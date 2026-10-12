@@ -152,4 +152,6 @@ export const MATERIALS = {
   // Bare steel is drawn as a line along the blade. Like the eyes it claims
   // every cell it touches, as it is far thinner than a cell.
   blade: { color: [206, 214, 228], tex: null, claim: true },
+  // A blade charged for a spin burns a cold blue.
+  bladeGlow: { color: [170, 230, 255], tex: null, claim: true, emissive: true },
 };

@@ -96,13 +96,15 @@ export function strideCycle(run) {
 //   run      0..1, how much of that stride is a run
 //   time     seconds, drives breathing
 export function buildRig(st) {
-  const { heading, phase, walk, run, time } = st;
+  const { phase, walk, run, time } = st;
+  // A spinning slash turns the whole body round on top of the heading.
+  const heading = st.heading + (st.combat?.spin ?? 0);
   // The sword's pose, when it is out, leans and turns the whole body.
   const cb = st.combat;
   const fight = cb ? cb.active : 0;
   const sp = cb?.pose;
   const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0);
-  const lean = 0.06 * walk + 0.3 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
+  const lean = 0.06 * walk + 0.3 * run - (st.brace ?? 0) * 0.45 + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
     (st.kneel ?? 0) * 0.18;
   // Shoulders counter-rotate against the hips as the legs swing.
   const twist = Math.sin(phase) * 0.14 * walk * (1 - fight * 0.6) + (sp ? SWORD_SIDE * sp.twist * fight : 0);
@@ -131,13 +133,17 @@ export function buildRig(st) {
     const swingT = Math.cos(lp);
     // Sprinting drives the knee up high on the way through.
     const drive = run * walk * 0.3 * Math.max(0, swingT);
-    const thigh = SWEEP(lp) * (0.42 + 0.36 * run) * walk + drive + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
+    // Skidding to a halt, one foot is thrust out ahead and the other leg
+    // folds beneath.
+    const br = st.brace ?? 0;
+    const thigh = SWEEP(lp) * (0.42 + 0.36 * run) * walk + drive + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05) +
+      br * (s > 0 ? 0.75 : -0.15);
     // The knee folds through the swing and gives a little under the weight
     // mid-stance, but is straight as the foot lands and pushes off, so both
     // feet meet the ground level when the weight changes over.
     // and kicks the heel up behind.
     const knee = walk * ((0.55 + 1.05 * run) * Math.max(0, swingT) + (0.12 + 0.25 * run) * Math.max(0, -swingT)) +
-      crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65);
+      crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65) + br * (s > 0 ? 0.15 : 1.0);
     const shin = thigh - knee;
     // The hip on the swinging side drops a little, as it does in a real
     // stride.
@@ -229,6 +235,8 @@ export function buildRig(st) {
       if (Math.hypot(...bar) < 0.2) bar = cross(blade, [0, 0, 1]);
       bar = mul(norm(bar), 0.12);
       sword = {
+        // A charged blade glows, ready to be unleashed.
+        glow: cb.charged,
         pommel: sub(hilt, mul(blade, 0.2)),
         guard,
         tip: add(guard, mul(blade, 1.02)),
@@ -281,7 +289,8 @@ function toWorld(rig, heading) {
     at: (p) => w(rig.torso(p)),
     headAt: (p) => w(rig.headAt(p)),
     eyes: rig.eyes,
-    sword: rig.sword && Object.fromEntries(Object.entries(rig.sword).map(([k, v]) => [k, w(v)])),
+    sword: rig.sword &&
+      Object.fromEntries(Object.entries(rig.sword).map(([k, v]) => [k, Array.isArray(v) ? w(v) : v])),
     kneeFwd: rig.kneeFwd,
     kneeBack: rig.kneeBack,
     // How much of the body's width faces the camera (1 front or back, 0 side).

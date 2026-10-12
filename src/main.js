@@ -78,9 +78,19 @@ const hint = document.getElementById('hint');
 let walked = 0;
 
 // A click on the scene swings the sword.
+// Holding it down charges a spin.
 let clicked = false;
+let mouseHeld = false;
 canvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0) clicked = true;
+  if (e.button !== 0) return;
+  clicked = true;
+  mouseHeld = true;
+});
+window.addEventListener('mouseup', (e) => {
+  if (e.button === 0) mouseHeld = false;
+});
+window.addEventListener('blur', () => {
+  mouseHeld = false;
 });
 
 let hitStop = 0;
@@ -101,7 +111,8 @@ function frame(now) {
   clicked = false;
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
-  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  const held = isDown('KeyJ') || mouseHeld;
+  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   for (const e of player.events) {
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
@@ -109,10 +120,12 @@ function frame(now) {
     }
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
     if (e.type === 'breath') dust.breath(e.x, e.y, e.h, e.dx, e.dy);
+    if (e.type === 'skid') dust.burst(world, e.x, e.y, 2, 3 + e.strength * 5);
+    if (e.type === 'whirl') dust.burst(world, e.x, e.y, 18, 14);
     if (e.type === 'slam') {
-      dust.burst(world, e.x, e.y, 22, 12);
-      if (world.typeAt(e.x, e.y) !== GRASS) dust.sparks(e.x, e.y, 14);
-      camera.shake(0.7);
+      dust.burst(world, e.x, e.y, Math.round(22 * e.strength), 12 * e.strength);
+      if (world.typeAt(e.x, e.y) !== GRASS) dust.sparks(e.x, e.y, Math.round(14 * e.strength));
+      camera.shake(0.7 * e.strength);
       // Freeze the warrior for a heartbeat as the blow lands, to sell its
       // weight.
       hitStop = 0.08;

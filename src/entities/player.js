@@ -61,10 +61,20 @@ export class Player {
     // 0 open .. 1 shut, and when the next blink is due.
     this.blink = 0;
     this.nextBlink = 3;
+    // Extra speed along the heading from a lunge, in metres per second.
+    this.surge = 0;
+    // Pulling up hard from a sprint: seconds of skid left, the speed and
+    // direction carried into it, and how far the body braces against it.
+    this.skid = 0;
+    this.skidSpeed = 0;
+    this.skidHeading = 0;
+    this.brace = 0;
+    this.wasMoving = false;
   }
 
+  // The attack depends on what the warrior is doing at the time.
   attack() {
-    this.combat.attack();
+    this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
   }
 
   toggleSword() {
@@ -105,13 +115,35 @@ export class Player {
     this.reach += (reachTo - this.reach) * (1 - Math.exp(-18 * dt));
   }
 
-  update(dt, world, move, running) {
+  // `held`: whether the attack button is still down, to charge a spin.
+  update(dt, world, move, running, held = false) {
     this.time += dt;
     const fromX = this.x;
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
+
+    // Letting go mid-sprint does not stop the warrior dead: they skid to a
+    // halt, braced, throwing up dirt.
+    if (!moving && this.wasMoving && this.speed > 3.2 && this.air === 0) {
+      this.skid = 0.42;
+      this.skidSpeed = this.speed;
+      this.skidHeading = this.heading;
+    }
+    this.wasMoving = moving;
+    if (moving) this.skid = 0;
+    if (this.skid > 0) {
+      this.skid -= dt;
+      this.skidSpeed *= Math.exp(-7 * dt);
+      const v = this.skidSpeed * dt;
+      this.tryMove(world, Math.sin(this.skidHeading) * v * toCols, 0);
+      this.tryMove(world, 0, Math.cos(this.skidHeading) * v * toRows);
+      if (Math.random() < dt * 30) {
+        this.events.push({ type: 'skid', x: this.x, y: this.y, strength: this.skidSpeed / RUN_SPEED });
+      }
+    }
+    this.brace += ((this.skid > 0 ? 1 : 0) - this.brace) * ease(this.skid > 0 ? 18 : 6);
 
     if (moving) {
       // Speed up into a run gradually rather than in one jump.
@@ -133,9 +165,17 @@ export class Player {
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
     const going = moving && metres > 0.15 * dt;
 
+    // A lunge carries the warrior on along their heading, fading fast.
+    if (this.surge > 0.05) {
+      const v = this.surge * dt;
+      this.tryMove(world, Math.sin(this.heading) * v * toCols, 0);
+      this.tryMove(world, 0, Math.cos(this.heading) * v * toRows);
+      this.surge *= Math.exp(-6 * dt);
+    }
+
     // Pitch forward when setting off or speeding up, and rock back on the
     // heels when pulling up, then settle.
-    const speedNow = metres / Math.max(dt, 1e-3);
+    const speedNow = this.skid > 0 ? this.speed : metres / Math.max(dt, 1e-3);
     const accel = (speedNow - this.speed) / Math.max(dt, 1e-3);
     this.speed += (speedNow - this.speed) * ease(8);
     const leanTo = Math.max(-0.22, Math.min(0.22, accel * 0.025));
@@ -161,7 +201,7 @@ export class Player {
 
     // After standing a while the warrior glances around, scanning one side
     // then the other, with the occasional downward look.
-    this.idle = moving || this.air > 0 ? 0 : this.idle + dt;
+    this.idle = moving || this.air > 0 || held ? 0 : this.idle + dt;
     // Left alone long enough with the sword away, the warrior kneels to
     // rest, and springs up again the moment there is something to do.
     const rest = this.idle > 12 && !this.combat.inHand && !this.combat.busy;
@@ -187,18 +227,29 @@ export class Player {
       if (t > 0.18) this.nextBlink = 2.5 + Math.random() * 4;
     }
 
-    this.combat.update(dt, moving);
-    for (const e of this.combat.events) {
-      // The overhead chop lands a stride ahead, in the direction faced.
-      const reach = 0.95 * SCALE;
-      this.events.push({
-        type: 'slam',
-        x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
-        y: this.y + Math.cos(this.heading) * reach * TILT,
-        strength: 1,
-      });
+    // A plunge drives the warrior down out of the air.
+    const cb = this.combat;
+    if (cb.move === 'plunge' && cb.step >= 1 && this.air > 0) this.vy -= 30 * dt;
+
+    cb.update(dt, { moving, running: moving && this.run > 0.5, air: this.air > 0, held });
+    for (const e of cb.events) {
+      if (e.type === 'slam') {
+        // The blade lands a stride ahead, in the direction faced.
+        const reach = 0.95 * SCALE;
+        this.events.push({
+          type: 'slam',
+          x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
+          y: this.y + Math.cos(this.heading) * reach * TILT,
+          strength: e.strength,
+        });
+      } else if (e.type === 'lunge') {
+        this.surge = e.speed;
+        this.events.push({ type: 'land', x: this.x, y: this.y, strength: 0.6 });
+      } else if (e.type === 'whirl') {
+        this.events.push({ type: 'whirl', x: this.x, y: this.y, strength: 1 });
+      }
     }
-    this.combat.events.length = 0;
+    cb.events.length = 0;
 
     const rig = buildRig(this);
     this.recordTrail(rig);

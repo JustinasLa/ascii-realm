@@ -196,7 +196,7 @@ function greatsword(d, rig) {
   }
   // In hand: a long bright blade with a dark fuller, the crossguard square
   // across it. Kept just in front of the gauntlet that grips it.
-  d.limb(sw.guard, sw.tip, 0.034, 0.006, 'blade', 0.03);
+  d.limb(sw.guard, sw.tip, 0.034, 0.006, sw.glow ? 'bladeGlow' : 'blade', 0.03);
   d.limb(lerp3(sw.guard, sw.tip, 0.05), lerp3(sw.guard, sw.tip, 0.7), 0.009, 0.006, 'darkPlate', 0.031);
   d.limb(sw.barA, sw.barB, 0.024, 0.024, 'trim', 0.032);
   d.limb(sw.pommel, sw.guard, 0.024, 0.024, 'leather', 0.02);
