@@ -2,7 +2,7 @@ import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { MATERIALS } from './materials.js';
-import { add, buildRig, lerp3, project, SCALE } from './rig.js';
+import { add, buildRig, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
 
 // The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
@@ -81,8 +81,9 @@ class Dresser {
 const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 
 // Dresses the posed skeleton, back to front.
-function dress(rig) {
+function dress(rig, capeSim) {
   const d = new Dresser();
+  if (capeSim?.pts) cape(d, rig, capeSim.pts);
 
   for (const l of rig.legs) {
     // Mail thighs, a plate knee cop, a greave down the shin and a sabaton.
@@ -139,6 +140,36 @@ function cuirass(d, rig) {
   }
 }
 
+// The crimson cape: one cloth panel per link of the simulated chain,
+// widening towards a ragged hem. It is sorted a little further back than it
+// hangs, so it drapes under the pauldrons and sword rather than over them.
+function cape(d, rig, pts) {
+  const lat = rotY([1, 0, 0], rig.heading);
+  const n = pts.length;
+  const half = (i) => 0.2 + (0.11 * i) / (n - 1);
+  // Seen edge-on the cloth would vanish into a line, so give it the bulk of
+  // its folds from the side.
+  const back = rotY([0, 0, -1], rig.heading);
+  const bulk = (i) => mul(back, (1 - rig.facing) * (0.04 + (0.08 * i) / (n - 1)));
+  const edge = (i, s) => add(mul(lat, s * half(i)), mul(bulk(i), s));
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    d.panel(add(a, edge(i, -1)), add(a, edge(i, 1)), add(b, edge(i + 1, 1)), add(b, edge(i + 1, -1)), 'crimson',
+      -0.1);
+  }
+  // Tatters: strips of uneven length hanging off the hem.
+  const hem = pts[n - 1];
+  const dir = sub(hem, pts[n - 2]);
+  const len = Math.hypot(...dir) || 1;
+  for (let k = 0; k < 5; k++) {
+    const x = ((k + 0.5) / 5) * 2 - 1;
+    const top = add(hem, mul(lat, x * half(n - 1) * 0.9));
+    const drop = 0.05 + ((k * 37) % 5) * 0.025;
+    d.limb(top, add(top, mul(dir, drop / len)), 0.045, 0.012, 'crimson', -0.1);
+  }
+}
+
 // A greatsword slung across the back in a leather scabbard, the hilt riding
 // above the right shoulder.
 function greatsword(d, rig) {
@@ -161,7 +192,7 @@ function pauldron(d, rig, a) {
   const top = rig.at([s * 0.24, 0.5, 0]);
   const lower = rig.at([s * 0.27, 0.44, 0.005]);
   // Kept just in front of the arm they cover.
-  const z = Math.max(project(a.shoulder)[2], project(a.elbow)[2]) + 0.02;
+  const z = Math.max(project(a.shoulder)[2], project(a.elbow)[2]) + 0.05;
   const zOf = (p) => Math.max(z, project(p)[2]);
   d.blob(lower, 0.125, 0.085, 'trim', zOf(lower) - project(lower)[2] + 0.001);
   d.blob(lower, 0.115, 0.075, 'darkPlate', zOf(lower) - project(lower)[2] + 0.002);
@@ -265,7 +296,7 @@ export function drawShadow(r, view, x, y) {
 
 // Rasterises the figure with its feet at world position (state.x, state.y).
 export function drawFigure(r, view, state, write = putCell) {
-  const parts = dress(buildRig(state));
+  const parts = dress(buildRig(state), state.cape);
   let x0 = Infinity;
   let x1 = -Infinity;
   let y0 = Infinity;

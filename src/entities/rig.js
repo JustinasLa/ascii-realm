@@ -15,6 +15,7 @@ export const SCALE = 13;
 export const TILT = 0.35;
 
 export const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 export const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
 export const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 

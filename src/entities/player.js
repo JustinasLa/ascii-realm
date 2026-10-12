@@ -1,4 +1,6 @@
 import { ASPECT } from '../world/world.js';
+import { Cape } from './cape.js';
+import { buildRig, SCALE } from './rig.js';
 
 const WALK_SPEED = 8; // rows per second; columns are scaled by ASPECT
 const RUN_SPEED = 15;
@@ -19,10 +21,13 @@ export class Player {
     this.walk = 0;
     this.run = 0;
     this.time = 0;
+    this.cape = new Cape();
   }
 
   update(dt, world, move, running) {
     this.time += dt;
+    const fromX = this.x;
+    const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
@@ -47,6 +52,22 @@ export class Player {
     this.run += ((moving && running ? 1 : 0) - this.run) * ease(6);
     // Settle into a neutral stance once stopped.
     if (!moving && this.walk < 0.02) this.phase = 0;
+
+    const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / SCALE];
+    const t = this.time;
+    const wind = [2.2 + Math.sin(t * 0.7) * 1.6, 0, Math.sin(t * 0.43) * 1.2];
+    this.cape.update(dt, ...this.capeMount(), moved, wind);
+  }
+
+  // Where the cape hangs from, and which way is out of the warrior's back.
+  capeMount() {
+    const rig = buildRig(this);
+    return [rig.at([0, 0.47, -0.12]), [-Math.sin(this.heading), -Math.cos(this.heading)]];
+  }
+
+  // Lets the cape fall still, e.g. after the pose was changed by hand.
+  settleCape() {
+    this.cape.settle(...this.capeMount());
   }
 
   // Moves along one axis at a time so the player slides along shorelines.
