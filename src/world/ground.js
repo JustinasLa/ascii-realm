@@ -1,9 +1,12 @@
+import { valueNoise } from '../core/noise.js';
 import { glyph } from '../render/glyphs.js';
-import { CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER } from './world.js';
+import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER } from './world.js';
 
 const G = (s) => [...s].map(glyph);
 
-const GRASS_CH = G(`',"\`.`);
+// Blades lean with the wind: index 0 leans left, 2 leans right.
+const BLADE = G('\\|/');
+const STUBBLE = G(`',"\``);
 const SHORE_CH = G('.,:;');
 const DIRT_CH = G('.:,`');
 const STONE_CH = G('.:-=+*#%@');
@@ -42,7 +45,12 @@ export function drawGround(r, world, view, t) {
       let bb = 0;
 
       if (type === GRASS) {
-        ch = GRASS_CH[Math.floor(rnd * GRASS_CH.length)];
+        // Slow gusts roll across the field; each blade also flutters on its
+        // own phase so neighbours never move in lockstep.
+        const gust = valueNoise(wx * ASPECT * 0.035 - t * 0.55, wy * 0.035 + t * 0.12, world.seed + 900);
+        const lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
+        if (rnd < 0.12) ch = STUBBLE[Math.floor(rnd * 33) % STUBBLE.length];
+        else ch = BLADE[lean < -0.35 ? 0 : lean > 0.35 ? 2 : 1];
         const l = 0.55 + shade * 0.6;
         cr = 40 * l;
         cg = 120 * l;
