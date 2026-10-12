@@ -8,7 +8,7 @@ const POINTS = 7;
 const LENGTH = 1.12;
 const SEG = LENGTH / (POINTS - 1);
 const GRAVITY = 9.8;
-const DRAG = 0.9;
+const DRAG = 0.98;
 const STEP = 1 / 120;
 
 export class Cape {
