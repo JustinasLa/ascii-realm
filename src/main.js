@@ -6,8 +6,8 @@ import { drawGround } from './world/ground.js';
 import { World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
-const CELL_W = 7;
-const CELL_H = 12;
+const CELL_W = 6;
+const CELL_H = 10;
 
 const canvas = document.getElementById('screen');
 const renderer = new AsciiRenderer(canvas, buildAtlas(FONT));

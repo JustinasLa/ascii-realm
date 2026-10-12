@@ -9,7 +9,7 @@ export const STONE = 4;
 
 // Cells are taller than they are wide, so horizontal distances are squashed
 // before sampling noise. Without this every lake would look stretched.
-export const ASPECT = 7 / 12;
+export const ASPECT = 6 / 10;
 
 const CHUNK = 64;
 const WATER_LEVEL = 0.4;
