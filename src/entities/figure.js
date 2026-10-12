@@ -94,6 +94,7 @@ function dress(rig) {
   }
 
   cuirass(d, rig);
+  greatsword(d, rig);
 
   for (const a of rig.arms) {
     // Mail sleeve, an elbow cop, a flared vambrace and a plated gauntlet.
@@ -136,6 +137,21 @@ function cuirass(d, rig) {
     d.panel(at([-0.1, 0.0, z]), at([0.1, 0.0, z]), at([0.12, -0.46, z + push * 0.8]),
       at([-0.12, -0.46, z + push * 0.8]), 'crimson', side * 0.04);
   }
+}
+
+// A greatsword slung across the back in a leather scabbard, the hilt riding
+// above the right shoulder.
+function greatsword(d, rig) {
+  const at = rig.at;
+  const pommel = at([-0.21, 0.72, -0.2]);
+  const guard = at([-0.15, 0.56, -0.2]);
+  const tip = at([0.2, -0.46, -0.21]);
+  d.limb(guard, tip, 0.05, 0.035, 'leather', -0.01);
+  d.limb(lerp3(guard, tip, 0.93), tip, 0.054, 0.04, 'trim', -0.005);
+  d.limb(lerp3(guard, tip, 0.02), lerp3(guard, tip, 0.06), 0.056, 0.056, 'trim', -0.005);
+  d.limb(at([-0.25, 0.52, -0.2]), at([-0.05, 0.6, -0.2]), 0.026, 0.026, 'trim');
+  d.limb(guard, pommel, 0.026, 0.024, 'leather');
+  d.blob(pommel, 0.04, 0.04, 'trim', 0.001);
 }
 
 // Layered shoulder plates edged in brass, with a short spike on top. They
