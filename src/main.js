@@ -6,6 +6,7 @@ import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
+import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
@@ -65,6 +66,7 @@ const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
+const footprints = new Footprints();
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
@@ -101,7 +103,10 @@ function frame(now) {
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
   if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   for (const e of player.events) {
-    if (e.type === 'step') dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
+    if (e.type === 'step') {
+      dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
+      footprints.add(world, e.x, e.y, time);
+    }
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
     if (e.type === 'breath') dust.breath(e.x, e.y, e.h, e.dx, e.dy);
     if (e.type === 'slam') {
@@ -123,6 +128,7 @@ function frame(now) {
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
   drawSkyReflection(renderer, view, time);
+  footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
   // Props up to a screen above the view can still be reflected into it.
