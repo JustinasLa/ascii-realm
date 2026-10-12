@@ -28,7 +28,8 @@ export function drawSkyReflection(r, view, t) {
   const grid = STAR_GRID * r.dpr;
   for (let sy = 0; sy < rows; sy++) {
     // Each row of water wobbles sideways a little, breaking up the image.
-    const wobble = Math.round(Math.sin(sy * 0.9 + t * 1.5) * 0.8);
+    // The ripple belongs to the water, so it follows world rows.
+    const wobble = Math.round(Math.sin((sy + view.y0) * 0.9 + t * 1.5) * 0.8);
     const py = (sy + 0.5) * cellH - view.offY;
     for (let sx = 0; sx < cols; sx++) {
       const m = sy * cols + sx;
