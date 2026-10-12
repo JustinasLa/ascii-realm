@@ -2,7 +2,7 @@ import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { MATERIALS } from './materials.js';
-import { add, buildRig, project, SCALE } from './rig.js';
+import { add, buildRig, lerp3, project, SCALE } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
 
 // The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
@@ -85,17 +85,23 @@ function dress(rig) {
   const d = new Dresser();
 
   for (const l of rig.legs) {
-    d.limb(l.hip, l.knee, 0.085, 0.07, 'mail');
-    d.limb(l.knee, l.ankle, 0.068, 0.055, 'mail');
-    d.limb(l.ankle, l.toe, 0.06, 0.055, 'leather', 0.01);
+    // Mail thighs, a plate knee cop, a greave down the shin and a sabaton.
+    d.limb(l.hip, l.knee, 0.09, 0.072, 'mail');
+    d.limb(l.knee, l.ankle, 0.075, 0.06, 'plate');
+    d.limb(l.ankle, l.toe, 0.068, 0.055, 'darkPlate', 0.01);
+    d.blob(lerp3(l.knee, l.ankle, 0.04), 0.07, 0.065, 'darkPlate', 0.02);
+    d.limb(lerp3(l.knee, l.ankle, 0.8), lerp3(l.knee, l.ankle, 0.86), 0.072, 0.07, 'trim', 0.015);
   }
 
   cuirass(d, rig);
 
   for (const a of rig.arms) {
-    d.limb(a.shoulder, a.elbow, 0.072, 0.062, 'mail');
-    d.limb(a.elbow, a.wrist, 0.06, 0.05, 'plate');
-    d.blob(a.hand, 0.05, 0.055, 'leather', 0.01);
+    // Mail sleeve, an elbow cop, a flared vambrace and a plated gauntlet.
+    d.limb(a.shoulder, a.elbow, 0.074, 0.064, 'mail');
+    d.limb(a.elbow, a.wrist, 0.058, 0.07, 'plate');
+    d.blob(a.elbow, 0.062, 0.06, 'darkPlate', 0.01);
+    d.limb(lerp3(a.elbow, a.wrist, 0.9), a.wrist, 0.074, 0.074, 'trim', 0.012);
+    d.limb(a.wrist, a.hand, 0.06, 0.055, 'darkPlate', 0.015);
     pauldron(d, rig, a);
   }
 
