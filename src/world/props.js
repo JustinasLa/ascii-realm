@@ -53,8 +53,8 @@ function bake(w, top, bottom, sample, seed) {
 }
 
 function makeTree(x, y, rand) {
-  const height = 15 + rand() * 6;
-  const radius = 4.2 + rand() * 1.8;
+  const height = 30 + rand() * 12;
+  const radius = 8 + rand() * 3.5;
   const blobs = [{ x: 0, y: -height, r: radius }];
   const n = 3 + Math.floor(rand() * 3);
   for (let i = 0; i < n; i++) {
@@ -82,7 +82,7 @@ function makeTree(x, y, rand) {
       if (!best || l > best.l) best = { l, c: leaf };
     }
     if (best) return best;
-    if (py > trunkTop && py < 0.2 && Math.abs(px) < 0.75 + (py / -height) * -0.2) {
+    if (py > trunkTop && py < 0.2 && Math.abs(px) < 1.4 + (py / -height) * -0.5) {
       return { l: 0.6 - px * 0.4, c: bark };
     }
     return null;
@@ -93,14 +93,14 @@ function makeTree(x, y, rand) {
     kind: 'tree',
     x,
     y,
-    footW: 1.3,
-    footH: 0.8,
+    footW: 2.4,
+    footH: 1.2,
     cells: bake(w, -Math.ceil(height + radius), 0, sample, x * 31 + y),
   };
 }
 
 function makeRock(x, y, rand) {
-  const rx = 1.4 + rand() * 1.8;
+  const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.65 + rand() * 0.2);
   const stone = [118, 120, 124];
   const moss = [70, 104, 70];
@@ -118,7 +118,7 @@ function makeRock(x, y, rand) {
     x,
     y,
     footW: rx / ASPECT,
-    footH: 0.9,
+    footH: 1.4,
     cells: bake(w, -Math.ceil(ry * 2), 0, sample, x * 17 + y),
   };
 }
@@ -128,8 +128,8 @@ function makeRock(x, y, rand) {
 export function generateProps(world, cx, cy, size) {
   const props = [];
   const seed = world.seed;
-  const STEP_X = 9;
-  const STEP_Y = 5;
+  const STEP_X = 15;
+  const STEP_Y = 8;
   for (let gy = 0; gy < size; gy += STEP_Y) {
     for (let gx = 0; gx < size; gx += STEP_X) {
       const ox = cx * size + gx;
@@ -139,7 +139,7 @@ export function generateProps(world, cx, cy, size) {
       const y = oy + Math.floor(rand() * STEP_Y);
       if (world.typeAt(x, y) !== GRASS) continue;
       // Keep the spawn clearing open.
-      if (Math.hypot((x - world.spawn.x) * ASPECT, y - world.spawn.y) < 24) continue;
+      if (Math.hypot((x - world.spawn.x) * ASPECT, y - world.spawn.y) < 36) continue;
 
       const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
       const roll = rand();

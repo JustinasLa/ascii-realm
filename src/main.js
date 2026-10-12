@@ -93,8 +93,8 @@ function frame(now) {
   drawShadow(renderer, view, player.x, player.y);
 
   // Props up to a screen above the view can still be reflected into it.
-  const props = world.propsIn(view.x0 - 16, view.y0 - view.rows, view.x0 + view.cols + 16,
-    view.y0 + view.rows + 30);
+  const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
+    view.y0 + view.rows + 50);
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
