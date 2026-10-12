@@ -53,6 +53,7 @@ function frame(now) {
     view.y0 + view.rows + 30);
 
   const mirror = reflector();
+  for (const p of props) drawProp(renderer, view, p, mirror);
   drawFigure(renderer, view, player, mirror);
 
   // Painter's order: whatever stands further down the screen is in front.
