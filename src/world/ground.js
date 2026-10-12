@@ -143,6 +143,7 @@ export function drawGround(r, world, view, t, bend) {
         bb = 12;
       }
 
+      r.mask[sy * cols + sx] = type;
       const o = (sy * cols + sx) * 4;
       fg[o] = cr;
       fg[o + 1] = cg;
