@@ -4,6 +4,7 @@ import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
+import { Fireflies } from './world/fireflies.js';
 import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
@@ -29,6 +30,7 @@ const world = new World(seed);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 6);
+const fireflies = new Fireflies();
 
 let last = performance.now();
 let time = 0;
@@ -61,6 +63,9 @@ function frame(now) {
   drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player) });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
+
+  fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
+  fireflies.draw(renderer, view, time);
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }
