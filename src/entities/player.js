@@ -12,6 +12,10 @@ const RUN_SPEED = 4.6;
 const toCols = SCALE / ASPECT;
 const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second
+// How quickly the warrior gets up to speed or changes direction (per
+// second). Lower at a sprint, so they carve round in arcs.
+const GRIP = 11;
+const SPRINT_GRIP = 5;
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
 const WIND_UP = 0.1; // seconds spent crouching before leaving the ground
@@ -70,6 +74,13 @@ export class Player {
     this.skidHeading = 0;
     this.brace = 0;
     this.wasMoving = false;
+    // Ground velocity in metres per second (x across the screen, z down it).
+    this.vx = 0;
+    this.vz = 0;
+    // The spring-smoothed height of the body above the planted foot, and
+    // how fast it is moving.
+    this.bob = undefined;
+    this.bobV = 0;
   }
 
   // The attack depends on what the warrior is doing at the time.
@@ -145,15 +156,27 @@ export class Player {
     }
     this.brace += ((this.skid > 0 ? 1 : 0) - this.brace) * ease(this.skid > 0 ? 18 : 6);
 
-    if (moving) {
-      // Speed up into a run gradually rather than in one jump.
-      const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
-      this.tryMove(world, (move.x / len) * speed * toCols * dt, 0);
-      this.tryMove(world, 0, (move.y / len) * speed * toRows * dt);
+    // The warrior has momentum: velocity eases towards where the keys point
+    // rather than jumping there, so changes of direction sweep round.
+    const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
+    const tx = moving && this.skid <= 0 ? (move.x / len) * speed : 0;
+    const tz = moving && this.skid <= 0 ? (move.y / len) * speed : 0;
+    const grip = ease(moving ? GRIP + (SPRINT_GRIP - GRIP) * this.run : 16);
+    this.vx += (tx - this.vx) * grip;
+    this.vz += (tz - this.vz) * grip;
+    if (this.skid <= 0) {
+      this.tryMove(world, this.vx * toCols * dt, 0);
+      this.tryMove(world, 0, this.vz * toRows * dt);
+    } else {
+      this.vx = 0;
+      this.vz = 0;
+    }
 
-      // Turn smoothly through the in-between headings rather than snapping.
-      const target = Math.atan2(move.x, move.y);
-      const turned = angleTo(this.heading, target) * ease(TURN_RATE);
+    if (moving) {
+      // Turn smoothly through the in-between headings rather than snapping,
+      // following the way the body is actually travelling.
+      const target = Math.hypot(this.vx, this.vz) > 0.3 ? Math.atan2(this.vx, this.vz) : Math.atan2(move.x, move.y);
+      const turned = angleTo(this.heading, target) * ease(TURN_RATE - 4 * this.run);
       this.heading += turned;
       // Lean into the turn like a runner rounding a bend, harder at speed.
       const bankTo = Math.max(-0.35, Math.min(0.35, (-turned / dt) * 0.04 * (0.4 + this.run)));
@@ -251,6 +274,14 @@ export class Player {
     }
     cb.events.length = 0;
 
+    // Spring the body's bob towards where the legs put it: stiff enough to
+    // follow every stride, soft enough to round off its corners.
+    const want = buildRig({ ...this, bob: undefined, air: 0 }).gait;
+    if (this.bob === undefined) this.bob = want;
+    const sdt = Math.min(dt, 1 / 30);
+    this.bobV += ((want - this.bob) * 260 - this.bobV * 20) * sdt;
+    this.bob += this.bobV * sdt;
+
     const rig = buildRig(this);
     this.recordTrail(rig);
     // Breath leaves through the visor, wherever the head happens to be.
@@ -266,7 +297,10 @@ export class Player {
 
     const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / toRows];
     const t = this.time;
-    const wind = [2.2 + Math.sin(t * 0.7) * 1.6, 0, Math.sin(t * 0.43) * 1.2];
+    // At speed the cloth flaps and billows in the rush of air.
+    const rush = this.speed * (Math.sin(t * 13) * 0.35 + Math.sin(t * 7.3 + 1) * 0.25);
+    const wind = [2.2 + Math.sin(t * 0.7) * 1.6 + Math.cos(this.heading) * rush, 0,
+      Math.sin(t * 0.43) * 1.2 - Math.sin(this.heading) * rush];
     this.cape.update(dt, ...this.capeMount(rig), moved, wind);
   }
 
