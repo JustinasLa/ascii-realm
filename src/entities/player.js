@@ -40,6 +40,8 @@ export class Player {
     // Things that happened this frame for the world to react to, such as
     // footfalls and landings: { type, x, y, strength }.
     this.events = [];
+    // 0 standing .. 1 down on one knee, resting after a long wait.
+    this.kneel = 0;
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -130,7 +132,11 @@ export class Player {
     // After standing a while the warrior glances around, scanning one side
     // then the other, with the occasional downward look.
     this.idle = moving || this.air > 0 ? 0 : this.idle + dt;
-    const glance = Math.min(1, Math.max(0, (this.idle - 3) / 1.5));
+    // Left alone long enough with the sword away, the warrior kneels to
+    // rest, and springs up again the moment there is something to do.
+    const rest = this.idle > 12 && !this.combat.inHand && !this.combat.busy;
+    this.kneel += ((rest ? 1 : 0) - this.kneel) * ease(rest ? 2.2 : 9);
+    const glance = Math.min(1, Math.max(0, (this.idle - 3) / 1.5)) * (1 - this.kneel);
     const lookTo = glance * (Math.sin(this.idle * 0.55) * 0.75 + Math.sin(this.idle * 1.3) * 0.15);
     const nodTo = glance * Math.max(0, Math.sin(this.idle * 0.31 + 1)) * 0.25;
     this.look += (lookTo - this.look) * ease(4);

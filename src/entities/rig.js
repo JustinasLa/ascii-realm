@@ -82,7 +82,8 @@ export function buildRig(st) {
   const fight = cb ? cb.active : 0;
   const sp = cb?.pose;
   const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0);
-  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0);
+  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
+    (st.kneel ?? 0) * 0.18;
   // Shoulders counter-rotate against the hips as the legs swing.
   const twist = Math.sin(phase) * 0.14 * walk * (1 - fight * 0.6) + (sp ? SWORD_SIDE * sp.twist * fight : 0);
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;
@@ -99,9 +100,13 @@ export function buildRig(st) {
     // Crouching swings the thighs forward and folds the knees; planting the
     // feet below then lowers the hips by itself.
     const crouch = crouchAll;
-    const thigh = Math.sin(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85;
+    // Kneeling brings one foot forward and lowers the other knee to the
+    // ground behind it.
+    const kn = st.kneel ?? 0;
+    const thigh = Math.sin(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
     // The knee folds while the leg swings forward and straightens to land.
-    const knee = walk * (0.12 + 0.25 * run + (0.55 + 0.6 * run) * Math.max(0, Math.cos(lp))) + crouch * 1.6;
+    const knee = walk * (0.12 + 0.25 * run + (0.55 + 0.6 * run) * Math.max(0, Math.cos(lp))) + crouch * 1.6 +
+      kn * (s > 0 ? 1.45 : 1.65);
     const shin = thigh - knee;
     const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
     // Lean the legs out into a wide stance, and back under the weight.
@@ -116,7 +121,7 @@ export function buildRig(st) {
   // ground. A stride with the legs apart then naturally dips the body and
   // passing through upright lifts it, which is the bob of a real walk.
   let lowest = Infinity;
-  for (const l of legs) lowest = Math.min(lowest, l.ankle[1] - 0.065, l.toe[1] - 0.05);
+  for (const l of legs) lowest = Math.min(lowest, l.ankle[1] - 0.065, l.toe[1] - 0.05, l.knee[1] - 0.07);
   const lift = -lowest + (st.air ?? 0);
   pelvis[1] += lift;
   for (const l of legs) {
@@ -140,6 +145,17 @@ export function buildRig(st) {
     const wrist = add(elbowP, mul(turn(limb(swing + elbow, s * 0.08)), FOREARM));
     const hand = add(wrist, mul(turn(limb(swing + elbow, s * 0.05)), 0.06));
     arms.push({ s, shoulder, elbow: elbowP, wrist, hand });
+  }
+
+  // Kneeling, the forearm rests across the raised knee.
+  const kn = st.kneel ?? 0;
+  if (kn > 0.01) {
+    const arm = arms.find((a) => a.s > 0);
+    const knee = legs.find((l) => l.s > 0).knee;
+    const [elbow, wrist] = reach(arm.shoulder, add(knee, [-0.04, 0.06, 0.1]), UPPER_ARM, FOREARM, [1, -0.3, -0.2]);
+    arm.elbow = lerp3(arm.elbow, elbow, kn);
+    arm.wrist = lerp3(arm.wrist, wrist, kn);
+    arm.hand = lerp3(arm.hand, add(wrist, [-0.05, -0.02, 0.02]), kn);
   }
 
   // With the sword out the sword arm reaches for its pose, and the other
@@ -194,7 +210,7 @@ export function buildRig(st) {
     kneeFwd: Math.max(0, ...legs.map((l) => l.knee[2])),
     kneeBack: Math.max(0, ...legs.map((l) => -l.knee[2])),
     // Points on the head, which can turn and nod on its own.
-    headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, st.nod ?? 0), st.look ?? 0))),
+    headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, (st.nod ?? 0) + kn * 0.3), st.look ?? 0))),
   };
   return toWorld(rig, heading);
 }
