@@ -7,7 +7,7 @@ player is an armoured warrior drawn from hundreds of shaded characters.
 
 **Play:** https://justinasla.github.io/ascii-realm/
 
-![A hooded wanderer on a moonlit lakeshore, reflected in the water](docs/screenshot.png)
+![An armoured warrior mid-swing on a moonlit lakeshore, reflected in the water](docs/screenshot.png)
 
 For now it is a single warrior exploring procedurally generated terrain.
 
