@@ -73,7 +73,7 @@ function frame(now) {
 
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
-  drawSkyReflection(renderer, time);
+  drawSkyReflection(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y);
 
   // Props up to a screen above the view can still be reflected into it.
