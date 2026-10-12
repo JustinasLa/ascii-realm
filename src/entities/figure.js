@@ -2,7 +2,7 @@ import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { MATERIALS } from './materials.js';
-import { add, buildRig, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
+import { add, buildRig, cross, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
 
 // The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
@@ -122,7 +122,7 @@ function cuirass(d, rig) {
   const front = (p) => (project(p)[2] > project(rig.waist)[2] ? 0.15 : -0.15);
 
   d.limb(rig.pelvis, rig.chest, w(0.16, 0.12), w(0.17, 0.12), 'mail');
-  d.limb(at([0, 0.26, 0.02]), at([0, 0.42, 0.01]), w(0.18, 0.13), w(0.2, 0.135), 'plate', 0.02);
+  d.limb(at([0, 0.26, 0.02]), at([0, 0.42, 0.01]), w(0.18, 0.13), w(0.2, 0.135), 'breastplate', 0.02);
   d.limb(rig.neck, at([0, 0.47, 0]), 0.075, w(0.1, 0.09), 'darkPlate', 0.03);
   d.limb(at([0, 0.01, 0]), at([0, 0.06, 0]), w(0.175, 0.13), w(0.17, 0.13), 'leather', 0.025);
   const buckle = at([0, 0.035, 0.15]);
@@ -136,7 +136,7 @@ function cuirass(d, rig) {
     const z = side * 0.14;
     const push = side > 0 ? rig.kneeFwd : -rig.kneeBack;
     d.panel(at([-0.1, 0.0, z]), at([0.1, 0.0, z]), at([0.12, -0.46, z + push * 0.8]),
-      at([-0.12, -0.46, z + push * 0.8]), 'crimson', side * 0.04);
+      at([-0.12, -0.46, z + push * 0.8]), 'tabard', side * 0.04);
   }
 }
 
@@ -155,9 +155,14 @@ function cape(d, rig, pts) {
   for (let i = 0; i < n - 1; i++) {
     const a = pts[i];
     const b = pts[i + 1];
-    d.panel(add(a, edge(i, -1)), add(a, edge(i, 1)), add(b, edge(i + 1, 1)), add(b, edge(i + 1, -1)), 'crimson',
-      -0.1);
+    // Which face of the cloth is turned to the camera: the crimson outside,
+    // or the dark lining when it swings round or hangs behind a warrior
+    // facing us.
+    const face = cross(sub(b, a), lat)[2] > 0 ? 'lining' : 'crimson';
+    d.panel(add(a, edge(i, -1)), add(a, edge(i, 1)), add(b, edge(i + 1, 1)), add(b, edge(i + 1, -1)), face, -0.1);
   }
+  // A band of brass along the hem.
+  d.limb(add(pts[n - 1], edge(n - 1, -0.97)), add(pts[n - 1], edge(n - 1, 0.97)), 0.024, 0.024, 'trim', -0.099);
   // Tatters: strips of uneven length hanging off the hem.
   const hem = pts[n - 1];
   const dir = sub(hem, pts[n - 2]);
@@ -257,6 +262,7 @@ const SUB_X = [1 / 6, 3 / 6, 5 / 6];
 const SUB_Y = [1 / 8, 3 / 8, 5 / 8, 7 / 8];
 const SAMPLES = SUB_X.length * SUB_Y.length;
 const SAMPLE = { nx: 0, ny: 0, u: 0, v: 0 };
+const SHADE = { c: null, k: 1 };
 const hitPart = new Int16Array(SAMPLES);
 const hitLum = new Float32Array(SAMPLES);
 const hitU = new Float32Array(SAMPLES);
@@ -458,9 +464,12 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
   }
 
   const b = Math.max(0, Math.min(0.999, lum));
-  const g = mat.tex ? mat.tex(b, u, v) : part.bar;
-  const k2 = mat.emissive ? 1 : 0.35 + b * 0.85;
-  write(r, sx, sy, g, mr * k2, mg * k2, mb * k2, base, br, bgG, bb);
+  // Textures may repaint details in another colour or brightness.
+  SHADE.c = mat.color;
+  SHADE.k = mat.emissive ? 1 : 0.35 + b * 0.85;
+  const g = mat.tex ? mat.tex(b, u, v, SHADE) : part.bar;
+  const [tr, tg, tb] = SHADE.c;
+  write(r, sx, sy, g, tr * SHADE.k, tg * SHADE.k, tb * SHADE.k, base, br, bgG, bb);
 }
 
 // The glowing smear a swing leaves behind: the blade's recent positions,
