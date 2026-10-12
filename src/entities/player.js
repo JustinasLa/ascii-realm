@@ -22,6 +22,9 @@ export class Player {
     this.run = 0;
     this.time = 0;
     this.cape = new Cape();
+    // 0 open .. 1 shut, and when the next blink is due.
+    this.blink = 0;
+    this.nextBlink = 3;
   }
 
   update(dt, world, move, running) {
@@ -52,6 +55,14 @@ export class Player {
     this.run += ((moving && running ? 1 : 0) - this.run) * ease(6);
     // Settle into a neutral stance once stopped.
     if (!moving && this.walk < 0.02) this.phase = 0;
+
+    // Blink every few seconds: shut quickly, open a little slower.
+    this.nextBlink -= dt;
+    if (this.nextBlink < 0) {
+      const t = -this.nextBlink;
+      this.blink = t < 0.06 ? t / 0.06 : Math.max(0, 1 - (t - 0.06) / 0.12);
+      if (t > 0.18) this.nextBlink = 2.5 + Math.random() * 4;
+    }
 
     const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / SCALE];
     const t = this.time;

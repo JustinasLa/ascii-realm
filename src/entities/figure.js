@@ -226,6 +226,15 @@ function helm(d, rig) {
   d.limb(h([-0.12, 0.03, 0.06]), h([0.12, 0.03, 0.06]), 0.026, 0.026, 'trim', front(brow));
   const slit = h([0, -0.015, 0.125]);
   d.blob(slit, 0.1, 0.026, 'void', front(slit) * 1.1);
+
+  // Two cold points of light burn in the dark of the visor, and now and
+  // then they gutter out for a blink.
+  if (rig.eyes > 0.05) {
+    for (const s of [-1, 1]) {
+      const eye = h([s * 0.048, -0.015, 0.118]);
+      d.blob(eye, 0.026, 0.013 * rig.eyes, 'eye', front(eye) * 1.2);
+    }
+  }
 }
 
 // Each cell is sampled on a 3x4 grid. Coverage decides between leaving the
@@ -322,6 +331,7 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
   let mx = 0;
   let my = 0;
   let front = -1;
+  let glow = -1;
   let k = 0;
   for (const oy of SUB_Y) {
     for (const ox of SUB_X) {
@@ -340,10 +350,17 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
         mx += ox - 0.5;
         my += oy - 0.5;
         if (i > front) front = i;
+        if (p.mat.emissive) glow = i;
         break;
       }
       k++;
     }
+  }
+  // Lights are tiny but must never be outvoted by what surrounds them.
+  if (glow >= 0) {
+    const [gr, gg, gb] = parts[glow].mat.color;
+    write(r, sx, sy, parts[glow].mat.tex(), gr, gg, gb, base, 6, 10, 14);
+    return;
   }
   if (hits < 3) return;
 
