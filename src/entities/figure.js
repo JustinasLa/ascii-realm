@@ -102,14 +102,14 @@ export function drawShadow(r, view, x, y) {
   const { fg, bg, cols } = r;
   const fx = Math.floor(x);
   const fy = Math.floor(y);
-  for (let cy = fy - 1; cy <= fy + 1; cy++) {
+  for (let cy = fy - 2; cy <= fy + 2; cy++) {
     const sy = cy - view.y0;
     if (sy < 0 || sy >= view.rows) continue;
-    for (let cx = fx - 5; cx <= fx + 5; cx++) {
+    for (let cx = fx - 9; cx <= fx + 9; cx++) {
       const sx = cx - view.x0;
       if (sx < 0 || sx >= view.cols) continue;
-      const dx = ((cx + 0.5 - x) * ASPECT) / 2.6;
-      const dy = (cy + 0.5 - y) / 1.1;
+      const dx = ((cx + 0.5 - x) * ASPECT) / 4.4;
+      const dy = (cy + 0.5 - y) / 1.8;
       const d = dx * dx + dy * dy;
       if (d >= 1) continue;
       const k = 0.35 + 0.65 * d;

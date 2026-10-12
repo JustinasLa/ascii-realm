@@ -14,7 +14,7 @@ import { ASPECT, World } from './world/world.js';
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
 // Zooming sets a target and the cell size glides toward it every frame.
-let cellH = 10;
+let cellH = 8;
 let zoomTarget = cellH;
 const MIN_CELL = 6;
 const MAX_CELL = 24;
@@ -58,7 +58,7 @@ const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
 const world = new World(seed);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
-const camera = new Camera(spawn.x, spawn.y - 6);
+const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 
 // With ?debug in the URL the game state is reachable from the console, and
@@ -85,7 +85,7 @@ function frame(now) {
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
-  camera.follow(player.x, player.y - 6, dt);
+  camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);

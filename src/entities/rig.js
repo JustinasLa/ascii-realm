@@ -9,7 +9,7 @@
 // the screen). Heading 0 faces the camera.
 
 // Rows per metre: how tall the figure stands on screen.
-export const SCALE = 7.5;
+export const SCALE = 13;
 // How far a step towards the camera moves a point down the screen, relative
 // to a step upwards moving it up. Gives the scene its three-quarter view.
 export const TILT = 0.35;
