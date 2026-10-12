@@ -1,3 +1,4 @@
+import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 
@@ -164,18 +165,16 @@ export function drawShadow(r, view, x, y) {
 }
 
 // Rasterises the figure with its feet at world position (state.x, state.y).
-export function drawFigure(r, view, state) {
+export function drawFigure(r, view, state, write = putCell) {
   const parts = pose(state);
-  const { fg, cols } = r;
   const fx = Math.floor(state.x);
   const fy = Math.floor(state.y);
+  const base = fy - view.y0;
 
   for (let cy = fy - 16; cy <= fy + 1; cy++) {
     const sy = cy - view.y0;
-    if (sy < 0 || sy >= view.rows) continue;
     for (let cx = fx - 6; cx <= fx + 6; cx++) {
       const sx = cx - view.x0;
-      if (sx < 0 || sx >= view.cols) continue;
 
       let hits = 0;
       let lum = 0;
@@ -215,7 +214,6 @@ export function drawFigure(r, view, state) {
       }
       if (!hits) continue;
 
-      const o = (sy * cols + sx) * 4;
       const k = 1.35 / hits;
       let g;
       if (hits <= 2) {
@@ -226,10 +224,7 @@ export function drawFigure(r, view, state) {
         const b = Math.max(0, Math.min(0.999, (lum / hits - 0.25) / 0.85));
         g = RAMP[2 + Math.floor(b * 8)];
       }
-      fg[o] = cr * k;
-      fg[o + 1] = cg * k;
-      fg[o + 2] = cb * k;
-      fg[o + 3] = g;
+      write(r, sx, sy, g, cr * k, cg * k, cb * k, base);
     }
   }
 }

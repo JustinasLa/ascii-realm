@@ -1,5 +1,6 @@
 import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
+import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT, GRASS } from './world.js';
 
@@ -149,19 +150,11 @@ export function generateProps(world, cx, cy, size) {
   return props;
 }
 
-export function drawProp(r, view, prop) {
-  const { fg, cols } = r;
+export function drawProp(r, view, prop, write = putCell) {
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
   for (const c of prop.cells) {
-    const sx = bx + c.dx;
-    const sy = by + c.dy;
-    if (sx < 0 || sy < 0 || sx >= view.cols || sy >= view.rows) continue;
-    const o = (sy * cols + sx) * 4;
-    fg[o] = c.r;
-    fg[o + 1] = c.gg;
-    fg[o + 2] = c.b;
-    fg[o + 3] = c.g;
+    write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by);
   }
 }
 
