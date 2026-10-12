@@ -1,5 +1,6 @@
 import { fbm } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
+import { blocks, generateProps } from './props.js';
 
 export const WATER = 0;
 export const SHORE = 1;
@@ -20,6 +21,7 @@ export class World {
   constructor(seed = 1) {
     this.seed = seed;
     this.chunks = new Map();
+    this.spawn = this.findSpawn();
   }
 
   chunk(cx, cy) {
@@ -62,7 +64,7 @@ export class World {
         rnd[i] = hash2(x, y, s + 5);
       }
     }
-    return { cx, cy, type, elev, shade, rnd };
+    return { cx, cy, type, elev, shade, rnd, props: null };
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays
@@ -79,8 +81,31 @@ export class World {
     return c.type[i];
   }
 
+  // Props are generated on first request rather than with the terrain,
+  // because placing them needs the spawn point, which needs terrain first.
+  propsOf(cx, cy) {
+    const c = this.chunk(cx, cy);
+    if (!c.props) c.props = generateProps(this, cx, cy, CHUNK);
+    return c.props;
+  }
+
+  // Every prop whose base lies in the chunks touching the given cell range.
+  propsIn(x0, y0, x1, y1) {
+    const out = [];
+    for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
+      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+        for (const p of this.propsOf(cx, cy)) out.push(p);
+      }
+    }
+    return out;
+  }
+
   isWalkable(x, y) {
-    return this.typeAt(x, y) !== WATER;
+    if (this.typeAt(x, y) === WATER) return false;
+    for (const p of this.propsIn(x - 4, y - 2, x + 4, y + 2)) {
+      if (blocks(p, x, y)) return false;
+    }
+    return true;
   }
 
   // Walks outward from the origin until it finds grass a short way north of

@@ -5,6 +5,7 @@ import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { drawGround } from './world/ground.js';
+import { drawProp } from './world/props.js';
 import { drawSkyReflection } from './world/sky.js';
 import { World } from './world/world.js';
 
@@ -24,7 +25,7 @@ resize();
 
 const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
 const world = new World(seed);
-const spawn = world.findSpawn();
+const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 6);
 
@@ -45,7 +46,13 @@ function frame(now) {
   drawGround(renderer, world, view, time, player);
   drawSkyReflection(renderer, time);
   drawShadow(renderer, view, player.x, player.y);
-  drawFigure(renderer, view, player);
+
+  // Painter's order: whatever stands further down the screen is in front.
+  const props = world.propsIn(view.x0 - 16, view.y0 - 4, view.x0 + view.cols + 16, view.y0 + view.rows + 30);
+  const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
+  drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player) });
+  drawables.sort((a, b) => a.y - b.y);
+  for (const d of drawables) d.draw();
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }

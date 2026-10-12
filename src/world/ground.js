@@ -1,4 +1,5 @@
 import { valueNoise } from '../core/noise.js';
+import { hash2 } from '../core/rng.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, WATER_LEVEL } from './world.js';
 
@@ -20,7 +21,10 @@ const GREENS = [
 
 const SHORE_CH = G('.,:;');
 const DIRT_CH = G('.:,`');
-const STONE_CH = G('.:-=+*#%@');
+const SLAB = 4;
+const SLAB_FAMILIES = [':;-', '+=xo', 'aedbqp', 'Q0O8&$', '@#%WM'].map(G);
+const CRACK_A = glyph('.');
+const CRACK_B = glyph(',');
 const WAVE_HI = glyph('≈');
 const WAVE_MID = glyph('~');
 const WAVE_LO = glyph('-');
@@ -132,15 +136,46 @@ export function drawGround(r, world, view, t, bend) {
         bgG = 9;
         bb = 5;
       } else if (type === STONE) {
-        const e = chunk.elev[i];
-        const k = Math.min(1, (e - 0.7) * 6 + shade * 0.5);
-        ch = STONE_CH[Math.min(STONE_CH.length - 1, Math.floor(k * STONE_CH.length))];
-        cr = 110 + k * 60;
-        cg = 112 + k * 60;
-        cb = 120 + k * 60;
-        br = 9;
-        bgG = 10;
-        bb = 12;
+        // Rocky ground is a field of irregular slabs: find the nearest two
+        // jittered seed points and draw a dark crack where they tie.
+        const px = wx * ASPECT;
+        const gx = Math.floor(px / SLAB);
+        const gy = Math.floor(wy / SLAB);
+        let d1 = 1e9;
+        let d2 = 1e9;
+        let id = 0;
+        let ox = 0;
+        let oy = 0;
+        for (let j = -1; j <= 1; j++) {
+          for (let k = -1; k <= 1; k++) {
+            const hx = (gx + k + hash2(gx + k, gy + j, 13)) * SLAB;
+            const hy = (gy + j + hash2(gx + k, gy + j, 14)) * SLAB;
+            const d = Math.hypot(px - hx, wy - hy);
+            if (d < d1) {
+              d2 = d1;
+              d1 = d;
+              id = hash2(gx + k, gy + j, 15);
+              ox = px - hx;
+              oy = wy - hy;
+            } else if (d < d2) d2 = d;
+          }
+        }
+        if (d2 - d1 < 0.3) {
+          ch = rnd < 0.5 ? CRACK_A : CRACK_B;
+          cr = 40;
+          cg = 42;
+          cb = 48;
+        } else {
+          const l = Math.max(0, Math.min(0.999, 0.35 + id * 0.4 - (ox + oy) * 0.08 + shade * 0.2));
+          const fam = SLAB_FAMILIES[Math.floor(l * SLAB_FAMILIES.length)];
+          ch = fam[Math.floor(rnd * 101) % fam.length];
+          cr = 112 * (0.55 + l);
+          cg = 116 * (0.55 + l);
+          cb = 126 * (0.55 + l);
+        }
+        br = 8;
+        bgG = 9;
+        bb = 11;
       }
 
       r.mask[sy * cols + sx] = type;
