@@ -3,7 +3,7 @@ import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { MATERIALS } from './materials.js';
 import { add, buildRig, project, SCALE } from './rig.js';
-import { capsule, ellipse } from './shapes.js';
+import { capsule, ellipse, quad } from './shapes.js';
 
 // The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
 // every frame, dressed in simple shapes (capsules, ellipses, cloth panels)
@@ -64,6 +64,13 @@ class Dresser {
     return this.add(ellipse(p[0], p[1], rx * SCALE, ry * SCALE), mat, p[2] + bias);
   }
 
+  // A flat panel through four world points (top edge first), e.g. cloth.
+  panel(a, b, c, e, mat, bias = 0) {
+    const p = [a, b, c, e].map(project);
+    const z = (p[0][2] + p[1][2] + p[2][2] + p[3][2]) / 4;
+    return this.add(quad(p[0], p[1], p[2], p[3]), mat, z + bias);
+  }
+
   sorted() {
     return this.parts.sort((a, b) => a.z - b.z);
   }
@@ -83,9 +90,7 @@ function dress(rig) {
     d.limb(l.ankle, l.toe, 0.06, 0.055, 'leather', 0.01);
   }
 
-  d.limb(rig.waist, rig.chest, across(rig, 0.16, 0.12), across(rig, 0.19, 0.13), 'plate');
-  d.limb(rig.pelvis, rig.waist, across(rig, 0.17, 0.12), across(rig, 0.16, 0.12), 'leather', 0.01);
-  d.limb(rig.neck, rig.chest, 0.06, across(rig, 0.18, 0.12), 'plate', 0.01);
+  cuirass(d, rig);
 
   for (const a of rig.arms) {
     d.limb(a.shoulder, a.elbow, 0.072, 0.062, 'mail');
@@ -97,6 +102,34 @@ function dress(rig) {
   helm(d, rig);
 
   return d.sorted();
+}
+
+// Mail over the belly, a breastplate and gorget above it, a belt with a
+// brass buckle, plate tassets over the hips and a crimson tabard hanging
+// front and back that the knees push aside as they swing.
+function cuirass(d, rig) {
+  const at = rig.at;
+  const w = (a, b) => across(rig, a, b);
+  // Bits on the front vanish when the warrior turns away, and vice versa.
+  const front = (p) => (project(p)[2] > project(rig.waist)[2] ? 0.15 : -0.15);
+
+  d.limb(rig.pelvis, rig.chest, w(0.16, 0.12), w(0.17, 0.12), 'mail');
+  d.limb(at([0, 0.26, 0.02]), at([0, 0.42, 0.01]), w(0.18, 0.13), w(0.2, 0.135), 'plate', 0.02);
+  d.limb(rig.neck, at([0, 0.47, 0]), 0.075, w(0.1, 0.09), 'darkPlate', 0.03);
+  d.limb(at([0, 0.01, 0]), at([0, 0.06, 0]), w(0.175, 0.13), w(0.17, 0.13), 'leather', 0.025);
+  const buckle = at([0, 0.035, 0.15]);
+  d.blob(buckle, 0.035, 0.03, 'trim', front(buckle));
+
+  for (const s of [-1, 1]) {
+    d.limb(at([s * 0.14, -0.01, 0.02]), at([s * 0.19, -0.2, 0.05]), 0.065, 0.075, 'darkPlate', 0.03);
+  }
+
+  for (const side of [1, -1]) {
+    const z = side * 0.14;
+    const push = side > 0 ? rig.kneeFwd : -rig.kneeBack;
+    d.panel(at([-0.1, 0.0, z]), at([0.1, 0.0, z]), at([0.12, -0.46, z + push * 0.8]),
+      at([-0.12, -0.46, z + push * 0.8]), 'crimson', side * 0.04);
+  }
 }
 
 // Layered shoulder plates edged in brass, with a short spike on top. They

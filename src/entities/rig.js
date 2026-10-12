@@ -105,6 +105,10 @@ export function buildRig(st) {
     legs,
     arms,
     torso,
+    // How far the knees reach ahead of and behind the hips, so cloth hanging
+    // from the waist can be pushed out of their way.
+    kneeFwd: Math.max(0, ...legs.map((l) => l.knee[2])),
+    kneeBack: Math.max(0, ...legs.map((l) => -l.knee[2])),
     // Points on the head, which can turn and nod on its own.
     headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, st.nod ?? 0), st.look ?? 0))),
   };
@@ -128,6 +132,8 @@ function toWorld(rig, heading) {
     // Places a point given in the torso's own frame, or the head's.
     at: (p) => w(rig.torso(p)),
     headAt: (p) => w(rig.headAt(p)),
+    kneeFwd: rig.kneeFwd,
+    kneeBack: rig.kneeBack,
     // How much of the body's width faces the camera (1 front or back, 0 side).
     facing: Math.abs(Math.cos(heading)),
   };
