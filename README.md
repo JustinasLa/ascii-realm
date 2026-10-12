@@ -55,6 +55,12 @@ python -m http.server 8000
 
 A browser with WebGL2 is required.
 
+The rig and gait have unit tests (Node 18+, no dependencies):
+
+```sh
+npm test
+```
+
 ## Controls
 
 | Key | Action |
