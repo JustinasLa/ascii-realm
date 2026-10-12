@@ -93,12 +93,35 @@ function dress(rig) {
     d.blob(a.hand, 0.05, 0.055, 'leather', 0.01);
   }
 
-  d.blob(rig.head, 0.15, 0.16, 'plate');
-  // The face only shows while the head is turned towards the camera.
-  const face = rig.at([0, 0.635, 0.1]);
-  d.blob(face, 0.085, 0.1, 'void', face[2] > rig.head[2] ? 0.2 : -0.2);
+  helm(d, rig);
 
   return d.sorted();
+}
+
+// A closed great helm with a dark visor slit, a brow band and a pair of
+// horns sweeping up and back.
+function helm(d, rig) {
+  const h = rig.headAt;
+  const head = h([0, 0, 0]);
+  const z = project(head)[2];
+  // Anything on the front of the helm is hidden once it turns away.
+  const front = (p) => (project(p)[2] > z ? 0.3 : -0.3);
+
+  for (const s of [-1, 1]) {
+    const root = h([s * 0.11, 0.07, -0.01]);
+    const bend = h([s * 0.24, 0.13, -0.05]);
+    const tip = h([s * 0.27, 0.31, -0.12]);
+    d.limb(root, bend, 0.045, 0.032, 'horn', front(root) * 0.1);
+    d.limb(bend, tip, 0.032, 0.008, 'horn', front(root) * 0.1);
+  }
+
+  d.blob(head, 0.15, 0.17, 'plate');
+  // A ridge running over the crown, front to back.
+  d.limb(h([0, 0.15, 0.08]), h([0, 0.13, -0.1]), 0.022, 0.018, 'darkPlate', 0.05);
+  const brow = h([0, 0.035, 0.11]);
+  d.limb(h([-0.12, 0.03, 0.06]), h([0.12, 0.03, 0.06]), 0.026, 0.026, 'trim', front(brow));
+  const slit = h([0, -0.015, 0.125]);
+  d.blob(slit, 0.1, 0.026, 'void', front(slit) * 1.1);
 }
 
 // Each cell is sampled on a 3x4 grid. Coverage decides between leaving the

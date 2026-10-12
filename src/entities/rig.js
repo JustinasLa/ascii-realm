@@ -105,6 +105,8 @@ export function buildRig(st) {
     legs,
     arms,
     torso,
+    // Points on the head, which can turn and nod on its own.
+    headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, st.nod ?? 0), st.look ?? 0))),
   };
   return toWorld(rig, heading);
 }
@@ -123,8 +125,9 @@ function toWorld(rig, heading) {
     arms: rig.arms.map((a) => ({
       s: a.s, shoulder: w(a.shoulder), elbow: w(a.elbow), wrist: w(a.wrist), hand: w(a.hand),
     })),
-    // Places a point given in the torso's own frame.
+    // Places a point given in the torso's own frame, or the head's.
     at: (p) => w(rig.torso(p)),
+    headAt: (p) => w(rig.headAt(p)),
     // How much of the body's width faces the camera (1 front or back, 0 side).
     facing: Math.abs(Math.cos(heading)),
   };
