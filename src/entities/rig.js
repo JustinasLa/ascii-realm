@@ -26,6 +26,13 @@ export function rotX(p, a) {
   return [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c];
 }
 
+// Roll: tips +y towards -x.
+export function rotZ(p, a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]];
+}
+
 // Yaw: turns +z towards +x.
 export function rotY(p, a) {
   const c = Math.cos(a);
@@ -69,6 +76,19 @@ function reach(shoulder, target, upper, fore, pole) {
   return [elbow, add(shoulder, mul(dir, dist))];
 }
 
+// A triangle wave with softened corners: the thigh angle over the walk
+// cycle, in -1..1, in step with sin().
+const SOFT = 0.96;
+const SWEEP = (a) => Math.asin(SOFT * Math.sin(a)) / Math.asin(SOFT);
+
+// How far the body travels over one full walk cycle (two steps), in metres,
+// for a given amount of running. A planted foot sweeps back through the
+// whole stride angle, so this is what keeps the feet from sliding.
+export function strideCycle(run) {
+  const swing = 0.42 + 0.3 * run;
+  return 1.25 * 4 * (THIGH + SHIN) * Math.sin(swing);
+}
+
 // Builds the posed skeleton. `st` holds:
 //   heading  radians, 0 faces the camera
 //   phase    walk cycle angle
@@ -82,7 +102,8 @@ export function buildRig(st) {
   const fight = cb ? cb.active : 0;
   const sp = cb?.pose;
   const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0);
-  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0);
+  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
+    (st.kneel ?? 0) * 0.18;
   // Shoulders counter-rotate against the hips as the legs swing.
   const twist = Math.sin(phase) * 0.14 * walk * (1 - fight * 0.6) + (sp ? SWORD_SIDE * sp.twist * fight : 0);
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;
@@ -99,9 +120,19 @@ export function buildRig(st) {
     // Crouching swings the thighs forward and folds the knees; planting the
     // feet below then lowers the hips by itself.
     const crouch = crouchAll;
-    const thigh = Math.sin(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85;
-    // The knee folds while the leg swings forward and straightens to land.
-    const knee = walk * (0.12 + 0.25 * run + (0.55 + 0.6 * run) * Math.max(0, Math.cos(lp))) + crouch * 1.6;
+    // Kneeling brings one foot forward and lowers the other knee to the
+    // ground behind it.
+    const kn = st.kneel ?? 0;
+    // The thigh sweeps back at an even pace while the foot is planted, so
+    // the foot keeps up with the ground instead of skating, and swings
+    // forward again while it is lifted. cos(lp) > 0 is the swing.
+    const swingT = Math.cos(lp);
+    const thigh = SWEEP(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
+    // The knee folds through the swing and gives a little under the weight
+    // mid-stance, but is straight as the foot lands and pushes off, so both
+    // feet meet the ground level when the weight changes over.
+    const knee = walk * ((0.55 + 0.6 * run) * Math.max(0, swingT) + (0.12 + 0.25 * run) * Math.max(0, -swingT)) +
+      crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65);
     const shin = thigh - knee;
     const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
     // Lean the legs out into a wide stance, and back under the weight.
@@ -109,6 +140,11 @@ export function buildRig(st) {
     const kneeP = add(hip, mul(limb(thigh, roll), THIGH));
     const ankle = add(kneeP, mul(limb(shin, roll), SHIN));
     const toe = add(ankle, mul(limb(Math.PI / 2 + Math.min(0, shin) * 0.8), 0.15));
+    // Pick the swinging foot up clear of the ground so it never touches
+    // down before its time.
+    const clear = walk * (0.09 + 0.08 * run) * Math.sqrt(Math.max(0, swingT));
+    ankle[1] += clear;
+    toe[1] += clear;
     legs.push({ s, hip, knee: kneeP, ankle, toe });
   }
 
@@ -116,7 +152,7 @@ export function buildRig(st) {
   // ground. A stride with the legs apart then naturally dips the body and
   // passing through upright lifts it, which is the bob of a real walk.
   let lowest = Infinity;
-  for (const l of legs) lowest = Math.min(lowest, l.ankle[1] - 0.065, l.toe[1] - 0.05);
+  for (const l of legs) lowest = Math.min(lowest, l.ankle[1] - 0.065, l.toe[1] - 0.05, l.knee[1] - 0.07);
   const lift = -lowest + (st.air ?? 0);
   pelvis[1] += lift;
   for (const l of legs) {
@@ -124,8 +160,10 @@ export function buildRig(st) {
   }
 
   // Everything above the hips hangs off the torso frame.
-  const torso = (p) => add(pelvis, rotY(rotX(p, lean), twist));
-  const turn = (d) => rotY(rotX(d, lean * 0.5), twist);
+  // Banking tilts everything above the hips into a turn.
+  const bank = st.bank ?? 0;
+  const torso = (p) => add(pelvis, rotY(rotZ(rotX(p, lean), bank), twist));
+  const turn = (d) => rotY(rotZ(rotX(d, lean * 0.5), bank), twist);
 
   const arms = [];
   for (const s of [-1, 1]) {
@@ -140,6 +178,17 @@ export function buildRig(st) {
     const wrist = add(elbowP, mul(turn(limb(swing + elbow, s * 0.08)), FOREARM));
     const hand = add(wrist, mul(turn(limb(swing + elbow, s * 0.05)), 0.06));
     arms.push({ s, shoulder, elbow: elbowP, wrist, hand });
+  }
+
+  // Kneeling, the forearm rests across the raised knee.
+  const kn = st.kneel ?? 0;
+  if (kn > 0.01) {
+    const arm = arms.find((a) => a.s > 0);
+    const knee = legs.find((l) => l.s > 0).knee;
+    const [elbow, wrist] = reach(arm.shoulder, add(knee, [-0.04, 0.06, 0.1]), UPPER_ARM, FOREARM, [1, -0.3, -0.2]);
+    arm.elbow = lerp3(arm.elbow, elbow, kn);
+    arm.wrist = lerp3(arm.wrist, wrist, kn);
+    arm.hand = lerp3(arm.hand, add(wrist, [-0.05, -0.02, 0.02]), kn);
   }
 
   // With the sword out the sword arm reaches for its pose, and the other
@@ -194,7 +243,7 @@ export function buildRig(st) {
     kneeFwd: Math.max(0, ...legs.map((l) => l.knee[2])),
     kneeBack: Math.max(0, ...legs.map((l) => -l.knee[2])),
     // Points on the head, which can turn and nod on its own.
-    headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, st.nod ?? 0), st.look ?? 0))),
+    headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, (st.nod ?? 0) + kn * 0.3), st.look ?? 0))),
   };
   return toWorld(rig, heading);
 }

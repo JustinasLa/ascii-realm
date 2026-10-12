@@ -319,9 +319,15 @@ export function drawShadow(r, view, x, y, air = 0) {
   }
 }
 
-// Rasterises the figure with its feet at world position (state.x, state.y).
-export function drawFigure(r, view, state, write = putCell) {
-  const parts = dress(buildRig(state), state.cape);
+// Poses and dresses the figure: the list of shapes to draw, back to front.
+// Built once a frame and shared by the figure and its reflection.
+export function dressFigure(state) {
+  return dress(buildRig(state), state.cape);
+}
+
+// Rasterises the dressed figure with its feet at world position
+// (state.x, state.y).
+export function drawFigure(r, view, state, parts, write = putCell) {
   let x0 = Infinity;
   let x1 = -Infinity;
   let y0 = Infinity;

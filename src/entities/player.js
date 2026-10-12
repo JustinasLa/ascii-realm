@@ -1,10 +1,16 @@
 import { ASPECT } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
-import { buildRig, project, SCALE } from './rig.js';
+import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
 
-const WALK_SPEED = 8; // rows per second; columns are scaled by ASPECT
-const RUN_SPEED = 15;
+// Ground speeds in metres per second. On screen a metre sideways spans
+// SCALE row units, but a metre up or down the screen is foreshortened by
+// the camera tilt, exactly as the figure's own feet are, so a planted foot
+// stays planted whichever way the warrior walks.
+const WALK_SPEED = 1.25;
+const RUN_SPEED = 2.9;
+const toCols = SCALE / ASPECT;
+const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
@@ -40,6 +46,10 @@ export class Player {
     // Things that happened this frame for the world to react to, such as
     // footfalls and landings: { type, x, y, strength }.
     this.events = [];
+    // 0 standing .. 1 down on one knee, resting after a long wait.
+    this.kneel = 0;
+    // Sideways tilt into turns, in radians.
+    this.bank = 0;
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -100,28 +110,38 @@ export class Player {
     const ease = (rate) => 1 - Math.exp(-rate * dt);
 
     if (moving) {
-      const speed = running ? RUN_SPEED : WALK_SPEED;
-      // Columns are narrower than rows, so horizontal motion needs more of
-      // them per second to look like the same on-screen speed.
-      const vx = (move.x / len) * speed / ASPECT;
-      const vy = (move.y / len) * speed;
-      this.tryMove(world, vx * dt, 0);
-      this.tryMove(world, 0, vy * dt);
+      // Speed up into a run gradually rather than in one jump.
+      const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
+      this.tryMove(world, (move.x / len) * speed * toCols * dt, 0);
+      this.tryMove(world, 0, (move.y / len) * speed * toRows * dt);
 
       // Turn smoothly through the in-between headings rather than snapping.
       const target = Math.atan2(move.x, move.y);
-      this.heading += angleTo(this.heading, target) * ease(TURN_RATE);
+      const turned = angleTo(this.heading, target) * ease(TURN_RATE);
+      this.heading += turned;
+      // Lean into the turn like a runner rounding a bend, harder at speed.
+      const bankTo = Math.max(-0.35, Math.min(0.35, (-turned / dt) * 0.04 * (0.4 + this.run)));
+      this.bank += (bankTo - this.bank) * ease(10);
+    }
+
+    // The legs are driven by the ground actually covered, so the stride
+    // always matches the speed and stops when the way is blocked.
+    const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
+    const going = moving && metres > 0.15 * dt;
+    if (going) {
       const stride = Math.floor(this.phase / Math.PI);
-      this.phase += dt * (8 + 5 * this.run);
+      this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
       // A foot comes down every half cycle.
       if (this.air === 0 && Math.floor(this.phase / Math.PI) !== stride) {
         this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
       }
     }
 
+    if (!moving) this.bank += -this.bank * ease(8);
+
     // Ease the stride in and out so starting and stopping is not abrupt.
-    this.walk += ((moving ? 1 : 0) - this.walk) * ease(10);
-    this.run += ((moving && running ? 1 : 0) - this.run) * ease(6);
+    this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
+    this.run += ((moving && running ? 1 : 0) - this.run) * ease(5);
     // Settle into a neutral stance once stopped.
     if (!moving && this.walk < 0.02) this.phase = 0;
 
@@ -130,7 +150,11 @@ export class Player {
     // After standing a while the warrior glances around, scanning one side
     // then the other, with the occasional downward look.
     this.idle = moving || this.air > 0 ? 0 : this.idle + dt;
-    const glance = Math.min(1, Math.max(0, (this.idle - 3) / 1.5));
+    // Left alone long enough with the sword away, the warrior kneels to
+    // rest, and springs up again the moment there is something to do.
+    const rest = this.idle > 12 && !this.combat.inHand && !this.combat.busy;
+    this.kneel += ((rest ? 1 : 0) - this.kneel) * ease(rest ? 2.2 : 9);
+    const glance = Math.min(1, Math.max(0, (this.idle - 3) / 1.5)) * (1 - this.kneel);
     const lookTo = glance * (Math.sin(this.idle * 0.55) * 0.75 + Math.sin(this.idle * 1.3) * 0.15);
     const nodTo = glance * Math.max(0, Math.sin(this.idle * 0.31 + 1)) * 0.25;
     this.look += (lookTo - this.look) * ease(4);
@@ -151,7 +175,7 @@ export class Player {
       this.events.push({
         type: 'slam',
         x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
-        y: this.y + Math.cos(this.heading) * reach * 0.35,
+        y: this.y + Math.cos(this.heading) * reach * TILT,
         strength: 1,
       });
     }
@@ -160,7 +184,7 @@ export class Player {
     const rig = buildRig(this);
     this.recordTrail(rig);
 
-    const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / SCALE];
+    const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / toRows];
     const t = this.time;
     const wind = [2.2 + Math.sin(t * 0.7) * 1.6, 0, Math.sin(t * 0.43) * 1.2];
     this.cape.update(dt, ...this.capeMount(rig), moved, wind);

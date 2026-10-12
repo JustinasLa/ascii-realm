@@ -1,5 +1,5 @@
 import { isDown, moveAxis, wasTapped } from './core/input.js';
-import { drawFigure, drawShadow, drawTrail } from './entities/figure.js';
+import { dressFigure, drawFigure, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
@@ -120,11 +120,12 @@ function frame(now) {
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
-  drawFigure(renderer, view, player, mirror);
+  const figure = dressFigure(player);
+  drawFigure(renderer, view, player, figure, mirror);
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
-  drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player) });
+  drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player, figure) });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
