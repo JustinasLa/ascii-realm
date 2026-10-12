@@ -1,9 +1,10 @@
-import { isDown, moveAxis } from './core/input.js';
-import { drawFigure, drawShadow } from './entities/figure.js';
+import { isDown, moveAxis, wasTapped } from './core/input.js';
+import { drawFigure, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
+import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
 import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
@@ -60,6 +61,7 @@ const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
+const dust = new Dust();
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
@@ -69,6 +71,12 @@ if (new URLSearchParams(location.search).has('debug')) window.game = debug;
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
 let walked = 0;
+
+// A click on the scene swings the sword.
+let clicked = false;
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0) clicked = true;
+});
 
 let last = performance.now();
 let time = 0;
@@ -81,7 +89,21 @@ function frame(now) {
   updateZoom(dt);
 
   const move = moveAxis();
+  if (wasTapped('Space')) player.jump();
+  if (wasTapped('KeyJ') || clicked) player.attack();
+  if (wasTapped('KeyF')) player.toggleSword();
+  clicked = false;
   if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  for (const e of player.events) {
+    if (e.type === 'step') dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
+    if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
+    if (e.type === 'slam') {
+      dust.burst(world, e.x, e.y, 22, 12);
+      camera.shake(0.7);
+    }
+  }
+  player.events.length = 0;
+  dust.update(dt);
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
@@ -90,7 +112,7 @@ function frame(now) {
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
   drawSkyReflection(renderer, view, time);
-  drawShadow(renderer, view, player.x, player.y);
+  drawShadow(renderer, view, player.x, player.y, player.air);
 
   // Props up to a screen above the view can still be reflected into it.
   const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
@@ -106,6 +128,8 @@ function frame(now) {
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
+  drawTrail(renderer, view, player.trail, player.time);
+  dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   renderer.draw(view.offX, view.offY);

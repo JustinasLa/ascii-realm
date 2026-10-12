@@ -3,13 +3,13 @@
 A browser game rendered entirely in ASCII characters. Every frame is a grid of
 coloured glyphs: grass is made of `\ | /` blades that sway in the wind, water is
 streaked with `- ~ ≈` ripples and reflects whatever stands on the shore, and the
-player is a hooded wanderer drawn from shaded characters.
+player is an armoured warrior drawn from hundreds of shaded characters.
 
 **Play:** https://justinasla.github.io/ascii-realm/
 
-![A hooded wanderer on a moonlit lakeshore, reflected in the water](docs/screenshot.png)
+![An armoured warrior mid-swing on a moonlit lakeshore, reflected in the water](docs/screenshot.png)
 
-For now it is a single character walking around procedurally generated terrain.
+For now it is a single warrior exploring procedurally generated terrain.
 
 ## Features
 
@@ -26,8 +26,17 @@ For now it is a single character walking around procedurally generated terrain.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
-- **The wanderer.** Built from simple shapes and rasterised into glyphs every
-  frame with supersampling, so the walk cycle is smooth in four directions.
+- **The warrior.** A 3D skeleton posed every frame, turned to any heading and
+  dressed in armour: horned great helm with glowing eyes, layered pauldrons,
+  cuirass and crimson tabard, greaves and gauntlets, a greatsword on the back
+  and a simulated cape. Every part is rasterised into glyphs with
+  supersampling: outlines follow the silhouette with a moonlit rim, and each
+  material (plate, mail, cloth, leather, brass) has its own glyph texture.
+- **Animation.** Walk and run cycles with planted feet, smooth turning, an idle
+  stance that shifts its weight and looks around, blinking, jumping with a
+  wind-up and landing squash, and sword play: draw, guard, a three-hit combo
+  with glowing swing trails and a ground-shaking overhead chop. Footsteps and
+  landings kick up dust and grass.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 
 ## Running
@@ -47,6 +56,9 @@ A browser with WebGL2 is required.
 | --- | --- |
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
+| `Space` | Jump |
+| `J` / left click | Strike (repeat for a combo) |
+| `F` | Draw or sheathe the sword |
 | Mouse wheel / `+` `-` | Zoom |
 
 ## Layout
@@ -56,6 +68,6 @@ src/
   main.js            game loop and wiring
   core/              input, hashing, noise
   render/            glyph atlas, WebGL renderer, cell writers
-  world/             terrain, grass and water shading, props, sky, reflections, fireflies
-  entities/          the wanderer: shape rig and movement
+  world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
+  entities/          the warrior: skeleton, armour, materials, cape, combat, movement
 ```

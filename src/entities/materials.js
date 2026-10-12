@@ -55,7 +55,8 @@ export const MATERIALS = {
   // The dark slit of a visor.
   void: { color: [10, 10, 16], tex: () => 0 },
   // Lights that ignore the moon: they are drawn at full brightness.
-  eye: { color: [150, 235, 255], tex: () => GLOW[0], emissive: true },
-  // Bare steel follows the direction of the blade.
-  blade: { color: [200, 208, 222], tex: null },
+  eye: { color: [150, 235, 255], tex: () => GLOW[0], emissive: true, claim: true },
+  // Bare steel is drawn as a line along the blade. Like the eyes it claims
+  // every cell it touches, as it is far thinner than a cell.
+  blade: { color: [206, 214, 228], tex: null, claim: true },
 };
