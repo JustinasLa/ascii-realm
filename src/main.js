@@ -6,6 +6,7 @@ import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
+import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { World } from './world/world.js';
 
@@ -47,8 +48,15 @@ function frame(now) {
   drawSkyReflection(renderer, time);
   drawShadow(renderer, view, player.x, player.y);
 
+  // Props up to a screen above the view can still be reflected into it.
+  const props = world.propsIn(view.x0 - 16, view.y0 - view.rows, view.x0 + view.cols + 16,
+    view.y0 + view.rows + 30);
+
+  const mirror = reflector(time);
+  for (const p of props) drawProp(renderer, view, p, mirror);
+  drawFigure(renderer, view, player, mirror);
+
   // Painter's order: whatever stands further down the screen is in front.
-  const props = world.propsIn(view.x0 - 16, view.y0 - 4, view.x0 + view.cols + 16, view.y0 + view.rows + 30);
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
   drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player) });
   drawables.sort((a, b) => a.y - b.y);
