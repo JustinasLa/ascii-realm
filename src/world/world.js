@@ -12,7 +12,7 @@ export const STONE = 4;
 export const ASPECT = 6 / 10;
 
 const CHUNK = 64;
-const WATER_LEVEL = 0.4;
+export const WATER_LEVEL = 0.4;
 const SHORE_LEVEL = 0.415;
 const STONE_LEVEL = 0.7;
 
