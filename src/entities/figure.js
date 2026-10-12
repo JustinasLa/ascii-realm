@@ -2,7 +2,7 @@ import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { MATERIALS } from './materials.js';
-import { buildRig, project, SCALE } from './rig.js';
+import { add, buildRig, project, SCALE } from './rig.js';
 import { capsule, ellipse } from './shapes.js';
 
 // The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
@@ -91,11 +91,29 @@ function dress(rig) {
     d.limb(a.shoulder, a.elbow, 0.072, 0.062, 'mail');
     d.limb(a.elbow, a.wrist, 0.06, 0.05, 'plate');
     d.blob(a.hand, 0.05, 0.055, 'leather', 0.01);
+    pauldron(d, rig, a);
   }
 
   helm(d, rig);
 
   return d.sorted();
+}
+
+// Layered shoulder plates edged in brass, with a short spike on top. They
+// ride on the torso, so they shrug with the breath but ignore the arm swing.
+function pauldron(d, rig, a) {
+  const s = a.s;
+  const top = rig.at([s * 0.24, 0.5, 0]);
+  const lower = rig.at([s * 0.27, 0.44, 0.005]);
+  // Kept just in front of the arm they cover.
+  const z = Math.max(project(a.shoulder)[2], project(a.elbow)[2]) + 0.02;
+  const zOf = (p) => Math.max(z, project(p)[2]);
+  d.blob(lower, 0.125, 0.085, 'trim', zOf(lower) - project(lower)[2] + 0.001);
+  d.blob(lower, 0.115, 0.075, 'darkPlate', zOf(lower) - project(lower)[2] + 0.002);
+  d.blob(top, 0.135, 0.09, 'trim', zOf(top) - project(top)[2] + 0.003);
+  d.blob(top, 0.125, 0.08, 'plate', zOf(top) - project(top)[2] + 0.004);
+  const spike = rig.at([s * 0.25, 0.58, -0.01]);
+  d.limb(top, add(spike, [0, 0.06, 0]), 0.03, 0.004, 'plate', zOf(top) - project(top)[2] + 0.005);
 }
 
 // A closed great helm with a dark visor slit, a brow band and a pair of

@@ -13,7 +13,7 @@ const MAIL = G('.o08');
 const CLOTH = G(" .:;i!|");
 const LEATHER = G('-=+#');
 const BONE = G('.:o0O@');
-const TRIM = G('-=o$&');
+const TRIM = G(':-==#');
 const GLOW = G('*');
 const STAR = glyph('*');
 
