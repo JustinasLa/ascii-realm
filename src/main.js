@@ -52,7 +52,7 @@ function frame(now) {
   const props = world.propsIn(view.x0 - 16, view.y0 - view.rows, view.x0 + view.cols + 16,
     view.y0 + view.rows + 30);
 
-  const mirror = reflector();
+  const mirror = reflector(time);
   for (const p of props) drawProp(renderer, view, p, mirror);
   drawFigure(renderer, view, player, mirror);
 
