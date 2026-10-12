@@ -2,15 +2,22 @@ import { ASPECT } from '../world/world.js';
 
 const WALK_SPEED = 8; // rows per second; columns are scaled by ASPECT
 const RUN_SPEED = 15;
+const TURN_RATE = 12; // how quickly the heading swings round, per second
+
+// Shortest signed angle from a to b.
+function angleTo(a, b) {
+  return Math.atan2(Math.sin(b - a), Math.cos(b - a));
+}
 
 export class Player {
   constructor(x, y) {
     this.x = x;
     this.y = y;
-    this.facing = 'down';
+    // Radians; 0 faces the camera, +pi/2 faces right.
+    this.heading = 0;
     this.phase = 0;
-    this.amp = 0;
-    this.bob = 0;
+    this.walk = 0;
+    this.run = 0;
     this.time = 0;
   }
 
@@ -18,6 +25,7 @@ export class Player {
     this.time += dt;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
+    const ease = (rate) => 1 - Math.exp(-rate * dt);
 
     if (moving) {
       const speed = running ? RUN_SPEED : WALK_SPEED;
@@ -28,18 +36,17 @@ export class Player {
       this.tryMove(world, vx * dt, 0);
       this.tryMove(world, 0, vy * dt);
 
-      if (move.x !== 0) this.facing = move.x > 0 ? 'right' : 'left';
-      else this.facing = move.y > 0 ? 'down' : 'up';
-      this.phase += dt * (running ? 13 : 9);
+      // Turn smoothly through the in-between headings rather than snapping.
+      const target = Math.atan2(move.x, move.y);
+      this.heading += angleTo(this.heading, target) * ease(TURN_RATE);
+      this.phase += dt * (8 + 5 * this.run);
     }
 
     // Ease the stride in and out so starting and stopping is not abrupt.
-    this.amp += ((moving ? 1 : 0) - this.amp) * (1 - Math.exp(-12 * dt));
-    if (!moving && this.amp < 0.02) this.phase = 0;
-
-    const step = Math.abs(Math.sin(this.phase)) * 0.35 * this.amp;
-    const breathe = (Math.sin(this.time * 2.2) * 0.5 + 0.5) * 0.12 * (1 - this.amp);
-    this.bob = step + breathe;
+    this.walk += ((moving ? 1 : 0) - this.walk) * ease(10);
+    this.run += ((moving && running ? 1 : 0) - this.run) * ease(6);
+    // Settle into a neutral stance once stopped.
+    if (!moving && this.walk < 0.02) this.phase = 0;
   }
 
   // Moves along one axis at a time so the player slides along shorelines.

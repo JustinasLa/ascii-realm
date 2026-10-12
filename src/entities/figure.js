@@ -1,12 +1,14 @@
 import { putCell } from '../render/cells.js';
-import { capsule as cap, ellipse as ell, quad } from './shapes.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
+import { buildRig, project, SCALE } from './rig.js';
+import { capsule, ellipse } from './shapes.js';
 
-// The wanderer is not a hand-drawn sprite: it is a handful of simple shapes
-// (capsules, ellipses, trapezoids) that are rasterised into character cells
-// every frame. That way the walk cycle can be animated smoothly and the figure
-// glides between cells instead of snapping.
+// The wanderer is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
+// every frame, dressed in simple shapes (capsules, ellipses, cloth panels)
+// that are projected onto the screen, sorted back to front and rasterised
+// into character cells with supersampling. That way every movement can be
+// animated smoothly and the figure glides between cells instead of snapping.
 //
 // Shapes live in "row units": one unit is one cell tall, the feet are at the
 // origin and up is negative y.
@@ -24,83 +26,71 @@ const COLORS = {
   pants: [58, 54, 56],
   boots: [44, 34, 30],
   belt: [104, 72, 44],
-  pack: [116, 86, 56],
   hand: [150, 120, 100],
 };
 
-// Wraps a shape with the colour it is painted in.
-function part(shape, color) {
-  shape.color = color;
-  return shape;
-}
-
-// Trapezoid between rows y0 (top) and y1 (bottom); the centre may drift so a
-// cloak can lean into the walk.
-function trapezoid(y0, y1, cx0, cx1, half0, half1, color) {
-  return part(quad([cx0 - half0, y0], [cx0 + half0, y0], [cx1 + half1, y1], [cx1 - half1, y1]), color);
-}
-
-const capsule = (ax, ay, bx, by, rad, color) => part(cap(ax, ay, bx, by, rad), color);
-const ellipse = (cx, cy, rx, ry, color) => part(ell(cx, cy, rx, ry), color);
-
-// Builds the list of shapes, back to front, for the current pose.
-function pose({ facing, phase, amp, bob }) {
-  const parts = [];
-  const C = COLORS;
-  const s = Math.sin(phase) * amp;
-  const top = -bob;
-
-  if (facing === 'down' || facing === 'up') {
-    const liftL = Math.max(0, s) * 0.9;
-    const liftR = Math.max(0, -s) * 0.9;
-    for (const [side, lift] of [[-1, liftL], [1, liftR]]) {
-      parts.push(capsule(side * 0.85, -4.6 + top, side * 0.9, -1.2 - lift, 0.62, C.pants));
-      parts.push(capsule(side * 0.9, -1.1 - lift, side * 0.95, -0.45 - lift, 0.7, C.boots));
-    }
-    parts.push(trapezoid(-11 + top, -4.1 + top, 0, 0, 1.9, 2.7, C.cloak));
-    parts.push(trapezoid(-7.3 + top, -6.7 + top, 0, 0, 2.35, 2.45, C.belt));
-    if (facing === 'up') {
-      parts.push(trapezoid(-10.4 + top, -7.4 + top, 0, 0, 1.45, 1.55, C.pack));
-    }
-    for (const side of [-1, 1]) {
-      const swing = side * s * 0.7;
-      parts.push(capsule(side * 2.15, -10.3 + top, side * 2.5, -6.8 + top + swing, 0.68, C.sleeve));
-      parts.push(ellipse(side * 2.55, -6.3 + top + swing, 0.55, 0.55, C.hand));
-    }
-    parts.push(ellipse(0, -12.3 + top, 1.75, 1.95, C.hood));
-    if (facing === 'down') parts.push(ellipse(0, -12.0 + top, 0.95, 1.1, C.face));
-  } else {
-    const dir = facing === 'right' ? 1 : -1;
-    const stride = 1.5;
-    const legs = [
-      { foot: -s * stride, lift: Math.max(0, -Math.cos(phase)) * 0.6 * amp, shade: 0.75 },
-      { foot: s * stride, lift: Math.max(0, Math.cos(phase)) * 0.6 * amp, shade: 1 },
-    ];
-    const tint = (c, k) => c.map((v) => v * k);
-
-    // Far side first so the near leg and arm overlap it.
-    const far = legs[0];
-    parts.push(capsule(0, -4.6 + top, far.foot * dir, -1.2 - far.lift, 0.62, tint(C.pants, far.shade)));
-    parts.push(capsule(far.foot * dir, -1.0 - far.lift, far.foot * dir + dir * 0.6, -0.45 - far.lift, 0.6,
-      tint(C.boots, far.shade)));
-    parts.push(capsule(0, -10.2 + top, s * 1.4 * dir, -6.8 + top, 0.6, tint(C.sleeve, 0.75)));
-
-    const lean = dir * 0.3 * amp;
-    parts.push(trapezoid(-10.2 + top, -7.2 + top, -dir * 1.9 + lean, -dir * 1.7 + lean, 0.75, 0.85, C.pack));
-    parts.push(trapezoid(-11 + top, -4.1 + top, lean, -lean * 1.5, 1.35, 1.95, C.cloak));
-    parts.push(trapezoid(-7.3 + top, -6.7 + top, lean * 0.4, lean * 0.4, 1.5, 1.6, C.belt));
-
-    const near = legs[1];
-    parts.push(capsule(0, -4.6 + top, near.foot * dir, -1.2 - near.lift, 0.62, C.pants));
-    parts.push(capsule(near.foot * dir, -1.0 - near.lift, near.foot * dir + dir * 0.6, -0.45 - near.lift, 0.6,
-      C.boots));
-    parts.push(capsule(lean, -10.2 + top, -s * 1.4 * dir, -6.8 + top, 0.62, C.sleeve));
-    parts.push(ellipse(-s * 1.45 * dir, -6.3 + top, 0.5, 0.5, C.hand));
-
-    parts.push(ellipse(lean + dir * 0.1, -12.3 + top, 1.55, 1.95, C.hood));
-    parts.push(ellipse(lean + dir * 0.95, -12.0 + top, 0.55, 1.0, C.face));
+// Collects projected shapes along with their depth, so they can be drawn
+// back to front.
+class Dresser {
+  constructor() {
+    this.parts = [];
   }
-  return parts;
+
+  add(shape, color, z) {
+    shape.color = color;
+    shape.z = z;
+    this.parts.push(shape);
+  }
+
+  // A limb segment between two joints, radii in metres.
+  limb(a, b, ra, rb, color, bias = 0) {
+    const pa = project(a);
+    const pb = project(b);
+    this.add(capsule(pa[0], pa[1], pb[0], pb[1], ra * SCALE, rb * SCALE), color, (pa[2] + pb[2]) / 2 + bias);
+  }
+
+  // A round blob, radii in metres.
+  blob(c, rx, ry, color, bias = 0) {
+    const p = project(c);
+    this.add(ellipse(p[0], p[1], rx * SCALE, ry * SCALE), color, p[2] + bias);
+  }
+
+  sorted() {
+    return this.parts.sort((a, b) => a.z - b.z);
+  }
+}
+
+// The torso is wider than it is deep, so how wide it looks depends on how
+// far it has turned towards the camera.
+const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
+
+// Dresses the posed skeleton, back to front.
+function dress(rig) {
+  const C = COLORS;
+  const d = new Dresser();
+
+  for (const l of rig.legs) {
+    d.limb(l.hip, l.knee, 0.085, 0.07, C.pants);
+    d.limb(l.knee, l.ankle, 0.068, 0.055, C.pants);
+    d.limb(l.ankle, l.toe, 0.06, 0.055, C.boots, 0.01);
+  }
+
+  d.limb(rig.waist, rig.chest, across(rig, 0.16, 0.12), across(rig, 0.19, 0.13), C.cloak);
+  d.limb(rig.pelvis, rig.waist, across(rig, 0.17, 0.12), across(rig, 0.16, 0.12), C.belt, 0.01);
+  d.limb(rig.neck, rig.chest, 0.06, across(rig, 0.18, 0.12), C.cloak, 0.01);
+
+  for (const a of rig.arms) {
+    d.limb(a.shoulder, a.elbow, 0.072, 0.062, C.sleeve);
+    d.limb(a.elbow, a.wrist, 0.06, 0.05, C.sleeve);
+    d.blob(a.hand, 0.05, 0.055, C.hand, 0.01);
+  }
+
+  d.blob(rig.head, 0.15, 0.16, C.hood);
+  // The face only shows while the head is turned towards the camera.
+  const face = rig.at([0, 0.635, 0.1]);
+  d.blob(face, 0.085, 0.1, C.face, face[2] > rig.head[2] ? 0.2 : -0.2);
+
+  return d.sorted();
 }
 
 const SAMPLE = { nx: 0, ny: 0, u: 0, v: 0 };
@@ -134,14 +124,22 @@ export function drawShadow(r, view, x, y) {
 
 // Rasterises the figure with its feet at world position (state.x, state.y).
 export function drawFigure(r, view, state, write = putCell) {
-  const parts = pose(state);
-  const fx = Math.floor(state.x);
-  const fy = Math.floor(state.y);
-  const base = fy - view.y0;
+  const parts = dress(buildRig(state));
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const p of parts) {
+    x0 = Math.min(x0, p.x0);
+    x1 = Math.max(x1, p.x1);
+    y0 = Math.min(y0, p.y0);
+    y1 = Math.max(y1, p.y1);
+  }
+  const base = Math.floor(state.y) - view.y0;
 
-  for (let cy = fy - 16; cy <= fy + 1; cy++) {
+  for (let cy = Math.floor(state.y + y0); cy <= Math.floor(state.y + y1); cy++) {
     const sy = cy - view.y0;
-    for (let cx = fx - 6; cx <= fx + 6; cx++) {
+    for (let cx = Math.floor(state.x + x0 / ASPECT); cx <= Math.floor(state.x + x1 / ASPECT); cx++) {
       const sx = cx - view.x0;
 
       let hits = 0;
@@ -168,8 +166,7 @@ export function drawFigure(r, view, state, write = putCell) {
           const nx = SAMPLE.nx;
 
           // Moonlight from the upper left, plus a cool rim on the lit edge.
-          const t = (py - hit.y0) / (hit.y1 - hit.y0);
-          let l = 0.78 - 0.32 * nx - 0.22 * t;
+          let l = 0.7 - 0.32 * nx - 0.12 * SAMPLE.ny;
           if (nx < -0.72) l += 0.25;
           hits++;
           lum += l;
