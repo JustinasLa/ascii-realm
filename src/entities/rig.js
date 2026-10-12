@@ -243,7 +243,9 @@ export function buildRig(st) {
     kneeFwd: Math.max(0, ...legs.map((l) => l.knee[2])),
     kneeBack: Math.max(0, ...legs.map((l) => -l.knee[2])),
     // Points on the head, which can turn and nod on its own.
-    headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, (st.nod ?? 0) + kn * 0.3), st.look ?? 0))),
+    // The neck turns against the shoulders' swing, so the head stays
+    // pointed where the warrior is going rather than wagging with each step.
+    headAt: (p) => torso(add([0, 0.64, 0.01], rotY(rotX(p, (st.nod ?? 0) + kn * 0.3), (st.look ?? 0) - twist * 0.85))),
   };
   return toWorld(rig, heading);
 }
