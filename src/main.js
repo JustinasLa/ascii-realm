@@ -41,7 +41,7 @@ function frame(now) {
   camera.follow(player.x, player.y - 6, dt);
 
   const view = camera.view(renderer);
-  drawGround(renderer, world, view, time);
+  drawGround(renderer, world, view, time, player);
   drawShadow(renderer, view, player.x, player.y);
   drawFigure(renderer, view, player);
   renderer.draw(view.offX, view.offY);

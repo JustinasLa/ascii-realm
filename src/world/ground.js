@@ -7,6 +7,7 @@ const G = (s) => [...s].map(glyph);
 // Blades lean with the wind: index 0 leans left, 2 leans right.
 const BLADE = G('\\|/');
 const STUBBLE = G(`',"\``);
+const BEND_R2 = 3.2 * 3.2;
 const DEW = glyph('.');
 const STAR = glyph('*');
 const GREENS = [
@@ -24,7 +25,7 @@ const WATER_CH = G('~-');
 
 // Fills the grid with the terrain under the camera. Writes straight into the
 // renderer's buffers because this runs for every visible cell every frame.
-export function drawGround(r, world, view, t) {
+export function drawGround(r, world, view, t, bend) {
   const { fg, bg, cols } = r;
   let chunk = null;
   let ccx = 0;
@@ -58,7 +59,12 @@ export function drawGround(r, world, view, t) {
         // Slow gusts roll across the field; each blade also flutters on its
         // own phase so neighbours never move in lockstep.
         const gust = valueNoise(wx * ASPECT * 0.035 - t * 0.55, wy * 0.035 + t * 0.12, world.seed + 900);
-        const lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
+        let lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
+        // Blades near the wanderer's feet are pushed aside.
+        const pdx = (wx + 0.5 - bend.x) * ASPECT;
+        const pdy = wy + 0.5 - bend.y;
+        const pd = pdx * pdx + pdy * pdy;
+        if (pd < BEND_R2) lean += Math.sign(pdx) * (1 - pd / BEND_R2) * 3;
         if (rnd < 0.12) ch = STUBBLE[Math.floor(rnd * 33) % STUBBLE.length];
         else ch = BLADE[lean < -0.35 ? 0 : lean > 0.35 ? 2 : 1];
         // Pick one of a few greens per blade, darken whole patches with the
