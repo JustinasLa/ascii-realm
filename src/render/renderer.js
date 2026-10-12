@@ -122,28 +122,37 @@ export class AsciiRenderer {
     this.rows = 0;
   }
 
-  // Cell size is given in CSS pixels; it is snapped to whole device pixels so
-  // glyph edges stay crisp.
+  // Cell size is given in CSS pixels and may be fractional: rounding it to
+  // whole device pixels would nudge the width/height ratio at every zoom
+  // level and visibly stretch the world. The buffers are only reallocated
+  // when the grid actually changes size, so zooming smoothly is cheap.
   resize(cssW, cssH, dpr, cellW, cellH) {
     const gl = this.gl;
-    this.canvas.width = Math.round(cssW * dpr);
-    this.canvas.height = Math.round(cssH * dpr);
-    this.cellW = Math.max(2, Math.round(cellW * dpr));
-    this.cellH = Math.max(3, Math.round(cellH * dpr));
+    const w = Math.round(cssW * dpr);
+    const h = Math.round(cssH * dpr);
+    if (w !== this.canvas.width || h !== this.canvas.height) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      gl.viewport(0, 0, w, h);
+    }
+    this.dpr = dpr;
+    this.cellW = Math.max(2, cellW * dpr);
+    this.cellH = Math.max(3, cellH * dpr);
     // One spare row and column so sub-cell scrolling never exposes a gap.
-    this.cols = Math.ceil(this.canvas.width / this.cellW) + 1;
-    this.rows = Math.ceil(this.canvas.height / this.cellH) + 1;
-    this.fg = new Uint8ClampedArray(this.cols * this.rows * 4);
-    this.bg = new Uint8ClampedArray(this.cols * this.rows * 4);
+    const cols = Math.ceil(w / this.cellW) + 1;
+    const rows = Math.ceil(h / this.cellH) + 1;
+    if (cols === this.cols && rows === this.rows) return;
+    this.cols = cols;
+    this.rows = rows;
+    this.fg = new Uint8ClampedArray(cols * rows * 4);
+    this.bg = new Uint8ClampedArray(cols * rows * 4);
     // Terrain type under each cell, so later passes know where water is.
-    this.mask = new Uint8Array(this.cols * this.rows);
+    this.mask = new Uint8Array(cols * rows);
 
     for (const tex of [this.fgTex, this.bgTex]) {
       gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.cols, this.rows, 0, gl.RGBA,
-        gl.UNSIGNED_BYTE, null);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     }
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
 
   clear(r = 0, g = 0, b = 0) {

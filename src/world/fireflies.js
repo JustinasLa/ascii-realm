@@ -3,7 +3,9 @@ import { glyph } from '../render/glyphs.js';
 import { ASPECT, GRASS } from './world.js';
 
 const BODY = [glyph('.'), glyph('*'), glyph('o')];
-const COUNT = 60;
+// How many fireflies per screen cell, so the meadow looks equally busy at
+// every zoom level.
+const DENSITY = 1 / 260;
 
 // Little lights that wander over the meadow around the camera and pulse on
 // and off. Each one also tints the cells around it to fake a glow.
@@ -13,7 +15,9 @@ export class Fireflies {
   }
 
   update(dt, t, world, cx, cy, halfW, halfH) {
-    while (this.list.length < COUNT) this.list.push(this.spawn(world, cx, cy, halfW, halfH));
+    const count = Math.round(4 * halfW * halfH * DENSITY);
+    while (this.list.length < count) this.list.push(this.spawn(world, cx, cy, halfW, halfH));
+    if (this.list.length > count) this.list.length = count;
     for (let i = 0; i < this.list.length; i++) {
       const f = this.list[i];
       // Drift along a slowly changing noise field, each on its own track.
