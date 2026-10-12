@@ -1,157 +1,287 @@
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
+import { MATERIALS } from './materials.js';
+import { add, buildRig, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
+import { capsule, ellipse, quad } from './shapes.js';
 
-// The wanderer is not a hand-drawn sprite: it is a handful of simple shapes
-// (capsules, ellipses, trapezoids) that are rasterised into character cells
-// every frame. That way the walk cycle can be animated smoothly and the figure
-// glides between cells instead of snapping.
+// The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
+// every frame, dressed in simple shapes (capsules, ellipses, cloth panels)
+// that are projected onto the screen, sorted back to front and rasterised
+// into character cells with supersampling. That way every movement can be
+// animated smoothly and the figure glides between cells instead of snapping.
 //
 // Shapes live in "row units": one unit is one cell tall, the feet are at the
 // origin and up is negative y.
 
-const RAMP = [...' .:-=+*#%@'].map(glyph);
-const EDGE_TOP = glyph("'");
-const EDGE_BOTTOM = glyph('.');
-const EDGE_SIDE = glyph(':');
-
-const COLORS = {
-  cloak: [74, 86, 102],
-  sleeve: [62, 72, 88],
-  hood: [66, 78, 94],
-  face: [128, 104, 88],
-  pants: [58, 54, 56],
-  boots: [44, 34, 30],
-  belt: [104, 72, 44],
-  pack: [116, 86, 56],
-  hand: [150, 120, 100],
+const EDGE = {
+  top: glyph('_'),
+  topLight: glyph('.'),
+  bottom: glyph('"'),
+  bottomLight: glyph("'"),
+  side: glyph('|'),
+  rise: glyph('/'),
+  fall: glyph('\\'),
+  flat: glyph('-'),
 };
 
-function capsule(ax, ay, bx, by, rad, color) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const len2 = dx * dx + dy * dy || 1;
-  return {
-    color,
-    y0: Math.min(ay, by) - rad,
-    y1: Math.max(ay, by) + rad,
-    test(x, y) {
-      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
-      const px = x - (ax + dx * t);
-      const py = y - (ay + dy * t);
-      if (px * px + py * py > rad * rad) return NaN;
-      return px / rad;
-    },
-  };
+// The glyph that best draws a bar running in a given screen direction.
+function barGlyph(dx, dy) {
+  const a = ((Math.atan2(dy, dx) * 180) / Math.PI + 180) % 180;
+  if (a < 22.5 || a >= 157.5) return EDGE.flat;
+  if (a < 67.5) return EDGE.fall;
+  if (a < 112.5) return EDGE.side;
+  return EDGE.rise;
 }
 
-function ellipse(cx, cy, rx, ry, color) {
-  return {
-    color,
-    y0: cy - ry,
-    y1: cy + ry,
-    test(x, y) {
-      const dx = (x - cx) / rx;
-      const dy = (y - cy) / ry;
-      return dx * dx + dy * dy <= 1 ? dx : NaN;
-    },
-  };
-}
-
-// Trapezoid between rows y0 (top) and y1 (bottom); the centre may drift so a
-// cloak can lean into the walk.
-function trapezoid(y0, y1, cx0, cx1, half0, half1, color) {
-  return {
-    color,
-    y0,
-    y1,
-    test(x, y) {
-      if (y < y0 || y > y1) return NaN;
-      const t = (y - y0) / (y1 - y0);
-      const cx = cx0 + (cx1 - cx0) * t;
-      const half = half0 + (half1 - half0) * t;
-      const nx = (x - cx) / half;
-      return Math.abs(nx) <= 1 ? nx : NaN;
-    },
-  };
-}
-
-// Builds the list of shapes, back to front, for the current pose.
-function pose({ facing, phase, amp, bob }) {
-  const parts = [];
-  const C = COLORS;
-  const s = Math.sin(phase) * amp;
-  const top = -bob;
-
-  if (facing === 'down' || facing === 'up') {
-    const liftL = Math.max(0, s) * 0.9;
-    const liftR = Math.max(0, -s) * 0.9;
-    for (const [side, lift] of [[-1, liftL], [1, liftR]]) {
-      parts.push(capsule(side * 0.85, -4.6 + top, side * 0.9, -1.2 - lift, 0.62, C.pants));
-      parts.push(capsule(side * 0.9, -1.1 - lift, side * 0.95, -0.45 - lift, 0.7, C.boots));
-    }
-    parts.push(trapezoid(-11 + top, -4.1 + top, 0, 0, 1.9, 2.7, C.cloak));
-    parts.push(trapezoid(-7.3 + top, -6.7 + top, 0, 0, 2.35, 2.45, C.belt));
-    if (facing === 'up') {
-      parts.push(trapezoid(-10.4 + top, -7.4 + top, 0, 0, 1.45, 1.55, C.pack));
-    }
-    for (const side of [-1, 1]) {
-      const swing = side * s * 0.7;
-      parts.push(capsule(side * 2.15, -10.3 + top, side * 2.5, -6.8 + top + swing, 0.68, C.sleeve));
-      parts.push(ellipse(side * 2.55, -6.3 + top + swing, 0.55, 0.55, C.hand));
-    }
-    parts.push(ellipse(0, -12.3 + top, 1.75, 1.95, C.hood));
-    if (facing === 'down') parts.push(ellipse(0, -12.0 + top, 0.95, 1.1, C.face));
-  } else {
-    const dir = facing === 'right' ? 1 : -1;
-    const stride = 1.5;
-    const legs = [
-      { foot: -s * stride, lift: Math.max(0, -Math.cos(phase)) * 0.6 * amp, shade: 0.75 },
-      { foot: s * stride, lift: Math.max(0, Math.cos(phase)) * 0.6 * amp, shade: 1 },
-    ];
-    const tint = (c, k) => c.map((v) => v * k);
-
-    // Far side first so the near leg and arm overlap it.
-    const far = legs[0];
-    parts.push(capsule(0, -4.6 + top, far.foot * dir, -1.2 - far.lift, 0.62, tint(C.pants, far.shade)));
-    parts.push(capsule(far.foot * dir, -1.0 - far.lift, far.foot * dir + dir * 0.6, -0.45 - far.lift, 0.6,
-      tint(C.boots, far.shade)));
-    parts.push(capsule(0, -10.2 + top, s * 1.4 * dir, -6.8 + top, 0.6, tint(C.sleeve, 0.75)));
-
-    const lean = dir * 0.3 * amp;
-    parts.push(trapezoid(-10.2 + top, -7.2 + top, -dir * 1.9 + lean, -dir * 1.7 + lean, 0.75, 0.85, C.pack));
-    parts.push(trapezoid(-11 + top, -4.1 + top, lean, -lean * 1.5, 1.35, 1.95, C.cloak));
-    parts.push(trapezoid(-7.3 + top, -6.7 + top, lean * 0.4, lean * 0.4, 1.5, 1.6, C.belt));
-
-    const near = legs[1];
-    parts.push(capsule(0, -4.6 + top, near.foot * dir, -1.2 - near.lift, 0.62, C.pants));
-    parts.push(capsule(near.foot * dir, -1.0 - near.lift, near.foot * dir + dir * 0.6, -0.45 - near.lift, 0.6,
-      C.boots));
-    parts.push(capsule(lean, -10.2 + top, -s * 1.4 * dir, -6.8 + top, 0.62, C.sleeve));
-    parts.push(ellipse(-s * 1.45 * dir, -6.3 + top, 0.5, 0.5, C.hand));
-
-    parts.push(ellipse(lean + dir * 0.1, -12.3 + top, 1.55, 1.95, C.hood));
-    parts.push(ellipse(lean + dir * 0.95, -12.0 + top, 0.55, 1.0, C.face));
+// Collects projected shapes along with their depth, so they can be drawn
+// back to front.
+class Dresser {
+  constructor() {
+    this.parts = [];
   }
-  return parts;
+
+  add(shape, mat, z) {
+    shape.mat = MATERIALS[mat];
+    shape.z = z;
+    this.parts.push(shape);
+    return shape;
+  }
+
+  // A limb segment between two joints, radii in metres.
+  limb(a, b, ra, rb, mat, bias = 0) {
+    const pa = project(a);
+    const pb = project(b);
+    const shape = this.add(capsule(pa[0], pa[1], pb[0], pb[1], ra * SCALE, rb * SCALE), mat,
+      (pa[2] + pb[2]) / 2 + bias);
+    shape.bar = barGlyph(pb[0] - pa[0], pb[1] - pa[1]);
+    return shape;
+  }
+
+  // A round blob, radii in metres.
+  blob(c, rx, ry, mat, bias = 0) {
+    const p = project(c);
+    return this.add(ellipse(p[0], p[1], rx * SCALE, ry * SCALE), mat, p[2] + bias);
+  }
+
+  // A flat panel through four world points (top edge first), e.g. cloth.
+  panel(a, b, c, e, mat, bias = 0) {
+    const p = [a, b, c, e].map(project);
+    const z = (p[0][2] + p[1][2] + p[2][2] + p[3][2]) / 4;
+    return this.add(quad(p[0], p[1], p[2], p[3]), mat, z + bias);
+  }
+
+  sorted() {
+    return this.parts.sort((a, b) => a.z - b.z);
+  }
 }
 
-const SUB_X = [0.25, 0.75];
-const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
+// The torso is wider than it is deep, so how wide it looks depends on how
+// far it has turned towards the camera.
+const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
+
+// Dresses the posed skeleton, back to front.
+function dress(rig, capeSim) {
+  const d = new Dresser();
+  if (capeSim?.pts) cape(d, rig, capeSim.pts);
+
+  for (const l of rig.legs) {
+    // Mail thighs, a plate knee cop, a greave down the shin and a sabaton.
+    d.limb(l.hip, l.knee, 0.09, 0.072, 'mail');
+    d.limb(l.knee, l.ankle, 0.075, 0.06, 'plate');
+    d.limb(l.ankle, l.toe, 0.068, 0.055, 'darkPlate', 0.01);
+    d.blob(lerp3(l.knee, l.ankle, 0.04), 0.07, 0.065, 'darkPlate', 0.02);
+    d.limb(lerp3(l.knee, l.ankle, 0.8), lerp3(l.knee, l.ankle, 0.86), 0.072, 0.07, 'trim', 0.015);
+  }
+
+  cuirass(d, rig);
+  greatsword(d, rig);
+
+  for (const a of rig.arms) {
+    // Mail sleeve, an elbow cop, a flared vambrace and a plated gauntlet.
+    d.limb(a.shoulder, a.elbow, 0.074, 0.064, 'mail');
+    d.limb(a.elbow, a.wrist, 0.058, 0.07, 'plate');
+    d.blob(a.elbow, 0.062, 0.06, 'darkPlate', 0.01);
+    d.limb(lerp3(a.elbow, a.wrist, 0.9), a.wrist, 0.074, 0.074, 'trim', 0.012);
+    d.limb(a.wrist, a.hand, 0.06, 0.055, 'darkPlate', 0.015);
+    pauldron(d, rig, a);
+  }
+
+  helm(d, rig);
+
+  return d.sorted();
+}
+
+// Mail over the belly, a breastplate and gorget above it, a belt with a
+// brass buckle, plate tassets over the hips and a crimson tabard hanging
+// front and back that the knees push aside as they swing.
+function cuirass(d, rig) {
+  const at = rig.at;
+  const w = (a, b) => across(rig, a, b);
+  // Bits on the front vanish when the warrior turns away, and vice versa.
+  const front = (p) => (project(p)[2] > project(rig.waist)[2] ? 0.15 : -0.15);
+
+  d.limb(rig.pelvis, rig.chest, w(0.16, 0.12), w(0.17, 0.12), 'mail');
+  d.limb(at([0, 0.26, 0.02]), at([0, 0.42, 0.01]), w(0.18, 0.13), w(0.2, 0.135), 'plate', 0.02);
+  d.limb(rig.neck, at([0, 0.47, 0]), 0.075, w(0.1, 0.09), 'darkPlate', 0.03);
+  d.limb(at([0, 0.01, 0]), at([0, 0.06, 0]), w(0.175, 0.13), w(0.17, 0.13), 'leather', 0.025);
+  const buckle = at([0, 0.035, 0.15]);
+  d.blob(buckle, 0.035, 0.03, 'trim', front(buckle));
+
+  for (const s of [-1, 1]) {
+    d.limb(at([s * 0.14, -0.01, 0.02]), at([s * 0.19, -0.2, 0.05]), 0.065, 0.075, 'darkPlate', 0.03);
+  }
+
+  for (const side of [1, -1]) {
+    const z = side * 0.14;
+    const push = side > 0 ? rig.kneeFwd : -rig.kneeBack;
+    d.panel(at([-0.1, 0.0, z]), at([0.1, 0.0, z]), at([0.12, -0.46, z + push * 0.8]),
+      at([-0.12, -0.46, z + push * 0.8]), 'crimson', side * 0.04);
+  }
+}
+
+// The crimson cape: one cloth panel per link of the simulated chain,
+// widening towards a ragged hem. It is sorted a little further back than it
+// hangs, so it drapes under the pauldrons and sword rather than over them.
+function cape(d, rig, pts) {
+  const lat = rotY([1, 0, 0], rig.heading);
+  const n = pts.length;
+  const half = (i) => 0.2 + (0.11 * i) / (n - 1);
+  // Seen edge-on the cloth would vanish into a line, so give it the bulk of
+  // its folds from the side.
+  const back = rotY([0, 0, -1], rig.heading);
+  const bulk = (i) => mul(back, (1 - rig.facing) * (0.04 + (0.08 * i) / (n - 1)));
+  const edge = (i, s) => add(mul(lat, s * half(i)), mul(bulk(i), s));
+  for (let i = 0; i < n - 1; i++) {
+    const a = pts[i];
+    const b = pts[i + 1];
+    d.panel(add(a, edge(i, -1)), add(a, edge(i, 1)), add(b, edge(i + 1, 1)), add(b, edge(i + 1, -1)), 'crimson',
+      -0.1);
+  }
+  // Tatters: strips of uneven length hanging off the hem.
+  const hem = pts[n - 1];
+  const dir = sub(hem, pts[n - 2]);
+  const len = Math.hypot(...dir) || 1;
+  for (let k = 0; k < 5; k++) {
+    const x = ((k + 0.5) / 5) * 2 - 1;
+    const top = add(hem, mul(lat, x * half(n - 1) * 0.9));
+    const drop = 0.05 + ((k * 37) % 5) * 0.025;
+    d.limb(top, add(top, mul(dir, drop / len)), 0.045, 0.012, 'crimson', -0.1);
+  }
+}
+
+// A greatsword slung across the back in a leather scabbard, the hilt riding
+// above the right shoulder.
+function greatsword(d, rig) {
+  const at = rig.at;
+  const pommel = at([-0.21, 0.72, -0.2]);
+  const guard = at([-0.15, 0.56, -0.2]);
+  const tip = at([0.2, -0.46, -0.21]);
+  d.limb(guard, tip, 0.05, 0.035, 'leather', -0.01);
+  d.limb(lerp3(guard, tip, 0.93), tip, 0.054, 0.04, 'trim', -0.005);
+  d.limb(lerp3(guard, tip, 0.02), lerp3(guard, tip, 0.06), 0.056, 0.056, 'trim', -0.005);
+  d.limb(at([-0.25, 0.52, -0.2]), at([-0.05, 0.6, -0.2]), 0.026, 0.026, 'trim');
+  d.limb(guard, pommel, 0.026, 0.024, 'leather');
+  d.blob(pommel, 0.04, 0.04, 'trim', 0.001);
+}
+
+// Layered shoulder plates edged in brass, with a short spike on top. They
+// ride on the torso, so they shrug with the breath but ignore the arm swing.
+function pauldron(d, rig, a) {
+  const s = a.s;
+  const top = rig.at([s * 0.24, 0.5, 0]);
+  const lower = rig.at([s * 0.27, 0.44, 0.005]);
+  // Kept just in front of the arm they cover.
+  const z = Math.max(project(a.shoulder)[2], project(a.elbow)[2]) + 0.05;
+  const zOf = (p) => Math.max(z, project(p)[2]);
+  d.blob(lower, 0.125, 0.085, 'trim', zOf(lower) - project(lower)[2] + 0.001);
+  d.blob(lower, 0.115, 0.075, 'darkPlate', zOf(lower) - project(lower)[2] + 0.002);
+  d.blob(top, 0.135, 0.09, 'trim', zOf(top) - project(top)[2] + 0.003);
+  d.blob(top, 0.125, 0.08, 'plate', zOf(top) - project(top)[2] + 0.004);
+  const spike = rig.at([s * 0.25, 0.58, -0.01]);
+  d.limb(top, add(spike, [0, 0.06, 0]), 0.03, 0.004, 'plate', zOf(top) - project(top)[2] + 0.005);
+}
+
+// A closed great helm with a dark visor slit, a brow band and a pair of
+// horns sweeping up and back.
+function helm(d, rig) {
+  const h = rig.headAt;
+  const head = h([0, 0, 0]);
+  const z = project(head)[2];
+  // Anything on the front of the helm is hidden once it turns away.
+  const front = (p) => (project(p)[2] > z ? 0.3 : -0.3);
+
+  for (const s of [-1, 1]) {
+    const root = h([s * 0.11, 0.07, -0.01]);
+    const bend = h([s * 0.24, 0.13, -0.05]);
+    const tip = h([s * 0.27, 0.31, -0.12]);
+    d.limb(root, bend, 0.045, 0.032, 'horn', front(root) * 0.1);
+    d.limb(bend, tip, 0.032, 0.008, 'horn', front(root) * 0.1);
+  }
+
+  d.blob(head, 0.15, 0.17, 'plate');
+  // A ridge running over the crown, front to back.
+  d.limb(h([0, 0.15, 0.08]), h([0, 0.13, -0.1]), 0.022, 0.018, 'darkPlate', 0.05);
+  const brow = h([0, 0.035, 0.11]);
+  d.limb(h([-0.12, 0.03, 0.06]), h([0.12, 0.03, 0.06]), 0.026, 0.026, 'trim', front(brow));
+  const slit = h([0, -0.015, 0.125]);
+  d.blob(slit, 0.1, 0.026, 'void', front(slit) * 1.1);
+}
+
+// Each cell is sampled on a 3x4 grid. Coverage decides between leaving the
+// ground showing, drawing an outline glyph and filling the cell with the
+// material's texture.
+const SUB_X = [1 / 6, 3 / 6, 5 / 6];
+const SUB_Y = [1 / 8, 3 / 8, 5 / 8, 7 / 8];
+const SAMPLES = SUB_X.length * SUB_Y.length;
+const SAMPLE = { nx: 0, ny: 0, u: 0, v: 0 };
+const hitPart = new Int16Array(SAMPLES);
+const hitLum = new Float32Array(SAMPLES);
+const hitU = new Float32Array(SAMPLES);
+const hitV = new Float32Array(SAMPLES);
+
+// Moonlight comes from the upper left; edges that face it catch a cold rim.
+const LIGHT_X = -0.6;
+const LIGHT_Y = -0.8;
+const RIM = [150, 178, 220];
+
+// Picks the outline glyph for a partly covered cell from the direction the
+// covered samples lean (mx, my). Also returns how squarely the edge faces
+// the moon, for the rim light.
+const OUTLINE = { g: 0, rim: 0 };
+function outline(mx, my, cover) {
+  const len = Math.hypot(mx, my) || 1;
+  const nx = -mx / len;
+  const ny = -my / len;
+  const a = (Math.atan2(ny, nx) * 180) / Math.PI;
+  let g;
+  if (a > -112.5 && a <= -67.5) g = cover > 0.5 ? EDGE.top : EDGE.topLight;
+  else if (a > 67.5 && a <= 112.5) g = cover > 0.5 ? EDGE.bottom : EDGE.bottomLight;
+  else if (a > -22.5 && a <= 22.5) g = EDGE.side;
+  else if (a > 157.5 || a <= -157.5) g = EDGE.side;
+  // Screen y points down, so an edge facing up and right runs like "\".
+  else if (a > -67.5 && a <= -22.5) g = EDGE.fall;
+  else if (a > -157.5 && a <= -112.5) g = EDGE.rise;
+  else if (a > 22.5 && a <= 67.5) g = EDGE.rise;
+  else g = EDGE.fall;
+  OUTLINE.g = g;
+  OUTLINE.rim = Math.max(0, nx * LIGHT_X + ny * LIGHT_Y);
+  return OUTLINE;
+}
 
 // Darkens the ground in a soft ellipse under the feet.
 export function drawShadow(r, view, x, y) {
   const { fg, bg, cols } = r;
   const fx = Math.floor(x);
   const fy = Math.floor(y);
-  for (let cy = fy - 1; cy <= fy + 1; cy++) {
+  for (let cy = fy - 2; cy <= fy + 2; cy++) {
     const sy = cy - view.y0;
     if (sy < 0 || sy >= view.rows) continue;
-    for (let cx = fx - 5; cx <= fx + 5; cx++) {
+    for (let cx = fx - 9; cx <= fx + 9; cx++) {
       const sx = cx - view.x0;
       if (sx < 0 || sx >= view.cols) continue;
-      const dx = ((cx + 0.5 - x) * ASPECT) / 2.6;
-      const dy = (cy + 0.5 - y) / 1.1;
+      const dx = ((cx + 0.5 - x) * ASPECT) / 4.4;
+      const dy = (cy + 0.5 - y) / 1.8;
       const d = dx * dx + dy * dy;
       if (d >= 1) continue;
       const k = 0.35 + 0.65 * d;
@@ -166,65 +296,123 @@ export function drawShadow(r, view, x, y) {
 
 // Rasterises the figure with its feet at world position (state.x, state.y).
 export function drawFigure(r, view, state, write = putCell) {
-  const parts = pose(state);
-  const fx = Math.floor(state.x);
-  const fy = Math.floor(state.y);
-  const base = fy - view.y0;
+  const parts = dress(buildRig(state), state.cape);
+  let x0 = Infinity;
+  let x1 = -Infinity;
+  let y0 = Infinity;
+  let y1 = -Infinity;
+  for (const p of parts) {
+    x0 = Math.min(x0, p.x0);
+    x1 = Math.max(x1, p.x1);
+    y0 = Math.min(y0, p.y0);
+    y1 = Math.max(y1, p.y1);
+  }
+  const base = Math.floor(state.y) - view.y0;
 
-  for (let cy = fy - 16; cy <= fy + 1; cy++) {
+  for (let cy = Math.floor(state.y + y0); cy <= Math.floor(state.y + y1); cy++) {
     const sy = cy - view.y0;
-    for (let cx = fx - 6; cx <= fx + 6; cx++) {
-      const sx = cx - view.x0;
-
-      let hits = 0;
-      let lum = 0;
-      let cr = 0;
-      let cg = 0;
-      let cb = 0;
-      let my = 0;
-      let mx = 0;
-      for (const oy of SUB_Y) {
-        for (const ox of SUB_X) {
-          const px = (cx + ox - state.x) * ASPECT;
-          const py = cy + oy - state.y;
-          let nx = NaN;
-          let part = null;
-          for (let i = parts.length - 1; i >= 0; i--) {
-            const v = parts[i].test(px, py);
-            if (v === v) {
-              nx = v;
-              part = parts[i];
-              break;
-            }
-          }
-          if (!part) continue;
-
-          // Moonlight from the upper left, plus a cool rim on the lit edge.
-          const t = (py - part.y0) / (part.y1 - part.y0);
-          let l = 0.78 - 0.32 * nx - 0.22 * t;
-          if (nx < -0.72) l += 0.25;
-          hits++;
-          lum += l;
-          cr += part.color[0] * l;
-          cg += part.color[1] * l;
-          cb += part.color[2] * l;
-          mx += ox - 0.5;
-          my += oy - 0.5;
-        }
-      }
-      if (!hits) continue;
-
-      const k = 1.35 / hits;
-      let g;
-      if (hits <= 2) {
-        // Mostly empty cell: a light glyph hugging the covered side.
-        if (Math.abs(my) >= Math.abs(mx)) g = my < 0 ? EDGE_TOP : EDGE_BOTTOM;
-        else g = EDGE_SIDE;
-      } else {
-        const b = Math.max(0, Math.min(0.999, (lum / hits - 0.25) / 0.85));
-        g = RAMP[2 + Math.floor(b * 8)];
-      }
-      write(r, sx, sy, g, cr * k, cg * k, cb * k, base);
+    for (let cx = Math.floor(state.x + x0 / ASPECT); cx <= Math.floor(state.x + x1 / ASPECT); cx++) {
+      shadeCell(r, cx - view.x0, sy, cx, cy, state, parts, base, write);
     }
   }
+}
+
+function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
+  let hits = 0;
+  let mx = 0;
+  let my = 0;
+  let front = -1;
+  let k = 0;
+  for (const oy of SUB_Y) {
+    for (const ox of SUB_X) {
+      const px = (cx + ox - state.x) * ASPECT;
+      const py = cy + oy - state.y;
+      hitPart[k] = -1;
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const p = parts[i];
+        if (px < p.x0 || px > p.x1 || py < p.y0 || py > p.y1) continue;
+        if (!p.test(px, py, SAMPLE)) continue;
+        hitPart[k] = i;
+        hitLum[k] = 0.62 - 0.3 * SAMPLE.nx - 0.2 * SAMPLE.ny;
+        hitU[k] = SAMPLE.u;
+        hitV[k] = SAMPLE.v;
+        hits++;
+        mx += ox - 0.5;
+        my += oy - 0.5;
+        if (i > front) front = i;
+        break;
+      }
+      k++;
+    }
+  }
+  if (hits < 3) return;
+
+  // Which part covers the most samples, and where the frontmost part's own
+  // samples lean, in case its edge runs through this cell.
+  let best = -1;
+  let bestN = 0;
+  let frontN = 0;
+  let fmx = 0;
+  let fmy = 0;
+  for (let i = 0; i < SAMPLES; i++) {
+    const p = hitPart[i];
+    if (p < 0) continue;
+    if (p === front) {
+      frontN++;
+      fmx += SUB_X[i % 3] - 0.5;
+      fmy += SUB_Y[(i / 3) | 0] - 0.5;
+    }
+    if (p === best) continue;
+    let n = 0;
+    for (let j = i; j < SAMPLES; j++) if (hitPart[j] === p) n++;
+    if (n > bestN) {
+      bestN = n;
+      best = p;
+    }
+  }
+  let lum = 0;
+  let u = 0;
+  let v = 0;
+  for (let i = 0; i < SAMPLES; i++) {
+    if (hitPart[i] !== best) continue;
+    lum += hitLum[i];
+    u += hitU[i];
+    v += hitV[i];
+  }
+  lum /= bestN;
+  u /= bestN;
+  v /= bestN;
+
+  const part = parts[best];
+  const mat = part.mat;
+  const [mr, mg, mb] = mat.color;
+
+  if (hits < SAMPLES - 2) {
+    // The silhouette: an outline glyph, lit by the moon on the near side.
+    const o = outline(mx, my, hits / SAMPLES);
+    const l = 0.45 + 0.25 * lum;
+    const t = Math.min(1, o.rim * 0.85);
+    write(r, sx, sy, o.g, mr * l + (RIM[0] - mr * l) * t, mg * l + (RIM[1] - mg * l) * t,
+      mb * l + (RIM[2] - mb * l) * t, base);
+    return;
+  }
+
+  // Fully covered cells blot out the grass behind with a dark backing.
+  const br = 3 + mr * 0.06;
+  const bgG = 3 + mg * 0.06;
+  const bb = 5 + mb * 0.08;
+
+  if (front !== best && frontN >= 3 && frontN <= SAMPLES - 3) {
+    // A part overlapping another: trace its edge so limbs stay readable.
+    const f = parts[front].mat.color;
+    const o = outline(fmx, fmy, frontN / SAMPLES);
+    const l = 0.55 + 0.4 * o.rim;
+    write(r, sx, sy, o.g, f[0] * l, f[1] * l, f[2] * l, base, br, bgG, bb);
+    return;
+  }
+
+  const b = Math.max(0, Math.min(0.999, lum));
+  const g = mat.tex ? mat.tex(b, u, v) : part.bar;
+  const k2 = mat.emissive ? 1 : 0.35 + b * 0.85;
+  write(r, sx, sy, g, mr * k2, mg * k2, mb * k2, base, br, bgG, bb);
 }
