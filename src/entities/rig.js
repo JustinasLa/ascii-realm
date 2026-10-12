@@ -79,6 +79,17 @@ export function buildRig(st) {
     legs.push({ s, hip, knee: kneeP, ankle, toe });
   }
 
+  // Plant the feet: raise or lower the hips so the lowest foot rests on the
+  // ground. A stride with the legs apart then naturally dips the body and
+  // passing through upright lifts it, which is the bob of a real walk.
+  let lowest = Infinity;
+  for (const l of legs) lowest = Math.min(lowest, l.ankle[1] - 0.065, l.toe[1] - 0.05);
+  const lift = -lowest + (st.air ?? 0);
+  pelvis[1] += lift;
+  for (const l of legs) {
+    for (const k of ['hip', 'knee', 'ankle', 'toe']) l[k][1] += lift;
+  }
+
   // Everything above the hips hangs off the torso frame.
   const torso = (p) => add(pelvis, rotY(rotX(p, lean), twist));
   const turn = (d) => rotY(rotX(d, lean * 0.5), twist);
