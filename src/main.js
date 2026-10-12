@@ -4,6 +4,7 @@ import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
+import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
 import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
@@ -60,6 +61,7 @@ const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
+const dust = new Dust();
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
@@ -83,6 +85,12 @@ function frame(now) {
   const move = moveAxis();
   if (wasTapped('Space')) player.jump();
   if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  for (const e of player.events) {
+    if (e.type === 'step') dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
+    if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
+  }
+  player.events.length = 0;
+  dust.update(dt);
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
@@ -107,6 +115,7 @@ function frame(now) {
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
+  dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   renderer.draw(view.offX, view.offY);

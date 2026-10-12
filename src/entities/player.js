@@ -33,6 +33,9 @@ export class Player {
     this.reach = 0;
     this.windUp = -1;
     this.landed = 0;
+    // Things that happened this frame for the world to react to, such as
+    // footfalls and landings: { type, x, y, strength }.
+    this.events = [];
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -64,6 +67,7 @@ export class Player {
       if (this.air <= 0) {
         this.air = 0;
         this.landed = Math.min(1, -this.vy / JUMP_SPEED);
+        this.events.push({ type: 'land', x: this.x, y: this.y, strength: this.landed });
       }
     }
     this.landed = Math.max(0, this.landed - dt * 4);
@@ -95,7 +99,12 @@ export class Player {
       // Turn smoothly through the in-between headings rather than snapping.
       const target = Math.atan2(move.x, move.y);
       this.heading += angleTo(this.heading, target) * ease(TURN_RATE);
+      const stride = Math.floor(this.phase / Math.PI);
       this.phase += dt * (8 + 5 * this.run);
+      // A foot comes down every half cycle.
+      if (this.air === 0 && Math.floor(this.phase / Math.PI) !== stride) {
+        this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
+      }
     }
 
     // Ease the stride in and out so starting and stopping is not abrupt.
