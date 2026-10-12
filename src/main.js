@@ -14,7 +14,7 @@ import { ASPECT, World } from './world/world.js';
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
 // Zooming sets a target and the cell size glides toward it every frame.
-let cellH = 10;
+let cellH = 8;
 let zoomTarget = cellH;
 const MIN_CELL = 6;
 const MAX_CELL = 24;
@@ -58,8 +58,13 @@ const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
 const world = new World(seed);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
-const camera = new Camera(spawn.x, spawn.y - 6);
+const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
+
+// With ?debug in the URL the game state is reachable from the console, and
+// setting `freeze` stops the wanderer updating so a pose can be inspected.
+const debug = { player, camera, world, freeze: false };
+if (new URLSearchParams(location.search).has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
@@ -76,11 +81,11 @@ function frame(now) {
   updateZoom(dt);
 
   const move = moveAxis();
-  player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
-  camera.follow(player.x, player.y - 6, dt);
+  camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
@@ -88,8 +93,8 @@ function frame(now) {
   drawShadow(renderer, view, player.x, player.y);
 
   // Props up to a screen above the view can still be reflected into it.
-  const props = world.propsIn(view.x0 - 16, view.y0 - view.rows, view.x0 + view.cols + 16,
-    view.y0 + view.rows + 30);
+  const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
+    view.y0 + view.rows + 50);
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);

@@ -3,7 +3,9 @@
 // but the same sprite code can be pointed at a different writer to, say,
 // draw its mirror image into a lake.
 //
-// `base` is the screen row the sprite stands on.
-export function putCell(r, sx, sy, g, cr, cg, cb, base) {
+// `base` is the screen row the sprite stands on. A sprite may also pass a
+// background colour to blot out whatever is behind a cell it fully covers.
+export function putCell(r, sx, sy, g, cr, cg, cb, base, br, bgG, bb) {
   r.put(sx, sy, g, cr, cg, cb);
+  if (br !== undefined) r.putBg(sx, sy, br, bgG, bb);
 }
