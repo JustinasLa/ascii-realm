@@ -172,6 +172,13 @@ export class Player {
     this.look += (lookTo - this.look) * ease(4);
     this.nod += (nodTo - this.nod) * ease(3);
 
+    // Breathe out a puff of vapour every few seconds, faster when running.
+    this.nextBreath = (this.nextBreath ?? 2) - dt * (1 + this.run * 2.5);
+    if (this.nextBreath < 0) {
+      this.nextBreath = 3 + Math.random();
+      this.events.push({ type: 'breath' });
+    }
+
     // Blink every few seconds: shut quickly, open a little slower.
     this.nextBlink -= dt;
     if (this.nextBlink < 0) {
@@ -195,6 +202,16 @@ export class Player {
 
     const rig = buildRig(this);
     this.recordTrail(rig);
+    // Breath leaves through the visor, wherever the head happens to be.
+    for (const e of this.events) {
+      if (e.type !== 'breath') continue;
+      const m = project(rig.headAt([0, -0.03, 0.17]));
+      e.x = this.x + m[0] / ASPECT;
+      e.y = this.y;
+      e.h = -m[1];
+      e.dx = Math.sin(this.heading);
+      e.dy = Math.cos(this.heading);
+    }
 
     const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / toRows];
     const t = this.time;

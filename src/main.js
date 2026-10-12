@@ -100,6 +100,7 @@ function frame(now) {
   for (const e of player.events) {
     if (e.type === 'step') dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
+    if (e.type === 'breath') dust.breath(e.x, e.y, e.h, e.dx, e.dy);
     if (e.type === 'slam') {
       dust.burst(world, e.x, e.y, 22, 12);
       if (world.typeAt(e.x, e.y) !== GRASS) dust.sparks(e.x, e.y, 14);
