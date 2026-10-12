@@ -50,6 +50,10 @@ export class Player {
     this.kneel = 0;
     // Sideways tilt into turns, in radians.
     this.bank = 0;
+    // Forward tilt from speeding up or slowing down, and the speed it is
+    // measured against (metres per second).
+    this.lean = 0;
+    this.speed = 0;
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -128,6 +132,14 @@ export class Player {
     // always matches the speed and stops when the way is blocked.
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
     const going = moving && metres > 0.15 * dt;
+
+    // Pitch forward when setting off or speeding up, and rock back on the
+    // heels when pulling up, then settle.
+    const speedNow = metres / Math.max(dt, 1e-3);
+    const accel = (speedNow - this.speed) / Math.max(dt, 1e-3);
+    this.speed += (speedNow - this.speed) * ease(8);
+    const leanTo = Math.max(-0.22, Math.min(0.22, accel * 0.025));
+    this.lean += (leanTo - this.lean) * ease(6);
     if (going) {
       const stride = Math.floor(this.phase / Math.PI);
       this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
@@ -160,6 +172,13 @@ export class Player {
     this.look += (lookTo - this.look) * ease(4);
     this.nod += (nodTo - this.nod) * ease(3);
 
+    // Breathe out a puff of vapour every few seconds, faster when running.
+    this.nextBreath = (this.nextBreath ?? 2) - dt * (1 + this.run * 2.5);
+    if (this.nextBreath < 0) {
+      this.nextBreath = 3 + Math.random();
+      this.events.push({ type: 'breath' });
+    }
+
     // Blink every few seconds: shut quickly, open a little slower.
     this.nextBlink -= dt;
     if (this.nextBlink < 0) {
@@ -183,6 +202,16 @@ export class Player {
 
     const rig = buildRig(this);
     this.recordTrail(rig);
+    // Breath leaves through the visor, wherever the head happens to be.
+    for (const e of this.events) {
+      if (e.type !== 'breath') continue;
+      const m = project(rig.headAt([0, -0.03, 0.17]));
+      e.x = this.x + m[0] / ASPECT;
+      e.y = this.y;
+      e.h = -m[1];
+      e.dx = Math.sin(this.heading);
+      e.dy = Math.cos(this.heading);
+    }
 
     const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / toRows];
     const t = this.time;

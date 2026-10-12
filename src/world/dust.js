@@ -7,6 +7,8 @@ import { ASPECT, DIRT, GRASS, SHORE, STONE } from './world.js';
 
 const PUFF = [...'.:oO°'].map(glyph);
 const FLECK = [...`',\`"`].map(glyph);
+const SPARK = [...`*+'.`].map(glyph);
+const VAPOUR = [...`~~:-.`].map(glyph);
 
 const DUST_COLORS = {
   [DIRT]: [150, 118, 80],
@@ -61,6 +63,51 @@ export class Dust {
           glyphs: FLECK,
         });
       }
+    }
+  }
+
+  // Bright sparks struck from the ground by steel; they arc up, fall and
+  // die out quickly.
+  sparks(x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = 6 + Math.random() * 10;
+      const life = 0.25 + Math.random() * 0.3;
+      this.list.push({
+        x,
+        y,
+        h: 0.5,
+        vx: (Math.cos(a) * v) / ASPECT,
+        vy: Math.sin(a) * v * 0.35,
+        vh: 6 + Math.random() * 9,
+        g: 40,
+        life,
+        max: life,
+        color: [255, 220 + Math.random() * 35, 140 + Math.random() * 80],
+        glyphs: SPARK,
+      });
+    }
+  }
+
+  // A breath fogging in the cold night air: a few pale wisps from the visor
+  // that drift the way the warrior faces, rise and thin away. `h` is the
+  // height of the mouth in rows; dx, dy the facing direction.
+  breath(x, y, h, dx, dy) {
+    for (let i = 0; i < 6; i++) {
+      const life = 0.7 + Math.random() * 0.6;
+      this.list.push({
+        x: x + (Math.random() - 0.5) * 0.6,
+        y,
+        h: h + (Math.random() - 0.5) * 0.4,
+        vx: (dx * (2 + Math.random() * 2)) / ASPECT,
+        vy: dy * (1 + Math.random()),
+        vh: 0.6 + Math.random() * 0.8,
+        g: -0.4,
+        life,
+        max: life,
+        color: [190, 200, 215],
+        glyphs: VAPOUR,
+      });
     }
   }
 

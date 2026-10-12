@@ -1,16 +1,17 @@
 import { isDown, moveAxis, wasTapped } from './core/input.js';
-import { dressFigure, drawFigure, drawShadow, drawTrail } from './entities/figure.js';
+import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
+import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
-import { ASPECT, World } from './world/world.js';
+import { ASPECT, GRASS, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
@@ -55,18 +56,22 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
 
-const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
+const params = new URLSearchParams(location.search);
+const seed = Number(params.get('seed')) || 1;
+// Shown above the warrior's head; ?name=... picks another.
+const name = (params.get('name') || 'Kael').slice(0, 24);
 const world = new World(seed);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
+const footprints = new Footprints();
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const debug = { player, camera, world, freeze: false };
-if (new URLSearchParams(location.search).has('debug')) window.game = debug;
+if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
@@ -78,6 +83,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (e.button === 0) clicked = true;
 });
 
+let hitStop = 0;
 let last = performance.now();
 let time = 0;
 
@@ -93,13 +99,23 @@ function frame(now) {
   if (wasTapped('KeyJ') || clicked) player.attack();
   if (wasTapped('KeyF')) player.toggleSword();
   clicked = false;
-  if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  hitStop = Math.max(0, hitStop - dt);
+  const playerDt = hitStop > 0 ? dt * 0.05 : dt;
+  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   for (const e of player.events) {
-    if (e.type === 'step') dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
+    if (e.type === 'step') {
+      dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
+      footprints.add(world, e.x, e.y, time);
+    }
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
+    if (e.type === 'breath') dust.breath(e.x, e.y, e.h, e.dx, e.dy);
     if (e.type === 'slam') {
       dust.burst(world, e.x, e.y, 22, 12);
+      if (world.typeAt(e.x, e.y) !== GRASS) dust.sparks(e.x, e.y, 14);
       camera.shake(0.7);
+      // Freeze the warrior for a heartbeat as the blow lands, to sell its
+      // weight.
+      hitStop = 0.08;
     }
   }
   player.events.length = 0;
@@ -112,6 +128,7 @@ function frame(now) {
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
   drawSkyReflection(renderer, view, time);
+  footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
   // Props up to a screen above the view can still be reflected into it.
@@ -130,6 +147,7 @@ function frame(now) {
   for (const d of drawables) d.draw();
 
   drawTrail(renderer, view, player.trail, player.time);
+  drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);

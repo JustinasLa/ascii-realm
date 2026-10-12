@@ -32,11 +32,16 @@ For now it is a single warrior exploring procedurally generated terrain.
   and a simulated cape. Every part is rasterised into glyphs with
   supersampling: outlines follow the silhouette with a moonlit rim, and each
   material (plate, mail, cloth, leather, brass) has its own glyph texture.
-- **Animation.** Walk and run cycles with planted feet, smooth turning, an idle
-  stance that shifts its weight and looks around, blinking, jumping with a
-  wind-up and landing squash, and sword play: draw, guard, a three-hit combo
-  with glowing swing trails and a ground-shaking overhead chop. Footsteps and
-  landings kick up dust and grass.
+- **Animation.** Walk and run cycles driven by the ground actually covered, so
+  planted feet stay planted, with hip sway, a steady head, leaning into turns
+  and into speeding up or stopping. An idle stance that shifts its weight and
+  looks around, then kneels to rest; blinking eyes and breath fogging in the
+  cold air; jumping with a wind-up and landing squash; and sword play: draw,
+  guard, a three-hit combo with glowing swing trails and an overhead chop that
+  strikes sparks, shakes the camera and freezes for a beat on impact.
+  Footsteps kick up dust and grass and leave prints in dirt and sand.
+- **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
+  the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 
 ## Running
