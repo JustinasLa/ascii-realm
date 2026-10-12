@@ -1,4 +1,4 @@
-import { isDown, moveAxis } from './core/input.js';
+import { isDown, moveAxis, wasTapped } from './core/input.js';
 import { drawFigure, drawShadow } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
@@ -81,6 +81,7 @@ function frame(now) {
   updateZoom(dt);
 
   const move = moveAxis();
+  if (wasTapped('Space')) player.jump();
   if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
@@ -90,7 +91,7 @@ function frame(now) {
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
   drawSkyReflection(renderer, view, time);
-  drawShadow(renderer, view, player.x, player.y);
+  drawShadow(renderer, view, player.x, player.y, player.air);
 
   // Props up to a screen above the view can still be reflected into it.
   const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,

@@ -278,8 +278,11 @@ function outline(mx, my, cover) {
   return OUTLINE;
 }
 
-// Darkens the ground in a soft ellipse under the feet.
-export function drawShadow(r, view, x, y) {
+// Darkens the ground in a soft ellipse under the feet, smaller and fainter
+// the higher the warrior is off the ground.
+export function drawShadow(r, view, x, y, air = 0) {
+  const size = 1 / (1 + air * 1.2);
+  const depth = 0.65 * size;
   const { fg, bg, cols } = r;
   const fx = Math.floor(x);
   const fy = Math.floor(y);
@@ -289,11 +292,11 @@ export function drawShadow(r, view, x, y) {
     for (let cx = fx - 9; cx <= fx + 9; cx++) {
       const sx = cx - view.x0;
       if (sx < 0 || sx >= view.cols) continue;
-      const dx = ((cx + 0.5 - x) * ASPECT) / 4.4;
-      const dy = (cy + 0.5 - y) / 1.8;
+      const dx = ((cx + 0.5 - x) * ASPECT) / (4.4 * size);
+      const dy = (cy + 0.5 - y) / (1.8 * size);
       const d = dx * dx + dy * dy;
       if (d >= 1) continue;
-      const k = 0.35 + 0.65 * d;
+      const k = 1 - depth * (1 - d);
       const o = (sy * cols + sx) * 4;
       for (let c = 0; c < 3; c++) {
         fg[o + c] *= k;

@@ -58,7 +58,7 @@ const FOREARM = 0.26;
 //   time     seconds, drives breathing
 export function buildRig(st) {
   const { heading, phase, walk, run, time } = st;
-  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0);
+  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + (st.crouch ?? 0) * 0.45;
   // Shoulders counter-rotate against the hips as the legs swing.
   const twist = Math.sin(phase) * 0.14 * walk;
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;
@@ -72,9 +72,12 @@ export function buildRig(st) {
   const legs = [];
   for (const s of [-1, 1]) {
     const lp = phase + (s > 0 ? 0 : Math.PI);
-    const thigh = Math.sin(lp) * (0.42 + 0.3 * run) * walk;
+    // Crouching swings the thighs forward and folds the knees; planting the
+    // feet below then lowers the hips by itself.
+    const crouch = st.crouch ?? 0;
+    const thigh = Math.sin(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85;
     // The knee folds while the leg swings forward and straightens to land.
-    const knee = walk * (0.12 + 0.25 * run + (0.55 + 0.6 * run) * Math.max(0, Math.cos(lp)));
+    const knee = walk * (0.12 + 0.25 * run + (0.55 + 0.6 * run) * Math.max(0, Math.cos(lp))) + crouch * 1.6;
     const shin = thigh - knee;
     const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
     // Lean the legs out into a wide stance, and back under the weight.
@@ -104,7 +107,8 @@ export function buildRig(st) {
   for (const s of [-1, 1]) {
     const lp = phase + (s > 0 ? 0 : Math.PI);
     // Each arm swings with the opposite leg.
-    const swing = -Math.sin(lp) * (0.45 + 0.35 * run) * walk;
+    // `reach` raises both arms forward, e.g. to balance in the air.
+    const swing = -Math.sin(lp) * (0.45 + 0.35 * run) * walk + (st.reach ?? 0);
     const elbow = 0.22 + 0.15 * walk + 1.1 * run + 0.3 * Math.max(0, swing);
     const shoulder = torso([s * 0.2, 0.46 + breath * 0.008, 0]);
     // Arms hang a little away from the armour, more so when at rest.
