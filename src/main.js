@@ -9,21 +9,40 @@ import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
-import { World } from './world/world.js';
+import { ASPECT, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
-const CELL_W = 6;
-const CELL_H = 10;
+// Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
+let cellH = 10;
+const MIN_CELL = 6;
+const MAX_CELL = 22;
 
 const canvas = document.getElementById('screen');
 const renderer = new AsciiRenderer(canvas, buildAtlas(FONT));
 
 function resize() {
-  renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, CELL_W,
-    CELL_H);
+  renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, cellH * ASPECT,
+    cellH);
 }
 window.addEventListener('resize', resize);
 resize();
+
+function zoom(steps) {
+  const next = Math.max(MIN_CELL, Math.min(MAX_CELL, cellH + steps));
+  if (next === cellH) return;
+  cellH = next;
+  resize();
+}
+
+// Mouse wheel or +/- to zoom in and out.
+window.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoom(e.deltaY < 0 ? 1 : -1);
+}, { passive: false });
+window.addEventListener('keydown', (e) => {
+  if (e.key === '+' || e.key === '=') zoom(1);
+  if (e.key === '-' || e.key === '_') zoom(-1);
+});
 
 const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
 const world = new World(seed);
