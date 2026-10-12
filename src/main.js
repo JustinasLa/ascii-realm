@@ -5,6 +5,7 @@ import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { drawGround } from './world/ground.js';
+import { drawSkyReflection } from './world/sky.js';
 import { World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
@@ -42,6 +43,7 @@ function frame(now) {
 
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
+  drawSkyReflection(renderer, time);
   drawShadow(renderer, view, player.x, player.y);
   drawFigure(renderer, view, player);
   renderer.draw(view.offX, view.offY);

@@ -1,6 +1,6 @@
 import { valueNoise } from '../core/noise.js';
 import { glyph } from '../render/glyphs.js';
-import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER } from './world.js';
+import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, WATER_LEVEL } from './world.js';
 
 const G = (s) => [...s].map(glyph);
 
@@ -21,7 +21,10 @@ const GREENS = [
 const SHORE_CH = G('.,:;');
 const DIRT_CH = G('.:,`');
 const STONE_CH = G('.:-=+*#%@');
-const WATER_CH = G('~-');
+const WAVE_HI = glyph('≈');
+const WAVE_MID = glyph('~');
+const WAVE_LO = glyph('-');
+const WAVE_DOT = glyph('·');
 
 // Fills the grid with the terrain under the camera. Writes straight into the
 // renderer's buffers because this runs for every visible cell every frame.
@@ -87,13 +90,31 @@ export function drawGround(r, world, view, t, bend) {
         bgG = 10;
         bb = 6;
       } else if (type === WATER) {
-        ch = rnd < 0.25 ? WATER_CH[Math.floor(rnd * 8)] : 0;
-        cr = 50;
-        cg = 70;
-        cb = 110;
-        br = 4;
-        bgG = 6;
-        bb = 16;
+        // Long horizontal streaks that drift slowly, like moonlight broken up
+        // by a gentle swell.
+        const depth = Math.min(1, (WATER_LEVEL - chunk.elev[i]) * 12);
+        const v = valueNoise(wx * ASPECT * 0.09 + t * 0.25, wy * 0.7 - t * 0.05, world.seed + 300) +
+          Math.sin(wx * ASPECT * 0.4 + wy * 1.3 + t * 1.2) * 0.12;
+        if (v > 0.74) ch = WAVE_HI;
+        else if (v > 0.63) ch = WAVE_MID;
+        else if (v > 0.53) ch = WAVE_LO;
+        else if (v > 0.47 && rnd < 0.4) ch = WAVE_DOT;
+        const k = (0.45 + Math.max(0, v - 0.45) * 1.6) * (1 - depth * 0.3);
+        cr = 66 * k;
+        cg = 86 * k;
+        cb = 128 * k;
+        // Thin lapping foam right where the water meets the shore.
+        if (depth < 0.07) {
+          const lap = Math.sin(t * 1.8 + wx * ASPECT * 0.5 + rnd * 2);
+          ch = lap > 0.1 ? WAVE_MID : WAVE_LO;
+          const f = 0.6 + 0.4 * Math.max(0, lap);
+          cr = 120 * f;
+          cg = 138 * f;
+          cb = 160 * f;
+        }
+        br = 3 + 4 * (1 - depth);
+        bgG = 5 + 6 * (1 - depth);
+        bb = 13 + 6 * (1 - depth);
       } else if (type === SHORE) {
         ch = SHORE_CH[Math.floor(rnd * SHORE_CH.length)];
         cr = 90;
@@ -122,6 +143,7 @@ export function drawGround(r, world, view, t, bend) {
         bb = 12;
       }
 
+      r.mask[sy * cols + sx] = type;
       const o = (sy * cols + sx) * 4;
       fg[o] = cr;
       fg[o + 1] = cg;
