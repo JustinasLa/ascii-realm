@@ -1,5 +1,5 @@
 import { isDown, moveAxis, wasTapped } from './core/input.js';
-import { dressFigure, drawFigure, drawShadow, drawTrail } from './entities/figure.js';
+import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
@@ -55,7 +55,10 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
 
-const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
+const params = new URLSearchParams(location.search);
+const seed = Number(params.get('seed')) || 1;
+// Shown above the warrior's head; ?name=... picks another.
+const name = (params.get('name') || 'Kael').slice(0, 24);
 const world = new World(seed);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
@@ -66,7 +69,7 @@ const dust = new Dust();
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const debug = { player, camera, world, freeze: false };
-if (new URLSearchParams(location.search).has('debug')) window.game = debug;
+if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
@@ -138,6 +141,7 @@ function frame(now) {
   for (const d of drawables) d.draw();
 
   drawTrail(renderer, view, player.trail, player.time);
+  drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);

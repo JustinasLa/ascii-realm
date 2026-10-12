@@ -491,3 +491,16 @@ export function drawTrail(r, view, trail, time) {
 }
 
 export const TRAIL_SECONDS = TRAIL_LIFE;
+
+// The warrior's name floating above the helm, as in an online RPG. `top` is
+// the highest point of the dressed figure, in rows above the feet.
+export function drawNameTag(r, view, state, parts, name) {
+  let top = 0;
+  for (const p of parts) top = Math.min(top, p.y0);
+  const sy = Math.floor(state.y + top - 2) - view.y0;
+  const sx = Math.floor(state.x - name.length / 2) - view.x0;
+  for (let i = 0; i < name.length; i++) {
+    r.put(sx + i, sy, glyph(name[i]), 212, 218, 228);
+    r.putBg(sx + i, sy, 8, 10, 14);
+  }
+}
