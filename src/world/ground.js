@@ -7,6 +7,8 @@ const G = (s) => [...s].map(glyph);
 // Blades lean with the wind: index 0 leans left, 2 leans right.
 const BLADE = G('\\|/');
 const STUBBLE = G(`',"\``);
+const DEW = glyph('.');
+const STAR = glyph('*');
 const GREENS = [
   [34, 92, 48],
   [46, 122, 62],
@@ -67,6 +69,14 @@ export function drawGround(r, world, view, t) {
         cr = tone[0] * l;
         cg = tone[1] * l;
         cb = tone[2] * l;
+        // A few cells hold a dew drop or tiny flower that twinkles.
+        if (rnd > 0.985) {
+          const tw = 0.6 + 0.4 * Math.sin(t * 3 + rnd * 977);
+          ch = rnd > 0.996 ? STAR : DEW;
+          cr = 200 * tw;
+          cg = 215 * tw;
+          cb = 200 * tw;
+        }
         br = 4;
         bgG = 10;
         bb = 6;
