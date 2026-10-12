@@ -1,4 +1,6 @@
-import { moveAxis } from './core/input.js';
+import { isDown, moveAxis } from './core/input.js';
+import { drawFigure } from './entities/figure.js';
+import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
@@ -22,8 +24,8 @@ resize();
 const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
 const world = new World(seed);
 const spawn = world.findSpawn();
-const focus = { ...spawn };
-const camera = new Camera(spawn.x, spawn.y);
+const player = new Player(spawn.x, spawn.y);
+const camera = new Camera(spawn.x, spawn.y - 6);
 
 let last = performance.now();
 let time = 0;
@@ -34,14 +36,13 @@ function frame(now) {
   last = now;
   time += dt;
 
-  // Free-look until there is a player to follow.
-  const move = moveAxis();
-  focus.x += move.x * 40 * dt;
-  focus.y += move.y * 24 * dt;
-  camera.follow(focus.x, focus.y, dt);
+  player.update(dt, world, moveAxis(), isDown('ShiftLeft', 'ShiftRight'));
+  // Aim at the wanderer's middle rather than their feet.
+  camera.follow(player.x, player.y - 6, dt);
 
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time);
+  drawFigure(renderer, view, player);
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }

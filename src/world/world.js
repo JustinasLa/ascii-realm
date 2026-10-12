@@ -79,6 +79,10 @@ export class World {
     return c.type[i];
   }
 
+  isWalkable(x, y) {
+    return this.typeAt(x, y) !== WATER;
+  }
+
   // Walks outward from the origin until it finds grass a short way north of
   // a lake, so the player starts somewhere scenic.
   findSpawn() {
