@@ -10,7 +10,7 @@ import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
-import { ASPECT, World } from './world/world.js';
+import { ASPECT, GRASS, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
@@ -78,6 +78,7 @@ canvas.addEventListener('mousedown', (e) => {
   if (e.button === 0) clicked = true;
 });
 
+let hitStop = 0;
 let last = performance.now();
 let time = 0;
 
@@ -93,13 +94,19 @@ function frame(now) {
   if (wasTapped('KeyJ') || clicked) player.attack();
   if (wasTapped('KeyF')) player.toggleSword();
   clicked = false;
-  if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  hitStop = Math.max(0, hitStop - dt);
+  const playerDt = hitStop > 0 ? dt * 0.05 : dt;
+  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   for (const e of player.events) {
     if (e.type === 'step') dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
     if (e.type === 'slam') {
       dust.burst(world, e.x, e.y, 22, 12);
+      if (world.typeAt(e.x, e.y) !== GRASS) dust.sparks(e.x, e.y, 14);
       camera.shake(0.7);
+      // Freeze the warrior for a heartbeat as the blow lands, to sell its
+      // weight.
+      hitStop = 0.08;
     }
   }
   player.events.length = 0;

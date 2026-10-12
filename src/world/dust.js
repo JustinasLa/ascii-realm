@@ -7,6 +7,7 @@ import { ASPECT, DIRT, GRASS, SHORE, STONE } from './world.js';
 
 const PUFF = [...'.:oO°'].map(glyph);
 const FLECK = [...`',\`"`].map(glyph);
+const SPARK = [...`*+'.`].map(glyph);
 
 const DUST_COLORS = {
   [DIRT]: [150, 118, 80],
@@ -61,6 +62,29 @@ export class Dust {
           glyphs: FLECK,
         });
       }
+    }
+  }
+
+  // Bright sparks struck from the ground by steel; they arc up, fall and
+  // die out quickly.
+  sparks(x, y, n) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const v = 6 + Math.random() * 10;
+      const life = 0.25 + Math.random() * 0.3;
+      this.list.push({
+        x,
+        y,
+        h: 0.5,
+        vx: (Math.cos(a) * v) / ASPECT,
+        vy: Math.sin(a) * v * 0.35,
+        vh: 6 + Math.random() * 9,
+        g: 40,
+        life,
+        max: life,
+        color: [255, 220 + Math.random() * 35, 140 + Math.random() * 80],
+        glyphs: SPARK,
+      });
     }
   }
 
