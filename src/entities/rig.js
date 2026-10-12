@@ -58,12 +58,16 @@ const FOREARM = 0.26;
 //   time     seconds, drives breathing
 export function buildRig(st) {
   const { heading, phase, walk, run, time } = st;
-  const lean = 0.06 * walk + 0.22 * run;
+  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0);
   // Shoulders counter-rotate against the hips as the legs swing.
   const twist = Math.sin(phase) * 0.14 * walk;
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;
 
-  const pelvis = [Math.sin(phase) * 0.015 * walk, 1.0, 0];
+  // Standing still the warrior plants their feet apart and shifts their
+  // weight slowly from one to the other.
+  const still = 1 - walk;
+  const shift = Math.sin(time * 0.9) * 0.02 * still;
+  const pelvis = [Math.sin(phase) * 0.015 * walk + shift, 1.0, 0];
 
   const legs = [];
   for (const s of [-1, 1]) {
@@ -73,8 +77,10 @@ export function buildRig(st) {
     const knee = walk * (0.12 + 0.25 * run + (0.55 + 0.6 * run) * Math.max(0, Math.cos(lp)));
     const shin = thigh - knee;
     const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
-    const kneeP = add(hip, mul(limb(thigh, s * 0.02), THIGH));
-    const ankle = add(kneeP, mul(limb(shin, s * 0.02), SHIN));
+    // Lean the legs out into a wide stance, and back under the weight.
+    const roll = s * (0.02 + 0.07 * still) - shift * 1.5;
+    const kneeP = add(hip, mul(limb(thigh, roll), THIGH));
+    const ankle = add(kneeP, mul(limb(shin, roll), SHIN));
     const toe = add(ankle, mul(limb(Math.PI / 2 + Math.min(0, shin) * 0.8), 0.15));
     legs.push({ s, hip, knee: kneeP, ankle, toe });
   }
@@ -101,7 +107,8 @@ export function buildRig(st) {
     const swing = -Math.sin(lp) * (0.45 + 0.35 * run) * walk;
     const elbow = 0.22 + 0.15 * walk + 1.1 * run + 0.3 * Math.max(0, swing);
     const shoulder = torso([s * 0.2, 0.46 + breath * 0.008, 0]);
-    const elbowP = add(shoulder, mul(turn(limb(swing, s * 0.16)), UPPER_ARM));
+    // Arms hang a little away from the armour, more so when at rest.
+    const elbowP = add(shoulder, mul(turn(limb(swing, s * (0.16 + 0.06 * still))), UPPER_ARM));
     const wrist = add(elbowP, mul(turn(limb(swing + elbow, s * 0.08)), FOREARM));
     const hand = add(wrist, mul(turn(limb(swing + elbow, s * 0.05)), 0.06));
     arms.push({ s, shoulder, elbow: elbowP, wrist, hand });

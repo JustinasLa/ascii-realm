@@ -22,6 +22,10 @@ export class Player {
     this.run = 0;
     this.time = 0;
     this.cape = new Cape();
+    // Seconds spent standing still, and where the head is turned.
+    this.idle = 0;
+    this.look = 0;
+    this.nod = 0;
     // 0 open .. 1 shut, and when the next blink is due.
     this.blink = 0;
     this.nextBlink = 3;
@@ -55,6 +59,15 @@ export class Player {
     this.run += ((moving && running ? 1 : 0) - this.run) * ease(6);
     // Settle into a neutral stance once stopped.
     if (!moving && this.walk < 0.02) this.phase = 0;
+
+    // After standing a while the warrior glances around, scanning one side
+    // then the other, with the occasional downward look.
+    this.idle = moving ? 0 : this.idle + dt;
+    const glance = Math.min(1, Math.max(0, (this.idle - 3) / 1.5));
+    const lookTo = glance * (Math.sin(this.idle * 0.55) * 0.75 + Math.sin(this.idle * 1.3) * 0.15);
+    const nodTo = glance * Math.max(0, Math.sin(this.idle * 0.31 + 1)) * 0.25;
+    this.look += (lookTo - this.look) * ease(4);
+    this.nod += (nodTo - this.nod) * ease(3);
 
     // Blink every few seconds: shut quickly, open a little slower.
     this.nextBlink -= dt;
