@@ -1,5 +1,5 @@
 import { isDown, moveAxis, wasTapped } from './core/input.js';
-import { drawFigure, drawShadow } from './entities/figure.js';
+import { drawFigure, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
@@ -72,6 +72,12 @@ if (new URLSearchParams(location.search).has('debug')) window.game = debug;
 const hint = document.getElementById('hint');
 let walked = 0;
 
+// A click on the scene swings the sword.
+let clicked = false;
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0) clicked = true;
+});
+
 let last = performance.now();
 let time = 0;
 
@@ -84,10 +90,17 @@ function frame(now) {
 
   const move = moveAxis();
   if (wasTapped('Space')) player.jump();
+  if (wasTapped('KeyJ') || clicked) player.attack();
+  if (wasTapped('KeyF')) player.toggleSword();
+  clicked = false;
   if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   for (const e of player.events) {
     if (e.type === 'step') dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
+    if (e.type === 'slam') {
+      dust.burst(world, e.x, e.y, 22, 12);
+      camera.shake(0.7);
+    }
   }
   player.events.length = 0;
   dust.update(dt);
@@ -115,6 +128,7 @@ function frame(now) {
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
+  drawTrail(renderer, view, player.trail, player.time);
   dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);

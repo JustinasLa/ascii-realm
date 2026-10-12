@@ -1,6 +1,7 @@
 import { ASPECT } from '../world/world.js';
 import { Cape } from './cape.js';
-import { buildRig, SCALE } from './rig.js';
+import { Combat } from './combat.js';
+import { buildRig, project, SCALE } from './rig.js';
 
 const WALK_SPEED = 8; // rows per second; columns are scaled by ASPECT
 const RUN_SPEED = 15;
@@ -25,6 +26,9 @@ export class Player {
     this.run = 0;
     this.time = 0;
     this.cape = new Cape();
+    this.combat = new Combat();
+    // Recent blade positions in world cells, for the swing trail.
+    this.trail = [];
     // Height above the ground in metres, rising speed, and the crouch used
     // to wind up a jump and soak up the landing.
     this.air = 0;
@@ -43,6 +47,14 @@ export class Player {
     // 0 open .. 1 shut, and when the next blink is due.
     this.blink = 0;
     this.nextBlink = 3;
+  }
+
+  attack() {
+    this.combat.attack();
+  }
+
+  toggleSword() {
+    this.combat.toggle();
   }
 
   // Starts a jump if standing on the ground.
@@ -132,15 +144,46 @@ export class Player {
       if (t > 0.18) this.nextBlink = 2.5 + Math.random() * 4;
     }
 
+    this.combat.update(dt, moving);
+    for (const e of this.combat.events) {
+      // The overhead chop lands a stride ahead, in the direction faced.
+      const reach = 0.95 * SCALE;
+      this.events.push({
+        type: 'slam',
+        x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
+        y: this.y + Math.cos(this.heading) * reach * 0.35,
+        strength: 1,
+      });
+    }
+    this.combat.events.length = 0;
+
+    const rig = buildRig(this);
+    this.recordTrail(rig);
+
     const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / SCALE];
     const t = this.time;
     const wind = [2.2 + Math.sin(t * 0.7) * 1.6, 0, Math.sin(t * 0.43) * 1.2];
-    this.cape.update(dt, ...this.capeMount(), moved, wind);
+    this.cape.update(dt, ...this.capeMount(rig), moved, wind);
+  }
+
+  // Remembers where the blade is while it cuts, in world cells.
+  recordTrail(rig) {
+    const keep = this.time - 0.16;
+    this.trail = this.trail.filter((p) => p.t > keep);
+    if (!this.combat.trailing || !rig.sword) return;
+    const h = project(rig.sword.guard);
+    const tip = project(rig.sword.tip);
+    this.trail.push({
+      t: this.time,
+      hx: this.x + h[0] / ASPECT,
+      hy: this.y + h[1],
+      tx: this.x + tip[0] / ASPECT,
+      ty: this.y + tip[1],
+    });
   }
 
   // Where the cape hangs from, and which way is out of the warrior's back.
-  capeMount() {
-    const rig = buildRig(this);
+  capeMount(rig = buildRig(this)) {
     return [rig.at([0, 0.47, -0.12]), [-Math.sin(this.heading), -Math.cos(this.heading)]];
   }
 

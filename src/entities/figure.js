@@ -171,7 +171,8 @@ function cape(d, rig, pts) {
 }
 
 // A greatsword slung across the back in a leather scabbard, the hilt riding
-// above the right shoulder.
+// above the right shoulder. Once drawn the scabbard hangs empty and the
+// blade is drawn in the sword hand instead.
 function greatsword(d, rig) {
   const at = rig.at;
   const pommel = at([-0.21, 0.72, -0.2]);
@@ -180,9 +181,21 @@ function greatsword(d, rig) {
   d.limb(guard, tip, 0.05, 0.035, 'leather', -0.01);
   d.limb(lerp3(guard, tip, 0.93), tip, 0.054, 0.04, 'trim', -0.005);
   d.limb(lerp3(guard, tip, 0.02), lerp3(guard, tip, 0.06), 0.056, 0.056, 'trim', -0.005);
-  d.limb(at([-0.25, 0.52, -0.2]), at([-0.05, 0.6, -0.2]), 0.026, 0.026, 'trim');
-  d.limb(guard, pommel, 0.026, 0.024, 'leather');
-  d.blob(pommel, 0.04, 0.04, 'trim', 0.001);
+
+  const sw = rig.sword;
+  if (!sw) {
+    d.limb(at([-0.25, 0.52, -0.2]), at([-0.05, 0.6, -0.2]), 0.026, 0.026, 'trim');
+    d.limb(guard, pommel, 0.026, 0.024, 'leather');
+    d.blob(pommel, 0.04, 0.04, 'trim', 0.001);
+    return;
+  }
+  // In hand: a long bright blade with a dark fuller, the crossguard square
+  // across it. Kept just in front of the gauntlet that grips it.
+  d.limb(sw.guard, sw.tip, 0.034, 0.006, 'blade', 0.03);
+  d.limb(lerp3(sw.guard, sw.tip, 0.05), lerp3(sw.guard, sw.tip, 0.7), 0.009, 0.006, 'darkPlate', 0.031);
+  d.limb(sw.barA, sw.barB, 0.024, 0.024, 'trim', 0.032);
+  d.limb(sw.pommel, sw.guard, 0.024, 0.024, 'leather', 0.02);
+  d.blob(sw.pommel, 0.036, 0.036, 'trim', 0.021);
 }
 
 // Layered shoulder plates edged in brass, with a short spike on top. They
@@ -334,7 +347,8 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
   let mx = 0;
   let my = 0;
   let front = -1;
-  let glow = -1;
+  let claim = -1;
+  let claimLum = 0;
   let k = 0;
   for (const oy of SUB_Y) {
     for (const ox of SUB_X) {
@@ -353,16 +367,22 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
         mx += ox - 0.5;
         my += oy - 0.5;
         if (i > front) front = i;
-        if (p.mat.emissive) glow = i;
+        if (p.mat.claim && i > claim) {
+          claim = i;
+          claimLum = hitLum[k];
+        }
         break;
       }
       k++;
     }
   }
-  // Lights are tiny but must never be outvoted by what surrounds them.
-  if (glow >= 0) {
-    const [gr, gg, gb] = parts[glow].mat.color;
-    write(r, sx, sy, parts[glow].mat.tex(), gr, gg, gb, base, 6, 10, 14);
+  // Lights and blades are thinner than a cell but must never be outvoted
+  // by what surrounds them.
+  if (claim >= 0) {
+    const p = parts[claim];
+    const [cr, cg, cbl] = p.mat.color;
+    const l = p.mat.emissive ? 1 : 0.55 + 0.45 * Math.max(0, Math.min(1, claimLum));
+    write(r, sx, sy, p.mat.tex ? p.mat.tex() : p.bar, cr * l, cg * l, cbl * l, base, 6, 10, 14);
     return;
   }
   if (hits < 3) return;
@@ -436,3 +456,32 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
   const k2 = mat.emissive ? 1 : 0.35 + b * 0.85;
   write(r, sx, sy, g, mr * k2, mg * k2, mb * k2, base, br, bgG, bb);
 }
+
+// The glowing smear a swing leaves behind: the blade's recent positions,
+// joined into bands that fade with age and towards the hilt.
+const TRAIL_LIFE = 0.16;
+const TRAIL_COLOR = [176, 224, 255];
+const TRAIL_HIT = { nx: 0, ny: 0, u: 0, v: 0 };
+export function drawTrail(r, view, trail, time) {
+  for (let i = 0; i + 1 < trail.length; i++) {
+    const a = trail[i];
+    const b = trail[i + 1];
+    const fade = 1 - (time - a.t) / TRAIL_LIFE;
+    if (fade <= 0) continue;
+    // Corners in row units: hilt then tip of one sample, tip then hilt of
+    // the next.
+    const shape = quad([a.hx * ASPECT, a.hy], [a.tx * ASPECT, a.ty], [b.tx * ASPECT, b.ty],
+      [b.hx * ASPECT, b.hy]);
+    const g = barGlyph((a.tx - a.hx) * ASPECT, a.ty - a.hy);
+    for (let cy = Math.floor(shape.y0); cy <= Math.floor(shape.y1); cy++) {
+      for (let cx = Math.floor(shape.x0 / ASPECT); cx <= Math.floor(shape.x1 / ASPECT); cx++) {
+        if (!shape.test((cx + 0.5) * ASPECT, cy + 0.5, TRAIL_HIT)) continue;
+        // v runs across the band from hilt (-1) to tip (+1).
+        const k = fade * (0.25 + 0.75 * Math.max(0, (TRAIL_HIT.v + 1) / 2));
+        r.put(cx - view.x0, cy - view.y0, g, TRAIL_COLOR[0] * k, TRAIL_COLOR[1] * k, TRAIL_COLOR[2] * k);
+      }
+    }
+  }
+}
+
+export const TRAIL_SECONDS = TRAIL_LIFE;
