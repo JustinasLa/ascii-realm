@@ -1,4 +1,5 @@
 import { putCell } from '../render/cells.js';
+import { capsule as cap, ellipse as ell, quad } from './shapes.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 
@@ -27,54 +28,20 @@ const COLORS = {
   hand: [150, 120, 100],
 };
 
-function capsule(ax, ay, bx, by, rad, color) {
-  const dx = bx - ax;
-  const dy = by - ay;
-  const len2 = dx * dx + dy * dy || 1;
-  return {
-    color,
-    y0: Math.min(ay, by) - rad,
-    y1: Math.max(ay, by) + rad,
-    test(x, y) {
-      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / len2));
-      const px = x - (ax + dx * t);
-      const py = y - (ay + dy * t);
-      if (px * px + py * py > rad * rad) return NaN;
-      return px / rad;
-    },
-  };
-}
-
-function ellipse(cx, cy, rx, ry, color) {
-  return {
-    color,
-    y0: cy - ry,
-    y1: cy + ry,
-    test(x, y) {
-      const dx = (x - cx) / rx;
-      const dy = (y - cy) / ry;
-      return dx * dx + dy * dy <= 1 ? dx : NaN;
-    },
-  };
+// Wraps a shape with the colour it is painted in.
+function part(shape, color) {
+  shape.color = color;
+  return shape;
 }
 
 // Trapezoid between rows y0 (top) and y1 (bottom); the centre may drift so a
 // cloak can lean into the walk.
 function trapezoid(y0, y1, cx0, cx1, half0, half1, color) {
-  return {
-    color,
-    y0,
-    y1,
-    test(x, y) {
-      if (y < y0 || y > y1) return NaN;
-      const t = (y - y0) / (y1 - y0);
-      const cx = cx0 + (cx1 - cx0) * t;
-      const half = half0 + (half1 - half0) * t;
-      const nx = (x - cx) / half;
-      return Math.abs(nx) <= 1 ? nx : NaN;
-    },
-  };
+  return part(quad([cx0 - half0, y0], [cx0 + half0, y0], [cx1 + half1, y1], [cx1 - half1, y1]), color);
 }
+
+const capsule = (ax, ay, bx, by, rad, color) => part(cap(ax, ay, bx, by, rad), color);
+const ellipse = (cx, cy, rx, ry, color) => part(ell(cx, cy, rx, ry), color);
 
 // Builds the list of shapes, back to front, for the current pose.
 function pose({ facing, phase, amp, bob }) {
@@ -136,6 +103,7 @@ function pose({ facing, phase, amp, bob }) {
   return parts;
 }
 
+const SAMPLE = { nx: 0, ny: 0, u: 0, v: 0 };
 const SUB_X = [0.25, 0.75];
 const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
 
@@ -187,27 +155,27 @@ export function drawFigure(r, view, state, write = putCell) {
         for (const ox of SUB_X) {
           const px = (cx + ox - state.x) * ASPECT;
           const py = cy + oy - state.y;
-          let nx = NaN;
-          let part = null;
+          let hit = null;
           for (let i = parts.length - 1; i >= 0; i--) {
-            const v = parts[i].test(px, py);
-            if (v === v) {
-              nx = v;
-              part = parts[i];
+            const p = parts[i];
+            if (px < p.x0 || px > p.x1 || py < p.y0 || py > p.y1) continue;
+            if (p.test(px, py, SAMPLE)) {
+              hit = p;
               break;
             }
           }
-          if (!part) continue;
+          if (!hit) continue;
+          const nx = SAMPLE.nx;
 
           // Moonlight from the upper left, plus a cool rim on the lit edge.
-          const t = (py - part.y0) / (part.y1 - part.y0);
+          const t = (py - hit.y0) / (hit.y1 - hit.y0);
           let l = 0.78 - 0.32 * nx - 0.22 * t;
           if (nx < -0.72) l += 0.25;
           hits++;
           lum += l;
-          cr += part.color[0] * l;
-          cg += part.color[1] * l;
-          cb += part.color[2] * l;
+          cr += hit.color[0] * l;
+          cg += hit.color[1] * l;
+          cb += hit.color[2] * l;
           mx += ox - 0.5;
           my += oy - 0.5;
         }
