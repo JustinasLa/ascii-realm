@@ -129,6 +129,8 @@ export class AsciiRenderer {
     this.rows = Math.ceil(this.canvas.height / this.cellH) + 1;
     this.fg = new Uint8ClampedArray(this.cols * this.rows * 4);
     this.bg = new Uint8ClampedArray(this.cols * this.rows * 4);
+    // Terrain type under each cell, so later passes know where water is.
+    this.mask = new Uint8Array(this.cols * this.rows);
 
     for (const tex of [this.fgTex, this.bgTex]) {
       gl.bindTexture(gl.TEXTURE_2D, tex);
