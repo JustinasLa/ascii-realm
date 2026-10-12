@@ -112,7 +112,9 @@ export function buildRig(st) {
   // weight slowly from one to the other.
   const still = 1 - walk;
   const shift = Math.sin(time * 0.9) * 0.02 * still;
-  const pelvis = [Math.sin(phase) * 0.015 * walk + shift, 1.0, 0];
+  // Walking, the weight rolls over onto whichever leg is planted.
+  const sway = -Math.cos(phase) * 0.028 * walk * (1 - run * 0.6);
+  const pelvis = [sway + shift, 1.0, 0];
 
   const legs = [];
   for (const s of [-1, 1]) {
@@ -134,7 +136,10 @@ export function buildRig(st) {
     const knee = walk * ((0.55 + 0.6 * run) * Math.max(0, swingT) + (0.12 + 0.25 * run) * Math.max(0, -swingT)) +
       crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65);
     const shin = thigh - knee;
-    const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
+    // The hip on the swinging side drops a little, as it does in a real
+    // stride.
+    const drop = 0.022 * walk * Math.max(0, swingT);
+    const hip = add(pelvis, rotY([s * 0.1, -0.04 - drop, 0], -twist * 0.6));
     // Lean the legs out into a wide stance, and back under the weight.
     const roll = s * (0.02 + 0.07 * still) - shift * 1.5;
     const kneeP = add(hip, mul(limb(thigh, roll), THIGH));
@@ -161,7 +166,8 @@ export function buildRig(st) {
 
   // Everything above the hips hangs off the torso frame.
   // Banking tilts everything above the hips into a turn.
-  const bank = st.bank ?? 0;
+  // The chest leans a touch the other way to the hip sway, to balance.
+  const bank = (st.bank ?? 0) + sway * 1.2;
   const torso = (p) => add(pelvis, rotY(rotZ(rotX(p, lean), bank), twist));
   const turn = (d) => rotY(rotZ(rotX(d, lean * 0.5), bank), twist);
 
