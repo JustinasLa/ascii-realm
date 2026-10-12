@@ -61,6 +61,11 @@ const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 6);
 const fireflies = new Fireflies();
 
+// With ?debug in the URL the game state is reachable from the console, and
+// setting `freeze` stops the wanderer updating so a pose can be inspected.
+const debug = { player, camera, world, freeze: false };
+if (new URLSearchParams(location.search).has('debug')) window.game = debug;
+
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
 let walked = 0;
@@ -76,7 +81,7 @@ function frame(now) {
   updateZoom(dt);
 
   const move = moveAxis();
-  player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  if (!debug.freeze) player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
