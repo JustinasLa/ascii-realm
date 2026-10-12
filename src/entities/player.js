@@ -1,10 +1,16 @@
 import { ASPECT } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
-import { buildRig, project, SCALE } from './rig.js';
+import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
 
-const WALK_SPEED = 8; // rows per second; columns are scaled by ASPECT
-const RUN_SPEED = 15;
+// Ground speeds in metres per second. On screen a metre sideways spans
+// SCALE row units, but a metre up or down the screen is foreshortened by
+// the camera tilt, exactly as the figure's own feet are, so a planted foot
+// stays planted whichever way the warrior walks.
+const WALK_SPEED = 1.25;
+const RUN_SPEED = 2.9;
+const toCols = SCALE / ASPECT;
+const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
@@ -104,13 +110,10 @@ export class Player {
     const ease = (rate) => 1 - Math.exp(-rate * dt);
 
     if (moving) {
-      const speed = running ? RUN_SPEED : WALK_SPEED;
-      // Columns are narrower than rows, so horizontal motion needs more of
-      // them per second to look like the same on-screen speed.
-      const vx = (move.x / len) * speed / ASPECT;
-      const vy = (move.y / len) * speed;
-      this.tryMove(world, vx * dt, 0);
-      this.tryMove(world, 0, vy * dt);
+      // Speed up into a run gradually rather than in one jump.
+      const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
+      this.tryMove(world, (move.x / len) * speed * toCols * dt, 0);
+      this.tryMove(world, 0, (move.y / len) * speed * toRows * dt);
 
       // Turn smoothly through the in-between headings rather than snapping.
       const target = Math.atan2(move.x, move.y);
@@ -119,8 +122,15 @@ export class Player {
       // Lean into the turn like a runner rounding a bend, harder at speed.
       const bankTo = Math.max(-0.35, Math.min(0.35, (-turned / dt) * 0.04 * (0.4 + this.run)));
       this.bank += (bankTo - this.bank) * ease(10);
+    }
+
+    // The legs are driven by the ground actually covered, so the stride
+    // always matches the speed and stops when the way is blocked.
+    const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
+    const going = moving && metres > 0.15 * dt;
+    if (going) {
       const stride = Math.floor(this.phase / Math.PI);
-      this.phase += dt * (8 + 5 * this.run);
+      this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
       // A foot comes down every half cycle.
       if (this.air === 0 && Math.floor(this.phase / Math.PI) !== stride) {
         this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
@@ -130,8 +140,8 @@ export class Player {
     if (!moving) this.bank += -this.bank * ease(8);
 
     // Ease the stride in and out so starting and stopping is not abrupt.
-    this.walk += ((moving ? 1 : 0) - this.walk) * ease(10);
-    this.run += ((moving && running ? 1 : 0) - this.run) * ease(6);
+    this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
+    this.run += ((moving && running ? 1 : 0) - this.run) * ease(5);
     // Settle into a neutral stance once stopped.
     if (!moving && this.walk < 0.02) this.phase = 0;
 
@@ -165,7 +175,7 @@ export class Player {
       this.events.push({
         type: 'slam',
         x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
-        y: this.y + Math.cos(this.heading) * reach * 0.35,
+        y: this.y + Math.cos(this.heading) * reach * TILT,
         strength: 1,
       });
     }
@@ -174,7 +184,7 @@ export class Player {
     const rig = buildRig(this);
     this.recordTrail(rig);
 
-    const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / SCALE];
+    const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / toRows];
     const t = this.time;
     const wind = [2.2 + Math.sin(t * 0.7) * 1.6, 0, Math.sin(t * 0.43) * 1.2];
     this.cape.update(dt, ...this.capeMount(rig), moved, wind);

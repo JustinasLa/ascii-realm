@@ -76,6 +76,19 @@ function reach(shoulder, target, upper, fore, pole) {
   return [elbow, add(shoulder, mul(dir, dist))];
 }
 
+// A triangle wave with softened corners: the thigh angle over the walk
+// cycle, in -1..1, in step with sin().
+const SOFT = 0.96;
+const SWEEP = (a) => Math.asin(SOFT * Math.sin(a)) / Math.asin(SOFT);
+
+// How far the body travels over one full walk cycle (two steps), in metres,
+// for a given amount of running. A planted foot sweeps back through the
+// whole stride angle, so this is what keeps the feet from sliding.
+export function strideCycle(run) {
+  const swing = 0.42 + 0.3 * run;
+  return 1.25 * 4 * (THIGH + SHIN) * Math.sin(swing);
+}
+
 // Builds the posed skeleton. `st` holds:
 //   heading  radians, 0 faces the camera
 //   phase    walk cycle angle
@@ -110,10 +123,16 @@ export function buildRig(st) {
     // Kneeling brings one foot forward and lowers the other knee to the
     // ground behind it.
     const kn = st.kneel ?? 0;
-    const thigh = Math.sin(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
-    // The knee folds while the leg swings forward and straightens to land.
-    const knee = walk * (0.12 + 0.25 * run + (0.55 + 0.6 * run) * Math.max(0, Math.cos(lp))) + crouch * 1.6 +
-      kn * (s > 0 ? 1.45 : 1.65);
+    // The thigh sweeps back at an even pace while the foot is planted, so
+    // the foot keeps up with the ground instead of skating, and swings
+    // forward again while it is lifted. cos(lp) > 0 is the swing.
+    const swingT = Math.cos(lp);
+    const thigh = SWEEP(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
+    // The knee folds through the swing and gives a little under the weight
+    // mid-stance, but is straight as the foot lands and pushes off, so both
+    // feet meet the ground level when the weight changes over.
+    const knee = walk * ((0.55 + 0.6 * run) * Math.max(0, swingT) + (0.12 + 0.25 * run) * Math.max(0, -swingT)) +
+      crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65);
     const shin = thigh - knee;
     const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
     // Lean the legs out into a wide stance, and back under the weight.
@@ -121,6 +140,11 @@ export function buildRig(st) {
     const kneeP = add(hip, mul(limb(thigh, roll), THIGH));
     const ankle = add(kneeP, mul(limb(shin, roll), SHIN));
     const toe = add(ankle, mul(limb(Math.PI / 2 + Math.min(0, shin) * 0.8), 0.15));
+    // Pick the swinging foot up clear of the ground so it never touches
+    // down before its time.
+    const clear = walk * (0.09 + 0.08 * run) * Math.sqrt(Math.max(0, swingT));
+    ankle[1] += clear;
+    toe[1] += clear;
     legs.push({ s, hip, knee: kneeP, ankle, toe });
   }
 
