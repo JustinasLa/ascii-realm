@@ -40,7 +40,13 @@ void main() {
   float lod = clamp(log2(inner.y / uCell.y), 0.0, 2.5);
   float a = textureLod(uAtlas, apx / uAtlasSize, lod).r;
 
-  outColor = vec4(mix(bg, fg.rgb, a), 1.0);
+  vec3 color = mix(bg, fg.rgb, a);
+
+  // Darken toward the corners so the eye settles on the middle of the scene.
+  vec2 uv = gl_FragCoord.xy / uView - 0.5;
+  uv.x *= uView.x / uView.y;
+  float vignette = 1.0 - smoothstep(0.35, 1.05, length(uv)) * 0.7;
+  outColor = vec4(color * vignette, 1.0);
 }
 `;
 
