@@ -1,5 +1,5 @@
 import { isDown, moveAxis } from './core/input.js';
-import { drawFigure } from './entities/figure.js';
+import { drawFigure, drawShadow } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
@@ -42,6 +42,7 @@ function frame(now) {
 
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time);
+  drawShadow(renderer, view, player.x, player.y);
   drawFigure(renderer, view, player);
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);

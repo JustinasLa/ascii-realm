@@ -138,6 +138,31 @@ function pose({ facing, phase, amp, bob }) {
 const SUB_X = [0.25, 0.75];
 const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
 
+// Darkens the ground in a soft ellipse under the feet.
+export function drawShadow(r, view, x, y) {
+  const { fg, bg, cols } = r;
+  const fx = Math.floor(x);
+  const fy = Math.floor(y);
+  for (let cy = fy - 1; cy <= fy + 1; cy++) {
+    const sy = cy - view.y0;
+    if (sy < 0 || sy >= view.rows) continue;
+    for (let cx = fx - 5; cx <= fx + 5; cx++) {
+      const sx = cx - view.x0;
+      if (sx < 0 || sx >= view.cols) continue;
+      const dx = ((cx + 0.5 - x) * ASPECT) / 2.6;
+      const dy = (cy + 0.5 - y) / 1.1;
+      const d = dx * dx + dy * dy;
+      if (d >= 1) continue;
+      const k = 0.35 + 0.65 * d;
+      const o = (sy * cols + sx) * 4;
+      for (let c = 0; c < 3; c++) {
+        fg[o + c] *= k;
+        bg[o + c] *= k;
+      }
+    }
+  }
+}
+
 // Rasterises the figure with its feet at world position (state.x, state.y).
 export function drawFigure(r, view, state) {
   const parts = pose(state);
@@ -198,8 +223,8 @@ export function drawFigure(r, view, state) {
         if (Math.abs(my) >= Math.abs(mx)) g = my < 0 ? EDGE_TOP : EDGE_BOTTOM;
         else g = EDGE_SIDE;
       } else {
-        const b = Math.max(0, Math.min(1, lum / hits));
-        g = RAMP[Math.min(RAMP.length - 1, 3 + Math.floor(b * 7))];
+        const b = Math.max(0, Math.min(0.999, (lum / hits - 0.25) / 0.85));
+        g = RAMP[2 + Math.floor(b * 8)];
       }
       fg[o] = cr * k;
       fg[o + 1] = cg * k;
