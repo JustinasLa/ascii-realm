@@ -1,5 +1,9 @@
-import { buildAtlas, glyph } from './render/glyphs.js';
+import { moveAxis } from './core/input.js';
+import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { Camera } from './world/camera.js';
+import { drawGround } from './world/ground.js';
+import { World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 const CELL_W = 7;
@@ -15,21 +19,11 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-// Temporary test card until the world exists: a scrolling plasma of glyphs.
-const RAMP = ' .:-=+*#%@';
-
-function drawTestCard(t) {
-  renderer.clear(4, 5, 9);
-  for (let y = 0; y < renderer.rows; y++) {
-    for (let x = 0; x < renderer.cols; x++) {
-      const v = Math.sin(x * 0.08 + t) + Math.sin(y * 0.13 - t * 0.7) +
-        Math.sin((x + y) * 0.05 + t * 0.4);
-      const n = (v + 3) / 6;
-      const ch = RAMP[Math.min(RAMP.length - 1, Math.floor(n * RAMP.length))];
-      renderer.put(x, y, glyph(ch), 60 + n * 120, 140 + n * 100, 90 + n * 60);
-    }
-  }
-}
+const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
+const world = new World(seed);
+const spawn = world.findSpawn();
+const focus = { ...spawn };
+const camera = new Camera(spawn.x, spawn.y);
 
 let last = performance.now();
 let time = 0;
@@ -39,8 +33,16 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   time += dt;
-  drawTestCard(time);
-  renderer.draw();
+
+  // Free-look until there is a player to follow.
+  const move = moveAxis();
+  focus.x += move.x * 40 * dt;
+  focus.y += move.y * 24 * dt;
+  camera.follow(focus.x, focus.y, dt);
+
+  const view = camera.view(renderer);
+  drawGround(renderer, world, view, time);
+  renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }
 
