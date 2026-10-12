@@ -103,6 +103,15 @@ export function drawGround(r, world, view, t, bend) {
         cr = 66 * k;
         cg = 86 * k;
         cb = 128 * k;
+        // Thin lapping foam right where the water meets the shore.
+        if (depth < 0.07) {
+          const lap = Math.sin(t * 1.8 + wx * ASPECT * 0.5 + rnd * 2);
+          ch = lap > 0.1 ? WAVE_MID : WAVE_LO;
+          const f = 0.6 + 0.4 * Math.max(0, lap);
+          cr = 120 * f;
+          cg = 138 * f;
+          cb = 160 * f;
+        }
         br = 3 + 4 * (1 - depth);
         bgG = 5 + 6 * (1 - depth);
         bb = 13 + 6 * (1 - depth);
