@@ -42,6 +42,8 @@ export class Player {
     this.events = [];
     // 0 standing .. 1 down on one knee, resting after a long wait.
     this.kneel = 0;
+    // Sideways tilt into turns, in radians.
+    this.bank = 0;
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -112,7 +114,11 @@ export class Player {
 
       // Turn smoothly through the in-between headings rather than snapping.
       const target = Math.atan2(move.x, move.y);
-      this.heading += angleTo(this.heading, target) * ease(TURN_RATE);
+      const turned = angleTo(this.heading, target) * ease(TURN_RATE);
+      this.heading += turned;
+      // Lean into the turn like a runner rounding a bend, harder at speed.
+      const bankTo = Math.max(-0.35, Math.min(0.35, (-turned / dt) * 0.04 * (0.4 + this.run)));
+      this.bank += (bankTo - this.bank) * ease(10);
       const stride = Math.floor(this.phase / Math.PI);
       this.phase += dt * (8 + 5 * this.run);
       // A foot comes down every half cycle.
@@ -120,6 +126,8 @@ export class Player {
         this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
       }
     }
+
+    if (!moving) this.bank += -this.bank * ease(8);
 
     // Ease the stride in and out so starting and stopping is not abrupt.
     this.walk += ((moving ? 1 : 0) - this.walk) * ease(10);

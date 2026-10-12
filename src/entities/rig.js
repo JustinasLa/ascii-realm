@@ -26,6 +26,13 @@ export function rotX(p, a) {
   return [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c];
 }
 
+// Roll: tips +y towards -x.
+export function rotZ(p, a) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]];
+}
+
 // Yaw: turns +z towards +x.
 export function rotY(p, a) {
   const c = Math.cos(a);
@@ -129,8 +136,10 @@ export function buildRig(st) {
   }
 
   // Everything above the hips hangs off the torso frame.
-  const torso = (p) => add(pelvis, rotY(rotX(p, lean), twist));
-  const turn = (d) => rotY(rotX(d, lean * 0.5), twist);
+  // Banking tilts everything above the hips into a turn.
+  const bank = st.bank ?? 0;
+  const torso = (p) => add(pelvis, rotY(rotZ(rotX(p, lean), bank), twist));
+  const turn = (d) => rotY(rotZ(rotX(d, lean * 0.5), bank), twist);
 
   const arms = [];
   for (const s of [-1, 1]) {
