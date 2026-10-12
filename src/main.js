@@ -13,9 +13,11 @@ import { ASPECT, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
+// Zooming sets a target and the cell size glides toward it every frame.
 let cellH = 10;
+let zoomTarget = cellH;
 const MIN_CELL = 6;
-const MAX_CELL = 22;
+const MAX_CELL = 24;
 
 const canvas = document.getElementById('screen');
 const renderer = new AsciiRenderer(canvas, buildAtlas(FONT));
@@ -27,21 +29,29 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
-function zoom(steps) {
-  const next = Math.max(MIN_CELL, Math.min(MAX_CELL, cellH + steps));
-  if (next === cellH) return;
-  cellH = next;
+// Zoom is multiplicative so each notch feels the same at any scale.
+function zoomBy(factor) {
+  zoomTarget = Math.max(MIN_CELL, Math.min(MAX_CELL, zoomTarget * factor));
+}
+
+function updateZoom(dt) {
+  if (cellH === zoomTarget) return;
+  const k = 1 - Math.exp(-14 * dt);
+  cellH *= (zoomTarget / cellH) ** k;
+  if (Math.abs(cellH - zoomTarget) < 0.005) cellH = zoomTarget;
   resize();
 }
 
-// Mouse wheel or +/- to zoom in and out.
+// Mouse wheel or +/- to zoom in and out. Trackpads send many tiny deltas and
+// mice a few large ones, so scale by the distance scrolled.
 window.addEventListener('wheel', (e) => {
   e.preventDefault();
-  zoom(e.deltaY < 0 ? 1 : -1);
+  const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+  zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
-  if (e.key === '+' || e.key === '=') zoom(1);
-  if (e.key === '-' || e.key === '_') zoom(-1);
+  if (e.key === '+' || e.key === '=') zoomBy(1.15);
+  if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
 
 const seed = Number(new URLSearchParams(location.search).get('seed')) || 1;
@@ -63,6 +73,7 @@ function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.1);
   last = now;
   time += dt;
+  updateZoom(dt);
 
   const move = moveAxis();
   player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
