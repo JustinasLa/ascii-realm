@@ -11,3 +11,21 @@ body {
   width: 100vw;
   height: 100vh;
 }
+
+#hint {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  font: 12px "Cascadia Mono", Consolas, Menlo, monospace;
+  color: #b8c4b0;
+  background: rgba(5, 6, 10, 0.7);
+  border: 1px solid rgba(184, 196, 176, 0.2);
+  pointer-events: none;
+  transition: opacity 1.5s;
+}
+
+#hint.hidden {
+  opacity: 0;
+}

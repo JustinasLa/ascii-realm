@@ -51,6 +51,10 @@ const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 6);
 const fireflies = new Fireflies();
 
+// Fade the controls hint once the player has started walking about.
+const hint = document.getElementById('hint');
+let walked = 0;
+
 let last = performance.now();
 let time = 0;
 
@@ -60,7 +64,10 @@ function frame(now) {
   last = now;
   time += dt;
 
-  player.update(dt, world, moveAxis(), isDown('ShiftLeft', 'ShiftRight'));
+  const move = moveAxis();
+  player.update(dt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  if (move.x || move.y) walked += dt;
+  if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
   camera.follow(player.x, player.y - 6, dt);
 
