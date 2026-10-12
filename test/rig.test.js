@@ -26,13 +26,21 @@ test('a longer stride when running', () => {
   assert.ok(strideCycle(1) > strideCycle(0));
 });
 
-test('feet rest on the ground through the whole walk and run cycle', () => {
-  for (const run of [0, 1]) {
-    for (let phase = 0; phase < Math.PI * 2; phase += 0.1) {
-      const rig = buildRig(pose({ phase, walk: 1, run }));
-      assert.ok(Math.abs(groundGap(rig)) < 1e-9, `run=${run} phase=${phase.toFixed(1)}`);
-    }
+test('feet rest on the ground through the whole walk cycle', () => {
+  for (let phase = 0; phase < Math.PI * 2; phase += 0.1) {
+    const rig = buildRig(pose({ phase, walk: 1 }));
+    assert.ok(Math.abs(groundGap(rig)) < 1e-9, `phase=${phase.toFixed(1)}`);
   }
+});
+
+test('a sprint leaves the ground between footfalls but never sinks into it', () => {
+  let highest = 0;
+  for (let phase = 0; phase < Math.PI * 2; phase += 0.05) {
+    const gap = groundGap(buildRig(pose({ phase, walk: 1, run: 1 })));
+    assert.ok(gap > -1e-9 && gap < 0.1, `phase=${phase.toFixed(2)} gap=${gap}`);
+    highest = Math.max(highest, gap);
+  }
+  assert.ok(highest > 0.03, 'never airborne');
 });
 
 test('the knee touches down when kneeling', () => {

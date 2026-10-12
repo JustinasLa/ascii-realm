@@ -7,8 +7,8 @@ import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
 // SCALE row units, but a metre up or down the screen is foreshortened by
 // the camera tilt, exactly as the figure's own feet are, so a planted foot
 // stays planted whichever way the warrior walks.
-const WALK_SPEED = 1.25;
-const RUN_SPEED = 2.9;
+const WALK_SPEED = 1.8;
+const RUN_SPEED = 4.6;
 const toCols = SCALE / ASPECT;
 const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second

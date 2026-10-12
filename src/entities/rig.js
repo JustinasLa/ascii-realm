@@ -12,7 +12,7 @@
 export const SCALE = 13;
 // How far a step towards the camera moves a point down the screen, relative
 // to a step upwards moving it up. Gives the scene its three-quarter view.
-export const TILT = 0.35;
+export const TILT = 0.5;
 
 export const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -85,7 +85,7 @@ const SWEEP = (a) => Math.asin(SOFT * Math.sin(a)) / Math.asin(SOFT);
 // for a given amount of running. A planted foot sweeps back through the
 // whole stride angle, so this is what keeps the feet from sliding.
 export function strideCycle(run) {
-  const swing = 0.42 + 0.3 * run;
+  const swing = 0.42 + 0.36 * run;
   return 1.25 * 4 * (THIGH + SHIN) * Math.sin(swing);
 }
 
@@ -102,7 +102,7 @@ export function buildRig(st) {
   const fight = cb ? cb.active : 0;
   const sp = cb?.pose;
   const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0);
-  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
+  const lean = 0.06 * walk + 0.3 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
     (st.kneel ?? 0) * 0.18;
   // Shoulders counter-rotate against the hips as the legs swing.
   const twist = Math.sin(phase) * 0.14 * walk * (1 - fight * 0.6) + (sp ? SWORD_SIDE * sp.twist * fight : 0);
@@ -129,11 +129,14 @@ export function buildRig(st) {
     // the foot keeps up with the ground instead of skating, and swings
     // forward again while it is lifted. cos(lp) > 0 is the swing.
     const swingT = Math.cos(lp);
-    const thigh = SWEEP(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
+    // Sprinting drives the knee up high on the way through.
+    const drive = run * walk * 0.3 * Math.max(0, swingT);
+    const thigh = SWEEP(lp) * (0.42 + 0.36 * run) * walk + drive + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
     // The knee folds through the swing and gives a little under the weight
     // mid-stance, but is straight as the foot lands and pushes off, so both
     // feet meet the ground level when the weight changes over.
-    const knee = walk * ((0.55 + 0.6 * run) * Math.max(0, swingT) + (0.12 + 0.25 * run) * Math.max(0, -swingT)) +
+    // and kicks the heel up behind.
+    const knee = walk * ((0.55 + 1.05 * run) * Math.max(0, swingT) + (0.12 + 0.25 * run) * Math.max(0, -swingT)) +
       crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65);
     const shin = thigh - knee;
     // The hip on the swinging side drops a little, as it does in a real
@@ -158,7 +161,10 @@ export function buildRig(st) {
   // passing through upright lifts it, which is the bob of a real walk.
   let lowest = Infinity;
   for (const l of legs) lowest = Math.min(lowest, l.ankle[1] - 0.065, l.toe[1] - 0.05, l.knee[1] - 0.07);
-  const lift = -lowest + (st.air ?? 0);
+  // A sprint is a run of bounds: between footfalls both feet leave the
+  // ground for a moment.
+  const flight = run * walk * 0.07 * Math.max(0, -Math.cos(2 * phase));
+  const lift = -lowest + flight + (st.air ?? 0);
   pelvis[1] += lift;
   for (const l of legs) {
     for (const k of ['hip', 'knee', 'ankle', 'toe']) l[k][1] += lift;
@@ -176,8 +182,9 @@ export function buildRig(st) {
     const lp = phase + (s > 0 ? 0 : Math.PI);
     // Each arm swings with the opposite leg.
     // `reach` raises both arms forward, e.g. to balance in the air.
-    const swing = -Math.sin(lp) * (0.45 + 0.35 * run) * walk + (st.reach ?? 0);
-    const elbow = 0.22 + 0.15 * walk + 1.1 * run + 0.3 * Math.max(0, swing);
+    const swing = -Math.sin(lp) * (0.45 + 0.55 * run) * walk + (st.reach ?? 0);
+    // Sprinting, the arms pump hard with the elbows locked near square.
+    const elbow = 0.22 + 0.15 * walk + 1.25 * run + 0.3 * Math.max(0, swing) * (1 - run);
     const shoulder = torso([s * 0.2, 0.46 + breath * 0.008, 0]);
     // Arms hang a little away from the armour, more so when at rest.
     const elbowP = add(shoulder, mul(turn(limb(swing, s * (0.16 + 0.06 * still))), UPPER_ARM));
