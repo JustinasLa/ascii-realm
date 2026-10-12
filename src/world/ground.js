@@ -7,6 +7,14 @@ const G = (s) => [...s].map(glyph);
 // Blades lean with the wind: index 0 leans left, 2 leans right.
 const BLADE = G('\\|/');
 const STUBBLE = G(`',"\``);
+const GREENS = [
+  [34, 92, 48],
+  [46, 122, 62],
+  [58, 140, 74],
+  [74, 150, 70],
+  [40, 108, 70],
+];
+
 const SHORE_CH = G('.,:;');
 const DIRT_CH = G('.:,`');
 const STONE_CH = G('.:-=+*#%@');
@@ -51,10 +59,14 @@ export function drawGround(r, world, view, t) {
         const lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
         if (rnd < 0.12) ch = STUBBLE[Math.floor(rnd * 33) % STUBBLE.length];
         else ch = BLADE[lean < -0.35 ? 0 : lean > 0.35 ? 2 : 1];
-        const l = 0.55 + shade * 0.6;
-        cr = 40 * l;
-        cg = 120 * l;
-        cb = 60 * l;
+        // Pick one of a few greens per blade, darken whole patches with the
+        // shade noise and let passing gusts flash the tips lighter.
+        const tone = GREENS[Math.floor(rnd * 997) % GREENS.length];
+        const sheen = Math.max(0, gust - 0.55) * 1.6;
+        const l = 0.35 + shade * shade * 1.1 + sheen;
+        cr = tone[0] * l;
+        cg = tone[1] * l;
+        cb = tone[2] * l;
         br = 4;
         bgG = 10;
         bb = 6;
