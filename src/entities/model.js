@@ -125,6 +125,10 @@ export class ModelFigure {
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(COLS * SX, ROWS * SY, false);
     this.renderer.setClearColor(0x000000, 0);
+    // Clip the submerged geometry in 3D, so each leg meets the surface at
+    // its own position even when striding towards or away from the camera.
+    this.waterClipping = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)];
+    this.waterDepth = 0;
     this.pixels = new Uint8Array(COLS * SX * ROWS * SY * 4);
 
     this.scene = new THREE.Scene();
@@ -152,6 +156,11 @@ export class ModelFigure {
     });
 
     this.sword = this.makeSword();
+    this.legs = ['L', 'R'].map((side) => ({
+      thigh: this.bones[bone(`DEF-thigh.${side}`)],
+      shin: this.bones[bone(`DEF-shin.${side}`)],
+      foot: this.bones[bone(`DEF-foot.${side}`)],
+    }));
 
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50);
     this.camera.position.set(0, TILT * 20, COS * 20);
@@ -246,18 +255,21 @@ export class ModelFigure {
   update(dt, p) {
     const cb = p.combat;
     const speed = p.speed;
+    // Water drag changes cadence, while the blend still follows whether
+    // the player is walking or running at that reduced ground speed.
+    const gaitSpeed = speed / (p.speedScale ?? 1);
     const w = { idle: 0, walk: 0, jog: 0, sprint: 0, guard: 0, attack: 0, jumpStart: 0, jumpLoop: 0, jumpLand: 0, rest: 0 };
 
     // Locomotion: blend the clips whose ground speed brackets ours.
     const [wk, jg, sp] = this.gaits;
-    const moving = Math.min(1, speed / (wk.speed * 0.5));
+    const moving = Math.min(1, gaitSpeed / (wk.speed * 0.5));
     let loco;
-    if (speed <= wk.speed) loco = { walk: 1 };
-    else if (speed <= jg.speed) {
-      const t = (speed - wk.speed) / (jg.speed - wk.speed);
+    if (gaitSpeed <= wk.speed) loco = { walk: 1 };
+    else if (gaitSpeed <= jg.speed) {
+      const t = (gaitSpeed - wk.speed) / (jg.speed - wk.speed);
       loco = { walk: 1 - t, jog: t };
     } else {
-      const t = Math.min(1, (speed - jg.speed) / (sp.speed - jg.speed));
+      const t = Math.min(1, (gaitSpeed - jg.speed) / (sp.speed - jg.speed));
       loco = { jog: 1 - t, sprint: t };
     }
     // Advance one shared gait cycle by ground covered, so the feet keep pace
@@ -338,8 +350,29 @@ export class ModelFigure {
       p.events.push({ type: 'step', x: p.x + at.x * SCALE / ASPECT,
         y: p.y + at.z * SCALE * TILT, strength: Math.min(1, speed / 5) });
     }
-    this.model.position.y = p.air;
+    this.waterDepth = p.waterDepth ?? 0;
+    this.model.position.y = p.air - this.waterDepth;
     this.model.updateMatrixWorld(true);
+  }
+
+  // Where the surface cuts each leg, in world-cell offsets from the body.
+  // These little waterlines follow the animated knees, rather than orbiting
+  // the player's centre, and vanish once a jumping foot clears the surface.
+  waterContacts() {
+    if (this.waterDepth <= 0.001) return [];
+    const contacts = [];
+    for (const leg of this.legs) {
+      const joints = [leg.thigh, leg.shin, leg.foot].map((b) => b.getWorldPosition(new THREE.Vector3()));
+      for (let i = 0; i < joints.length - 1; i++) {
+        const a = joints[i];
+        const b = joints[i + 1];
+        if (a.y < 0 || b.y > 0 || a.y === b.y) continue;
+        const at = a.clone().lerp(b, a.y / (a.y - b.y));
+        contacts.push({ x: at.x * SCALE / ASPECT, y: at.z * SCALE * TILT });
+        break;
+      }
+    }
+    return contacts;
   }
 
   // Starts a one-shot clip from the beginning at a given playback rate.
@@ -383,6 +416,7 @@ export class ModelFigure {
     cam.bottom = -(1 - fy) * heightM;
     cam.updateProjectionMatrix();
 
+    this.renderer.clippingPlanes = this.waterDepth > 0.001 ? this.waterClipping : [];
     this.renderer.render(this.scene, cam);
     const gl = this.renderer.getContext();
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);

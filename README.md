@@ -22,7 +22,10 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Living grass.** Blades lean with rolling gusts, flash lighter where the wind
   catches them, part around your feet, and hide twinkling dew drops.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
-  the moon) mirrored in every lake.
+  the moon) mirrored in every lake. Walk or run through any lake: the water
+  rises from your ankles to at most your knees, slows your stride, and hides
+  the submerged boots. Each footfall throws up droplets and spreading rings;
+  jumps, landings and sword impacts make larger splashes.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.

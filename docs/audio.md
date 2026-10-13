@@ -329,8 +329,10 @@ Serve the game locally and verify:
    Reload to check saved settings, including starting muted.
 3. Walk and sprint across grass, dirt, stone and shore. Listen for contact-synced
    soft brushing on grass and distinct material changes, including low wet splashes
-   at lake edges; deep water still blocks movement. Jump, land and stop from a sprint to hear short cloth,
-   weighted material contact and skid brushes.
+   at lake edges. With wading enabled, walk and run through knee-deep water,
+   then jump and land to hear the takeoff wash and larger landing splash.
+   Stop from a sprint to hear short cloth, weighted material contact and skid
+   brushes. Check that standing still creates no extra step or splash cues.
 4. Draw and sheathe with `F`, strike with `J` or left click, and hold then release
    a strike. Listen for weathered blade friction, leather movement, low air rush
    and weighted, damped contact; charge should build as a quiet drifting air

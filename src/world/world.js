@@ -14,6 +14,8 @@ export const ASPECT = 6 / 10;
 
 const CHUNK = 64;
 export const WATER_LEVEL = 0.4;
+// All lakes are fordable: even their lowest beds are only knee deep.
+export const MAX_WATER_DEPTH = 0.42;
 const SHORE_LEVEL = 0.415;
 const STONE_LEVEL = 0.7;
 
@@ -81,6 +83,14 @@ export class World {
     return c.type[i];
   }
 
+  // Metres below the surface, rising gently from the bank and capped at
+  // the knee regardless of how low the terrain noise goes.
+  waterDepthAt(x, y) {
+    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
+    if (c.type[i] !== WATER) return 0;
+    return Math.min(MAX_WATER_DEPTH, Math.max(0, (WATER_LEVEL - c.elev[i]) / 0.065) * MAX_WATER_DEPTH);
+  }
+
   // Props are generated on first request rather than with the terrain,
   // because placing them needs the spawn point, which needs terrain first.
   propsOf(cx, cy) {
@@ -101,7 +111,6 @@ export class World {
   }
 
   isWalkable(x, y) {
-    if (this.typeAt(x, y) === WATER) return false;
     for (const p of this.propsIn(x - 4, y - 2, x + 4, y + 2)) {
       if (blocks(p, x, y)) return false;
     }
