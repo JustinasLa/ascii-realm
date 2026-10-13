@@ -1,7 +1,9 @@
 import { isDown, moveAxis, wasTapped } from './core/input.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
+import { ModelFigure } from './entities/model.js';
 import { Player } from './entities/player.js';
-import { buildAtlas } from './render/glyphs.js';
+import { putCell } from './render/cells.js';
+import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
@@ -94,6 +96,30 @@ window.addEventListener('blur', () => {
 });
 
 let hitStop = 0;
+
+// The player's 3D character; until it has loaded the shape-built figure
+// stands in.
+let model = null;
+ModelFigure.load('assets/ual1.glb')
+  .then((m) => {
+    model = m;
+    debug.model = m;
+    player.modelTrail = true;
+  })
+  .catch((e) => console.error('Could not load the character model', e));
+
+// The name floating above the character's head; `top` is the highest row
+// the character covers.
+function drawName(top) {
+  if (top === null || top === undefined) return;
+  const view = camera.view(renderer);
+  const sy = top - 2 - view.y0;
+  const sx = Math.floor(player.x - name.length / 2) - view.x0;
+  for (let i = 0; i < name.length; i++) {
+    renderer.put(sx + i, sy, glyph(name[i]), 212, 218, 228);
+    renderer.putBg(sx + i, sy, 8, 10, 14);
+  }
+}
 let last = performance.now();
 let time = 0;
 
@@ -113,6 +139,16 @@ function frame(now) {
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
   const held = isDown('KeyJ') || mouseHeld;
   if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
+  if (model) {
+    if (!debug.freeze) model.update(playerDt, player);
+    // The sword's trail follows the blade of the 3D character.
+    player.trail = player.trail.filter((t) => player.time - t.t < 0.16);
+    const blade = player.combat.trailing ? model.swordLine() : null;
+    if (blade) {
+      player.trail.push({ t: player.time, hx: player.x + blade.base[0], hy: player.y + blade.base[1],
+        tx: player.x + blade.tip[0], ty: player.y + blade.tip[1] });
+    }
+  }
   for (const e of player.events) {
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
@@ -150,17 +186,28 @@ function frame(now) {
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
-  const figure = dressFigure(player);
-  drawFigure(renderer, view, player, figure, mirror);
+  // Once the 3D character has loaded it replaces the shape-built figure.
+  let figure = null;
+  if (model) {
+    model.rasterise(view, player.x, player.y);
+    model.draw(renderer, mirror);
+  } else {
+    figure = dressFigure(player);
+    drawFigure(renderer, view, player, figure, mirror);
+  }
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
-  drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player, figure) });
+  drawables.push({
+    y: player.y,
+    draw: () => (model ? model.draw(renderer, putCell) : drawFigure(renderer, view, player, figure)),
+  });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
   drawTrail(renderer, view, player.trail, player.time);
-  drawNameTag(renderer, view, player, figure, name);
+  if (model) drawName(model.top);
+  else drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);

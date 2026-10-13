@@ -7,8 +7,8 @@ import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './r
 // SCALE row units, but a metre up or down the screen is foreshortened by
 // the camera tilt, exactly as the figure's own feet are, so a planted foot
 // stays planted whichever way the warrior walks.
-const WALK_SPEED = 1.75;
-const RUN_SPEED = 4.2;
+const WALK_SPEED = 1.35;
+const RUN_SPEED = 5.3;
 const toCols = SCALE / ASPECT;
 const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second
@@ -366,7 +366,8 @@ export class Player {
   recordTrail(rig) {
     const keep = this.time - 0.16;
     this.trail = this.trail.filter((p) => p.t > keep);
-    if (!this.combat.trailing || !rig.sword) return;
+    // A 3D character records its own trail (see main.js).
+    if (this.modelTrail || !this.combat.trailing || !rig.sword) return;
     const h = project(rig.sword.guard);
     const tip = project(rig.sword.tip);
     this.trail.push({
