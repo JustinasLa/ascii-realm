@@ -1,5 +1,5 @@
 import { valueNoise } from '../core/noise.js';
-import { MIRRORED, glyph } from '../render/glyphs.js';
+import { glyph } from '../render/glyphs.js';
 import { WATER } from './world.js';
 
 const RIPPLE = glyph('~');
@@ -54,8 +54,7 @@ export function reflector(t, view) {
     // Drifting gaps where the swell breaks the image up into slivers.
     const n = valueNoise((tx + view.x0) * 0.12 + t * 0.35, wy * 0.9, 5);
     if (n < 0.24) return;
-    // Upside down, a drawn blade stroke leans the other way.
-    g = n < 0.34 ? RIPPLE : MIRRORED[g];
+    if (n < 0.34) g = RIPPLE;
 
     // Dimmer the further the reflected point is from the mirror line, and
     // pulled toward the colour of the night water.
