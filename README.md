@@ -50,6 +50,10 @@ For now it is a single warrior exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
+- **Phone controls and performance.** A touch stick for walking/running, separate
+  jump and sword buttons, and zoom controls in portrait or landscape. Rendering
+  targets 60 fps, caps backing resolution, and adjusts the visible cell count
+  under sustained load. Hidden tabs stop drawing and distant chunks are evicted.
 
 ## Running
 
@@ -62,11 +66,18 @@ python -m http.server 8000
 
 A browser with WebGL2 is required.
 
-The rig and gait have unit tests (Node 18+, no dependencies):
+To play this checkout on a phone on the same Wi-Fi, open
+`http://<computer-LAN-IP>:8000` on the phone after starting the server.
+
+Gameplay, input, rendering equivalence, memory bounds and frame budgets have
+tests (Node 18+, no dependencies):
 
 ```sh
 npm test
 ```
+
+Run `npm run bench` for the repeatable CPU benchmark. Measurements, browser
+checks and reproduction instructions are in [docs/performance.md](docs/performance.md).
 
 ## Controls
 
@@ -78,6 +89,11 @@ npm test
 | `J` / left click | Strike (repeat for a combo) |
 | `F` | Draw or sheathe the sword |
 | Mouse wheel / `+` `-` | Zoom |
+
+On a phone, drag the left pad to walk and push it to the outer edge to run.
+Use **JUMP**, **STRIKE**, and **DRAW** with your other thumb; repeated strikes
+chain a combo. The upper **− / +** buttons zoom. Controls support multiple
+fingers and reset when a touch is cancelled or the page is backgrounded.
 
 ## Layout
 

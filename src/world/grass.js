@@ -74,6 +74,8 @@ export class Grass {
     this.previousSword = null;
     this.tracks = new Map();
     this.previousFeet = new Map();
+    this.prepared = null;
+    this.field = null;
   }
 
   bendAt(x, y, t) {
@@ -102,6 +104,7 @@ export class Grass {
   }
 
   update(world, player, t) {
+    this.prepared = null;
     for (const [key, bend] of this.bends) {
       if (t - bend.t >= LIFE) this.bends.delete(key);
     }
@@ -148,6 +151,7 @@ export class Grass {
   }
 
   trample(world, foot, from, t, direction) {
+    this.prepared = null;
     const stamp = (ax, ay, bx, by) => this.contactRoots(world, ax, ay, bx, by,
       SOLE_RADIUS, 1 / TILT, (x, y, rnd, side, weight) => {
         const key = `${x},${y}`;
@@ -177,6 +181,7 @@ export class Grass {
   }
 
   disturb(world, ax, ay, bx, by, radius, t, push, strength) {
+    this.prepared = null;
     this.contactRoots(world, ax, ay, bx, by, radius, 1, (x, y, rnd, side, weight) => {
       const press = weight * strength;
       const lean = ((Math.sign(side) || (rnd < 0.5 ? -1 : 1)) + push) * press;
@@ -184,7 +189,7 @@ export class Grass {
       const old = this.bends.get(key);
       if (old?.t === t && old.press > press) return;
       this.bends.delete(key);
-      this.bends.set(key, { lean, press, t });
+      this.bends.set(key, { x, y, lean, press, t });
       if (this.bends.size > MAX_BENDS) this.bends.delete(this.bends.keys().next().value);
     });
   }
@@ -230,18 +235,64 @@ export class Grass {
     }
   }
 
+  // Resolve the small set of contacts once per frame. Blades and their
+  // overhanging strokes then use array reads instead of constructing strings
+  // and looking up Maps for every segment, twice (scene and reflection).
+  prepare(view, t) {
+    const pad = SIDE_PAD + MAX_GRASS_HEIGHT;
+    const x0 = view.x0 - pad;
+    const y0 = view.y0 - pad;
+    const cols = view.cols + pad * 2;
+    const rows = view.rows + pad * 2;
+    const prev = this.prepared;
+    if (prev && prev.t === t && prev.x0 === x0 && prev.y0 === y0 &&
+      prev.cols === cols && prev.rows === rows) return;
+    const length = cols * rows;
+    if (!this.field || this.field.press.length < length) {
+      this.field = { press: new Float64Array(length), lean: new Float64Array(length),
+        tracks: new Float64Array(length) };
+    }
+    const { press, lean, tracks } = this.field;
+    press.fill(0, 0, length);
+    lean.fill(0, 0, length);
+    tracks.fill(0, 0, length);
+    for (const bend of this.bends.values()) {
+      const x = bend.x - x0;
+      const y = bend.y - y0;
+      if (x < 0 || x >= cols || y < 0 || y >= rows || t - bend.t >= LIFE) continue;
+      const age = Math.max(0, t - bend.t - HOLD);
+      const recovery = (1 + age * 5) * Math.exp(-age * 5);
+      const i = y * cols + x;
+      press[i] = bend.press * recovery;
+      lean[i] = bend.lean * recovery;
+    }
+    for (const track of this.tracks.values()) {
+      const x = track.x - x0;
+      const y = track.y - y0;
+      if (x < 0 || x >= cols || y < 0 || y >= rows) continue;
+      const i = y * cols + x;
+      const recovery = this.trackRecovery(track, t);
+      tracks[i] = track.press * recovery;
+      if (tracks[i] > press[i]) {
+        press[i] = tracks[i];
+        lean[i] = track.lean * recovery;
+      }
+    }
+    this.prepared = { x0, y0, cols, rows, t };
+  }
+
   drawRow(r, world, view, t, y, write = putCell) {
+    this.prepare(view, t);
+    const field = this.field;
+    const grid = this.prepared;
     const cy = Math.floor(y / CHUNK_SIZE);
-    let chunk = null;
-    let lastCx;
     // Overhanging ASCII strokes must not paint an upright stalk back across
     // a matted footprint. This uses the existing, world-anchored sole marks
     // and is shared by the normal and reflected views.
-    const paint = (renderer, sx, sy, ch, cr, cg, cb, base) => {
+    const paint = this.tracks.size === 0 ? write : (renderer, sx, sy, ch, cr, cg, cb, base) => {
       const wx = sx + view.x0;
       const wy = sy + view.y0;
-      const track = this.tracks.get(`${wx},${wy}`);
-      const pressure = track ? track.press * this.trackRecovery(track, t) : 0;
+      const pressure = field.tracks[(wy - grid.y0) * grid.cols + wx - grid.x0] || 0;
       if (pressure > 0.45) {
         ch = MATTED[Math.abs(wx * 7 + wy * 13) % MATTED.length];
         const blend = pressure * 0.6;
@@ -251,37 +302,47 @@ export class Grass {
       }
       write(renderer, sx, sy, ch, cr, cg, cb, base);
     };
-    for (let x = view.x0 - SIDE_PAD; x < view.x0 + view.cols + SIDE_PAD; x++) {
-      const cx = Math.floor(x / CHUNK_SIZE);
-      if (!chunk || cx !== lastCx) {
-        chunk = world.chunk(cx, cy);
-        lastCx = cx;
-      }
-      const i = (y - cy * CHUNK_SIZE) * CHUNK_SIZE + x - cx * CHUNK_SIZE;
-      const rnd = chunk.rnd[i];
-      const profile = chunk.grassHeight[i];
-      const style = chunk.grassStyle?.[i] ?? (chunk.reeds[i] ? 5 : 0);
-      const density = (chunk.grassDensity?.[i] ?? 0.26) * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1);
-      if (profile < 2 || rnd < 1 - density) continue;
-      const height = Math.min(MAX_GRASS_HEIGHT,
-        Math.floor(profile + hash2(x, y, world.seed + 1101)));
-      const bend = this.bendAt(x, y, t);
-      const press = this.pressAt(x, y, t);
-      const wind = grassWind(x, y, t, world.seed, rnd);
-      const variation = hash2(x, y, world.seed + 1217);
-      const curve = (variation - 0.5) * (style === 2 ? 2.2 : 0.6) * (1 - press);
-      const flat = 1 - (1 - Math.min(1, press)) ** 3;
-      const lean = Math.max(-4, Math.min(4, wind * Math.min(1.3, height * 0.35) * (1 - flat) +
-        curve + bend * (1.4 + height * 0.45)));
-      const light = (0.48 + chunk.shade[i] * 0.65 + Math.max(0, wind) * 0.1) * (0.85 + variation * 0.3);
-      const head = style === 5 ? SEED_HEAD : style === 3 ? (variation < 0.5 ? DOT : SEED) :
-        style === 4 ? DRY : style === 0 && variation > 0.6 ? FINE : style === 1 && variation > 0.75 ? LEAF : 0;
-      const tone = PALETTES[style];
-      drawBlade(r, view, paint, x, y, height, lean, press, light, tone, head);
-      if (style === 1 || (style === 4 && variation > 0.55)) {
-        const fan = Math.max(-4, Math.min(4, lean + (variation < 0.5 ? -1.6 : 1.6) * (1 - press * 0.7)));
-        drawBlade(r, view, paint, x, y, Math.max(2, height - 1), fan, press, light * 0.85,
-          tone, style === 4 ? FINE : 0);
+    const left = view.x0 - SIDE_PAD;
+    const right = view.x0 + view.cols + SIDE_PAD;
+    for (let cx = Math.floor(left / CHUNK_SIZE); cx <= Math.floor((right - 1) / CHUNK_SIZE); cx++) {
+      const chunk = world.chunk(cx, cy);
+      const row = y - cy * CHUNK_SIZE;
+      const blades = chunk.blades;
+      const first = blades ? blades.rows[row] : row * CHUNK_SIZE;
+      const last = blades ? blades.rows[row + 1] : (row + 1) * CHUNK_SIZE;
+      for (let root = first; root < last; root++) {
+        const i = blades ? blades.indices[root] : root;
+        const x = cx * CHUNK_SIZE + i % CHUNK_SIZE;
+        if (x < left || x >= right) continue;
+        const rnd = chunk.rnd[i];
+        const profile = chunk.grassHeight[i];
+        const style = chunk.grassStyle?.[i] ?? (chunk.reeds[i] ? 5 : 0);
+        const density = (chunk.grassDensity?.[i] ?? 0.26) * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1);
+        if (profile < 2 || rnd < 1 - density) continue;
+        const height = blades ? blades.heights[root] : Math.min(MAX_GRASS_HEIGHT,
+          Math.floor(profile + hash2(x, y, world.seed + 1101)));
+        const base = y - view.y0;
+        if (write.visible && !write.visible(r, x - view.x0 - 4, base - height + 1,
+          x - view.x0 + 4, base, base)) continue;
+        const fi = (y - grid.y0) * grid.cols + x - grid.x0;
+        const bend = field.lean[fi];
+        const press = field.press[fi];
+        const wind = grassWind(x, y, t, world.seed, rnd);
+        const variation = blades ? blades.variations[root] : hash2(x, y, world.seed + 1217);
+        const curve = (variation - 0.5) * (style === 2 ? 2.2 : 0.6) * (1 - press);
+        const flat = 1 - (1 - Math.min(1, press)) ** 3;
+        const lean = Math.max(-4, Math.min(4, wind * Math.min(1.3, height * 0.35) * (1 - flat) +
+          curve + bend * (1.4 + height * 0.45)));
+        const light = (0.48 + chunk.shade[i] * 0.65 + Math.max(0, wind) * 0.1) * (0.85 + variation * 0.3);
+        const head = style === 5 ? SEED_HEAD : style === 3 ? (variation < 0.5 ? DOT : SEED) :
+          style === 4 ? DRY : style === 0 && variation > 0.6 ? FINE : style === 1 && variation > 0.75 ? LEAF : 0;
+        const tone = PALETTES[style];
+        drawBlade(r, view, paint, x, y, height, lean, press, light, tone, head);
+        if (style === 1 || (style === 4 && variation > 0.55)) {
+          const fan = Math.max(-4, Math.min(4, lean + (variation < 0.5 ? -1.6 : 1.6) * (1 - press * 0.7)));
+          drawBlade(r, view, paint, x, y, Math.max(2, height - 1), fan, press, light * 0.85,
+            tone, style === 4 ? FINE : 0);
+        }
       }
     }
   }

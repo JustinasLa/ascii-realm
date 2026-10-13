@@ -1,6 +1,7 @@
 import { fbm, valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { blocks, generateProps } from './props.js';
+import { grassRoots } from './grass-roots.js';
 
 export const WATER = 0;
 export const SHORE = 1;
@@ -22,19 +23,30 @@ const smoothRange = (a, b, x) => {
 };
 
 export class World {
-  constructor(seed = 1) {
+  constructor(seed = 1, maxChunks = 128) {
     this.seed = seed;
+    this.maxChunks = Math.max(16, Math.floor(maxChunks));
+    this.clock = 0;
     this.chunks = new Map();
     this.spawn = this.findSpawn();
   }
 
   chunk(cx, cy) {
-    const key = (cx + 32768) * 65536 + (cy + 32768);
+    const key = `${cx},${cy}`;
     let c = this.chunks.get(key);
     if (!c) {
+      if (this.chunks.size >= this.maxChunks) {
+        let oldestKey;
+        let oldest = Infinity;
+        for (const [k, chunk] of this.chunks) {
+          if (chunk.used < oldest) { oldest = chunk.used; oldestKey = k; }
+        }
+        this.chunks.delete(oldestKey);
+      }
       c = this.generate(cx, cy);
       this.chunks.set(key, c);
     }
+    c.used = ++this.clock;
     return c;
   }
 
@@ -96,7 +108,9 @@ export class World {
         }
       }
     }
-    return { cx, cy, type, elev, shade, rnd, grassHeight, grassDensity, grassStyle, reeds, props: null };
+    const chunk = { cx, cy, type, elev, shade, rnd, grassHeight, grassDensity, grassStyle, reeds, props: null };
+    chunk.blades = grassRoots(chunk, s, CHUNK);
+    return chunk;
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays
@@ -134,8 +148,12 @@ export class World {
 
   isWalkable(x, y) {
     if (this.typeAt(x, y) === WATER) return false;
-    for (const p of this.propsIn(x - 4, y - 2, x + 4, y + 2)) {
-      if (blocks(p, x, y)) return false;
+    // Wide boulders can cross a chunk edge. Visit just the nearby chunks,
+    // without building a temporary list on every movement substep.
+    for (let cy = Math.floor((y - 2) / CHUNK); cy <= Math.floor((y + 2) / CHUNK); cy++) {
+      for (let cx = Math.floor((x - 10) / CHUNK); cx <= Math.floor((x + 10) / CHUNK); cx++) {
+        for (const p of this.propsOf(cx, cy)) if (blocks(p, x, y)) return false;
+      }
     }
     return true;
   }

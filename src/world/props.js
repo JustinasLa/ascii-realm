@@ -10,6 +10,8 @@ import { ASPECT, GRASS } from './world.js';
 
 const SUB_X = [0.25, 0.75];
 const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
+export const PROP_HEIGHT = 54;
+export const PROP_WIDTH = 34;
 
 // Glyph families from sparse to dense. A cell picks a family by brightness
 // and a member by hash, which gives foliage its busy, leafy texture.
@@ -17,6 +19,7 @@ const FAMILIES = ['.\'`', ':;-', '+=~ox', 'aedbqpu', 'Q0O8&$', '@#%WM'].map((f) 
 
 function bake(w, top, bottom, sample, seed) {
   const cells = [];
+  cells.bounds = { x0: -w, x1: w, y0: top, y1: bottom };
   for (let dy = top; dy <= bottom; dy++) {
     for (let dx = -w; dx <= w; dx++) {
       let hits = 0;
@@ -89,13 +92,16 @@ function makeTree(x, y, rand) {
   };
 
   const w = Math.ceil((radius * 1.7) / ASPECT);
+  const top = -Math.ceil(height + radius);
+  let cells;
   return {
     kind: 'tree',
     x,
     y,
     footW: 2.4,
     footH: 1.2,
-    cells: bake(w, -Math.ceil(height + radius), 0, sample, x * 31 + y),
+    bounds: { x0: -w, x1: w, y0: top, y1: 0 },
+    get cells() { return cells ??= bake(w, top, 0, sample, x * 31 + y); },
   };
 }
 
@@ -113,13 +119,16 @@ function makeRock(x, y, rand) {
     return { l, c: ny < -0.3 && rand() < 0.4 ? moss : stone };
   };
   const w = Math.ceil(rx / ASPECT) + 1;
+  const top = -Math.ceil(ry * 2);
+  let cells;
   return {
     kind: 'rock',
     x,
     y,
     footW: rx / ASPECT,
     footH: 1.4,
-    cells: bake(w, -Math.ceil(ry * 2), 0, sample, x * 17 + y),
+    bounds: { x0: -w, x1: w, y0: top, y1: 0 },
+    get cells() { return cells ??= bake(w, top, 0, sample, x * 17 + y); },
   };
 }
 
@@ -153,6 +162,12 @@ export function generateProps(world, cx, cy, size) {
 export function drawProp(r, view, prop, write = putCell) {
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
+  const b = prop.bounds || prop.cells.bounds;
+  if (b) {
+    if (write === putCell && (bx + b.x1 < 0 || bx + b.x0 >= r.cols ||
+      by + b.y1 < 0 || by + b.y0 >= r.rows)) return;
+    if (write.visible && !write.visible(r, bx + b.x0, by + b.y0, bx + b.x1, by + b.y1, by)) return;
+  }
   for (const c of prop.cells) {
     write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by);
   }

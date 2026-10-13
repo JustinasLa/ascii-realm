@@ -1,15 +1,17 @@
 import { isDown, moveAxis, wasTapped } from './core/input.js';
+import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
-import { drawProp } from './world/props.js';
+import { drawProp, PROP_HEIGHT, PROP_WIDTH } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { ASPECT, GRASS, World } from './world/world.js';
@@ -23,19 +25,38 @@ const MIN_CELL = 6;
 const MAX_CELL = 24;
 
 const canvas = document.getElementById('screen');
-const renderer = new AsciiRenderer(canvas, buildAtlas(FONT));
+const status = document.getElementById('status');
+let renderer;
+try {
+  renderer = new AsciiRenderer(canvas, buildAtlas(FONT));
+} catch (error) {
+  status.textContent = 'ASCII Realm needs WebGL2. Please open it in a browser with hardware acceleration enabled.';
+  status.hidden = false;
+  throw error;
+}
+const mobile = matchMedia('(any-pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
+const quality = new FrameQuality(mobile);
 
 function resize() {
-  renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, cellH * ASPECT,
-    cellH);
+  const { dpr, cell } = renderSize(window.innerWidth, window.innerHeight,
+    window.devicePixelRatio, cellH, mobile, quality.limit);
+  renderer.resize(window.innerWidth, window.innerHeight, dpr, cell * ASPECT, cell);
 }
 window.addEventListener('resize', resize);
 resize();
 
 // Zoom is multiplicative so each notch feels the same at any scale.
 function zoomBy(factor) {
+  // Start from the displayed scale when an automatic budget has enlarged
+  // the cells; otherwise several taps would be swallowed below that floor.
+  const displayed = renderer.cellH / renderer.dpr;
+  if (displayed > cellH + 0.001) {
+    cellH = displayed;
+    zoomTarget = Math.max(zoomTarget, displayed);
+  }
   zoomTarget = Math.max(MIN_CELL, Math.min(MAX_CELL, zoomTarget * factor));
 }
+installTouchControls(zoomBy);
 
 function updateZoom(dt) {
   if (cellH === zoomTarget) return;
@@ -61,7 +82,7 @@ const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed')) || 1;
 // Shown above the warrior's head; ?name=... picks another.
 const name = (params.get('name') || 'Kael').slice(0, 24);
-const world = new World(seed);
+const world = new World(seed, mobile ? 64 : 128);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
@@ -72,7 +93,8 @@ const grass = new Grass();
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, grass, renderer, freeze: false };
+const debug = { player, camera, world, grass, renderer, quality, freeze: false,
+  metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -81,30 +103,69 @@ let walked = 0;
 
 // A click on the scene swings the sword.
 let clicked = false;
-canvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0) clicked = true;
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button === 0 && e.pointerType !== 'touch') clicked = true;
 });
 
 let hitStop = 0;
-let last = performance.now();
 let time = 0;
+const clock = new FrameClock();
+let animation = null;
+let contextLost = false;
+
+function schedule() {
+  if (animation === null && !document.hidden && !contextLost) animation = requestAnimationFrame(frame);
+}
+
+function suspend() {
+  if (animation !== null) cancelAnimationFrame(animation);
+  animation = null;
+  clock.reset();
+  clicked = false;
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) suspend();
+  else schedule();
+});
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  contextLost = true;
+  suspend();
+  status.textContent = 'Restoring the scene…';
+  status.hidden = false;
+});
+canvas.addEventListener('webglcontextrestored', () => {
+  renderer.restore();
+  resize();
+  contextLost = false;
+  status.hidden = true;
+  schedule();
+});
 
 function frame(now) {
-  // Clamp dt so a backgrounded tab does not produce one enormous step.
-  const dt = Math.min((now - last) / 1000, 0.1);
-  last = now;
+  animation = null;
+  if (document.hidden || contextLost) return;
+  const dt = clock.step(now);
+  if (dt === null) { schedule(); return; }
+  const started = performance.now();
   time += dt;
   updateZoom(dt);
 
   const move = moveAxis();
-  if (wasTapped('Space')) player.jump();
-  if (wasTapped('KeyJ') || clicked) player.attack();
-  if (wasTapped('KeyF')) player.toggleSword();
+  const jump = wasTapped('Space');
+  const strike = wasTapped('KeyJ');
+  const draw = wasTapped('KeyF');
+  if (!debug.freeze) {
+    if (jump) player.jump();
+    if (strike || clicked) player.attack();
+    if (draw) player.toggleSword();
+  }
   clicked = false;
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
   if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
-  grass.update(world, player, time);
+  if (!debug.freeze) grass.update(world, player, time);
   for (const e of player.events) {
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
@@ -135,9 +196,9 @@ function frame(now) {
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
-  // Props up to a screen above the view can still be reflected into it.
-  const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
-    view.y0 + view.rows + 50);
+  // Only props within their maximum reach can paint or reflect into the view.
+  const props = world.propsIn(view.x0 - PROP_WIDTH, view.y0 - PROP_HEIGHT - 1,
+    view.x0 + view.cols + PROP_WIDTH, view.y0 + view.rows + PROP_HEIGHT);
 
   const mirror = reflector(time, view);
   const figure = dressFigure(player);
@@ -160,7 +221,12 @@ function frame(now) {
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   renderer.draw(view.offX, view.offY);
-  requestAnimationFrame(frame);
+  const workMs = performance.now() - started;
+  if (quality.sample(workMs, dt)) resize();
+  debug.metrics.frames++;
+  debug.metrics.workMs = workMs;
+  debug.metrics.intervalMs = dt * 1000;
+  schedule();
 }
 
-requestAnimationFrame(frame);
+schedule();
