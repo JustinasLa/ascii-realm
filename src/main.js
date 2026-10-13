@@ -140,7 +140,7 @@ function frame(now) {
 
   const mirror = reflector(time, view);
   for (const p of props) {
-    if (propInView(view, p, true)) drawProp(renderer, view, p, mirror, time, null, seed);
+    if (propInView(view, p, true)) drawProp(renderer, view, p, mirror, time, null, seed, true);
   }
   const figure = dressFigure(player);
   drawFigure(renderer, view, player, figure, mirror);

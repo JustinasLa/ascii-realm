@@ -3,17 +3,17 @@ import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
 import { GLYPHS, glyph } from '../src/render/glyphs.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from '../src/world/leaves.js';
-import { drawProp, generateProps, nearWater, propInView, treeSpeciesAt } from '../src/world/props.js';
+import { blocks, drawProp, generateProps, nearWater, propInView, treeSpeciesAt } from '../src/world/props.js';
 import { reflector } from '../src/world/reflection.js';
-import { makeTree, TREE_SPECIES } from '../src/world/trees.js';
+import { makeBush, makeTree, MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT, TREE_SPECIES } from '../src/world/trees.js';
 import { treeWind, windGust } from '../src/world/wind.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from '../src/world/world.js';
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const EVERGREEN = new Set(['pine', 'spruce']);
-const VIEW = { x0: 0, y0: 0, cols: 640, rows: 240 };
+const VIEW = { x0: 0, y0: 0, cols: 640, rows: 640 };
 
-function tree(species = 'oak', season = 'summer', x = 100.5, y = 100.5) {
+function tree(species = 'oak', season = 'summer', x = 100.5, y = 300.5) {
   return makeTree(x, y, mulberry32(123456), { species, season, seed: 42 });
 }
 
@@ -62,15 +62,15 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
     assert.deepEqual(prop, tree(species), species);
     assert.equal(prop.kind, 'tree');
     assert.equal(prop.species, species);
-    assert.ok(prop.cells.length > 50 && prop.cells.length < 4000, species);
+    assert.ok(prop.cells.length > 500 && prop.cells.length < 14000, species);
     assert.ok(prop.cells.some((cell) => cell.foliage), `${species} foliage`);
     assert.ok(prop.cells.some((cell) => !cell.foliage && cell.dy >= -2), `${species} roots`);
     assert.ok(prop.footW > 0 && prop.footH > 0);
-    assert.ok(prop.height > 0 && prop.height <= 75, `${species} height`);
+    assert.ok(prop.height >= 75 && prop.height <= MAX_TREE_HEIGHT, `${species} must tower over the 27-row player`);
     const occupied = new Set();
     for (const cell of prop.cells) {
       assert.ok(Number.isInteger(cell.dx) && Number.isInteger(cell.dy));
-      assert.ok(Math.abs(cell.dx) <= 24 && cell.dy >= -74 && cell.dy <= 0, species);
+      assert.ok(Math.abs(cell.dx) <= MAX_TREE_HALF_WIDTH && cell.dy >= 1 - MAX_TREE_HEIGHT && cell.dy <= 0, species);
       const location = `${cell.dx},${cell.dy}`;
       assert.ok(!occupied.has(location), `${species} duplicated ${location}`);
       occupied.add(location);
@@ -149,12 +149,14 @@ test('chunk visitation order preserves props, grass ownership, and the actual sp
   const generated = new Map();
   let trees = 0;
   let props = 0;
+  const growths = new Set();
   for (const [cx, cy] of chunks) {
     const chunkProps = forward.propsOf(cx, cy);
     generated.set(`${cx},${cy}`, chunkProps);
     assert.deepEqual(generateProps(forward, cx, cy, CHUNK_SIZE), chunkProps, `${cx},${cy} regeneration`);
     for (const prop of chunkProps) {
       props++;
+      if (prop.growth) growths.add(prop.growth);
       assert.equal(Math.floor(prop.x / CHUNK_SIZE), cx, `${prop.kind} owning x chunk`);
       assert.equal(Math.floor(prop.y / CHUNK_SIZE), cy, `${prop.kind} owning y chunk`);
       assert.equal(forward.typeAt(prop.x, prop.y), GRASS);
@@ -169,6 +171,7 @@ test('chunk visitation order preserves props, grass ownership, and the actual sp
     }
   }
   assert.ok(props > 0 && trees > 0, 'placement fixture exercises populated chunks');
+  assert.deepEqual(growths, new Set(['mature', 'sapling', 'bush']), 'forests generate all three growth layers');
   for (const [cx, cy] of [...chunks].reverse()) {
     assert.deepEqual(reverse.propsOf(cx, cy), generated.get(`${cx},${cy}`), `${cx},${cy} reversed visitation`);
   }
@@ -258,7 +261,7 @@ test('culling retains crowns below the viewport and reflections from trees above
   assert.ok(by >= crownView.y0 + crownView.rows, 'tree base is below the viewport');
   assert.equal(propInView(crownView, prop), true);
   const visible = [];
-  drawProp({ put: (...cell) => {
+  drawProp({ putBg() {}, put: (...cell) => {
     if (cell[0] >= 0 && cell[1] >= 0 && cell[0] < crownView.cols && cell[1] < crownView.rows) visible.push(cell);
   } }, crownView, prop, undefined, 5, null, 42);
   assert.ok(visible.length > 0, 'offscreen base still draws its crown');
@@ -271,6 +274,47 @@ test('culling retains crowns below the viewport and reflections from trees above
     fg: new Float64Array(lakeView.cols * lakeView.rows * 4) };
   drawProp(r, lakeView, prop, reflector(5, lakeView), 5, null, 42);
   assert.ok(r.fg.some((value, i) => i % 4 === 3 && value > 0), 'above-screen tree reflects into lake');
+});
+
+test('clipping large reflected sprites preserves the uncropped water image', () => {
+  const prop = tree('willow');
+  for (const view of [
+    { x0: 65, y0: 320, cols: 64, rows: 80 },
+    { x0: 130, y0: 360, cols: 64, rows: 80 },
+    { x0: 38, y0: 300, cols: 64, rows: 80 },
+  ]) {
+    const renderer = () => ({ cols: view.cols, rows: view.rows,
+      mask: new Uint8Array(view.cols * view.rows).fill(WATER),
+      fg: new Float64Array(view.cols * view.rows * 4) });
+    const full = renderer();
+    const clipped = renderer();
+    drawProp(full, view, prop, reflector(12, view), 12, null, 42);
+    drawProp(clipped, view, prop, reflector(12, view), 12, null, 42, true);
+    assert.deepEqual(clipped.fg, full.fg, 'wind and ripples survive source clipping');
+    assert.ok(full.fg.some((v, i) => i % 4 === 3 && v > 0), 'fixture reflects some canopy');
+  }
+});
+
+test('saplings and walkable bushes form a varied layer below mature trees', () => {
+  const heights = new Set();
+  for (const species of TREE_SPECIES) {
+    const mature = tree(species);
+    const young = makeTree(100.5, 300.5, mulberry32(123456), { species, seed: 42, growth: 'sapling' });
+    const bush = makeBush(100.5, 300.5, mulberry32(123456), { species, seed: 42 });
+    assert.equal(young.growth, 'sapling');
+    assert.equal(bush.kind, 'bush');
+    assert.ok(young.height >= 12 && young.height <= 55, `${species} sapling size`);
+    assert.ok(bush.height >= 5 && bush.height <= 20, `${species} bush size`);
+    assert.ok(mature.height > young.height * 2.5, `${species} mature-to-young scale`);
+    assert.ok(mature.footW > young.footW);
+    assert.ok(bush.cells.some(c => c.foliage));
+    assert.equal(blocks(bush, bush.x, bush.y), false, 'the player can pass through undergrowth');
+    assert.equal(blocks(mature, mature.x, mature.y), true, 'solid mature trunk');
+    assert.equal(blocks(young, young.x, young.y), true, 'solid sapling stem');
+    assert.deepEqual(bush, makeBush(100.5, 300.5, mulberry32(123456), { species, seed: 42 }));
+    heights.add(young.height);
+  }
+  assert.ok(heights.size >= 4, 'sapling species have different proportions');
 });
 
 test('nearby player reveal removes only local foliage behind the tree', () => {

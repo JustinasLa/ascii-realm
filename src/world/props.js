@@ -2,13 +2,13 @@ import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
-import { makeTree } from './trees.js';
+import { makeBush, makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
 
 // Trees and boulders. Each prop is rasterised once, when its chunk is
 // generated, into a list of cells relative to its base (the point where it
-// touches the ground). Drawing is then just copying those cells.
+// touches the ground). Crowns animate without rebuilding their geometry.
 
 const SUB_X = [0.25, 0.75];
 const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
@@ -116,67 +116,88 @@ export function treeSpeciesAt(world, x, y) {
   return (grove < 0.43) !== (local < 0.18) ? 'birch' : 'oak';
 }
 
-// Scatters props over a chunk on a jittered grid. Forest density comes from
-// low-frequency noise, so trees cluster into groves with clearings between.
+// Two layers: widely spaced mature trees, with a smaller understorey grid.
+// Their independent random streams keep groves repeatable across seasons.
 export function generateProps(world, cx, cy, size) {
   const props = [];
   const seed = world.seed;
-  const STEP_X = 15;
-  const STEP_Y = 8;
-  for (let gy = 0; gy < size; gy += STEP_Y) {
-    for (let gx = 0; gx < size; gx += STEP_X) {
-      const ox = cx * size + gx;
-      const oy = cy * size + gy;
-      const rand = mulberry32(Math.floor(hash2(ox, oy, seed + 61) * 2 ** 32));
-      // The last grid slot can be smaller than STEP_X. Keep every base in
-      // its owning chunk so collision queries still find it near a seam.
-      const x = ox + Math.floor(rand() * Math.min(STEP_X, size - gx));
-      const y = oy + Math.floor(rand() * Math.min(STEP_Y, size - gy));
-      if (world.typeAt(x, y) !== GRASS) continue;
-      // Keep the spawn clearing open.
-      if (Math.hypot((x + 0.5 - world.spawn.x) * ASPECT, y + 0.5 - world.spawn.y) < 36) continue;
+  for (let layer = 0; layer < 2; layer++) {
+    const stepX = layer === 0 ? 42 : 14;
+    const stepY = layer === 0 ? 28 : 12;
+    for (let gy = 0; gy < size; gy += stepY) {
+      for (let gx = 0; gx < size; gx += stepX) {
+        const ox = cx * size + gx;
+        const oy = cy * size + gy;
+        const rand = mulberry32(Math.floor(hash2(ox, oy, seed + 61 + layer * 1031) * 2 ** 32));
+        // The last grid slot can be smaller than stepX. Keep every base in
+        // its owning chunk so collision queries still find it near a seam.
+        const x = ox + Math.floor(rand() * Math.min(stepX, size - gx));
+        const y = oy + Math.floor(rand() * Math.min(stepY, size - gy));
+        if (world.typeAt(x, y) !== GRASS) continue;
+        // Keep the spawn clearing open.
+        if (Math.hypot((x + 0.5 - world.spawn.x) * ASPECT, y + 0.5 - world.spawn.y) < 36) continue;
 
-      const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
-      const roll = rand();
-      if (roll < (forest - 0.5) * 1.6) {
-        const species = treeSpeciesAt(world, x, y);
-        props.push(makeTree(x + 0.5, y + 0.5, rand, { species, season: world.season, seed }));
+        const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
+        const roll = rand();
+        if (layer === 0 && roll < Math.max(0, forest - 0.38) * 1.6) {
+          const species = treeSpeciesAt(world, x, y);
+          props.push(makeTree(x + 0.5, y + 0.5, rand, { species, season: world.season, seed }));
+        } else if (layer === 1 && roll < 0.04 + Math.max(0, forest - 0.38) * 0.7) {
+          // Keep seedlings out of the mature trunks without recursively
+          // generating neighboring props. Bushes stay soft and walkable.
+          if (props.some((p) => p.kind === 'tree' && Math.hypot((p.x - x) * ASPECT, p.y - y) < 7)) continue;
+          const species = treeSpeciesAt(world, x, y);
+          const options = { species, season: world.season, seed };
+          props.push(rand() < 0.35 ? makeTree(x + 0.5, y + 0.5, rand, { ...options, growth: 'sapling' }) :
+            makeBush(x + 0.5, y + 0.5, rand, options));
+        } else if (layer === 1 && roll > 0.965) {
+          props.push(makeRock(x + 0.5, y + 0.5, rand));
+        }
       }
-      else if (roll > 0.975) props.push(makeRock(x + 0.5, y + 0.5, rand));
     }
   }
   return props;
 }
 
-export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1) {
+export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
-  const tree = prop.kind === 'tree';
+  const tree = prop.kind === 'tree' || prop.kind === 'bush';
   const sway = tree ? treeWind(prop, t, seed) : 0;
   const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
+  const sin = tree ? Math.sin(t * 1.4) : 0;
+  const cos = tree ? Math.cos(t * 1.4) : 0;
+  const sheen = Math.max(0, gust - 0.55) * 0.18;
+  const direct = write === putCell;
   if (write === putCell && !propInView(view, prop)) return;
   // The figure has already been drawn when its base is behind this tree.
   // Stable local dither lets it show through nearby leaves without changing
   // the renderer's glyph index channel or punching holes in solid wood.
   const reveal = player && prop.y > player.y ? player.foliageBounds : null;
   for (const c of prop.cells) {
+    const sy = by + c.dy;
+    // Reject invisible rows before calculating foliage lighting or texture.
+    // Reflections need source rows above the view, measured about the base.
+    if (direct && (sy < 0 || sy >= view.rows)) continue;
+    if (reflected && (by - c.dy + 1 < 0 || by - c.dy + 1 >= view.rows)) continue;
     const dx = c.dx + (c.foliage ? Math.round(sway * c.flex) : 0);
     const sx = bx + dx;
-    const sy = by + c.dy;
+    if ((direct || reflected) && (sx < -1 || sx >= view.cols + 1)) continue;
     if (c.foliage && reveal) {
       const nx = (Math.floor(prop.x) + dx - reveal.x) / reveal.rx;
       const ny = (Math.floor(prop.y) + c.dy - reveal.y) / reveal.ry;
       const d2 = nx * nx + ny * ny;
       if (d2 < 1 && hash2(c.dx, c.dy, prop.textureSeed) < (1 - d2) * 0.93) continue;
     }
-    const flutter = c.foliage ? Math.sin(t * 1.4 + c.phase) : 0;
-    const light = c.foliage ? 1 + flutter * 0.035 + Math.max(0, gust - 0.55) * 0.18 : 1;
+    const flutter = c.foliage ? sin * c.phaseCos + cos * c.phaseSin : 0;
+    const light = c.foliage ? 1 + flutter * 0.035 + sheen : 1;
     const ch = c.foliage && flutter > 0.94 && gust > 0.58 ? c.rustle : c.g;
-    write(r, sx, sy, ch, c.r * light, c.gg * light, c.b * light, by);
+    write(r, sx, sy, ch, c.r * light, c.gg * light, c.b * light, by, c.br, c.bgG, c.bb);
   }
 }
 
 export function blocks(prop, x, y) {
+  if (prop.kind === 'bush') return false;
   const dx = (x - prop.x) / prop.footW;
   const dy = (y - prop.y) / prop.footH;
   return dx * dx + dy * dy < 1;

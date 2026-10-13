@@ -18,7 +18,7 @@ export function drawLeaves(r, view, props, t, seed = 1) {
   const count = list ? props.length : 1;
   for (let i = 0; i < count; i++) {
     const prop = list ? props[i] : props;
-    if (prop.kind !== 'tree' || prop.season === 'winter' ||
+    if ((prop.kind !== 'tree' && prop.kind !== 'bush') || prop.season === 'winter' ||
         prop.species === 'pine' || prop.species === 'spruce') continue;
     const cells = prop.cells;
     if (!cells || cells.length === 0) continue;

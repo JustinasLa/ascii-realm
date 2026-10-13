@@ -103,7 +103,7 @@ export class World {
 
   isWalkable(x, y) {
     if (this.typeAt(x, y) === WATER) return false;
-    for (const p of this.propsIn(x - 4, y - 2, x + 4, y + 2)) {
+    for (const p of this.propsIn(x - 10, y - 3, x + 10, y + 3)) {
       if (blocks(p, x, y)) return false;
     }
     return true;

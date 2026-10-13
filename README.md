@@ -23,7 +23,10 @@ For now it is a single warrior exploring procedurally generated terrain.
   catches them, part around your feet, and hide twinkling dew drops.
 - **Living forests.** Eight distinct trees inspired by Minecraft's variety:
   oak, pale-barked birch, pine, tiered spruce, umbrella-shaped acacia, tall
-  jungle trees, pink cherry groves and drooping willows near lakes. Layered
+  jungle trees, pink cherry groves and drooping willows near lakes. Mature
+  trees tower over the warrior, with varied heights, irregular leaf clusters,
+  branching trunks and shaded canopy pockets. Smaller saplings and walkable
+  shrubs grow between the widely spaced mature trees. Layered
   foliage has shaded depth and moonlit edges; crowns rustle and gently sway
   with the grass, while trunks and roots stay planted. Leaves and blossoms
   drift down, and foliage thins around the warrior when it would hide them.
