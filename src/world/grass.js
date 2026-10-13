@@ -2,69 +2,157 @@ import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
-import { glyph } from '../render/glyphs.js';
+import { BLOSSOM, BUD, STROKE_STEPS, flatGlyph, glyph, strokeGlyph } from '../render/glyphs.js';
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 
-export const MAX_GRASS_HEIGHT = 5;
-const SIDE_PAD = 8;
+// Terrain grows blades up to five cells high; drawn blades are longer than
+// that profile, so they read as separate strokes, and a flower can top one.
+const MAX_PROFILE = 5;
+const BLADE_LENGTH = 1.3;
+export const MAX_GRASS_HEIGHT = 8;
+const SIDE_PAD = 12;
 const SOLE_RADIUS = SCALE * 0.1;
 const HOLD = 0.25;
 const LIFE = 2;
 const MAX_BENDS = 1024;
 const MAX_TRACKS = 8192;
 const TRACK_MEMORY = 45;
-const STEM = glyph('|');
-const LEFT = glyph('\\');
-const RIGHT = glyph('/');
+// The body parts the meadow around it: an ellipse on the ground plane,
+// in aspect-corrected cells across and rows deep.
+const BODY_RADIUS = 4.8;
+const BODY_DEPTH = 3;
+const PART_LIFE = 2.2;
+const PART_SPRING = 2.6;
+const MAX_PARTS = 4096;
 const SEED_HEAD = glyph('"');
-const FLAT = glyph('-');
-const LEAF = glyph('Y');
 const DOT = glyph('.');
 const SEED = glyph(':');
-const FINE = glyph("'");
-const DRY = glyph('`');
-const MAT = [80, 120, 66];
-const MATTED = [FLAT, glyph('_')];
-// Fine blue-green blades, leafy tufts, curved emerald grass, seed heads,
-// dry gold grass, and olive shoreline reeds.
+const MAT = [64, 104, 66];
+const MATTED = [flatGlyph(2, 2), flatGlyph(1, 2), flatGlyph(2, 1)];
+// Saturated mid greens against the near-black ground: blue-green fine
+// blades, leafy tufts, curved emerald grass, seed heads, dry gold grass,
+// and olive shoreline reeds.
 const PALETTES = [
-  [54, 126, 104], [78, 144, 64], [46, 134, 72],
-  [100, 142, 82], [138, 132, 72], [106, 134, 72],
+  [48, 118, 88], [58, 126, 72], [46, 130, 80],
+  [70, 124, 80], [96, 116, 70], [82, 116, 72],
 ];
+// Tips catch the moonlight and pale toward this.
+const TIP = [104, 142, 124];
+const FLOWERS = [
+  [BLOSSOM, 244, 248, 240], [BUD, 214, 236, 240], [BLOSSOM, 248, 242, 214],
+  [BUD, 236, 240, 226], [glyph('°'), 240, 236, 214], [glyph('.'), 230, 244, 236],
+  [BLOSSOM, 236, 242, 250], [BLOSSOM, 248, 248, 244],
+];
+const PETAL = BUD;
+// Where the last drawn blade ended: the cell just beyond its tip.
+let tipX = 0;
+let tipY = 0;
 
-function drawBlade(r, view, write, x, y, height, lean, press, light, tone, head) {
+// A smooth, sine-like wave with period 1 made of two parabolas. Cheaper
+// than Math.sin, which matters when it runs for every blade every frame.
+const ripple = (p) => {
+  const f = p - Math.floor(p);
+  return f < 0.5 ? 16 * f * (0.5 - f) : 16 * (f - 0.5) * (f - 1);
+};
+
+const step = (v, steps) => v <= 0 ? 0 : v >= 1 ? steps - 1 : (v * steps) | 0;
+
+function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase = 0) {
   // Firm contact lays even the tallest stalk right on the ground. Ease out
   // of the flat pose only as pressure recovers, rather than leaving little
   // upright stems in the fresh footprint.
-  const flat = 1 - (1 - Math.min(1, press)) ** 3;
-  const rise = (height - 1) * (1 - flat);
+  const flat = press > 0 ? 1 - (1 - Math.min(1, press)) ** 3 : 0;
+  // A blade swings about its root, so a strong lean lowers it rather than
+  // stretching it sideways, and pressure swings it the rest of the way down.
+  const side = lean < 0 ? -1 : 1;
+  const across = Math.abs(lean) * ASPECT;
+  let rise;
+  let reach;
+  if (flat) {
+    const angle = Math.atan2(across, height);
+    const swing = angle + (1.5 - angle) * flat;
+    rise = Math.cos(swing) * height;
+    reach = Math.sin(swing) * height / ASPECT * side;
+  } else {
+    const k = height / Math.sqrt(height * height + across * across);
+    rise = height * k;
+    reach = lean * k;
+  }
   const base = y - view.y0;
-  const steps = Math.ceil(height + Math.abs(lean) * 2);
-  let lastX = 0;
-  let lastY = 0;
-  for (let k = 0; k <= steps; k++) {
-    const u = k / steps;
-    const offset = Math.round(lean * u * u);
-    const sy = base - Math.round(rise * u);
-    if (k && offset === lastX && sy === lastY && k !== steps) continue;
-    let ch = k && sy === lastY && offset !== lastX ? FLAT :
-      offset < lastX ? LEFT : offset > lastX ? RIGHT : STEM;
-    if (k === steps) ch = press > 0.6 ? FLAT : head || (lean < 0 ? LEFT : RIGHT);
-    const l = light * (0.55 + u * 0.6 + flat * 0.12);
-    const mat = flat * 0.35;
-    write(r, x - view.x0 + offset, sy, ch,
+  const sx = x - view.x0;
+  const dim = 1 - flat * 0.25;
+  if (rise >= 0.75 && Math.abs(reach) <= rise * 1.8) {
+    // Upright: one edge-to-edge stroke per row, joined where the blade
+    // crosses each row boundary. The tip bends over more than the base.
+    // A blade ending low in its last row gets a short tip there.
+    const rows = Math.max(1, Math.ceil(rise - 0.25));
+    const tip = rise - rows + 1 < 0.7 ? 2 : 1;
+    const [tr, tg, tb] = tone;
+    const lit = light * dim;
+    let bottom = 0.5;
+    for (let j = 0; j < rows; j++) {
+      const v = (j + 1) / rows;
+      const top = 0.5 + reach * v * (0.7 + v * 0.3);
+      // Shade along the blade with a per-blade offset, so rows of equally
+      // tall blades do not line up into horizontal bands of brightness.
+      const u = Math.min(1, (j + 0.5) / rows + phase);
+      const l = lit * (0.66 + u * 0.6);
+      const pale = u > 0.6 ? (u - 0.6) * 0.8 : 0;
+      const cr = (tr + (TIP[0] - tr) * pale) * l;
+      const cg = (tg + (TIP[1] - tg) * pale) * l;
+      const cb = (tb + (TIP[2] - tb) * pale) * l;
+      // A steeply leaning segment crosses into the next column: give each
+      // column it passes through its own part, so the blade has no gaps.
+      const from = Math.floor(Math.min(bottom, top) + 0.25);
+      const to = Math.floor(Math.max(bottom, top) - 0.25);
+      if (to <= from) {
+        const col = Math.floor((bottom + top) / 2);
+        write(r, sx + col, base - j,
+          strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS), j === rows - 1 ? tip : 0),
+          cr, cg, cb, base);
+      } else {
+        const end = top > bottom ? to : from;
+        for (let col = from; col <= to; col++) {
+          write(r, sx + col, base - j, strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS),
+            j === rows - 1 && col === end ? tip : 0), cr, cg, cb, base);
+        }
+      }
+      bottom = top;
+    }
+    tipX = sx + Math.floor(bottom);
+    tipY = base - rows;
+    return;
+  }
+  // Lying down: the blade crosses columns rather than rows, a little above
+  // the bottom of the root's cell, rising towards a tip that lifts off.
+  const cols = Math.max(1, Math.round(Math.abs(reach)));
+  const mat = flat * 0.5;
+  for (let k = 0; k < cols; k++) {
+    const h0 = 0.3 + rise * k / cols;
+    const h1 = 0.3 + rise * (k + 1) / cols;
+    const row = Math.floor((h0 + h1) / 2);
+    const a = step(1 - (h0 - row), 3);
+    const b = step(1 - (h1 - row), 3);
+    const l = light * (0.4 + (k + 0.5) / cols * 0.4) * dim;
+    write(r, sx + side * k, base - row, side > 0 ? flatGlyph(a, b) : flatGlyph(b, a),
       (tone[0] + (MAT[0] - tone[0]) * mat) * l,
       (tone[1] + (MAT[1] - tone[1]) * mat) * l,
       (tone[2] + (MAT[2] - tone[2]) * mat) * l, base);
-    lastX = offset;
-    lastY = sy;
   }
+  tipX = sx + side * cols;
+  tipY = base - Math.floor(0.3 + rise);
 }
 
-// One gust per rooted blade: upper segments follow the same wave as the base.
+// Wind arrives in gusts: broad patches of stronger wind drift across the
+// field with a quicker ripple running through them, so waves of bending
+// (and of light caught by the bent blades) sweep visibly over the meadow.
+// Upper segments of a rooted blade follow the same gust as its base.
 export function grassWind(x, y, t, seed, rnd) {
-  return (valueNoise(x * ASPECT * 0.035 - t * 0.18, y * 0.035 + t * 0.04,
-    seed + 900) - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.1;
+  const nx = x * ASPECT;
+  const n = Math.max(0, Math.min(1, (valueNoise(nx * 0.025 - t * 0.3, y * 0.045 + t * 0.03, seed + 900) - 0.5) / 0.3));
+  const gust = n * n * (3 - 2 * n);
+  const wave = ripple(nx * 0.025 + y * 0.011 - t * 0.33);
+  return 0.25 + wave * 0.25 + gust * (2.6 + wave * 0.8) + ripple(t * 0.41 + rnd * 6.4) * 0.12;
 }
 
 export class Grass {
@@ -74,6 +162,7 @@ export class Grass {
     this.previousSword = null;
     this.tracks = new Map();
     this.previousFeet = new Map();
+    this.parts = new Map();
     this.prepared = null;
     this.field = null;
   }
@@ -97,6 +186,12 @@ export class Grass {
       (track[field] || 0) * lasting : (bend?.[field] || 0) * transient;
   }
 
+  // Body parting springs back smoothly, without the footprint's hold.
+  partRecovery(part, t) {
+    const age = t - part.t;
+    return age < PART_LIFE ? (1 + age * PART_SPRING) * Math.exp(-age * PART_SPRING) : 0;
+  }
+
   trackRecovery(track, t) {
     if (!track) return 0;
     const u = Math.max(0, Math.min(1, (t - track.until) / track.recover));
@@ -111,6 +206,10 @@ export class Grass {
     for (const [key, track] of this.tracks) {
       if (t - track.t > TRACK_MEMORY) this.tracks.delete(key);
     }
+    for (const [key, part] of this.parts) {
+      if (t - part.t >= PART_LIFE) this.parts.delete(key);
+    }
+    this.part(world, player, t);
     const prev = this.previous;
     this.previous = { x: player.x, y: player.y, air: player.air, t };
     // A sword wake follows the animated blade's swept ground footprint,
@@ -148,6 +247,24 @@ export class Grass {
       const direction = continuous ? Math.sign(player.x - prev.x) : 0;
       this.trample(world, foot, from, t, direction);
     }
+  }
+
+  // Blades lean away from the body and sink beneath it, leaving a darker
+  // hollow the figure stands out against. Entries are refreshed while the
+  // body is near, so walking leaves a parted wake that slowly stands back up.
+  part(world, player, t) {
+    if (player.air > 0.3) return;
+    this.prepared = null;
+    this.contactRoots(world, player.x, player.y, player.x, player.y, BODY_RADIUS,
+      BODY_RADIUS / BODY_DEPTH, (x, y, rnd, side, weight) => {
+        const key = `${x},${y}`;
+        const old = this.parts.get(key);
+        if (old && old.sink * this.partRecovery(old, t) > weight * weight) return;
+        const lean = (Math.sign(side) || (rnd < 0.5 ? -1 : 1)) * weight * 3.2;
+        this.parts.delete(key);
+        this.parts.set(key, { x, y, lean, sink: weight * weight, t });
+        if (this.parts.size > MAX_PARTS) this.parts.delete(this.parts.keys().next().value);
+      });
   }
 
   trample(world, foot, from, t, direction) {
@@ -226,7 +343,7 @@ export class Grass {
       const mat = 1 - (1 - pressure) ** 3;
       const texture = Math.abs(track.x * 7 + track.y * 13) % MATTED.length;
       for (let c = 0; c < 3; c++) {
-        r.fg[o + c] += (MAT[c] * 0.65 - r.fg[o + c]) * mat * 0.55;
+        r.fg[o + c] += (MAT[c] * 0.5 - r.fg[o + c]) * mat * 0.55;
         // The compressed bed is dark; exposed, horizontal leaf surfaces
         // catch the moonlight and make the walked route easy to read.
         r.bg[o + c] *= 1 - mat * 0.3;
@@ -250,12 +367,22 @@ export class Grass {
     const length = cols * rows;
     if (!this.field || this.field.press.length < length) {
       this.field = { press: new Float64Array(length), lean: new Float64Array(length),
-        tracks: new Float64Array(length) };
+        tracks: new Float64Array(length), part: new Float64Array(length), sink: new Float64Array(length) };
     }
-    const { press, lean, tracks } = this.field;
+    const { press, lean, tracks, part, sink } = this.field;
     press.fill(0, 0, length);
     lean.fill(0, 0, length);
     tracks.fill(0, 0, length);
+    part.fill(0, 0, length);
+    sink.fill(0, 0, length);
+    for (const entry of this.parts.values()) {
+      const x = entry.x - x0;
+      const y = entry.y - y0;
+      const recovery = this.partRecovery(entry, t);
+      if (x < 0 || x >= cols || y < 0 || y >= rows || recovery < 0.02) continue;
+      part[y * cols + x] = entry.lean * recovery;
+      sink[y * cols + x] = entry.sink * recovery;
+    }
     for (const bend of this.bends.values()) {
       const x = bend.x - x0;
       const y = bend.y - y0;
@@ -296,9 +423,9 @@ export class Grass {
       if (pressure > 0.45) {
         ch = MATTED[Math.abs(wx * 7 + wy * 13) % MATTED.length];
         const blend = pressure * 0.6;
-        cr += (MAT[0] * 0.65 - cr) * blend;
-        cg += (MAT[1] * 0.65 - cg) * blend;
-        cb += (MAT[2] * 0.65 - cb) * blend;
+        cr += (MAT[0] * 0.5 - cr) * blend;
+        cg += (MAT[1] * 0.5 - cg) * blend;
+        cb += (MAT[2] * 0.5 - cb) * blend;
       }
       write(renderer, sx, sy, ch, cr, cg, cb, base);
     };
@@ -315,33 +442,63 @@ export class Grass {
         const x = cx * CHUNK_SIZE + i % CHUNK_SIZE;
         if (x < left || x >= right) continue;
         const rnd = chunk.rnd[i];
-        const profile = chunk.grassHeight[i];
         const style = chunk.grassStyle?.[i] ?? (chunk.reeds[i] ? 5 : 0);
-        const density = (chunk.grassDensity?.[i] ?? 0.26) * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1);
-        if (profile < 2 || rnd < 1 - density) continue;
-        const height = blades ? blades.heights[root] : Math.min(MAX_GRASS_HEIGHT,
-          Math.floor(profile + hash2(x, y, world.seed + 1101)));
+        if (!blades) {
+          const density = (chunk.grassDensity?.[i] ?? 0.26) * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1);
+          if (chunk.grassHeight[i] < 2 || rnd < 1 - density) continue;
+        }
+        const height = blades ? blades.heights[root] : Math.min(MAX_PROFILE,
+          Math.floor(chunk.grassHeight[i] + hash2(x, y, world.seed + 1101)));
         const base = y - view.y0;
-        if (write.visible && !write.visible(r, x - view.x0 - 4, base - height + 1,
-          x - view.x0 + 4, base, base)) continue;
         const fi = (y - grid.y0) * grid.cols + x - grid.x0;
-        const bend = field.lean[fi];
         const press = field.press[fi];
+        const sink = field.sink[fi];
+        // Blades lying down reach further sideways than upright ones lean
+        // (at most seven columns, plus a flower cluster's petal).
+        const span = press > 0.3 || sink > 0.3 ? SIDE_PAD : 9;
+        if (write.visible && !write.visible(r, x - view.x0 - span, base - MAX_GRASS_HEIGHT,
+          x - view.x0 + span, base, base)) continue;
+        const bend = field.lean[fi];
         const wind = grassWind(x, y, t, world.seed, rnd);
         const variation = blades ? blades.variations[root] : hash2(x, y, world.seed + 1217);
-        const curve = (variation - 0.5) * (style === 2 ? 2.2 : 0.6) * (1 - press);
-        const flat = 1 - (1 - Math.min(1, press)) ** 3;
-        const lean = Math.max(-4, Math.min(4, wind * Math.min(1.3, height * 0.35) * (1 - flat) +
-          curve + bend * (1.4 + height * 0.45)));
-        const light = (0.48 + chunk.shade[i] * 0.65 + Math.max(0, wind) * 0.1) * (0.85 + variation * 0.3);
-        const head = style === 5 ? SEED_HEAD : style === 3 ? (variation < 0.5 ? DOT : SEED) :
-          style === 4 ? DRY : style === 0 && variation > 0.6 ? FINE : style === 1 && variation > 0.75 ? LEAF : 0;
+        // Each blade has its own resting angle, so neighbours cross and fan.
+        const jitter = (rnd * 7919) % 1;
+        // Few stand quite upright; most lean ten to thirty degrees.
+        const tilt = (variation - 0.5) * 2;
+        // Contact overrides the resting angle: a parted blade leans away.
+        const bent = Math.max(press, sink * 0.55);
+        const curve = (Math.sign(tilt) * (0.3 + Math.abs(tilt) * 0.7) * (style === 2 ? 4.4 : 3.6) +
+          (jitter - 0.5) * 2) * (1 - Math.max(press, sink));
+        const flat = 1 - (1 - Math.min(1, bent)) ** 3;
+        const lean = Math.max(-7, Math.min(7, (wind * Math.min(1.3, height * 0.35) * (1 - flat) +
+          curve + bend * (1.4 + height * 0.45) + field.part[fi]) * BLADE_LENGTH));
+        // Gusts lay blades over to show their lit sides; the parted hollow
+        // under a figure stays in shadow.
+        const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.16) *
+          (0.82 + variation * 0.36) * (1 - sink * 0.8);
         const tone = PALETTES[style];
-        drawBlade(r, view, paint, x, y, height, lean, press, light, tone, head);
-        if (style === 1 || (style === 4 && variation > 0.55)) {
-          const fan = Math.max(-4, Math.min(4, lean + (variation < 0.5 ? -1.6 : 1.6) * (1 - press * 0.7)));
-          drawBlade(r, view, paint, x, y, Math.max(2, height - 1), fan, press, light * 0.85,
-            tone, style === 4 ? FINE : 0);
+        const length = height * BLADE_LENGTH * (0.78 + jitter * 0.3);
+        drawBlade(r, view, paint, x, y, length, lean, bent, light, tone, (variation - 0.5) * 0.4);
+        const flower = blades ? blades.flowers[root] : 0;
+        if (flower) {
+          const [ch, fr, fg, fb] = FLOWERS[flower - 1];
+          const glow = (0.8 + variation * 0.25) * (1 - sink * 0.45) * (1 - flat * 0.4);
+          paint(r, tipX, tipY, flat > 0.6 ? DOT : ch, fr * glow, fg * glow, fb * glow, base);
+          // The last kind blooms in a little cluster across the stem.
+          if (flower === FLOWERS.length && flat < 0.6) {
+            paint(r, tipX - 1, tipY, PETAL, fr * glow * 0.8, fg * glow * 0.85, fb * glow * 0.9, base);
+            paint(r, tipX + 1, tipY, PETAL, fr * glow * 0.8, fg * glow * 0.85, fb * glow * 0.9, base);
+          }
+        } else if ((style === 3 && variation > 0.8) || (style === 5 && variation > 0.6)) {
+          paint(r, tipX, tipY, style === 5 ? SEED_HEAD : variation < 0.9 ? DOT : SEED,
+            tone[0] * light * 1.3, tone[1] * light * 1.2, tone[2] * light, base);
+        }
+        // Most roots are tufts: a second, shorter blade crosses the first.
+        // Ripples break reflections up too much for it to show there.
+        if ((style === 1 || jitter > 0.5) && !write.visible) {
+          const fan = Math.max(-7, Math.min(7, lean + (variation < 0.5 ? 4 : -4) * (1 - press * 0.7)));
+          drawBlade(r, view, paint, x, y, Math.max(2, length * (0.75 + jitter * 0.2)), fan, bent, light * 0.85,
+            tone, (jitter - 0.5) * 0.4);
         }
       }
     }

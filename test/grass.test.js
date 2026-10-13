@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Grass, MAX_GRASS_HEIGHT } from '../src/world/grass.js';
+import { Grass, MAX_GRASS_HEIGHT, grassWind } from '../src/world/grass.js';
+import { clumpAt, grassRoots } from '../src/world/grass-roots.js';
+import { hash2 } from '../src/core/rng.js';
 import { Player } from '../src/entities/player.js';
 import { SCALE, TILT, buildRig } from '../src/entities/rig.js';
-import { glyph } from '../src/render/glyphs.js';
+import { FLAT_GLYPHS, STROKE_STEPS, strokeGlyph } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, World } from '../src/world/world.js';
@@ -121,7 +123,7 @@ test('grass biome heights are cached and deterministic, with reeds on shoreline 
       }
     }
   }
-  assert.equal(MAX_GRASS_HEIGHT, 5);
+  assert.equal(MAX_GRASS_HEIGHT, 8, 'drawn blades outgrow the five-cell profile, leaving room for a flower');
   assert.ok([...heights].some((h) => h >= 2 && h < 2.4), 'verges retain multi-cell grass');
   assert.ok([...heights].some((h) => h > 2.6 && h < 3.6), 'the field includes ordinary grass');
   assert.ok([...heights].some((h) => h > 3.7), 'the meadow includes fuller patches');
@@ -137,6 +139,7 @@ test('wind moves upper blade geometry while the root and reflection base stay fi
     const cells = rowCells(grass, world, view, t, 0);
     assert.ok(cells.length >= 2);
     assert.ok(cells.every((c) => c.base === 20));
+    assert.ok(cells.every((c) => c.y >= 20 - MAX_GRASS_HEIGHT && c.y <= 20), 'blades stay within their drawn height');
     assert.ok(cells.some((c) => c.x === 12 && c.y === 20), `root at t=${t}`);
     shapes.add(JSON.stringify(cells.filter((c) => c.y < 20).map((c) => [c.x, c.y, c.g])));
   }
@@ -173,7 +176,7 @@ test('player contact visibly flattens a short blade, then restores its wind-driv
   const after = rowCells(grass, world, view, 0, 0);
   assert.ok(Math.min(...after.map((c) => c.y)) > Math.min(...before.map((c) => c.y)),
     'the visible stalk lies lower, rather than just changing a stored bend');
-  assert.ok(after.some((c) => c.g === glyph('-')), 'pressed grass has a horizontal stalk');
+  assert.ok(after.some((c) => FLAT_GLYPHS.includes(c.g)), 'pressed grass has a horizontal stalk');
   assert.ok(after.some((c) => c.x === 12 && c.y === 10), 'the root stays anchored');
   grass.update(world, player(30.5, 0.5), 0.1);
   assert.ok(grass.pressAt(2, 0, 0.2) > 0.6, 'the flattened trail remains briefly');
@@ -190,7 +193,7 @@ test('a contacted five-cell stalk lies fully flat and spreads into a visible mat
   assert.ok(standing.some(c => c.y === 6), 'the unpressed stalk is five cells tall');
   assert.ok(flat.every(c => c.y === 10), 'fresh contact leaves no upright stem');
   assert.ok(new Set(flat.map(c => c.x)).size >= 5, 'fallen strands spread along the ground');
-  assert.ok(flat.some(c => c.g === glyph('-')));
+  assert.ok(flat.some(c => FLAT_GLYPHS.includes(c.g)));
 });
 
 test('matted footprints remain legible through foreground grass and fade back to the original field', () => {
@@ -208,11 +211,13 @@ test('matted footprints remain legible through foreground grass and fade back to
   grass.update(world, player(0.5, 0.5), 0);
   const r = render(grass, 0);
   const o = (10 * view.cols + 10) * 4;
-  assert.ok([glyph('-'), glyph('_')].includes(r.fg[o + 3]),
+  assert.ok(FLAT_GLYPHS.includes(r.fg[o + 3]),
     'upright strokes from roots below the footprint do not bury it');
   assert.ok(r.fg[o] >= 25 && r.fg[o] <= 70, 'the mat retains a natural, moderate highlight');
   assert.ok(r.bg[o + 1] >= 6 && r.bg[o + 1] < 9, 'the bed has a soft shadow');
-  assert.equal(r.bg[(10 * view.cols + 18) * 4 + 1], 10, 'untouched ground is not shaded into an aura');
+  const aside = (10 * view.cols + 18) * 4;
+  assert.deepEqual(r.bg.slice(aside, aside + 3), render(new Grass(), 0).bg.slice(aside, aside + 3),
+    'untouched ground is not shaded into an aura');
   grass.update(world, player(30.5, 30.5), 0.1);
   const recovered = render(grass, 25);
   const untouched = render(new Grass(), 25);
@@ -311,7 +316,7 @@ test('grass variations have different silhouettes and palettes and all flatten u
     palettes.add(JSON.stringify(cells.map(cell => [cell.cr, cell.cg, cell.cb])));
     const pressed = new Grass();
     pressed.update(world, player(0.5, 0.5), 2);
-    assert.ok(rowCells(pressed, world, view, 2, 0).some(cell => cell.g === glyph('-')));
+    assert.ok(rowCells(pressed, world, view, 2, 0).some(cell => FLAT_GLYPHS.includes(cell.g)));
   }
   assert.ok(silhouettes.size >= 4, 'variation changes shape rather than only recolouring identical blades');
   assert.equal(palettes.size, 6);
@@ -369,7 +374,7 @@ test('sword contact covers the space swept between blade frames and produces a f
   assert.ok(grass.pressAt(13, 0, 0.05) > 0.8, 'the swept strip affects grass between footprints');
   const cells = rowCells(grass, meadow(new Map([['13,0', 3]])),
     { x0: 0, y0: -10, cols: 30, rows: 20 }, 0.05, 0);
-  assert.ok(cells.some((c) => c.g === glyph('-')), 'the sword wake is visible in the rendered blade');
+  assert.ok(cells.some((c) => FLAT_GLYPHS.includes(c.g)), 'the sword wake is visible in the rendered blade');
   grass.update(world, { ...next, swordSweep: null, air: 1 }, 2.1);
   assert.equal(grass.pressAt(13, 0, 2.1), 0, 'the sword wake recovers');
 });
@@ -519,4 +524,140 @@ test('reflected grass rows interleave with reflected entities in the same rooted
   const frontRoot = events.indexOf('root:17');
   assert.ok(back >= 0 && backRoot >= 0 && front >= 0 && frontRoot >= 0);
   assert.ok(back < backRoot && backRoot < front && front < frontRoot, events.join(', '));
+});
+
+const strokes = new Map();
+for (let tip = 0; tip < 3; tip++) {
+  for (let b = 0; b < STROKE_STEPS; b++) {
+    for (let t = 0; t < STROKE_STEPS; t++) strokes.set(strokeGlyph(b, t, tip), { b, t, tip });
+  }
+}
+const tipOf = (cells) => cells.reduce((a, c) => (c.y < a.y ? c : a));
+
+test('upright blades are long joined strokes: each row starts where the row below ended', () => {
+  const world = meadow(new Map([['0,0', 5]]));
+  const view = { x0: -12, y0: -20, cols: 32, rows: 40 };
+  for (const t of [0, 1.3, 4.2, 7.7]) {
+    const cells = rowCells(new Grass(), world, view, t, 0);
+    assert.ok(cells.every((c) => strokes.has(c.g)));
+    const rows = [...new Set(cells.map((c) => c.y))].sort((a, b) => b - a);
+    assert.ok(rows.length >= 5, 'a five-cell profile draws a blade at least five rows long');
+    assert.deepEqual(rows, rows.map((_, k) => 20 - k), 'every row from the root up holds a stroke');
+    const ends = (y, side) => cells.filter((c) => c.y === y)
+      .map((c) => c.x + (strokes.get(c.g)[side] + 0.5) / STROKE_STEPS);
+    for (let k = 1; k < rows.length; k++) {
+      const gap = Math.min(...ends(rows[k - 1], 't').flatMap((a) => ends(rows[k], 'b').map((b) => Math.abs(a - b))));
+      assert.ok(gap < 0.4, `row ${rows[k]} joins the row below at t=${t}`);
+    }
+    const tips = cells.filter((c) => strokes.get(c.g).tip > 0);
+    assert.equal(tips.length, 1, 'the blade ends in one tapered tip');
+    assert.equal(tips[0].y, rows.at(-1));
+    assert.ok(tips[0].cg > cells.find((c) => c.y === 20).cg, 'the tip is lighter than the root');
+  }
+});
+
+test('meadow roots grow in clumps with dark gaps between them', () => {
+  const size = CHUNK_SIZE;
+  const n = size * size;
+  const chunk = { cx: 0, cy: 0, grassStyle: new Uint8Array(n), grassDensity: new Float32Array(n).fill(0.26),
+    grassHeight: new Float32Array(n).fill(3.5),
+    rnd: Float32Array.from({ length: n }, (_, i) => hash2(i % size, Math.floor(i / size), 3)) };
+  const { rows, indices, flowers } = grassRoots(chunk, 19, size);
+  assert.equal(rows[size], indices.length);
+  const grown = new Set(indices);
+  let bare = 0;
+  let lush = 0;
+  let lushRoots = 0;
+  for (let i = 0; i < n; i++) {
+    const clump = clumpAt(i % size, Math.floor(i / size), 19);
+    if (clump === 0) {
+      bare++;
+      const k = indices.indexOf(i);
+      assert.ok(k < 0 || flowers[k], 'only a flower grows in a gap between clumps');
+    } else if (clump > 1.4) {
+      lush++;
+      if (grown.has(i)) lushRoots++;
+    }
+  }
+  assert.ok(bare > n * 0.08 && bare < n * 0.4, `bare ground: ${bare} of ${n}`);
+  assert.ok(lushRoots / lush > indices.length / n * 1.2, 'roots crowd together inside the clumps');
+  const bloom = flowers.filter(Boolean).length / indices.length;
+  assert.ok(bloom > 0.02 && bloom < 0.2, `flowers on ${bloom} of roots`);
+});
+
+test('wind arrives in gusts that travel downwind across the meadow', () => {
+  const sample = (t) => Array.from({ length: 700 }, (_, x) => grassWind(x, 40, t, 19, 0.5));
+  const a = sample(0);
+  const b = sample(1);
+  assert.ok(Math.min(...a) < 0.6 && Math.max(...a) > 2.2, 'calm stretches between strong gusts');
+  const error = (lag) => {
+    let e = 0;
+    for (let x = 100; x < 600; x++) e += Math.abs(b[x] - a[x - lag]);
+    return e;
+  };
+  let best = 0;
+  for (let lag = 1; lag < 60; lag++) if (error(lag) < error(best)) best = lag;
+  assert.ok(best > 8 && best < 40, `a second later the gusts have moved ${best} cells downwind`);
+});
+
+test('the body parts the grass around it, shades the hollow and lets it spring back slowly', () => {
+  const view = { x0: -20, y0: -20, cols: 40, rows: 40 };
+  const body = (air = 0) => ({ x: 0.5, y: 0.5, air, feet: [] });
+  for (const [x, side] of [[4, 1], [-4, -1]]) {
+    const world = meadow(new Map([[`${x},0`, 4]]));
+    const still = rowCells(new Grass(), world, view, 1, 0);
+    const grass = new Grass();
+    grass.update(world, body(), 1);
+    const parted = rowCells(grass, world, view, 1, 0);
+    assert.equal(grass.pressAt(x, 0, 1), 0, 'the body bends grass without trampling it');
+    const [a, b] = [tipOf(still), tipOf(parted)];
+    assert.ok((b.x - a.x) * side > 0 && b.y > a.y, `the blade at ${x} leans away and lies lower`);
+    const shade = (cells) => cells.reduce((sum, c) => sum + c.cg, 0) / cells.length;
+    assert.ok(shade(parted) < shade(still) * 0.7, 'the parted hollow is darker');
+    assert.notDeepEqual(rowCells(grass, world, view, 1.6, 0), rowCells(new Grass(), world, view, 1.6, 0),
+      'still parted after half a second');
+    assert.deepEqual(rowCells(grass, world, view, 3.4, 0), rowCells(new Grass(), world, view, 3.4, 0),
+      'standing back up within a couple of seconds');
+  }
+  const world = meadow(new Map([['4,0', 4], ['14,0', 4]]));
+  const grass = new Grass();
+  grass.update(world, body(), 1);
+  assert.equal(grass.parts.has('14,0'), false, 'grass beyond the body is untouched');
+  const airborne = new Grass();
+  airborne.update(world, body(1), 1);
+  assert.equal(airborne.parts.size, 0, 'a jump does not part the grass');
+});
+
+test('flowers bloom on meadow roots, sway with the wind and are pushed aside by the body', () => {
+  const world = new World(19);
+  let found = null;
+  for (let cy = 0; cy < 3 && !found; cy++) {
+    for (let cx = 0; cx < 3 && !found; cx++) {
+      const { blades } = world.chunk(cx, cy);
+      for (let root = 0; root < blades.indices.length && !found; root++) {
+        if (!blades.flowers[root]) continue;
+        const i = blades.indices[root];
+        const row = Math.floor(i / CHUNK_SIZE);
+        const x = cx * CHUNK_SIZE + i % CHUNK_SIZE;
+        const y = cy * CHUNK_SIZE + row;
+        const lonely = !blades.indices.some((j, k) => k !== root && blades.flowers[k] &&
+          Math.floor(j / CHUNK_SIZE) === row && Math.abs(j % CHUNK_SIZE - i % CHUNK_SIZE) < 12);
+        if (lonely && world.typeAt(x, y) === GRASS && i % CHUNK_SIZE > 12 && i % CHUNK_SIZE < 52) found = { x, y };
+      }
+    }
+  }
+  assert.ok(found, 'the seeded meadow has flowers');
+  const view = { x0: found.x - 20, y0: found.y - 20, cols: 40, rows: 40 };
+  const head = (grass, t) => rowCells(grass, world, view, t, found.y)
+    .find((c) => c.cr > 150 && c.cb > 150 && Math.abs(c.x - 20) < 10);
+  const positions = new Set();
+  for (let t = 0; t < 12; t += 0.37) {
+    const h = head(new Grass(), t);
+    assert.ok(h, `a pale flower head at t=${t.toFixed(2)}`);
+    positions.add(h.x);
+  }
+  assert.ok(positions.size > 1, 'the flower sways with its stem');
+  const grass = new Grass();
+  grass.update(world, { x: found.x - 6.5, y: found.y + 0.5, air: 0, feet: [] }, 2);
+  assert.ok(head(grass, 2).x > head(new Grass(), 2).x, 'the body pushes the flower aside');
 });

@@ -95,10 +95,11 @@ function shadeCell(fg, bg, o, chunk, i, wx, wy, seed, t) {
 
   if (type === GRASS) {
     // The same quiet undergrowth beneath every height, including verges.
-    // Animated blades are drawn together later in rooted depth order.
+    // Animated blades are drawn together later in rooted depth order; the
+    // ground between their clumps stays near-black navy so they stand out.
     ch = STUBBLE[Math.floor(rnd * 33) % STUBBLE.length];
     const tone = GREENS[Math.floor(rnd * 997) % GREENS.length];
-    const l = 0.28 + shade * shade * 0.75;
+    const l = 0.04 + shade * shade * 0.08;
     cr = tone[0] * l;
     cg = tone[1] * l;
     cb = tone[2] * l;
@@ -110,9 +111,9 @@ function shadeCell(fg, bg, o, chunk, i, wx, wy, seed, t) {
       cg = 215 * tw;
       cb = 200 * tw;
     }
-    br = 4;
-    bgG = 10;
-    bb = 6;
+    br = 9;
+    bgG = 9;
+    bb = 19;
   } else if (type === WATER) {
     // Long horizontal streaks that drift slowly, like moonlight broken up
     // by a gentle swell.
