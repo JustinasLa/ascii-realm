@@ -12,6 +12,9 @@ export const STONE = 4;
 // before sampling noise. Without this every lake would look stretched.
 export const ASPECT = 6 / 10;
 
+export const TREE_DURABILITY = 3;
+export const CHOP_RADIUS = 3;
+
 const CHUNK = 64;
 export const WATER_LEVEL = 0.4;
 const SHORE_LEVEL = 0.415;
@@ -98,6 +101,51 @@ export class World {
       }
     }
     return out;
+  }
+
+  // A chop can hit a trunk near its landing point, or anywhere along the
+  // swing when the player's ground position is supplied as its origin.
+  // Distances are measured in rows, with columns corrected for cell aspect.
+  chopTree(x, y, strength = 1, origin = null) {
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(strength) || strength <= 0) {
+      return null;
+    }
+    const from = origin && Number.isFinite(origin.x) && Number.isFinite(origin.y) ? origin : { x, y };
+    const dx = (x - from.x) * ASPECT;
+    const dy = y - from.y;
+    const length2 = dx * dx + dy * dy;
+    let tree = null;
+    let closest = Infinity;
+    for (const prop of this.propsIn(
+      Math.min(from.x, x) - CHOP_RADIUS / ASPECT,
+      Math.min(from.y, y) - CHOP_RADIUS,
+      Math.max(from.x, x) + CHOP_RADIUS / ASPECT,
+      Math.max(from.y, y) + CHOP_RADIUS,
+    )) {
+      if (prop.kind !== 'tree') continue;
+      const px = (prop.x - from.x) * ASPECT;
+      const py = prop.y - from.y;
+      const along = length2 > 0 ? (px * dx + py * dy) / length2 : 0;
+      if (along < 0 || along > 1) continue;
+      const distance = Math.hypot(px - dx * along, py - dy * along);
+      if (distance > CHOP_RADIUS) continue;
+      // The first trunk along the swing absorbs the blow. For a point hit,
+      // the nearest trunk wins; props in neighbouring chunks cannot steal it.
+      const score = Math.hypot(px, py);
+      if (score >= closest) continue;
+      tree = prop;
+      closest = score;
+    }
+    if (!tree) return null;
+
+    tree.durability = Math.max(0, (tree.durability ?? TREE_DURABILITY) - strength);
+    const felled = tree.durability === 0;
+    if (felled) {
+      const props = this.propsOf(Math.floor(tree.x / CHUNK), Math.floor(tree.y / CHUNK));
+      const index = props.indexOf(tree);
+      if (index !== -1) props.splice(index, 1);
+    }
+    return { x: tree.x, y: tree.y, tree, felled, health: tree.durability };
   }
 
   isWalkable(x, y) {

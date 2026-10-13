@@ -2,6 +2,7 @@ import { ASPECT } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
+import { MATERIAL_IDS, WEAPON_IDS } from './weapons.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
 // SCALE row units, but a metre up or down the screen is foreshortened by
@@ -22,7 +23,7 @@ function angleTo(a, b) {
 }
 
 export class Player {
-  constructor(x, y) {
+  constructor(x, y, weaponId = 'greatsword', material = 'steel') {
     this.x = x;
     this.y = y;
     // Radians; 0 faces the camera, +pi/2 faces right.
@@ -32,7 +33,12 @@ export class Player {
     this.run = 0;
     this.time = 0;
     this.cape = new Cape();
-    this.combat = new Combat();
+    this.combat = new Combat(weaponId, material);
+    this.moving = false;
+    this.running = false;
+    // A spinning attack turns the figure without changing the direction
+    // used for movement and aiming after the attack.
+    this.combatSpin = 0;
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
     // Height above the ground in metres, rising speed, and the crouch used
@@ -63,12 +69,51 @@ export class Player {
     this.nextBlink = 3;
   }
 
-  attack() {
-    this.combat.attack();
+  combatContext(ctx = {}) {
+    return { moving: this.moving, running: this.running, air: this.air, ...ctx };
+  }
+
+  attack(ctx = {}) {
+    return this.combat.attack(this.combatContext(ctx));
+  }
+
+  release(ctx = {}) {
+    return this.combat.release(this.combatContext(ctx));
+  }
+
+  block(on = true) {
+    return this.combat.block(on);
+  }
+
+  // Losing focus ends a held charge without turning it into a shot.
+  cancelAction() {
+    if (this.combat.cancelAction) return this.combat.cancelAction();
+    return this.combat.cancel();
+  }
+
+  equipWeapon(id, material = this.combat.material) {
+    if (!this.combat.equip(id, material)) return false;
+    this.trail.length = 0;
+    this.combatSpin = 0;
+    return true;
+  }
+
+  cycleWeapon(delta = 1) {
+    const current = Math.max(0, WEAPON_IDS.indexOf(this.combat.weaponId));
+    const step = Number.isFinite(delta) ? Math.trunc(delta) : 1;
+    const next = ((current + step) % WEAPON_IDS.length + WEAPON_IDS.length) % WEAPON_IDS.length;
+    return this.equipWeapon(WEAPON_IDS[next]);
+  }
+
+  cycleMaterial(delta = 1) {
+    const current = Math.max(0, MATERIAL_IDS.indexOf(this.combat.material));
+    const step = Number.isFinite(delta) ? Math.trunc(delta) : 1;
+    const next = ((current + step) % MATERIAL_IDS.length + MATERIAL_IDS.length) % MATERIAL_IDS.length;
+    return this.equipWeapon(this.combat.weaponId, MATERIAL_IDS[next]);
   }
 
   toggleSword() {
-    this.combat.toggle();
+    return this.combat.toggle();
   }
 
   // Starts a jump if standing on the ground.
@@ -105,12 +150,19 @@ export class Player {
     this.reach += (reachTo - this.reach) * (1 - Math.exp(-18 * dt));
   }
 
-  update(dt, world, move, running) {
+  update(dt, world, move, running, input = {}) {
+    if (input.cancelled) {
+      this.cancelAction();
+      input = { ...input, held: false, blocking: false };
+    }
+    if (!Number.isFinite(dt) || dt <= 0) return;
     this.time += dt;
     const fromX = this.x;
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
+    this.moving = moving;
+    this.running = !!running;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
 
     if (moving) {
@@ -128,10 +180,27 @@ export class Player {
       this.bank += (bankTo - this.bank) * ease(10);
     }
 
+    this.updateJump(dt);
+    this.combat.update(dt, this.combatContext(input));
+    const motion = this.combat.motion ?? {};
+    const forward = motion.forward ?? 0;
+    if (Number.isFinite(forward) && forward !== 0) {
+      this.tryMove(world, Math.sin(this.heading) * forward * toCols * dt, 0);
+      this.tryMove(world, 0, Math.cos(this.heading) * forward * toRows * dt);
+    }
+    const turn = motion.turn ?? 0;
+    if (Number.isFinite(turn) && turn !== 0) {
+      this.combatSpin = angleTo(0, this.combatSpin + turn * dt);
+    } else {
+      this.combatSpin *= Math.exp(-16 * dt);
+      if (Math.abs(this.combatSpin) < 0.001) this.combatSpin = 0;
+    }
+    const travelling = moving || (Number.isFinite(forward) && forward !== 0);
+
     // The legs are driven by the ground actually covered, so the stride
     // always matches the speed and stops when the way is blocked.
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
-    const going = moving && metres > 0.15 * dt;
+    const going = travelling && metres > 0.15 * dt;
 
     // Pitch forward when setting off or speeding up, and rock back on the
     // heels when pulling up, then settle.
@@ -155,13 +224,11 @@ export class Player {
     this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
     this.run += ((moving && running ? 1 : 0) - this.run) * ease(5);
     // Settle into a neutral stance once stopped.
-    if (!moving && this.walk < 0.02) this.phase = 0;
-
-    this.updateJump(dt);
+    if (!travelling && this.walk < 0.02) this.phase = 0;
 
     // After standing a while the warrior glances around, scanning one side
     // then the other, with the occasional downward look.
-    this.idle = moving || this.air > 0 ? 0 : this.idle + dt;
+    this.idle = travelling || this.air > 0 || this.combat.busy || this.combat.blocking ? 0 : this.idle + dt;
     // Left alone long enough with the sword away, the warrior kneels to
     // rest, and springs up again the moment there is something to do.
     const rest = this.idle > 12 && !this.combat.inHand && !this.combat.busy;
@@ -187,20 +254,44 @@ export class Player {
       if (t > 0.18) this.nextBlink = 2.5 + Math.random() * 4;
     }
 
-    this.combat.update(dt, moving);
+    const rig = buildRig(this);
     for (const e of this.combat.events) {
-      // The overhead chop lands a stride ahead, in the direction faced.
-      const reach = 0.95 * SCALE;
+      // Combat works in metres; the world consumes columns and rows. Keep
+      // each action's type and metadata so a tree chop or projectile can
+      // receive its own world response.
+      const heading = this.heading + this.combatSpin;
+      const dx = Math.sin(heading) * toCols;
+      const dy = Math.cos(heading) * toRows;
+      const reach = e.reach ?? this.combat.weapon.reach;
+      const projectile = !!e.projectile || e.type === 'projectile';
+      const impact = ['hit', 'slash', 'thrust', 'chop', 'slam', 'bash', 'backstab'].includes(e.type);
+      const distance = projectile ? Math.min(reach, 0.45) : impact ? reach : 0;
+      // Launch at the posed arrowhead, thrown spear tip or staff crystal.
+      // Separate ground depth from height so flight starts on the rendered
+      // weapon at every heading, including while jumping.
+      const launchAt = projectile && rig.weapon
+        ? e.projectile?.kind === 'arrow' ? rig.weapon.arrow?.tip ?? rig.weapon.grip : rig.weapon.tip
+        : null;
+      const launchHeight = e.projectile?.launchHeight;
       this.events.push({
-        type: 'slam',
-        x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
-        y: this.y + Math.cos(this.heading) * reach * TILT,
-        strength: 1,
+        ...e,
+        originX: this.x,
+        originY: this.y,
+        x: this.x + (launchAt ? launchAt[0] * toCols : dx * distance),
+        y: this.y + (launchAt ? launchAt[2] * toRows : dy * distance),
+        dx,
+        dy,
+        dirX: dx,
+        dirY: dy,
+        heading,
+        ...(projectile ? {
+          h: launchHeight !== undefined ? (this.air + launchHeight) * SCALE
+            : launchAt ? launchAt[1] * SCALE : (this.air + 0.75) * SCALE,
+        } : {}),
       });
     }
     this.combat.events.length = 0;
 
-    const rig = buildRig(this);
     this.recordTrail(rig);
     // Breath leaves through the visor, wherever the head happens to be.
     for (const e of this.events) {
@@ -209,8 +300,8 @@ export class Player {
       e.x = this.x + m[0] / ASPECT;
       e.y = this.y;
       e.h = -m[1];
-      e.dx = Math.sin(this.heading);
-      e.dy = Math.cos(this.heading);
+      e.dx = Math.sin(rig.heading);
+      e.dy = Math.cos(rig.heading);
     }
 
     const moved = [((this.x - fromX) * ASPECT) / SCALE, 0, (this.y - fromY) / toRows];
@@ -232,12 +323,16 @@ export class Player {
       hy: this.y + h[1],
       tx: this.x + tip[0] / ASPECT,
       ty: this.y + tip[1],
+      color: this.combat.weapon.trailColor,
+      weapon: this.combat.weaponId,
+      material: this.combat.material,
+      kind: this.combat.weapon.trailKind ?? this.combat.weaponId,
     });
   }
 
   // Where the cape hangs from, and which way is out of the warrior's back.
   capeMount(rig = buildRig(this)) {
-    return [rig.at([0, 0.47, -0.12]), [-Math.sin(this.heading), -Math.cos(this.heading)]];
+    return [rig.at([0, 0.47, -0.12]), [-Math.sin(rig.heading), -Math.cos(rig.heading)]];
   }
 
   // Lets the cape fall still, e.g. after the pose was changed by hand.
@@ -247,9 +342,14 @@ export class Player {
 
   // Moves along one axis at a time so the player slides along shorelines.
   tryMove(world, dx, dy) {
-    const nx = this.x + dx;
-    const ny = this.y + dy;
-    if (world.isWalkable(nx, ny) && world.isWalkable(nx - 1.2, ny) && world.isWalkable(nx + 1.2, ny)) {
+    if (!Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    // Test the whole path, including a fast sprint lunge, so a long frame
+    // cannot carry the warrior across an unwalkable strip of shoreline.
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 0.5));
+    for (let i = 0; i < steps; i++) {
+      const nx = this.x + dx / steps;
+      const ny = this.y + dy / steps;
+      if (!world.isWalkable(nx, ny) || !world.isWalkable(nx - 1.2, ny) || !world.isWalkable(nx + 1.2, ny)) break;
       this.x = nx;
       this.y = ny;
     }

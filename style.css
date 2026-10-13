@@ -10,6 +10,105 @@ body {
   display: block;
   width: 100vw;
   height: 100vh;
+  touch-action: none;
+  outline: none;
+}
+
+#loadout {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 280px;
+  max-width: calc(100vw - 58px);
+  padding: 12px;
+  border: 1px solid rgba(184, 196, 176, 0.28);
+  border-radius: 6px;
+  background: rgba(5, 6, 10, 0.87);
+  color: #d6dfce;
+  font: 12px/1.4 "Cascadia Mono", Consolas, Menlo, monospace;
+}
+
+.equipment-row {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.shortcut {
+  color: #8d9f87;
+  font-size: 10px;
+}
+
+#loadout select {
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid #52644a;
+  border-radius: 3px;
+  background: #101710;
+  color: #e1ebd9;
+  font: inherit;
+  cursor: pointer;
+}
+
+#loadout select:focus-visible {
+  outline: 2px solid #b5d18e;
+  outline-offset: 2px;
+}
+
+.stamina-row {
+  display: grid;
+  grid-template-columns: 86px minmax(0, 1fr) 27px;
+  align-items: center;
+  gap: 8px;
+}
+
+#stamina {
+  width: 100%;
+  height: 12px;
+}
+
+#stamina::-webkit-meter-bar {
+  background: #1d271b;
+  border: 1px solid #52644a;
+}
+
+#stamina::-webkit-meter-optimum-value {
+  background: #9cbf76;
+}
+
+#stamina::-moz-meter-bar {
+  background: #9cbf76;
+}
+
+#stamina-value {
+  text-align: right;
+  color: #b5d18e;
+  font-variant-numeric: tabular-nums;
+}
+
+.weapon-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 18px;
+  margin-top: 8px;
+  color: #c3ba92;
+}
+
+#charge {
+  width: 112px;
+  height: 8px;
+  accent-color: #d2b970;
+}
+
+#weapon-help,
+.loadout-shortcuts {
+  margin: 7px 0 0;
+  color: #a4b09c;
+  font-size: 10px;
 }
 
 #hint {
@@ -18,6 +117,9 @@ body {
   bottom: 24px;
   transform: translateX(-50%);
   padding: 6px 12px;
+  max-width: calc(100vw - 48px);
+  width: max-content;
+  text-align: center;
   font: 12px "Cascadia Mono", Consolas, Menlo, monospace;
   color: #b8c4b0;
   background: rgba(5, 6, 10, 0.7);

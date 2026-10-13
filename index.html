@@ -8,8 +8,29 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <canvas id="screen"></canvas>
-    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump &middot; J / click — strike &middot; F — draw or sheathe &middot; scroll — zoom</div>
+    <canvas id="screen" tabindex="0" aria-label="ASCII Realm. Move with WASD or arrow keys. Use the equipment controls to choose a weapon and material."></canvas>
+    <aside id="loadout" data-game-ui aria-label="Equipment">
+      <div class="equipment-row">
+        <label for="weapon-select">Weapon <span class="shortcut">1–9</span></label>
+        <select id="weapon-select" aria-describedby="weapon-help"></select>
+      </div>
+      <div class="equipment-row">
+        <label for="material-select">Material <span class="shortcut">M</span></label>
+        <select id="material-select"></select>
+      </div>
+      <div class="stamina-row">
+        <label for="stamina">Stamina</label>
+        <meter id="stamina" min="0" max="100" value="100">100 / 100</meter>
+        <output id="stamina-value" for="stamina">100</output>
+      </div>
+      <div class="weapon-state">
+        <span id="weapon-status" role="status">Sheathed</span>
+        <progress id="charge" max="1" value="0" aria-label="Attack charge" hidden></progress>
+      </div>
+      <p id="weapon-help">Tap J / left click to strike. Hold to charge.</p>
+      <p class="loadout-shortcuts">[ ] cycle weapon &middot; M material &middot; F draw/sheathe</p>
+    </aside>
+    <div id="hint">WASD / arrows — walk &middot; Shift — run &middot; Space — jump &middot; scroll / + − — zoom</div>
     <script type="module" src="src/main.js"></script>
   </body>
 </html>

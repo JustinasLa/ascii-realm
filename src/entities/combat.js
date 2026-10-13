@@ -1,160 +1,424 @@
-// The greatsword: drawing it from the back, holding a guard, a three-hit
-// combo and sheathing it again. This only decides where the sword hand and
-// blade should be; the rig bends the arms to match (see rig.js).
-//
-// Poses are given in the torso's frame (metres from the hips, y up, z
-// forward) with x pointing out to the sword side, so the same numbers work
-// whichever hand holds the sword.
+import { getWeapon, MATERIAL_IDS, WEAPON_IDS } from './weapons.js';
+import { getWeaponMoves } from './weapon-moves.js';
 
-// The sword hand is the one on the body's -x side, under the hilt.
+// The weapon hand is on the body's -x side. Poses are mirrored by the rig.
 export const SWORD_SIDE = -1;
 
-// hand: where the sword hand grips. blade: which way the blade points.
-// twist: turns the chest towards the sword side. lean, crouch: as in the rig.
-// off: how firmly the other hand joins the grip, 0..1.
-const KEYS = {
-  rest: { hand: [0.26, 0.05, 0.05], blade: [0.1, -0.4, 0.9] },
-  hilt: { hand: [0.17, 0.66, -0.16], blade: [-0.32, -0.95, -0.02], twist: 0.2 },
-  free: { hand: [0.36, 0.86, 0.12], blade: [0.3, 0.4, -0.86], twist: 0.1 },
-  guard: { hand: [0.12, 0.24, 0.3], blade: [-0.55, 0.5, 0.67], twist: 0.3, crouch: 0.14, off: 1 },
-  carry: { hand: [0.27, 0.12, 0.1], blade: [0.15, -0.35, 0.92] },
-  // Forehand: from high on the sword side, sweeping across the body.
-  a0: { hand: [0.44, 0.62, -0.04], blade: [0.6, 0.45, -0.66], twist: 0.55, crouch: 0.1 },
-  a1: { hand: [0.16, 0.45, 0.5], blade: [0.15, 0.08, 1], twist: 0, lean: 0.1, crouch: 0.15 },
-  a2: { hand: [-0.28, 0.32, 0.32], blade: [-0.88, -0.08, 0.45], twist: -0.5, lean: 0.15, crouch: 0.2 },
-  // Backhand: straight back the other way.
-  b1: { hand: [0.06, 0.42, 0.52], blade: [-0.05, 0.12, 1], twist: 0, lean: 0.1, crouch: 0.15 },
-  b2: { hand: [0.46, 0.44, 0.14], blade: [0.92, 0.1, 0.3], twist: 0.5, lean: 0.1, crouch: 0.2 },
-  // Overhead: both hands, up behind the head and down into the ground.
-  c0: { hand: [0.1, 0.96, -0.02], blade: [0, 0.3, -0.95], twist: 0.1, lean: -0.12, off: 1 },
-  c1: { hand: [0.08, 0.74, 0.4], blade: [0, 0.75, 0.62], lean: 0.1, off: 1 },
-  c2: { hand: [0.05, 0.22, 0.52], blade: [0, -0.6, 0.8], lean: 0.38, crouch: 0.5, off: 1 },
-};
-
-// Each step eases towards a key over its duration. `rate` is how hard the
-// pose chases the key (per second); `trail` marks the cutting part of a
-// swing; `grab`/`release` move the sword between back and hand; `impact`
-// fires an event as the blade lands.
-const MOVES = {
-  draw: [
-    { key: 'hilt', time: 0.14, rate: 30 },
-    { key: 'free', time: 0.12, rate: 26, grab: true },
-    { key: 'guard', time: 0.14, rate: 20 },
-  ],
-  sheathe: [
-    { key: 'free', time: 0.16, rate: 22 },
-    { key: 'hilt', time: 0.16, rate: 26 },
-    { key: 'rest', time: 0.2, rate: 14, release: true },
-  ],
-  a: [
-    { key: 'a0', time: 0.11, rate: 34 },
-    { key: 'a1', time: 0.05, rate: 60, trail: true },
-    { key: 'a2', time: 0.08, rate: 50, trail: true },
-    { key: 'a2', time: 0.24, rate: 20, combo: true },
-  ],
-  b: [
-    { key: 'b1', time: 0.06, rate: 55, trail: true },
-    { key: 'b2', time: 0.08, rate: 50, trail: true },
-    { key: 'b2', time: 0.24, rate: 20, combo: true },
-  ],
-  c: [
-    { key: 'c0', time: 0.18, rate: 28 },
-    { key: 'c1', time: 0.06, rate: 55, trail: true },
-    { key: 'c2', time: 0.07, rate: 60, trail: true, impact: true },
-    { key: 'c2', time: 0.34, rate: 14 },
-  ],
-};
-const NEXT = { a: 'b', b: 'c', c: 'a' };
-
-// Seconds the sword stays out after the last swing before it is put away.
 const SHEATHE_AFTER = 5;
+const CHARGE_THRESHOLD = 0.2;
+const PARRY_WINDOW = 0.18;
+const STAMINA_REGEN = 22;
+const REGEN_DELAY = 0.45;
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+
+function context(value, previous = {}) {
+  if (typeof value === 'boolean') return { ...previous, moving: value };
+  const merged = { ...previous, ...(value ?? {}) };
+  if (value && Object.hasOwn(value, 'grounded')) {
+    merged.airborne = !value.grounded;
+    if (value.grounded) merged.air = 0;
+  } else if (value && Object.hasOwn(value, 'air')) {
+    delete merged.grounded;
+    merged.airborne = (value.air ?? 0) > 0;
+  } else if (value && Object.hasOwn(value, 'airborne')) {
+    delete merged.grounded;
+    if (!value.airborne) merged.air = 0;
+  }
+  return merged;
+}
+
+function airborne(ctx) {
+  if (typeof ctx.grounded === 'boolean') return !ctx.grounded;
+  return !!ctx.airborne || (ctx.air ?? 0) > 0;
+}
 
 export class Combat {
-  constructor() {
+  constructor(weapon = 'greatsword', material = 'steel') {
+    if (weapon && typeof weapon === 'object') {
+      material = weapon.material ?? material;
+      weapon = weapon.id ?? weapon.weapon ?? 'greatsword';
+    }
+    this.weapon = getWeapon(weapon, material);
+    this.maxStamina = 100;
+    this.stamina = this.maxStamina;
+    this.events = [];
+    this.context = {};
+    this.reset();
+  }
+
+  get weaponId() { return this.weapon.id; }
+  get material() { return this.weapon.material; }
+  get moveset() { return getWeaponMoves(this.weapon); }
+  get busy() { return this.move !== null || this.blocking; }
+  get charging() { return this.holding; }
+  get parrying() { return this.blocking && this.parryRemaining > 0; }
+  get moveName() { return this.move ? this.moveset.moves[this.move]?.name ?? this.move : null; }
+
+  keyPose(key) {
+    const pose = this.moveset.keys[key];
+    const sheath = this.weapon.sheath;
+    return key === 'hilt' && sheath
+      ? { ...pose, hand: sheath.hand, blade: sheath.blade } : pose;
+  }
+
+  reset() {
     this.inHand = false;
     this.move = null;
     this.step = 0;
     this.t = 0;
     this.queued = null;
+    this.queuedContext = null;
     this.lastSwing = '';
     this.calm = 0;
     this.trailing = false;
-    // The pose actually shown, chasing the current key.
-    this.pose = { hand: [...KEYS.rest.hand], blade: [...KEYS.rest.blade], twist: 0, lean: 0, crouch: 0, off: 0 };
-    // How much the arms follow the sword rather than swinging freely.
     this.active = 0;
-    this.events = [];
+    this.holding = false;
+    this.holdTime = 0;
+    this.charge = 0;
+    this.holdFallback = null;
+    this.blocking = false;
+    this.guardExhausted = false;
+    this.parryRemaining = 0;
+    this.regenDelay = 0;
+    this.actionStamina = 0;
+    this.actionCharge = 0;
+    this.actionContext = {};
+    this.motion = { forward: 0, turn: 0 };
+    const rest = this.moveset.keys.rest;
+    this.pose = { hand: [...rest.hand], blade: [...rest.blade], twist: 0, lean: 0, crouch: 0, off: 0, shield: 0 };
+    this.events.length = 0;
   }
 
-  get busy() {
-    return this.move !== null;
+  // Switching mid-action would leave a hand holding the previous weapon's
+  // pose. Selection succeeds only once that action has finished.
+  equip(id, material = this.material) {
+    if (this.busy || !WEAPON_IDS.includes(id) || !MATERIAL_IDS.includes(material)) return false;
+    const regenDelay = this.regenDelay;
+    this.weapon = getWeapon(id, material);
+    this.context = {};
+    this.reset();
+    this.regenDelay = regenDelay;
+    return true;
   }
 
-  // Swing (drawing the sword first if needed), or queue the next swing of
-  // the combo if one is already under way.
-  attack() {
-    if (!this.move) {
-      if (!this.inHand) {
-        this.start('draw');
-        this.queued = 'a';
-      } else {
-        this.start(this.calm < 0.6 && this.lastSwing ? NEXT[this.lastSwing] : 'a');
-      }
-      return;
+  nextCombo(move = this.lastSwing) {
+    const combo = this.moveset.combo;
+    const index = combo.indexOf(move);
+    return combo[(index + 1) % combo.length];
+  }
+
+  chooseAttack(ctx, combo = true) {
+    if (airborne(ctx)) return this.moveset.air;
+    if (ctx.running && ctx.moving !== false) return this.moveset.sprint;
+    return combo && this.inHand && this.move !== 'draw' && this.calm < 0.6 && this.lastSwing
+      ? this.nextCombo() : this.moveset.combo[0];
+  }
+
+  attack(ctx = {}) {
+    const requested = context(ctx, this.context);
+    this.context = requested;
+    if (this.blocking) return false;
+    const holding = ctx !== null && typeof ctx === 'object' && !!ctx.held;
+    const comboMove = this.moveset.combo.includes(this.move);
+    if (this.move && this.move !== 'draw' && !comboMove) return false;
+    if (this.holding) return false;
+
+    const sprinting = requested.running && requested.moving !== false;
+    const next = comboMove && !sprinting && !airborne(requested)
+      ? this.nextCombo(this.move) : this.chooseAttack(requested);
+    if (holding) {
+      this.holding = true;
+      this.holdTime = 0;
+      this.charge = 0;
+      this.holdFallback = next;
     }
-    if (MOVES[this.move] && 'abc'.includes(this.move)) this.queued = NEXT[this.move];
-    else if (this.move === 'draw') this.queued = 'a';
+    const wanted = holding ? 'charge' : next;
+    const cost = this.weapon.staminaCost * (this.moveset.moves[next].stamina ?? 1);
+    if (!holding && !this.move && this.stamina + 1e-9 < cost) return false;
+    if (this.move) {
+      this.queued = wanted;
+      this.queuedContext = { ...requested };
+      return true;
+    }
+    // A bow starts aiming straight away. Releasing a short press therefore
+    // works even when it was previously carried in its quiver.
+    if (!this.inHand && this.weaponId === 'bow' && holding) this.inHand = true;
+    if (!this.inHand) {
+      this.start('draw', requested);
+      this.queued = wanted;
+      this.queuedContext = { ...requested };
+      return true;
+    }
+    const started = this.start(wanted, requested);
+    if (!started) this.holding = false;
+    return started;
+  }
+
+  // A short press keeps the light combo; a deliberate hold releases the
+  // weapon's charged move. This also replaces a pending charge during draw.
+  release(ctx = {}) {
+    if (!this.holding) return false;
+    const requested = context(ctx, this.context);
+    requested.held = false;
+    this.context = requested;
+    this.holding = false;
+    const charged = this.holdTime >= CHARGE_THRESHOLD;
+    const next = charged ? this.moveset.charged : this.holdFallback ?? this.chooseAttack(requested);
+    const action = { ...requested, charge: charged ? this.charge : 0 };
+    if (this.move === 'charge') {
+      this.move = null;
+      const started = this.start(next, action);
+      if (!started) this.charge = 0;
+      return started;
+    }
+    if (this.queued === 'charge') {
+      this.queued = next;
+      this.queuedContext = action;
+      return true;
+    }
+    return this.start(next, action);
+  }
+
+  // Focus changes cancel held input without firing an arrow or cutting an
+  // ordinary attack short. Full cancellation is also available to previews.
+  cancelAction() {
+    if (this.move === 'charge') {
+      this.move = null;
+      this.step = 0;
+      this.t = 0;
+    }
+    if (this.queued === 'charge' || this.holding) {
+      this.queued = null;
+      this.queuedContext = null;
+    }
+    this.holding = false;
+    this.holdTime = 0;
+    this.charge = 0;
+    this.blocking = false;
+    this.guardExhausted = false;
+    this.parryRemaining = 0;
+    this.context.held = false;
+    this.context.blocking = false;
+  }
+
+  cancel() {
+    this.cancelAction();
+    this.move = null;
+    this.queued = null;
+    this.queuedContext = null;
+    this.step = 0;
+    this.t = 0;
+    this.trailing = false;
+    this.lastSwing = '';
+    this.motion = { forward: 0, turn: 0 };
+    this.events.length = 0;
   }
 
   toggle() {
-    if (this.move) return;
-    this.start(this.inHand ? 'sheathe' : 'draw');
+    if (this.busy) return false;
+    return this.start(this.inHand ? 'sheathe' : 'draw');
   }
 
-  start(move) {
+  spendStamina(cost) {
+    if (this.stamina + 1e-9 < cost) return false;
+    this.stamina = Math.max(0, this.stamina - cost);
+    this.regenDelay = REGEN_DELAY;
+    return true;
+  }
+
+  recoverStamina(dt, idle) {
+    const delayed = Math.min(dt, this.regenDelay);
+    this.regenDelay = Math.max(0, this.regenDelay - dt);
+    if (idle) this.stamina = Math.min(this.maxStamina, this.stamina + STAMINA_REGEN * (dt - delayed));
+  }
+
+  start(move, ctx = this.context) {
+    if (!Object.hasOwn(this.moveset.moves, move)) return false;
+    const definition = this.moveset.moves[move];
+    if (!definition) return false;
+    const cost = definition.kind === 'utility' ? 0 : this.weapon.staminaCost * (definition.stamina ?? 1);
+    if (cost > 0 && !this.spendStamina(cost)) return false;
     this.move = move;
     this.step = 0;
     this.t = 0;
-    if ('abc'.includes(move)) this.lastSwing = move;
+    this.calm = 0;
+    this.actionStamina = cost;
+    this.actionCharge = move === this.moveset.charged ? clamp(ctx.charge ?? this.charge, 0, 1) : 0;
+    this.actionContext = { ...ctx };
+    if (this.moveset.combo.includes(move)) this.lastSwing = move;
+    else if (definition.kind !== 'utility') this.lastSwing = '';
+    return true;
   }
 
-  update(dt, moving) {
+  block(on = true) {
+    if (!on) {
+      this.blocking = false;
+      this.guardExhausted = false;
+      this.parryRemaining = 0;
+      return true;
+    }
+    if (this.weaponId !== 'sword-shield' || this.move || this.stamina <= 0 || this.guardExhausted) return false;
+    if (this.blocking) return true;
+    this.blocking = true;
+    this.inHand = true;
+    this.parryRemaining = PARRY_WINDOW;
+    this.calm = 0;
+    this.events.push(this.defenseEvent('block', { window: PARRY_WINDOW, parrying: true }));
+    return true;
+  }
+
+  breakGuard() {
+    this.blocking = false;
+    this.parryRemaining = 0;
+    this.guardExhausted = true;
+  }
+
+  defenseEvent(type, extra = {}) {
+    return {
+      type, kind: 'defense', weapon: this.weaponId, material: this.material,
+      move: type, damage: 0, reach: this.weapon.reach, stamina: 0,
+      strength: 0, charged: false, trailColor: this.weapon.trailColor, ...extra,
+    };
+  }
+
+  // Enemy systems can use this result directly. Parry has a short opening
+  // window; continued blocking absorbs three quarters of a frontal hit.
+  defend(incoming, ctx = {}) {
+    const damage = Number.isFinite(incoming) ? Math.max(0, incoming) : 0;
+    const result = { damage, reducedDamage: damage, blocked: false, parried: false, stamina: 0 };
+    if (!this.blocking || ctx.front === false || damage === 0) return result;
+    const parried = this.parrying;
+    const cost = parried ? 6 + damage * 0.15 : damage * 0.35;
+    if (!this.spendStamina(cost)) {
+      this.breakGuard();
+      return result;
+    }
+    result.damage = result.reducedDamage = parried ? 0 : damage * 0.25;
+    result.blocked = true;
+    result.parried = parried;
+    result.stamina = cost;
+    this.events.push(this.defenseEvent(parried ? 'parry' : 'block', {
+      incomingDamage: damage, reducedDamage: result.damage, stamina: cost, parried,
+    }));
+    return result;
+  }
+
+  impact(definition, packet) {
+    const charge = this.actionCharge;
+    const backstab = this.weaponId === 'dagger' && !!this.actionContext.behind;
+    const baseReach = packet.projectile
+      ? this.weapon.projectileRange ?? this.weapon.reach * 5
+      : this.weapon.reach;
+    const reach = baseReach * (definition.reach ?? 1) * (1 + charge * 0.4);
+    const damage = this.weapon.damage * (definition.damage ?? 1) * (1 + charge * 0.6) * (backstab ? 3 : 1);
+    const materialStrength = this.weaponId === 'axe' ? this.weapon.damage / getWeapon('axe', 'steel').damage : 1;
+    const projectile = packet.projectile ? {
+      ...packet.projectile,
+      speed: packet.projectile.speed * (1 + charge * 0.7),
+      range: reach,
+      lifetime: reach / (packet.projectile.speed * (1 + charge * 0.7)) * 1.5,
+      count: packet.count ?? 1,
+    } : undefined;
+    this.events.push({
+      type: backstab ? 'backstab' : packet.type,
+      kind: definition.kind, weapon: this.weaponId, material: this.material,
+      move: definition.name, damage, reach, stamina: this.actionStamina,
+      charged: charge > 0, charge, backstab,
+      strength: (definition.damage ?? 1) * (1 + charge * 0.6) * materialStrength,
+      trailColor: this.weapon.trailColor,
+      ...(projectile ? { projectile, count: projectile.count } : {}),
+    });
+    if (!this.holding) this.charge = 0;
+  }
+
+  update(dt, ctx = {}) {
+    dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    this.context = context(ctx, this.context);
+    const current = this.context;
     this.trailing = false;
-    let target;
+    this.motion = { forward: 0, turn: 0 };
+    if (typeof ctx === 'object' && ctx !== null && Object.hasOwn(ctx, 'blocking')) this.block(!!ctx.blocking);
+    if (this.holding && typeof ctx === 'object' && ctx !== null && Object.hasOwn(ctx, 'held') && !ctx.held) this.release(current);
+    if (this.holding) {
+      this.holdTime += dt;
+      this.charge = clamp(this.holdTime / this.moveset.chargeDuration, 0, 1);
+    }
+
+    let remaining = dt;
+    if (this.blocking) {
+      const guarded = Math.min(remaining, this.stamina / 7);
+      this.parryRemaining = Math.max(0, this.parryRemaining - guarded);
+      this.recoverStamina(guarded, false);
+      if (guarded > 0) this.spendStamina(7 * guarded);
+      remaining -= guarded;
+      if (this.stamina <= 1e-9) {
+        this.stamina = 0;
+        this.breakGuard();
+      }
+    }
+    let target = this.moveset.keys.rest;
     let rate = 12;
-    if (this.move) {
-      const steps = MOVES[this.move];
-      const s = steps[this.step];
-      target = KEYS[s.key];
-      rate = s.rate;
-      this.trailing = !!s.trail;
-      this.t += dt;
-      // A queued swing cuts the recovery of the last one short.
-      if (s.combo && this.queued) this.t = s.time;
-      if (this.t >= s.time) {
-        if (s.grab) this.inHand = true;
-        if (s.release) this.inHand = false;
-        if (s.impact) this.events.push({ type: 'slam' });
-        this.t = 0;
-        this.step++;
-        // Hold a finished swing only until the next one is asked for.
-        const done = this.step >= steps.length;
-        const cut = this.queued && (done || steps[this.step].combo);
-        if (done || cut) {
-          const next = this.queued;
-          this.queued = null;
-          this.move = null;
-          if (next) this.start(next);
+    // Consume every crossed step, preserving excess frame time. A held
+    // charge or an airborne plunge is the only intentional waiting state.
+    for (let transitions = 0; this.move && transitions < 64; transitions++) {
+      const definition = this.moveset.moves[this.move];
+      const s = definition.steps[this.step];
+      target = this.keyPose(s.key);
+      rate = s.rate * this.weapon.speed;
+      this.trailing ||= !!s.trail;
+      this.calm = 0;
+      if (this.move === 'charge') {
+        this.recoverStamina(remaining, false);
+        remaining = 0;
+        break;
+      }
+
+      const cut = s.combo && this.queued;
+      const timeLeft = cut ? 0 : Math.max(0, s.time - this.t) / this.weapon.speed;
+      const elapsed = Math.min(remaining, timeLeft);
+      this.t += elapsed * this.weapon.speed;
+      remaining -= elapsed;
+      this.recoverStamina(elapsed, false);
+      this.motion.forward += (s.forward ?? 0) * elapsed;
+      this.motion.turn += (s.turn ?? 0) * elapsed;
+      if (!cut && this.t + 1e-9 < s.time) break;
+      if (s.waitForGround && airborne(current)) {
+        this.t = s.time;
+        this.recoverStamina(remaining, false);
+        remaining = 0;
+        break;
+      }
+
+      if (s.grab) this.inHand = true;
+      if (s.release) this.inHand = false;
+      if (s.event) this.impact(definition, s.event);
+      this.t = 0;
+      this.step++;
+      const done = this.step >= definition.steps.length;
+      if (done || (this.queued && definition.steps[this.step].combo)) {
+        const next = this.queued;
+        const nextContext = this.queuedContext ?? current;
+        this.queued = null;
+        this.queuedContext = null;
+        this.move = null;
+        if (next && !this.start(next, nextContext)) {
+          this.holding = false;
+          this.charge = 0;
         }
       }
-      this.calm = 0;
-    } else if (this.inHand) {
-      target = moving ? KEYS.carry : KEYS.guard;
-      this.calm += dt;
-      if (this.calm > SHEATHE_AFTER && !moving) this.start('sheathe');
-    } else {
-      target = KEYS.rest;
-      this.calm += dt;
+      if (remaining <= 0 && this.move && this.moveset.moves[this.move].steps[this.step]?.time !== 0) break;
+    }
+    if (dt > 0) {
+      this.motion.forward /= dt;
+      this.motion.turn /= dt;
+    }
+    if (!this.move) {
+      target = this.blocking ? this.moveset.keys.block
+        : this.inHand ? this.moveset.keys[current.moving ? 'carry' : 'guard']
+          : this.moveset.keys.rest;
+      this.calm += remaining;
+      this.recoverStamina(remaining, !this.blocking && !this.holding);
+      if (this.inHand && !this.blocking && this.calm > SHEATHE_AFTER && !current.moving) this.start('sheathe');
     }
 
     const k = 1 - Math.exp(-rate * dt);
@@ -165,12 +429,10 @@ export class Combat {
     }
     const len = Math.hypot(...p.blade) || 1;
     for (let i = 0; i < 3; i++) p.blade[i] /= len;
-    p.twist += ((target.twist ?? 0) - p.twist) * k;
-    p.lean += ((target.lean ?? 0) - p.lean) * k;
-    p.crouch += ((target.crouch ?? 0) - p.crouch) * k;
-    p.off += ((target.off ?? 0) - p.off) * k;
-
-    const want = this.inHand || this.move ? 1 : 0;
+    for (const name of ['twist', 'lean', 'crouch', 'off', 'shield']) {
+      p[name] += ((target[name] ?? 0) - p[name]) * k;
+    }
+    const want = this.inHand || this.move || this.blocking ? 1 : 0;
     this.active += (want - this.active) * (1 - Math.exp(-14 * dt));
   }
 }

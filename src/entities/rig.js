@@ -53,6 +53,7 @@ export function project(p) {
 }
 
 import { SWORD_SIDE } from './combat.js';
+import { getWeapon } from './weapons.js';
 
 const THIGH = 0.45;
 const SHIN = 0.44;
@@ -67,14 +68,58 @@ export const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * 
 // bending towards `pole`. Returns [elbow, wrist].
 function reach(shoulder, target, upper, fore, pole) {
   const d = sub(target, shoulder);
-  const dist = Math.min(Math.hypot(d[0], d[1], d[2]), upper + fore - 1e-4);
-  const dir = norm(d);
+  const length = Math.hypot(...d);
+  const dist = Math.max(Math.abs(upper - fore) + 1e-4, Math.min(length, upper + fore - 1e-4));
+  const dir = length > 1e-6 ? mul(d, 1 / length) : [0, -1, 0];
   const along = (upper * upper + dist * dist - fore * fore) / (2 * dist);
   const up = Math.sqrt(Math.max(0, upper * upper - along * along));
-  const bend = norm(sub(pole, mul(dir, dot(pole, dir))));
+  let bend = sub(pole, mul(dir, dot(pole, dir)));
+  if (Math.hypot(...bend) < 1e-6) bend = cross(dir, Math.abs(dir[1]) < 0.9 ? [0, 1, 0] : [0, 0, 1]);
+  bend = norm(bend);
   const elbow = add(shoulder, add(mul(dir, along), mul(bend, up)));
   return [elbow, add(shoulder, mul(dir, dist))];
 }
+
+// Every weapon's sprite uses this frame: x across the blade, y along it,
+// and z through its thickness. Keeping the axes in 3D makes broad axe heads,
+// shields and curved bows turn with the figure instead of becoming billboards.
+function weaponFrame(definition, grip, direction, forward, carried = false, acrossHint = null) {
+  const blade = Math.hypot(...direction) > 1e-6 ? norm(direction) : [0, 1, 0];
+  // Back-mounted gear lies flat on the torso; a drawn bow bends towards
+  // the archer so its string and arrow share the forward shooting plane.
+  const hint = acrossHint ?? (definition.type === 'bow' ? forward : null);
+  let across = hint ? sub(hint, mul(blade, dot(hint, blade))) : cross(blade, [0, 1, 0]);
+  if (Math.hypot(...across) < 0.2) across = cross(blade, forward);
+  if (Math.hypot(...across) < 1e-6) across = cross(blade, [1, 0, 0]);
+  across = norm(across);
+  const normal = norm(cross(across, blade));
+  const geometry = definition.rig ?? {};
+  const guard = add(grip, mul(blade, geometry.gripOffset ?? 0.08));
+  const halfBar = geometry.guardWidth ?? 0.12;
+  return {
+    definition,
+    kind: definition.type ?? definition.id,
+    spriteParts: definition.spriteParts,
+    placement: definition.sheath?.mount ?? 'back',
+    carried,
+    grip,
+    pommel: sub(grip, mul(blade, geometry.gripLength ?? 0.2)),
+    guard,
+    tip: add(guard, mul(blade, definition.reach ?? 1.02)),
+    barA: add(guard, mul(across, halfBar)),
+    barB: sub(guard, mul(across, halfBar)),
+    blade,
+    across,
+    side: across,
+    normal,
+    width: halfBar,
+  };
+}
+
+// Positions within a weapon's sprite frame, also used by the bow's nocked
+// arrow and the shield carried by the opposite arm.
+const weaponAt = (frame, p) => add(frame.guard,
+  add(mul(frame.across, p[0]), add(mul(frame.blade, p[1]), mul(frame.normal, p[2]))));
 
 // A triangle wave with softened corners: the thigh angle over the walk
 // cycle, in -1..1, in step with sin().
@@ -96,9 +141,12 @@ export function strideCycle(run) {
 //   run      0..1, how much of that stride is a run
 //   time     seconds, drives breathing
 export function buildRig(st) {
-  const { heading, phase, walk, run, time } = st;
-  // The sword's pose, when it is out, leans and turns the whole body.
+  const { phase, walk, run, time } = st;
+  const heading = st.heading + (st.combatSpin ?? 0);
+  // A weapon's pose, when it is out, leans and turns the whole body.
   const cb = st.combat;
+  const equipped = cb?.weapon ?? st.weapon;
+  const definition = typeof equipped === 'string' ? getWeapon(equipped) : equipped ?? getWeapon();
   const fight = cb ? cb.active : 0;
   const sp = cb?.pose;
   const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0);
@@ -197,38 +245,128 @@ export function buildRig(st) {
     arm.hand = lerp3(arm.hand, add(wrist, [-0.05, -0.02, 0.02]), kn);
   }
 
-  // With the sword out the sword arm reaches for its pose, and the other
-  // hand joins the grip when the move calls for two hands.
-  let sword = null;
-  if (cb && fight > 0.01) {
-    const side = (p) => [p[0] * SWORD_SIDE, p[1], p[2]];
+  const side = (p) => [p[0] * SWORD_SIDE, p[1], p[2]];
+  const bodyDirection = (p) => norm(sub(torso(p), pelvis));
+  const forward = bodyDirection([0, 0, 1]);
+  const main = arms.find((a) => a.s === SWORD_SIDE);
+  const off = arms.find((a) => a.s !== SWORD_SIDE);
+  let weapon = null;
+  const blend = (arm, target, pole, k, handDirection) => {
+    const [elbow, wrist] = reach(arm.shoulder, target, UPPER_ARM, FOREARM, pole);
+    arm.elbow = lerp3(arm.elbow, elbow, k);
+    arm.wrist = lerp3(arm.wrist, wrist, k);
+    arm.hand = lerp3(arm.hand, add(wrist, mul(handDirection, 0.06)), k);
+  };
+
+  // One-handed weapons leave the opposite arm free; long shafts and the
+  // greatsword can bring it to a second grip. A bow uses that hand to draw
+  // the string instead, and a shield keeps it clear of the sword grip.
+  if (cb && sp && fight > 0.01) {
     const blade = norm(turn(side(sp.blade)));
     const grip = torso(side(sp.hand));
-    const blend = (arm, target, pole, k) => {
-      const [elbow, wrist] = reach(arm.shoulder, target, UPPER_ARM, FOREARM, pole);
-      arm.elbow = lerp3(arm.elbow, elbow, k);
-      arm.wrist = lerp3(arm.wrist, wrist, k);
-      arm.hand = lerp3(arm.hand, add(wrist, mul(blade, 0.06)), k);
-    };
-    const main = arms.find((a) => a.s === SWORD_SIDE);
-    const off = arms.find((a) => a.s !== SWORD_SIDE);
-    blend(main, grip, [SWORD_SIDE, -0.6, -0.5], fight);
-    if (sp.off > 0.01) blend(off, sub(grip, mul(blade, 0.13)), [-SWORD_SIDE, -0.6, -0.4], sp.off * fight);
-    if (cb.inHand) {
-      const hilt = add(main.wrist, mul(blade, 0.03));
-      const guard = add(hilt, mul(blade, 0.08));
-      // The crossguard lies square to the blade, as flat as it can.
-      let bar = cross(blade, [0, 1, 0]);
-      if (Math.hypot(...bar) < 0.2) bar = cross(blade, [0, 0, 1]);
-      bar = mul(norm(bar), 0.12);
-      sword = {
-        pommel: sub(hilt, mul(blade, 0.2)),
-        guard,
-        tip: add(guard, mul(blade, 1.02)),
-        barA: add(guard, bar),
-        barB: sub(guard, bar),
-      };
+    blend(main, grip, [SWORD_SIDE, -0.6, -0.5], fight, blade);
+    if (definition.hands === 2 && definition.type !== 'bow' && sp.off > 0.01) {
+      const offGrip = definition.rig?.offGrip ?? 0.13;
+      blend(off, sub(grip, mul(blade, offGrip)), [-SWORD_SIDE, -0.6, -0.4], sp.off * fight, blade);
     }
+    if (cb.inHand) {
+      weapon = weaponFrame(definition, add(main.wrist, mul(blade, 0.03)), blade, forward);
+      if (definition.type === 'bow') {
+        // Curved stave ends join the moving string hand. The arrow starts
+        // at that hand and stays aimed ahead as the draw pulls it back.
+        const chord = definition.spriteParts.find((part) => part.material === 'string');
+        const endpoints = chord ? [chord.a, chord.b].sort((a, b) => a[1] - b[1])
+          : [[-0.21, -definition.reach * 0.92, 0], [-0.21, definition.reach, 0]];
+        const lower = weaponAt(weapon, endpoints[0]);
+        const upper = weaponAt(weapon, endpoints[1]);
+        const stringRest = lerp3(lower, upper, 0.48);
+        const charge = Math.max(0, Math.min(1, cb.charge ?? 0));
+        const drawTarget = torso(side([sp.hand[0], sp.hand[1] + 0.05, 0.1]));
+        const stringTarget = lerp3(stringRest, drawTarget, 0.2 + 0.8 * charge);
+        blend(off, stringTarget, [-SWORD_SIDE, -0.15, -0.5], (sp.off ?? 0) * fight, forward);
+        const string = off.hand;
+        weapon.upper = upper;
+        weapon.lower = lower;
+        const stave = definition.spriteParts.filter((part) => part.material === 'wood');
+        weapon.upperMid = weaponAt(weapon, stave.at(-1)?.a ?? [-0.06, definition.reach * 0.58, 0]);
+        weapon.lowerMid = weaponAt(weapon, stave[0]?.b ?? [-0.06, -definition.reach * 0.52, 0]);
+        weapon.string = string;
+        const aim = norm(sub(weapon.grip, string));
+        weapon.arrow = { tail: string, tip: add(string, mul(aim, 0.78)) };
+      }
+    }
+  }
+
+  // Sheath anchors follow the torso even while the hands are occupied.
+  // Explicit points retain the greatsword's familiar diagonal scabbard;
+  // every other weapon uses the same frame at its back, hip or quiver mount.
+  const sheath = definition.sheath ?? { mount: 'back', hand: [0.17, 0.66, -0.16], blade: [-0.32, -0.95, -0.02] };
+  const sheathGrip = torso(side(sheath.hand));
+  const sheathDirection = sheath.guard && sheath.tip
+    ? bodyDirection(side(sub(sheath.tip, sheath.guard)))
+    : bodyDirection(side(sheath.blade));
+  const sheathedWeapon = weaponFrame(definition, sheathGrip, sheathDirection, forward, !cb?.inHand, bodyDirection([1, 0, 0]));
+  sheathedWeapon.placement = sheath.mount;
+  if (sheath.guard) sheathedWeapon.guard = torso(side(sheath.guard));
+  if (sheath.tip) sheathedWeapon.tip = torso(side(sheath.tip));
+  else sheathedWeapon.tip = add(sheathedWeapon.guard, mul(sheathedWeapon.blade, definition.reach));
+  if (sheath.pommel) sheathedWeapon.pommel = torso(side(sheath.pommel));
+  sheathedWeapon.barA = add(sheathedWeapon.guard, mul(sheathedWeapon.across, sheathedWeapon.width));
+  sheathedWeapon.barB = sub(sheathedWeapon.guard, mul(sheathedWeapon.across, sheathedWeapon.width));
+
+  let shield = null;
+  if (definition.type === 'sword-shield') {
+    const block = Math.max(cb?.blocking ? 1 : 0, Math.max(0, Math.min(1, sp?.shield ?? 0)));
+    if (fight > 0.01) {
+      const target = torso([-SWORD_SIDE * (0.24 - block * 0.08), 0.12 + block * 0.24, 0.14 + block * 0.28]);
+      blend(off, target, [-SWORD_SIDE, -0.4, -0.2], fight, forward);
+    }
+    const up = bodyDirection([0, 1, 0]);
+    const across = bodyDirection([1, 0, 0]);
+    const center = add(off.wrist, mul(forward, 0.08));
+    const topHeight = 0.19;
+    const bottomHeight = 0.29;
+    const halfWidth = 0.19;
+    shield = {
+      definition,
+      spriteParts: definition.shieldParts,
+      center,
+      guard: center,
+      top: add(center, mul(up, topHeight)),
+      bottom: sub(center, mul(up, bottomHeight)),
+      left: sub(center, mul(across, halfWidth)),
+      right: add(center, mul(across, halfWidth)),
+      boss: add(center, mul(forward, 0.025)),
+      up,
+      blade: up,
+      across,
+      side: across,
+      normal: forward,
+      raised: block,
+      blocking: !!cb?.blocking,
+      parrying: !!cb?.parrying,
+    };
+  }
+
+  let quiver = null;
+  if (definition.type === 'bow' || definition.quiver) {
+    const data = definition.quiver ?? {};
+    const mount = data.mount ?? [0.23, 0.44, -0.18];
+    const length = data.length ?? 0.55;
+    const count = data.arrowCount ?? 3;
+    const top = torso(mount);
+    const bottom = torso(add(mount, [0, -length, -0.025]));
+    const arrows = [];
+    for (let i = 0; i < count; i++) {
+      const spread = (i - (count - 1) * 0.5) * 0.045;
+      const tip = torso(add(mount, [spread * 0.2, -length + 0.05, -0.02]));
+      const tail = torso(add(mount, [spread, 0.18 + (i % 2) * 0.035, -0.01]));
+      arrows.push({ tip, tail });
+    }
+    quiver = {
+      top, bottom, arrows, radius: data.radius ?? 0.075,
+      side: bodyDirection([1, 0, 0]), normal: forward,
+    };
   }
 
   const rig = {
@@ -241,7 +379,12 @@ export function buildRig(st) {
     legs,
     arms,
     torso,
-    sword,
+    weapon,
+    sheathedWeapon,
+    shield,
+    quiver,
+    // Blade endpoints remain available under the original name for trails.
+    sword: weapon,
     // How open the eyes are, 0..1.
     eyes: st.blink === undefined ? 1 : 1 - st.blink,
     // How far the knees reach ahead of and behind the hips, so cloth hanging
@@ -259,6 +402,16 @@ export function buildRig(st) {
 // Turns every joint from the body's frame to face `heading`.
 function toWorld(rig, heading) {
   const w = (p) => rotY(p, heading);
+  const equipment = (frame, keys) => {
+    if (!frame) return null;
+    const out = { ...frame };
+    for (const key of keys) if (frame[key]) out[key] = w(frame[key]);
+    if (frame.arrow) out.arrow = { tip: w(frame.arrow.tip), tail: w(frame.arrow.tail) };
+    return out;
+  };
+  const weaponKeys = ['grip', 'pommel', 'guard', 'tip', 'barA', 'barB', 'blade', 'across', 'side', 'normal',
+    'upper', 'lower', 'upperMid', 'lowerMid', 'string'];
+  const weapon = equipment(rig.weapon, weaponKeys);
   const out = {
     heading,
     pelvis: w(rig.pelvis),
@@ -274,7 +427,18 @@ function toWorld(rig, heading) {
     at: (p) => w(rig.torso(p)),
     headAt: (p) => w(rig.headAt(p)),
     eyes: rig.eyes,
-    sword: rig.sword && Object.fromEntries(Object.entries(rig.sword).map(([k, v]) => [k, w(v)])),
+    weapon,
+    sword: weapon,
+    sheathedWeapon: equipment(rig.sheathedWeapon, weaponKeys),
+    shield: equipment(rig.shield, ['center', 'guard', 'top', 'bottom', 'left', 'right', 'boss', 'up', 'blade', 'across', 'side', 'normal']),
+    quiver: rig.quiver && {
+      ...rig.quiver,
+      top: w(rig.quiver.top),
+      bottom: w(rig.quiver.bottom),
+      side: w(rig.quiver.side),
+      normal: w(rig.quiver.normal),
+      arrows: rig.quiver.arrows.map((arrow) => ({ tip: w(arrow.tip), tail: w(arrow.tail) })),
+    },
     kneeFwd: rig.kneeFwd,
     kneeBack: rig.kneeBack,
     // How much of the body's width faces the camera (1 front or back, 0 side).

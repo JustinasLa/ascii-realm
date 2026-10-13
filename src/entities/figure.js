@@ -1,8 +1,8 @@
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
-import { MATERIALS } from './materials.js';
-import { add, buildRig, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
+import { MATERIALS, weaponMaterial } from './materials.js';
+import { add, buildRig, cross, lerp3, mul, norm, project, rotY, SCALE, sub } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
 
 // The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
@@ -42,7 +42,7 @@ class Dresser {
   }
 
   add(shape, mat, z) {
-    shape.mat = MATERIALS[mat];
+    shape.mat = typeof mat === 'string' ? MATERIALS[mat] : mat;
     shape.z = z;
     this.parts.push(shape);
     return shape;
@@ -95,7 +95,7 @@ function dress(rig, capeSim) {
   }
 
   cuirass(d, rig);
-  greatsword(d, rig);
+  equipment(d, rig);
 
   for (const a of rig.arms) {
     // Mail sleeve, an elbow cop, a flared vambrace and a plated gauntlet.
@@ -140,6 +140,115 @@ function cuirass(d, rig) {
   }
 }
 
+// Sprite coordinates belong to the weapon's frame, so the same data dresses
+// its combat pose and its attachment on the back or hip. Keep this transform
+// in metres until Dresser projects it, just like every other part of the rig.
+function spritePoint(frame, p) {
+  const { guard, side, blade, normal } = frame;
+  return [
+    guard[0] + side[0] * p[0] + blade[0] * p[1] + normal[0] * (p[2] ?? 0),
+    guard[1] + side[1] * p[0] + blade[1] * p[1] + normal[1] * (p[2] ?? 0),
+    guard[2] + side[2] * p[0] + blade[2] * p[1] + normal[2] * (p[2] ?? 0),
+  ];
+}
+
+function spriteFrame(record) {
+  const blade = record.blade ?? norm(sub(record.tip, record.guard));
+  const side = record.side ?? record.across ?? norm(sub(record.barA, record.barB));
+  return { ...record, blade, side, normal: record.normal ?? norm(cross(side, blade)) };
+}
+
+function spriteParts(d, record, descriptors, definition, bias = 0.03, coveredBlade = false) {
+  const frame = spriteFrame(record);
+  const at = (p) => spritePoint(frame, p);
+  for (const part of descriptors ?? []) {
+    if (coveredBlade && (part.material === 'blade' || part.material === 'darkPlate')) continue;
+    const mat = weaponMaterial(definition, part.material);
+    let shape;
+    if (part.shape === 'limb') {
+      const z = bias + (part.bias ?? 0);
+      if (part.material === 'string' && frame.string) {
+        // The stave ends come from the sprite data; the middle of the string
+        // follows the drawing hand, with the arrow nocked at that same point.
+        const first = d.limb(at(part.a), frame.string, part.ra, part.rb ?? part.ra, mat, z);
+        first.weaponPart = part;
+        if (part.glyph) first.glyph = glyph(part.glyph);
+        shape = d.limb(frame.string, at(part.b), part.ra, part.rb ?? part.ra, mat, z);
+      } else {
+        shape = d.limb(at(part.a), at(part.b), part.ra, part.rb ?? part.ra, mat, z);
+      }
+    } else if (part.shape === 'blob') {
+      shape = d.blob(at(part.c), part.rx, part.ry, mat, bias + (part.bias ?? 0));
+      shape.bar = glyph('*');
+    } else if (part.shape === 'panel') {
+      const p = part.points.map(at);
+      shape = d.panel(p[0], p[1], p[2], p[3], mat, bias + (part.bias ?? 0));
+      const a = project(p[0]);
+      const b = project(p[3]);
+      shape.bar = barGlyph(b[0] - a[0], b[1] - a[1]);
+    }
+    if (!shape) continue;
+    if (part.glyph) shape.glyph = glyph(part.glyph);
+    shape.weaponPart = part;
+  }
+}
+
+const SCABBARDED = new Set(['greatsword', 'sword-shield', 'dagger']);
+
+function scabbard(d, record) {
+  const { guard, tip, definition } = record;
+  const width = (definition.spriteDimensions?.bladeWidth ?? 0.034) + 0.015;
+  d.limb(guard, tip, width, width * 0.72, 'leather', -0.01);
+  const trim = weaponMaterial(definition, 'trim');
+  d.limb(lerp3(guard, tip, 0.93), tip, width * 1.08, width * 0.8, trim, -0.005);
+  d.limb(lerp3(guard, tip, 0.02), lerp3(guard, tip, 0.06), width * 1.12, width * 1.12, trim, -0.005);
+}
+
+function equipment(d, rig) {
+  const held = rig.weapon;
+  const carried = rig.sheathedWeapon;
+  if (!held && !carried) return;
+
+  if (carried) {
+    const definition = carried.definition;
+    const covered = SCABBARDED.has(carried.kind ?? definition.type);
+    if (covered) scabbard(d, carried);
+    if (!held) spriteParts(d, carried, carried.spriteParts ?? definition.spriteParts, definition, -0.005, covered);
+  }
+  if (held) spriteParts(d, held, held.spriteParts ?? held.definition.spriteParts, held.definition);
+
+  const definition = (held ?? carried).definition;
+  if (rig.shield) {
+    const shield = rig.shield;
+    spriteParts(d, {
+      guard: shield.center, side: shield.side, blade: shield.up,
+      normal: shield.normal ?? norm(cross(shield.side, shield.up)),
+    }, definition.shieldParts, definition, shield.carried ? -0.015 : 0.055);
+  }
+  if (rig.quiver) quiver(d, rig.quiver, definition);
+  if (held?.arrow) arrow(d, held.arrow, held.side, definition, 0.045);
+}
+
+function arrow(d, points, side, definition, bias = 0) {
+  const tipBase = lerp3(points.tail, points.tip, 0.88);
+  d.limb(points.tail, tipBase, 0.011, 0.011, 'arrow', bias);
+  d.limb(tipBase, points.tip, 0.025, 0.003, weaponMaterial(definition, 'blade'), bias + 0.002);
+  const fletch = lerp3(points.tail, points.tip, 0.08);
+  const feather = mul(side, 0.04);
+  d.limb(add(fletch, feather), sub(fletch, feather), 0.011, 0.011, 'string', bias + 0.003);
+}
+
+function quiver(d, record, definition) {
+  const radius = definition.quiver?.radius ?? 0.075;
+  d.limb(record.bottom, record.top, radius * 0.8, radius, 'leather', -0.015);
+  d.limb(lerp3(record.bottom, record.top, 0.9), record.top, radius * 1.06, radius * 1.06,
+    weaponMaterial(definition, 'trim'), -0.01);
+  const side = record.side ?? norm(cross(norm(sub(record.top, record.bottom)), [0, 0, 1]));
+  // The shafts sit inside the case; depth sorting hides their metal tips
+  // while the feathers protrude above its opening.
+  for (const points of record.arrows ?? []) arrow(d, points, side, definition, -0.04);
+}
+
 // The crimson cape: one cloth panel per link of the simulated chain,
 // widening towards a ragged hem. It is sorted a little further back than it
 // hangs, so it drapes under the pauldrons and sword rather than over them.
@@ -168,34 +277,6 @@ function cape(d, rig, pts) {
     const drop = 0.05 + ((k * 37) % 5) * 0.025;
     d.limb(top, add(top, mul(dir, drop / len)), 0.045, 0.012, 'crimson', -0.1);
   }
-}
-
-// A greatsword slung across the back in a leather scabbard, the hilt riding
-// above the right shoulder. Once drawn the scabbard hangs empty and the
-// blade is drawn in the sword hand instead.
-function greatsword(d, rig) {
-  const at = rig.at;
-  const pommel = at([-0.21, 0.72, -0.2]);
-  const guard = at([-0.15, 0.56, -0.2]);
-  const tip = at([0.2, -0.46, -0.21]);
-  d.limb(guard, tip, 0.05, 0.035, 'leather', -0.01);
-  d.limb(lerp3(guard, tip, 0.93), tip, 0.054, 0.04, 'trim', -0.005);
-  d.limb(lerp3(guard, tip, 0.02), lerp3(guard, tip, 0.06), 0.056, 0.056, 'trim', -0.005);
-
-  const sw = rig.sword;
-  if (!sw) {
-    d.limb(at([-0.25, 0.52, -0.2]), at([-0.05, 0.6, -0.2]), 0.026, 0.026, 'trim');
-    d.limb(guard, pommel, 0.026, 0.024, 'leather');
-    d.blob(pommel, 0.04, 0.04, 'trim', 0.001);
-    return;
-  }
-  // In hand: a long bright blade with a dark fuller, the crossguard square
-  // across it. Kept just in front of the gauntlet that grips it.
-  d.limb(sw.guard, sw.tip, 0.034, 0.006, 'blade', 0.03);
-  d.limb(lerp3(sw.guard, sw.tip, 0.05), lerp3(sw.guard, sw.tip, 0.7), 0.009, 0.006, 'darkPlate', 0.031);
-  d.limb(sw.barA, sw.barB, 0.024, 0.024, 'trim', 0.032);
-  d.limb(sw.pommel, sw.guard, 0.024, 0.024, 'leather', 0.02);
-  d.blob(sw.pommel, 0.036, 0.036, 'trim', 0.021);
 }
 
 // Layered shoulder plates edged in brass, with a short spike on top. They
@@ -388,7 +469,7 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
     const p = parts[claim];
     const [cr, cg, cbl] = p.mat.color;
     const l = p.mat.emissive ? 1 : 0.55 + 0.45 * Math.max(0, Math.min(1, claimLum));
-    write(r, sx, sy, p.mat.tex ? p.mat.tex() : p.bar, cr * l, cg * l, cbl * l, base, 6, 10, 14);
+    write(r, sx, sy, p.glyph ?? (p.mat.tex ? p.mat.tex() : p.bar), cr * l, cg * l, cbl * l, base, 6, 10, 14);
     return;
   }
   if (hits < 3) return;
@@ -458,7 +539,7 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
   }
 
   const b = Math.max(0, Math.min(0.999, lum));
-  const g = mat.tex ? mat.tex(b, u, v) : part.bar;
+  const g = part.glyph ?? (mat.tex ? mat.tex(b, u, v) : part.bar);
   const k2 = mat.emissive ? 1 : 0.35 + b * 0.85;
   write(r, sx, sy, g, mr * k2, mg * k2, mb * k2, base, br, bgG, bb);
 }
@@ -474,6 +555,7 @@ export function drawTrail(r, view, trail, time) {
     const b = trail[i + 1];
     const fade = 1 - (time - a.t) / TRAIL_LIFE;
     if (fade <= 0) continue;
+    const color = a.color ?? TRAIL_COLOR;
     // Corners in row units: hilt then tip of one sample, tip then hilt of
     // the next.
     const shape = quad([a.hx * ASPECT, a.hy], [a.tx * ASPECT, a.ty], [b.tx * ASPECT, b.ty],
@@ -484,7 +566,7 @@ export function drawTrail(r, view, trail, time) {
         if (!shape.test((cx + 0.5) * ASPECT, cy + 0.5, TRAIL_HIT)) continue;
         // v runs across the band from hilt (-1) to tip (+1).
         const k = fade * (0.25 + 0.75 * Math.max(0, (TRAIL_HIT.v + 1) / 2));
-        r.put(cx - view.x0, cy - view.y0, g, TRAIL_COLOR[0] * k, TRAIL_COLOR[1] * k, TRAIL_COLOR[2] * k);
+        r.put(cx - view.x0, cy - view.y0, g, color[0] * k, color[1] * k, color[2] * k);
       }
     }
   }
