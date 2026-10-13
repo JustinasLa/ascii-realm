@@ -1,4 +1,4 @@
-import { fbm } from '../core/noise.js';
+import { fbm, valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { blocks, generateProps } from './props.js';
 
@@ -46,6 +46,7 @@ export class World {
     const rnd = new Float32Array(n);
     const grassHeight = new Float32Array(n);
     const grassDensity = new Float32Array(n);
+    const grassStyle = new Uint8Array(n);
     const reeds = new Uint8Array(n);
     const s = this.seed;
 
@@ -89,10 +90,13 @@ export class World {
             grassDensity[i] = 0.15 + lush * 0.06;
             reeds[i] = 1;
           }
+          const species = valueNoise(nx * 0.012, y * 0.012, s + 1801);
+          const edge = (hash2(x, y, s + 1802) - 0.5) * 0.7;
+          grassStyle[i] = reeds[i] ? 5 : Math.max(0, Math.min(4, Math.floor(species * 5 + edge)));
         }
       }
     }
-    return { cx, cy, type, elev, shade, rnd, grassHeight, grassDensity, reeds, props: null };
+    return { cx, cy, type, elev, shade, rnd, grassHeight, grassDensity, grassStyle, reeds, props: null };
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays

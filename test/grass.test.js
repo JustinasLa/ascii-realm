@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Grass, MAX_GRASS_HEIGHT } from '../src/world/grass.js';
 import { Player } from '../src/entities/player.js';
+import { SCALE, TILT, buildRig } from '../src/entities/rig.js';
 import { glyph } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
-import { CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, World } from '../src/world/world.js';
+import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, World } from '../src/world/world.js';
 
 // Terrain-only fixtures keep blade geometry and interaction tests independent
 // of the procedural biome layout.
@@ -21,6 +22,7 @@ function meadow(roots = null) {
           type: new Uint8Array(n).fill(GRASS),
           grassHeight: new Float32Array(n),
           reeds: new Uint8Array(n),
+          grassStyle: new Uint8Array(n),
           shade: new Float32Array(n).fill(0.6),
           rnd: new Float32Array(n).fill(0.91),
         };
@@ -72,7 +74,8 @@ function rowCells(grass, world, view, t, y) {
   return cells;
 }
 
-const player = (x, y, air = 0) => ({ x, y, air });
+const player = (x, y, air = 0, plant = 1) => ({ x, y, air,
+  feet: [{ id: 1, plant, grounded: air === 0, hx: x, hy: y, tx: x, ty: y + 0.55 }] });
 
 test('grass biome heights are cached and deterministic, with reeds on shoreline terrain', () => {
   const a = new World(19);
@@ -87,13 +90,16 @@ test('grass biome heights are cached and deterministic, with reeds on shoreline 
     assert.strictEqual(a.chunk(cx, cy).grassHeight, ca.grassHeight);
     assert.ok(ca.grassHeight instanceof Float32Array);
     assert.ok(ca.grassDensity instanceof Float32Array);
+    assert.ok(ca.grassStyle instanceof Uint8Array);
     assert.ok(ca.reeds instanceof Uint8Array);
     assert.deepEqual(ca.grassHeight, cb.grassHeight);
     assert.deepEqual(ca.reeds, cb.reeds);
     assert.deepEqual(ca.grassDensity, cb.grassDensity);
+    assert.deepEqual(ca.grassStyle, cb.grassStyle);
     for (let i = 0; i < ca.type.length; i++) {
       const h = ca.grassHeight[i];
       assert.ok(h <= 5, 'even shoreline grass stays within five cells');
+      assert.ok(ca.grassStyle[i] <= 5);
       if ([WATER, DIRT, STONE].includes(ca.type[i])) {
         assert.equal(h, 0);
         assert.equal(ca.reeds[i], 0);
@@ -169,7 +175,113 @@ test('player contact visibly flattens a short blade, then restores its wind-driv
   assert.ok(after.some((c) => c.x === 12 && c.y === 10), 'the root stays anchored');
   grass.update(world, player(30.5, 0.5), 0.1);
   assert.ok(grass.pressAt(2, 0, 0.2) > 0.6, 'the flattened trail remains briefly');
-  assert.deepEqual(rowCells(grass, world, view, 2.2, 0), rowCells(new Grass(), world, view, 2.2, 0));
+  assert.deepEqual(rowCells(grass, world, view, 8, 0), rowCells(new Grass(), world, view, 8, 0));
+});
+
+test('only boot soles trample grass, leaving the gap and surroundings untouched', () => {
+  const world = meadow();
+  const grass = new Grass();
+  const p = player(0.5, 0.5);
+  p.feet = [
+    { id: -1, plant: 1, grounded: true, hx: -2.5, hy: 0.5, tx: -2.5, ty: 1.05 },
+    { id: 1, plant: 2, grounded: true, hx: 3.5, hy: 0.5, tx: 3.5, ty: 1.05 },
+  ];
+  grass.update(world, p, 0);
+  assert.ok(grass.pressAt(-3, 0, 0) > 0.9);
+  assert.ok(grass.pressAt(3, 0, 0) > 0.9);
+  assert.equal(grass.pressAt(0, 0, 0), 0, 'the space between feet is not a body-centred aura');
+  assert.equal(grass.pressAt(0, 3, 0), 0, 'nearby untouched grass stays upright');
+  assert.equal(grass.pressAt(3, -1, 0), 0, 'sole contact respects foreshortening');
+  const raised = new Grass();
+  raised.update(world, { ...p, feet: p.feet.map(f => ({ ...f, grounded: false })) }, 0);
+  assert.equal(raised.tracks.size, 0, 'swinging feet do not flatten grass below them');
+});
+
+test('repeated footfalls keep a route down longer than a single pass at the same last-touch time', () => {
+  const world = meadow();
+  const once = new Grass();
+  const often = new Grass();
+  once.update(world, player(0.5, 0.5, 0, 3), 2);
+  for (let i = 0; i < 3; i++) often.update(world, player(0.5, 0.5, 0, i + 1), i);
+  assert.equal(once.pressAt(0, 0, 4), 1, 'one footfall stays flat for a few seconds');
+  assert.ok(often.tracks.get('0,0').wear > once.tracks.get('0,0').wear);
+  assert.equal(once.pressAt(0, 0, 8.5), 0, 'the single pass has recovered');
+  assert.ok(often.pressAt(0, 0, 8.5) > 0.5, 'repeated traffic is still visibly flattened');
+  assert.equal(often.pressAt(0, 0, 25), 0, 'even a worn route eventually recovers');
+});
+
+test('standing on one planted foot does not accumulate wear per animation frame', () => {
+  const world = meadow();
+  const simulate = (fps) => {
+    const grass = new Grass();
+    for (let i = 0; i <= fps * 4; i++) grass.update(world, player(0.5, 0.5), i / fps);
+    return grass;
+  };
+  const slow = simulate(30);
+  const fast = simulate(120);
+  assert.equal(slow.tracks.get('0,0').wear, 1);
+  assert.equal(fast.tracks.get('0,0').wear, 1);
+  assert.equal(slow.tracks.get('0,0').until, fast.tracks.get('0,0').until);
+  assert.equal(slow.pressAt(0, 0, 8), fast.pressAt(0, 0, 8));
+  for (let i = 1; i <= 30; i++) fast.update(world, player(0.5, 0.5, 0, i + 1), 4 + i * 0.1);
+  assert.ok(fast.tracks.get('0,0').wear <= 10, 'wear accumulation is bounded');
+});
+
+test('foot contacts follow the actual animated sole and count only new plantings', () => {
+  const world = meadow();
+  const p = new Player(0.5, 0.5);
+  const grass = new Grass();
+  const plants = new Set();
+  const feetTouched = new Set();
+  let lifted = false;
+  for (let i = 0; i < 180; i++) {
+    p.update(1 / 60, world, { x: 1, y: 0 }, false);
+    const rig = buildRig(p);
+    for (const foot of p.feet) {
+      const leg = rig.legs.find(l => l.s === foot.id);
+      assert.equal(foot.hx, p.x + leg.ankle[0] * SCALE / ASPECT);
+      assert.equal(foot.hy, p.y + leg.ankle[2] * SCALE * TILT);
+      assert.equal(foot.tx, p.x + leg.toe[0] * SCALE / ASPECT);
+      if (foot.grounded) { plants.add(foot.plant); feetTouched.add(foot.id); }
+      else lifted = true;
+    }
+    grass.update(world, p, p.time);
+    assert.equal(grass.tracks.has(`${Math.floor(p.x)},${Math.floor(p.y + 4)}`), false,
+      'walking never flattens a halo four rows away');
+    p.events.length = 0;
+  }
+  assert.ok(lifted && feetTouched.size === 2 && plants.size >= 4);
+  assert.ok(plants.size < 20, 'render frames are not mistaken for new footfalls');
+  assert.ok(grass.tracks.size > 20, 'the animated steps leave a trail');
+});
+
+test('grass variations have different silhouettes and palettes and all flatten underfoot', () => {
+  const world = meadow(new Map([['0,0', 4]]));
+  const grass = new Grass();
+  const { c, i } = world.locate(0, 0);
+  const view = { x0: -10, y0: -10, cols: 24, rows: 24 };
+  const silhouettes = new Set();
+  const palettes = new Set();
+  for (let style = 0; style < 6; style++) {
+    c.grassStyle[i] = style;
+    const cells = rowCells(grass, world, view, 2, 0);
+    silhouettes.add(JSON.stringify(cells.map(cell => [cell.x, cell.y, cell.g])));
+    palettes.add(JSON.stringify(cells.map(cell => [cell.cr, cell.cg, cell.cb])));
+    const pressed = new Grass();
+    pressed.update(world, player(0.5, 0.5), 2);
+    assert.ok(rowCells(pressed, world, view, 2, 0).some(cell => cell.g === glyph('-')));
+  }
+  assert.ok(silhouettes.size >= 4, 'variation changes shape rather than only recolouring identical blades');
+  assert.equal(palettes.size, 6);
+  const seeded = new World(19);
+  const styles = new Set();
+  for (const [cx, cy] of [[0,0],[-1,-1],[1,1],[-2,2],[3,-2]]) {
+    const chunk = seeded.chunk(cx, cy);
+    for (let j = 0; j < chunk.type.length; j++) {
+      if (chunk.grassHeight[j] > 0) styles.add(chunk.grassStyle[j]);
+    }
+  }
+  assert.ok(styles.size >= 5, 'the seeded world contains several grass families');
 });
 
 test('real sword animations disturb grass beyond the footsteps, including every combo swing', () => {
@@ -186,11 +298,11 @@ test('real sword animations disturb grass beyond the footsteps, including every 
     for (let frame = 0; frame < 32; frame++) {
       warrior.update(1 / 60, world, { x: 0, y: 0 }, false);
       grass.update(world, warrior, warrior.time);
-      feetOnly.update(world, player(warrior.x, warrior.y), warrior.time);
+      feetOnly.update(world, { ...player(warrior.x, warrior.y), feet: warrior.feet }, warrior.time);
       if (warrior.swordSweep) {
         activeFrames++;
         for (const [key, bend] of grass.bends) {
-          if (bend.t === warrior.time && !feetOnly.bends.has(key)) {
+          if (bend.t === warrior.time && !feetOnly.tracks.has(key)) {
             reacted = true;
             outerContacts++;
           }
@@ -254,8 +366,9 @@ test('player contact bends blades aside and leaves a recovering trail', () => {
   assert.equal(grass.bendAt(20, 0, 0), 0);
   grass.update(world, player(30.5, 0.5), 0.1);
   assert.ok(Math.abs(grass.bendAt(2, 0, 0.2)) > 0, 'bend persists after the player leaves');
-  assert.ok(Math.abs(grass.bendAt(2, 0, 0.8)) < Math.abs(right), 'the blade recovers over time');
-  assert.equal(grass.bendAt(2, 0, 2.2), 0);
+  assert.ok(Math.abs(grass.bendAt(2, 0, 2)) > Math.abs(right) * 0.9, 'a footfall stays trampled for several seconds');
+  assert.ok(Math.abs(grass.bendAt(2, 0, 4)) < Math.abs(right), 'the blade then recovers');
+  assert.equal(grass.bendAt(2, 0, 8), 0);
 });
 
 test('airborne players do not bend grass and teleports do not flatten the intervening field', () => {
@@ -274,16 +387,15 @@ test('grounded movement sweeps grass contact while jumps leave the crossed grass
   const world = meadow();
   const walking = new Grass();
   walking.update(world, player(0.5, 0.5), 0);
-  // Six columns in 0.1 seconds is within running speed. This lateral blade
-  // lies outside both endpoint footprints, but within the swept footprint.
-  assert.equal(walking.bendAt(3, 4, 0), 0);
+  // This blade is between the soles' endpoints and outside both footprints.
+  assert.equal(walking.bendAt(3, 0, 0), 0);
   walking.update(world, player(6.5, 0.5), 0.1);
-  assert.ok(Math.abs(walking.bendAt(3, 4, 0.1)) > 0, 'grounded movement contacts grass between snapshots');
+  assert.ok(Math.abs(walking.bendAt(3, 0, 0.1)) > 0, 'a planted sole sweeps the grass between snapshots');
   const jumping = new Grass();
   jumping.update(world, player(0.5, 0.5), 0);
   jumping.update(world, player(3.5, 0.5, 1), 0.05);
   jumping.update(world, player(6.5, 0.5), 0.1);
-  assert.equal(jumping.bendAt(3, 4, 0.1), 0);
+  assert.equal(jumping.bendAt(3, 0, 0.1), 0);
 });
 
 test('a short teleport faster than running does not sweep the intervening grass', () => {
@@ -291,18 +403,18 @@ test('a short teleport faster than running does not sweep the intervening grass'
   const grass = new Grass();
   grass.update(world, player(0.5, 0.5), 0);
   grass.update(world, player(13.5, 0.5), 0.1);
-  assert.equal(grass.bendAt(6, 3, 0.1), 0);
+  assert.equal(grass.bendAt(6, 0, 0.1), 0);
   assert.ok(Math.abs(grass.bendAt(15, 0, 0.1)) > 0, 'destination contact still bends nearby grass');
 });
 
 test('grass interaction memory stays bounded during long travel', () => {
   const world = meadow();
   const grass = new Grass();
-  for (let i = 0; i < 180; i++) grass.update(world, player(i * 20 + 0.5, 0.5), i * 0.0001);
-  assert.ok(grass.bends.size > 0);
-  assert.ok(grass.bends.size <= 1024, `stored bends: ${grass.bends.size}`);
-  grass.update(world, player(3600.5, 0.5, 1), 2.2);
-  assert.equal(grass.bends.size, 0, 'expired contact is removed from memory');
+  for (let i = 0; i < 2400; i++) grass.update(world, player(i * 8 + 0.5, 0.5), i * 0.0001);
+  assert.ok(grass.tracks.size > 0);
+  assert.ok(grass.tracks.size <= 8192, `stored footprints: ${grass.tracks.size}`);
+  grass.update(world, player(19200.5, 0.5, 1), 46);
+  assert.equal(grass.tracks.size, 0, 'expired footprint history is removed from memory');
 });
 
 test('offscreen grass roots reflect into visible water without writing on dry terrain', () => {

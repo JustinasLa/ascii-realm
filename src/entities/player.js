@@ -37,6 +37,9 @@ export class Player {
     this.trail = [];
     // The active blade on the ground plane, for its wake through the grass.
     this.swordSweep = null;
+    this.feet = [];
+    this.footPlants = new Map();
+    this.nextPlant = 0;
     // Height above the ground in metres, rising speed, and the crouch used
     // to wind up a jump and soak up the landing.
     this.air = 0;
@@ -203,6 +206,7 @@ export class Player {
     this.combat.events.length = 0;
 
     const rig = buildRig(this);
+    this.recordFeet(rig);
     this.recordTrail(rig);
     // Breath leaves through the visor, wherever the head happens to be.
     for (const e of this.events) {
@@ -219,6 +223,22 @@ export class Player {
     const t = this.time;
     const wind = [2.2 + Math.sin(t * 0.7) * 1.6, 0, Math.sin(t * 0.43) * 1.2];
     this.cape.update(dt, ...this.capeMount(rig), moved, wind);
+  }
+
+  // Boot soles on the ground plane, with one identifier for each planting.
+  // A raised foot casts no contact, and standing still is not another step.
+  recordFeet(rig) {
+    this.feet = rig.legs.map((leg) => {
+      const grounded = this.air === 0 && Math.min(leg.ankle[1] - 0.065, leg.toe[1] - 0.05) < 0.025;
+      const old = this.footPlants.get(leg.s);
+      const plant = grounded && !old?.grounded ? ++this.nextPlant : old?.plant ?? 0;
+      this.footPlants.set(leg.s, { grounded, plant });
+      return { id: leg.s, plant, grounded,
+        hx: this.x + leg.ankle[0] * SCALE / ASPECT,
+        hy: this.y + leg.ankle[2] * SCALE * TILT,
+        tx: this.x + leg.toe[0] * SCALE / ASPECT,
+        ty: this.y + leg.toe[2] * SCALE * TILT };
+    });
   }
 
   // Remembers where the blade is while it cuts, in world cells.

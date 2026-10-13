@@ -21,9 +21,12 @@ For now it is a single warrior exploring procedurally generated terrain.
   `?seed=42` to the URL for a different world.
 - **Living grass.** Two- and three-row path verges blend into fuller meadows
   and lakeshore reeds, with blades up to five cells high.
+  Fine blades, leafy tufts, curved grass, seed heads and dry gold patches give
+  each meadow a different texture and palette.
   Rolling gusts move the tips more than the roots and catch them with a pale
-  sheen. Footsteps and sword swings flatten and part the blades, which stay
-  bent briefly before springing back. Shoreline stems sway in their reflections
+  sheen. Planted boot soles press exact footprints into the grass for several
+  seconds; repeated footfalls keep a worn route flattened longer. Sword swings
+  push blades aside too. Shoreline stems sway in their reflections
   too. Dew twinkles in the undergrowth.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
   the moon) mirrored in every lake.
