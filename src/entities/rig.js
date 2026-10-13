@@ -247,7 +247,7 @@ export function buildRig(st) {
   // Striding, the torso's lean, roll and counter-twist come from the
   // recordings.
   const g = walk > 0.001 ? gaitTorso(phase, run) : { lean: 0, bank: 0, twist: 0 };
-  const lean = g.lean * walk - (st.brace ?? 0) * 0.45 + (st.lean ?? 0) + crouchAll * 0.45 +
+  const lean = g.lean * walk + (st.lean ?? 0) + crouchAll * 0.45 +
     (sp ? sp.lean * fight : 0) + (st.kneel ?? 0) * 0.18;
   const twist = g.twist * walk * (1 - fight * 0.6) + (sp ? SWORD_SIDE * sp.twist * fight : 0);
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;

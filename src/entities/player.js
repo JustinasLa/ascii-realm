@@ -214,12 +214,12 @@ export class Player {
       this.surge *= Math.exp(-6 * dt);
     }
 
-    // Pitch forward when setting off or speeding up, and rock back on the
-    // heels when pulling up, then settle.
+    // Pitch forward a little when setting off or speeding up. Slowing down
+    // does not rock the body back: it just settles upright.
     const speedNow = this.skid > 0 ? this.speed : metres / Math.max(dt, 1e-3);
     const accel = (speedNow - this.speed) / Math.max(dt, 1e-3);
     this.speed += (speedNow - this.speed) * ease(8);
-    const leanTo = Math.max(-0.22, Math.min(0.22, accel * 0.025));
+    const leanTo = Math.max(0, Math.min(0.15, accel * 0.02));
     this.lean += (leanTo - this.lean) * ease(6);
     if (going) {
       const stride = Math.floor(this.phase / Math.PI);
