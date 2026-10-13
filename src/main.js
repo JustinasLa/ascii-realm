@@ -82,6 +82,8 @@ const staminaValue = document.getElementById('stamina-value');
 const weaponStatus = document.getElementById('weapon-status');
 const chargeMeter = document.getElementById('charge');
 const weaponHelp = document.getElementById('weapon-help');
+const recoveredItems = document.getElementById('recovered-items');
+const collectionStatus = document.getElementById('collection-status');
 for (const [index, id] of WEAPON_IDS.entries()) {
   const option = document.createElement('option');
   option.value = id;
@@ -97,15 +99,22 @@ for (const id of MATERIAL_IDS) {
 
 const HELP = {
   bow: 'Hold J / left click to fully draw. Aim with the cursor; release to shoot.',
-  spear: 'Tap J / left click to thrust. Hold and release to throw.',
+  spear: 'Tap J / left click to thrust. Hold to charge, aim with the cursor, then release to throw.',
   staff: 'Hold J / left click to charge. Release to cast.',
-  javelin: 'Tap J / left click to thrust. Hold and release to throw.',
+  javelin: 'Tap J / left click to thrust. Hold to charge, aim with the cursor, then release to throw.',
   'sword-shield': 'Tap J / left to strike; hold for heavy. Hold K / right to block; tap to parry.',
 };
+function countLabel(kind, count) {
+  return `${count} ${kind}${count === 1 ? '' : 's'}`;
+}
+function collectionSummary(counts) {
+  return ['arrow', 'spear', 'javelin'].filter((kind) => counts[kind] > 0)
+    .map((kind) => countLabel(kind, counts[kind])).join(', ');
+}
 let currentHelp = '';
 function updateLoadout() {
   const combat = player.combat;
-  canvas.classList.toggle('bow-aiming', combat.weaponId === 'bow' && (combat.inHand || combat.charging));
+  canvas.classList.toggle('projectile-aiming', player.usesCursorAim && (combat.inHand || combat.charging));
   if (weaponSelect.value !== combat.weaponId) weaponSelect.value = combat.weaponId;
   if (materialSelect.value !== combat.material) materialSelect.value = combat.material;
   const stamina = Math.max(0, Math.min(combat.maxStamina, combat.stamina));
@@ -122,6 +131,18 @@ function updateLoadout() {
   if (currentHelp !== combat.weaponId) {
     currentHelp = combat.weaponId;
     weaponHelp.textContent = HELP[currentHelp] || 'Tap J / left click to strike. Hold and release for heavy.';
+  }
+  const counts = player.recoveredCounts;
+  const recovered = `Recovered: ${['arrow', 'spear', 'javelin'].map((kind) => countLabel(kind, counts[kind])).join(' · ')}`;
+  if (recoveredItems.textContent !== recovered) recoveredItems.textContent = recovered;
+  const collection = player.lastCollection;
+  collectionStatus.hidden = !collection || player.time - collection.time > 3;
+  if (!collectionStatus.hidden) {
+    const item = collection.items.length === 1 ? collection.items[0] : null;
+    const material = item && WEAPON_MATERIALS[item.material]?.name;
+    const collected = item ? `${material ? `${material} ` : ''}${item.kind}` : collectionSummary(collection.counts);
+    const message = `Collected ${collected}.`;
+    if (collectionStatus.textContent !== message) collectionStatus.textContent = message;
   }
 }
 weaponSelect.addEventListener('change', () => {
@@ -159,7 +180,7 @@ function frame(now) {
   const running = isDown('ShiftLeft', 'ShiftRight');
   const held = isDown('KeyJ', 'MouseLeft');
   const blocking = isDown('KeyK', 'MouseRight');
-  // Focus loss cancels a drawn bow rather than treating it as a shot release.
+  // Focus loss cancels the charged attack rather than treating it as a release.
   if (wasCancelled()) player.cancelAction();
   const bounds = canvas.getBoundingClientRect();
   const releasedAttack = wasReleased('KeyJ', 'MouseLeft') && !held;
@@ -210,6 +231,7 @@ function frame(now) {
   }
   player.events.length = 0;
   projectiles.update(dt, world);
+  if (!debug.freeze) player.collectProjectiles(projectiles);
   for (const e of projectiles.events) {
     if (e.type !== 'impact') continue;
     if (e.kind === 'magic') dust.sparks(e.x, e.y - (e.h || 0), 9);
@@ -240,12 +262,15 @@ function frame(now) {
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
+  for (const landed of projectiles.landedDrawables()) {
+    drawables.push({ y: landed.depth, draw: () => landed.draw(renderer, view) });
+  }
   drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player, figure) });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
   drawTrail(renderer, view, player.trail, player.time);
-  projectiles.draw(renderer, view);
+  projectiles.drawFlying(renderer, view);
   drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);

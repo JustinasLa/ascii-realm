@@ -10,6 +10,7 @@ const PARRY_WINDOW = 0.18;
 const STAMINA_REGEN = 22;
 const REGEN_DELAY = 0.45;
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+const CURSOR_PROJECTILES = new Set(['arrow', 'spear', 'javelin']);
 
 function copyAimTarget(value) {
   return value && Number.isFinite(value.x) && Number.isFinite(value.y)
@@ -83,6 +84,7 @@ export class Combat {
     this.charge = 0;
     this.bowDraw = null;
     this.bowShot = null;
+    this.projectileShot = null;
     this.holdFallback = null;
     this.blocking = false;
     this.guardExhausted = false;
@@ -215,6 +217,7 @@ export class Combat {
     this.cancelAction();
     this.bowDraw = null;
     this.bowShot = null;
+    this.projectileShot = null;
     this.move = null;
     this.queued = null;
     this.queuedContext = null;
@@ -326,12 +329,14 @@ export class Combat {
     const materialStrength = this.weaponId === 'axe' ? this.weapon.damage / getWeapon('axe', 'steel').damage : 1;
     const projectile = packet.projectile ? {
       ...packet.projectile,
+      material: this.material,
       speed: packet.projectile.speed * (1 + charge * 0.7),
       range: reach,
       lifetime: reach / (packet.projectile.speed * (1 + charge * 0.7)) * 1.5,
       count: packet.count ?? 1,
     } : undefined;
-    const aimTarget = projectile?.kind === 'arrow' ? copyAimTarget(this.actionContext.aimTarget) : null;
+    const aimedProjectile = CURSOR_PROJECTILES.has(projectile?.kind);
+    const aimTarget = aimedProjectile ? copyAimTarget(this.actionContext.aimTarget) : null;
     this.events.push({
       type: backstab ? 'backstab' : packet.type,
       kind: definition.kind, weapon: this.weaponId, material: this.material,
@@ -342,8 +347,11 @@ export class Combat {
       ...(projectile ? { projectile, count: projectile.count } : {}),
       ...(aimTarget ? { aimTarget } : {}),
     });
+    if (aimedProjectile) {
+      this.projectileShot = { kind: projectile.kind, target: copyAimTarget(aimTarget), speed: projectile.speed, gravity: projectile.gravity };
+    }
     if (projectile?.kind === 'arrow') {
-      this.bowShot = { target: copyAimTarget(aimTarget), speed: projectile.speed, gravity: projectile.gravity };
+      this.bowShot = this.projectileShot;
       // A second queued draw has its own charge; this arrow retains the
       // draw captured when it was released.
       this.bowDraw = charge;
@@ -359,6 +367,7 @@ export class Combat {
     dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
     this.bowDraw = null;
     this.bowShot = null;
+    this.projectileShot = null;
     this.context = context(ctx, this.context);
     const current = this.context;
     this.trailing = false;

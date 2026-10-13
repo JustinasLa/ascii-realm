@@ -74,6 +74,7 @@ npm test
 | `1`–`9` | Select a weapon in the order listed below |
 | `[` / `]` | Previous / next weapon |
 | `M` | Next weapon material |
+| Mouse cursor | Aim bow, spear and javelin while holding `J` / left click |
 | Mouse wheel / `+` `-` | Zoom |
 
 The Weapon and Material selectors in the HUD can also be used with the mouse
@@ -95,14 +96,16 @@ or keyboard (`Tab` to focus them).
 
 Each weapon has its own light combo, sprint attack, air attack and charged
 attack, ASCII shape, swing-trail colour and sheathed position. Attack while
-running or airborne to use its sprint or air move. With the spear, hold `J`
-or left click and release to throw; a quick tap still thrusts.
+running or airborne to use its sprint or air move. A quick tap with the spear
+still performs a melee thrust.
 
-With the bow, hold `J` or left click to pull the string fully back, aim with
-the cursor, then release. The warrior turns toward the cursor, and arrows
-land at its position on the ground unless an obstacle intercepts them.
-Spear and javelin throws and staff shots follow the warrior's facing direction;
-walk in the direction you want to aim them.
+With the **bow, spear or javelin**, hold `J` or left click, aim with the cursor,
+then release to shoot or throw. The bow pulls its string fully back to the
+warrior's cheek. The warrior turns toward the cursor while standing still,
+and you can keep walking or running while aiming. Each shot locks in the
+cursor's ground position at the instant you release; an obstacle can intercept
+it before it reaches that point. Staff shots follow the warrior's facing
+direction; walk in the direction you want to aim them.
 
 Choose **stone → copper → bronze → iron → steel** with `M` or the Material
 selector (steel is the default). Material tiers change damage, attack timing,
@@ -115,9 +118,12 @@ to start. Weapon and material changes are ignored while drawing, sheathing,
 attacking, charging or blocking.
 
 Axe strikes can fell trees and clear their collision for the current session.
-Reloading restores the generated world. Arrows, spears and thrown javelins travel
-through the world and hit terrain or obstacles. There are no enemies or
-harvested resources yet.
+Arrows, spears and thrown javelins stay embedded where they actually hit the
+ground or an obstacle. Walk or run on the ground within **0.75 metres** to
+collect them automatically. Recovered projectiles retain their kind and
+material in the session inventory; the HUD shows recovered totals and a pickup
+message. Reloading resets that inventory and restores the generated world.
+There are no enemies or harvested resources yet.
 
 ## Layout
 

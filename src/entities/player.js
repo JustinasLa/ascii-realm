@@ -17,6 +17,7 @@ const TURN_RATE = 12; // how quickly the heading swings round, per second
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
 const WIND_UP = 0.1; // seconds spent crouching before leaving the ground
+const CURSOR_PROJECTILES = new Set(['arrow', 'spear', 'javelin']);
 
 // Shortest signed angle from a to b.
 function angleTo(a, b) {
@@ -38,6 +39,12 @@ export class Player {
     this.moving = false;
     this.running = false;
     this.aimTarget = null;
+    // Recovered ammunition keeps its material and impact metadata. Firing
+    // remains unlimited while the prototype has no ammunition inventory UI.
+    this.recoveredItems = [];
+    this.recoveredCounts = { arrow: 0, spear: 0, javelin: 0 };
+    this.lastCollection = null;
+    this.collectionPath = null;
     // A spinning attack turns the figure without changing the direction
     // used for movement and aiming after the attack.
     this.combatSpin = 0;
@@ -84,34 +91,40 @@ export class Player {
 
   // Live draw follows the cursor; a released shot keeps its own target
   // while it finishes, even if another pointer update arrives meanwhile.
-  bowAimState() {
+  get usesCursorAim() {
+    return CURSOR_PROJECTILES.has(this.combat.weapon.projectile);
+  }
+
+  projectileAimState() {
     const cb = this.combat;
-    if (cb.weaponId !== 'bow') return null;
+    if (!this.usesCursorAim) return null;
     // A queued draw can begin in the same frame the prior arrow launches.
-    if (cb.bowShot) return cb.bowShot;
+    if (cb.projectileShot) return cb.projectileShot;
+    if (cb.weaponId === 'bow' && cb.bowShot) return { kind: 'arrow', ...cb.bowShot };
     const moveset = cb.moveset;
-    const packet = (move) => moveset.moves[move]?.steps?.find((s) => s.event?.projectile?.kind === 'arrow')?.event.projectile;
+    const packet = (move) => moveset.moves[move]?.steps?.find((s) => CURSOR_PROJECTILES.has(s.event?.projectile?.kind))?.event.projectile;
     const active = packet(cb.move);
     const queued = !cb.charging && !active && packet(cb.queued);
     const shotContext = active ? cb.actionContext : queued ? cb.queuedContext : null;
     const spec = active || queued || packet(moveset.charged);
     const charge = active ? cb.actionCharge : cb.charging ? cb.charge : queued ? shotContext.charge ?? 0 : 0;
     return {
+      kind: spec?.kind ?? cb.weapon.projectile,
       target: shotContext ? shotContext.aimTarget : this.aimTarget,
       speed: (spec?.speed ?? 18) * (1 + 0.7 * charge),
       gravity: spec?.gravity ?? 5,
     };
   }
 
-  getBowAimTarget() {
-    const target = this.bowAimState()?.target;
+  getProjectileAimTarget() {
+    const target = this.projectileAimState()?.target;
     return target ? { ...target } : null;
   }
 
   // The rig supplies a yaw-rotated point in metres relative to the feet.
   // Return a direction in the same 3D axes; flight uses the same solver.
-  bowAimDirection(origin) {
-    const aim = this.bowAimState();
+  projectileAimDirection(origin) {
+    const aim = this.projectileAimState();
     if (!aim?.target || !Array.isArray(origin) || origin.length < 3 || !origin.every(Number.isFinite)) return null;
     return solveBallisticShot(
       [this.x / toCols + origin[0], origin[1], this.y / toRows + origin[2]],
@@ -119,14 +132,42 @@ export class Player {
     )?.direction ?? null;
   }
 
-  aimBowHeading() {
-    if (this.combat.weaponId !== 'bow' || (!this.combat.inHand && !this.combat.charging)) return false;
-    const target = this.getBowAimTarget();
+  aimProjectileHeading() {
+    if (!this.usesCursorAim || (!this.combat.inHand && !this.combat.charging)) return false;
+    const target = this.getProjectileAimTarget();
     if (!target) return false;
     const x = (target.x - this.x) / toCols;
     const z = (target.y - this.y) / toRows;
     if (Math.hypot(x, z) > 1e-6) this.heading = Math.atan2(x, z);
     return true;
+  }
+
+  // Keep the bow-specific API for existing previews and animation callers.
+  bowAimState() { return this.combat.weaponId === 'bow' ? this.projectileAimState() : null; }
+  getBowAimTarget() { return this.combat.weaponId === 'bow' ? this.getProjectileAimTarget() : null; }
+  bowAimDirection(origin) { return this.combat.weaponId === 'bow' ? this.projectileAimDirection(origin) : null; }
+  aimBowHeading() { return this.combat.weaponId === 'bow' ? this.aimProjectileHeading() : false; }
+
+  // Only a real grounded walk or run can collect a nearby item. Consume
+  // this frame's path once so a second caller cannot collect along stale
+  // movement after another item lands.
+  collectProjectiles(projectiles) {
+    const path = this.collectionPath;
+    this.collectionPath = null;
+    if (!path || typeof projectiles?.collectNear !== 'function') return [];
+    const recovered = projectiles.collectNear(path.to.x, path.to.y, 0.75, path.from);
+    if (!Array.isArray(recovered) || !recovered.length) return [];
+    const items = recovered.filter((item) => CURSOR_PROJECTILES.has(item?.kind))
+      .map((item) => ({ ...item, collectedAt: this.time }));
+    if (!items.length) return [];
+    const counts = { arrow: 0, spear: 0, javelin: 0 };
+    for (const item of items) {
+      this.recoveredItems.push(item);
+      this.recoveredCounts[item.kind]++;
+      counts[item.kind]++;
+    }
+    this.lastCollection = { items, counts, time: this.time };
+    return items;
   }
 
   attack(ctx = {}) {
@@ -210,6 +251,7 @@ export class Player {
   }
 
   update(dt, world, move, running, input = {}) {
+    this.collectionPath = null;
     if (Object.hasOwn(input, 'aimTarget')) this.setAimTarget(input.aimTarget);
     if (input.cancelled) {
       this.cancelAction();
@@ -219,6 +261,7 @@ export class Player {
     this.time += dt;
     const fromX = this.x;
     const fromY = this.y;
+    const wasGrounded = this.air === 0 && this.windUp < 0;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
     this.moving = moving;
@@ -231,9 +274,12 @@ export class Player {
       this.tryMove(world, (move.x / len) * speed * toCols * dt, 0);
       this.tryMove(world, 0, (move.y / len) * speed * toRows * dt);
     }
+    // A blocked walking input must not turn an attack's lunge into a
+    // collection pass. Measure the input-driven travel before combat moves.
+    const walkingMetres = Math.hypot((this.x - fromX) / toCols, (this.y - fromY) / toRows);
 
-    let bowAiming = this.aimBowHeading();
-    if (moving && !bowAiming) {
+    let projectileAiming = this.aimProjectileHeading();
+    if (moving && !projectileAiming) {
       // Turn smoothly through the in-between headings rather than snapping.
       const target = Math.atan2(move.x, move.y);
       const turned = angleTo(this.heading, target) * ease(TURN_RATE);
@@ -251,7 +297,7 @@ export class Player {
       this.tryMove(world, Math.sin(this.heading) * forward * toCols * dt, 0);
       this.tryMove(world, 0, Math.cos(this.heading) * forward * toRows * dt);
     }
-    bowAiming = this.aimBowHeading() || bowAiming;
+    projectileAiming = this.aimProjectileHeading() || projectileAiming;
     const turn = motion.turn ?? 0;
     if (Number.isFinite(turn) && turn !== 0) {
       this.combatSpin = angleTo(0, this.combatSpin + turn * dt);
@@ -265,6 +311,9 @@ export class Player {
     // always matches the speed and stops when the way is blocked.
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
     const going = travelling && metres > 0.15 * dt;
+    if (moving && wasGrounded && this.air === 0 && this.windUp < 0 && walkingMetres > 1e-8) {
+      this.collectionPath = { from: { x: fromX, y: fromY }, to: { x: this.x, y: this.y } };
+    }
 
     // Pitch forward when setting off or speeding up, and rock back on the
     // heels when pulling up, then settle.
@@ -282,7 +331,7 @@ export class Player {
       }
     }
 
-    if (!moving || bowAiming) this.bank += -this.bank * ease(8);
+    if (!moving || projectileAiming) this.bank += -this.bank * ease(8);
 
     // Ease the stride in and out so starting and stopping is not abrupt.
     this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
@@ -341,7 +390,7 @@ export class Player {
       const y = this.y + (launchAt ? launchAt[2] * toRows : dy * distance);
       const h = launchHeight !== undefined ? (this.air + launchHeight) * SCALE
         : launchAt ? launchAt[1] * SCALE : (this.air + 0.75) * SCALE;
-      const aimedShot = e.projectile?.kind === 'arrow' && e.aimTarget ? solveBallisticShot(
+      const aimedShot = CURSOR_PROJECTILES.has(e.projectile?.kind) && e.aimTarget ? solveBallisticShot(
         [x / toCols, h / SCALE, y / toRows],
         [e.aimTarget.x / toCols, 0, e.aimTarget.y / toRows], e.projectile.speed, e.projectile.gravity,
       ) : null;

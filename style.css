@@ -14,7 +14,7 @@ body {
   outline: none;
 }
 
-#screen.bow-aiming {
+#screen.projectile-aiming {
   cursor: crosshair;
 }
 
@@ -109,9 +109,24 @@ body {
 }
 
 #weapon-help,
+.recovery-help,
 .loadout-shortcuts {
   margin: 7px 0 0;
   color: #a4b09c;
+  font-size: 10px;
+}
+
+.recovery-counts {
+  display: block;
+  margin-top: 9px;
+  color: #cbd8bc;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+#collection-status {
+  margin: 5px 0 0;
+  color: #b5d18e;
   font-size: 10px;
 }
 

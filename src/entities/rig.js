@@ -350,6 +350,69 @@ export function buildRig(st) {
           previousError = error;
         }
         weapon = aimBow(aim);
+      } else if (definition.type === 'spear' || definition.type === 'javelin') {
+        const aimedState = typeof st.projectileAimState === 'function' ? st.projectileAimState() : null;
+        const throwMove = cb.moveset?.moves[cb.move]?.steps?.some((step) =>
+          step.event?.projectile?.kind === definition.type);
+        const chargePose = cb.charging && (cb.move === 'charge' || !cb.move);
+        const emitted = cb.projectileShot?.kind === definition.type;
+        if (aimedState?.target && typeof st.projectileAimDirection === 'function' &&
+          (chargePose || throwMove || emitted)) {
+          // A thrown pole is balanced near its centre, with its butt behind
+          // the raised hand. The melee grip stays at the end of the shaft.
+          const mainBase = { ...main };
+          const offBase = { ...off };
+          const hand = [sp.hand[0], Math.max(0.72, sp.hand[1]), Math.min(0.3, sp.hand[2])];
+          const target = torso(side(hand));
+          const aimedDirection = (point, fallback) => {
+            const direction = st.projectileAimDirection(rotY(point, heading));
+            if (!Array.isArray(direction) || direction.length !== 3 ||
+              !direction.every(Number.isFinite) || Math.hypot(...direction) < 1e-6) return fallback;
+            return norm(rotY(direction, -heading));
+          };
+          const aimPole = (aim) => {
+            Object.assign(main, mainBase);
+            Object.assign(off, offBase);
+            blend(main, target, bodyDirection([SWORD_SIDE, 0, -1]), fight, aim);
+            const pole = weaponFrame(definition, add(main.wrist, mul(aim, 0.03)), aim, forward);
+            // Sliding the grip towards the point for steep downward shots
+            // keeps the tip above ground and the close-cursor solve stable.
+            // The sprite and guard-to-tip length remain the complete pole.
+            const clearance = 0.06;
+            const safeFront = aim[1] < -1e-6
+              ? Math.max(0, pole.grip[1] - clearance) * 0.5 / -aim[1] : Infinity;
+            const front = Math.min(definition.reach * 0.55, safeFront);
+            pole.guard = sub(pole.grip, mul(aim, definition.reach - front));
+            pole.tip = add(pole.guard, mul(aim, definition.reach));
+            pole.pommel = sub(pole.guard, mul(aim,
+              (definition.rig?.gripLength ?? 0.2) + (definition.rig?.gripOffset ?? 0.08)));
+            pole.barA = add(pole.guard, mul(pole.across, pole.width));
+            pole.barB = sub(pole.guard, mul(pole.across, pole.width));
+            pole.aim = aim;
+            if (definition.hands === 2 && sp.off > 0.01) {
+              blend(off, sub(pole.grip, mul(aim, definition.rig?.offGrip ?? 0.13)),
+                bodyDirection([-SWORD_SIDE, -0.3, -0.5]), sp.off * fight, aim);
+            }
+            return pole;
+          };
+
+          // Use the actual point of the shaft as the launch origin, just
+          // as the bow uses its arrowhead. Damping handles near-foot aim.
+          let aim = aimedDirection(target, blade);
+          let previousError = Infinity;
+          let relaxation = 1;
+          for (let i = 0; i < 64; i++) {
+            weapon = aimPole(aim);
+            const next = aimedDirection(weapon.tip, aim);
+            const error = Math.hypot(...sub(next, aim));
+            if (error < 1e-7) break;
+            if (relaxation === 1 && error >= previousError * 0.5) relaxation = 0.25;
+            else if (relaxation < 1 && error >= previousError * 0.95) relaxation = Math.max(1 / 32, relaxation * 0.5);
+            aim = norm(lerp3(aim, next, relaxation));
+            previousError = error;
+          }
+          weapon = aimPole(aim);
+        }
       }
     }
   }

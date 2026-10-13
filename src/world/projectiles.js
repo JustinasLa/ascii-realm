@@ -14,6 +14,32 @@ const SHAFT = { horizontal: glyph('-'), vertical: glyph('|'), rising: glyph('/')
 const HEAD = { right: glyph('>'), left: glyph('<'), up: glyph('^'), down: glyph('v') };
 const MAGIC = glyph('*');
 const TRAIL = glyph('.');
+const RECOVERABLE = new Set(['arrow', 'spear', 'javelin']);
+
+function projectedDirection(p) {
+  const dx = p.vx * ASPECT;
+  const dy = p.vy - p.vh;
+  const length = Math.hypot(dx, dy);
+  return length > 0 ? { x: dx / length, y: dy / length } : { x: 0, y: 1 };
+}
+
+function drawShaft(renderer, view, p) {
+  const { x: ux, y: uy } = p.orientation ?? projectedDirection(p);
+  const shaft = Math.abs(uy) < 0.4 ? SHAFT.horizontal : Math.abs(ux) < 0.4 ? SHAFT.vertical :
+    ux * uy < 0 ? SHAFT.rising : SHAFT.falling;
+  const head = p.kind === 'magic' ? MAGIC : Math.abs(ux) > Math.abs(uy) ?
+    ux > 0 ? HEAD.right : HEAD.left : uy > 0 ? HEAD.down : HEAD.up;
+  for (let offset = p.length; offset > 0; offset -= 0.45) {
+    renderer.put(
+      Math.floor(p.x - ux * offset / ASPECT) - view.x0,
+      Math.floor(p.y - p.h - uy * offset) - view.y0,
+      p.kind === 'magic' ? TRAIL : shaft,
+      p.color[0] * 0.85, p.color[1] * 0.85, p.color[2] * 0.85,
+    );
+  }
+  renderer.put(Math.floor(p.x) - view.x0, Math.floor(p.y - p.h) - view.y0,
+    head, ...p.color);
+}
 
 function propHeight(prop) {
   // The baked ASCII silhouette already records each obstacle's height.
@@ -41,7 +67,9 @@ function groundTime(height, velocity, gravity) {
 export class Projectiles {
   constructor() {
     this.list = [];
+    this.landed = [];
     this.events = [];
+    this.nextId = 1;
   }
 
   launch(event) {
@@ -54,7 +82,7 @@ export class Projectiles {
     const gravity = spec.gravity ?? style.gravity;
     const life = spec.lifetime ?? 3;
     const range = spec.range ?? Infinity;
-    const aimed = spec.kind === 'arrow' && event.aimTarget != null;
+    const aimed = RECOVERABLE.has(spec.kind) && event.aimTarget != null;
     const target = aimed ? { x: event.aimTarget.x, y: event.aimTarget.y } : null;
     const velocity = spec.velocity;
     const explicitVelocity = Array.isArray(velocity) && velocity.length === 3 && velocity.every(Number.isFinite);
@@ -79,7 +107,7 @@ export class Projectiles {
           ...event,
           dx: (fx * cos - fy * sin) * SCALE / ASPECT,
           dy: (fx * sin + fy * cos) * SCALE * TILT,
-          // Paired aimed arrows share the cursor but take slightly different
+          // Paired aimed shots share the cursor but take slightly different
           // arcs and durations. Unaimed shots retain their original fan.
           projectile: { ...spec, count: 1, speed: aimed ? speed * (1 + (i - (count - 1) / 2) * 0.04) : speed },
         });
@@ -97,7 +125,11 @@ export class Projectiles {
     const launchVelocity = shot?.velocity ?? (explicitVelocity ? velocity : null);
 
     const p = {
+      id: this.nextId++,
       kind: spec.kind,
+      weapon: event.weapon ?? event.weaponId ?? (spec.kind === 'arrow' ? 'bow' : spec.kind),
+      weaponId: event.weaponId ?? event.weapon ?? (spec.kind === 'arrow' ? 'bow' : spec.kind),
+      material: event.material ?? spec.material ?? 'steel',
       x, y, h,
       vx: launchVelocity ? launchVelocity[0] * SCALE / ASPECT : dx * speed,
       vy: launchVelocity ? launchVelocity[2] * SCALE * TILT : dy * speed,
@@ -113,13 +145,54 @@ export class Projectiles {
       target,
       strength: event.strength ?? 1,
       damage: event.damage ?? 0,
-      color: style.color,
+      color: [...style.color],
       length: style.length * SCALE,
       trail: [],
     };
     if (![p.vx, p.vy, p.vh, p.gravity].every(Number.isFinite)) return null;
     this.list.push(p);
     return p;
+  }
+
+  impact(p, prop = null) {
+    if (p.impacted) return;
+    p.impacted = true;
+    this.events.push({
+      type: 'impact', id: p.id, kind: p.kind,
+      weapon: p.weapon, weaponId: p.weaponId, material: p.material,
+      x: p.x, y: p.y, h: p.h,
+      strength: p.strength, damage: p.damage, prop,
+    });
+    if (!RECOVERABLE.has(p.kind)) return;
+    p.prop = prop;
+    p.depth = prop?.y ?? p.y;
+    p.orientation = projectedDirection(p);
+    p.trail = [];
+    p.life = 0;
+    this.landed.push(p);
+  }
+
+  // Positions are world cells; pickup reach and swept walking distance use
+  // metres, including the ground plane's foreshortened vertical projection.
+  collectNear(x, y, radiusMetres = 0.75, fromPosition = null) {
+    if (![x, y, radiusMetres].every(Number.isFinite) || radiusMetres < 0 ||
+      (fromPosition != null && ![fromPosition.x, fromPosition.y].every(Number.isFinite))) return [];
+    const from = fromPosition ?? { x, y };
+    const dx = (x - from.x) * ASPECT / SCALE;
+    const dy = (y - from.y) / (SCALE * TILT);
+    const length2 = dx * dx + dy * dy;
+    const radius2 = radiusMetres * radiusMetres;
+    const collected = [];
+    const remaining = [];
+    for (const p of this.landed) {
+      const px = (p.x - from.x) * ASPECT / SCALE;
+      const py = (p.y - from.y) / (SCALE * TILT);
+      const along = length2 > 0 ? Math.max(0, Math.min(1, (px * dx + py * dy) / length2)) : 0;
+      const distance2 = (px - along * dx) ** 2 + (py - along * dy) ** 2;
+      (distance2 <= radius2 ? collected : remaining).push(p);
+    }
+    if (collected.length) this.landed = remaining;
+    return collected;
   }
 
   update(dt, world) {
@@ -129,8 +202,10 @@ export class Projectiles {
       const duration = Math.min(dt, p.life, p.target ? Infinity : (p.range - p.travelled) / p.speed);
       if (duration <= 0) {
         if (p.target && p.flightTime === 0) {
-          this.events.push({ type: 'impact', kind: p.kind, x: p.target.x, y: p.target.y, h: 0,
-            strength: p.strength, damage: p.damage, prop: null });
+          p.x = p.target.x;
+          p.y = p.target.y;
+          p.h = 0;
+          this.impact(p);
         }
         continue;
       }
@@ -173,12 +248,7 @@ export class Projectiles {
         const prop = props.find((obstacle) => blocks(obstacle, p.x, p.y) && p.h <= propHeight(obstacle));
         if (landed || prop) {
           p.h = Math.max(0, p.h);
-          this.events.push({
-            type: 'impact', kind: p.kind,
-            x: p.x, y: p.y, h: p.h,
-            strength: p.strength, damage: p.damage,
-            prop: prop ?? null,
-          });
+          this.impact(p, prop ?? null);
           hit = true;
           break;
         }
@@ -188,7 +258,15 @@ export class Projectiles {
     this.list = alive;
   }
 
-  draw(renderer, view) {
+  landedDrawables() {
+    return this.landed.map((p) => ({ depth: p.depth, draw: (renderer, view) => drawShaft(renderer, view, p) }));
+  }
+
+  drawLanded(renderer, view) {
+    for (const p of this.landed) drawShaft(renderer, view, p);
+  }
+
+  drawFlying(renderer, view) {
     for (const p of this.list) {
       for (let i = 0; i < p.trail.length; i++) {
         const t = p.trail[i];
@@ -196,25 +274,12 @@ export class Projectiles {
         renderer.put(Math.floor(t.x) - view.x0, Math.floor(t.y - t.h) - view.y0,
           TRAIL, p.color[0] * fade, p.color[1] * fade, p.color[2] * fade);
       }
-      const dx = p.vx * ASPECT;
-      const dy = p.vy - p.vh;
-      const length = Math.hypot(dx, dy) || 1;
-      const ux = dx / length;
-      const uy = dy / length;
-      const shaft = Math.abs(uy) < 0.4 ? SHAFT.horizontal : Math.abs(ux) < 0.4 ? SHAFT.vertical :
-        ux * uy < 0 ? SHAFT.rising : SHAFT.falling;
-      const head = p.kind === 'magic' ? MAGIC : Math.abs(dx) > Math.abs(dy) ?
-        dx > 0 ? HEAD.right : HEAD.left : dy > 0 ? HEAD.down : HEAD.up;
-      for (let offset = p.length; offset > 0; offset -= 0.45) {
-        renderer.put(
-          Math.floor(p.x - ux * offset / ASPECT) - view.x0,
-          Math.floor(p.y - p.h - uy * offset) - view.y0,
-          p.kind === 'magic' ? TRAIL : shaft,
-          p.color[0] * 0.85, p.color[1] * 0.85, p.color[2] * 0.85,
-        );
-      }
-      renderer.put(Math.floor(p.x) - view.x0, Math.floor(p.y - p.h) - view.y0,
-        head, ...p.color);
+      drawShaft(renderer, view, p);
     }
+  }
+
+  draw(renderer, view) {
+    this.drawLanded(renderer, view);
+    this.drawFlying(renderer, view);
   }
 }
