@@ -29,3 +29,37 @@ body {
 #hint.hidden {
   opacity: 0;
 }
+
+#audio-controls {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  max-width: calc(100vw - 48px);
+  padding: 8px 12px;
+  color: #b8c4b0;
+  background: rgba(5, 6, 10, 0.85);
+  border: 1px solid rgba(184, 196, 176, 0.2);
+  font: 12px "Cascadia Mono", Consolas, Menlo, monospace;
+}
+
+#audio-controls summary { cursor: pointer; }
+#audio-controls button {
+  margin: 12px 0 8px;
+  padding: 5px 8px;
+  border: 1px solid #63785c;
+  color: inherit;
+  background: #16221a;
+  cursor: pointer;
+  font: inherit;
+}
+#audio-controls label {
+  display: grid;
+  grid-template-columns: 64px minmax(80px, 120px) 36px;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+#audio-controls input { width: 100%; accent-color: #69b578; }
+#audio-controls output { text-align: right; }
+#audio-controls p { max-width: 240px; line-height: 1.5; margin: 8px 0 0; }
+#audio-controls :focus-visible { outline: 2px solid #a9d4ae; outline-offset: 3px; }

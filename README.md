@@ -50,6 +50,12 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
+- **Procedural audio.** Surface-aware footsteps, sword and movement effects,
+  wind and grass rustle, lakes, birds, bugs, distant wildlife and firefly shimmer,
+  with six original songs in three day/night pairs. Sword effects use dry scrapes,
+  air rush and damped metal impacts. Sound starts on your first key press or click;
+  the Audio panel shows the current song, lets you skip, and saves mute and
+  master, music, effects, sword and ambience levels. See [audio notes](docs/audio.md).
 
 ## Running
 
@@ -78,6 +84,8 @@ npm test
 | `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
+| `M` | Mute or unmute all sound |
+| `N` / Audio panel's Skip song button | Switch to the next day/night song pair |
 | Mouse wheel / `+` `-` | Zoom |
 
 ## Layout
@@ -86,6 +94,7 @@ npm test
 src/
   main.js            game loop and wiring
   core/              input, hashing, noise
+  audio/             lazy Web Audio engine, procedural voices, effects, ambience and music
   render/            glyph atlas, WebGL renderer, cell writers
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement

@@ -3,6 +3,7 @@ import { GLTFLoader } from '../../vendor/three/loaders/GLTFLoader.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { SCALE, TILT } from './rig.js';
+import { footPlants } from './footfalls.js';
 
 // The player as a real rigged 3D character playing professionally animated
 // clips (Quaternius' Universal Animation Library, CC0), drawn every frame
@@ -264,11 +265,11 @@ export class ModelFigure {
     let perMetre = 0;
     for (const g of this.gaits) perMetre += (loco[g.key] ?? 0) / g.cycle;
     const before = this.phase;
-    this.phase = (this.phase + speed * dt * perMetre) % 1;
-    // A foot comes down as the cycle passes each half.
-    if (moving > 0.5 && p.air === 0 && Math.floor(this.phase * 2) !== Math.floor(before * 2)) {
-      p.events.push({ type: 'step', x: p.x, y: p.y, strength: Math.min(1, speed / 5) });
-    }
+    const after = before + speed * dt * perMetre;
+    this.phase = after % 1;
+    const plants = moving > 0.5 && p.air === 0 && p.windUp < 0
+      && !cb.charge && (!cb.move || cb.move === 'draw' || cb.move === 'sheathe') && !this.oneShot
+      ? footPlants(before, after) : [];
     for (const g of this.gaits) {
       const a = this.actions[g.key];
       a.time = (((this.phase + g.strike) % 1) + 1) % 1 * a.getClip().duration;
@@ -330,6 +331,13 @@ export class ModelFigure {
 
     this.sword.visible = cb.inHand;
     this.model.rotation.y = p.heading + (cb.spin ?? 0);
+    this.model.updateMatrixWorld(true);
+    for (const side of plants) {
+      const foot = this.bones[bone(side === 0 ? 'DEF-foot.L' : 'DEF-foot.R')];
+      const at = foot.getWorldPosition(new THREE.Vector3());
+      p.events.push({ type: 'step', x: p.x + at.x * SCALE / ASPECT,
+        y: p.y + at.z * SCALE * TILT, strength: Math.min(1, speed / 5) });
+    }
     this.model.position.y = p.air;
     this.model.updateMatrixWorld(true);
   }

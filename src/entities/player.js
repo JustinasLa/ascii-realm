@@ -128,6 +128,7 @@ export class Player {
         this.windUp = -1;
         this.vy = JUMP_SPEED;
         this.air = 0.001;
+        this.events.push({ type: 'jump', x: this.x, y: this.y, strength: 1 });
       }
     }
     if (this.air > 0) {
@@ -226,11 +227,26 @@ export class Player {
     const leanTo = Math.max(0, Math.min(0.15, accel * 0.02));
     this.lean += (leanTo - this.lean) * ease(6);
     if (going) {
-      const stride = Math.floor(this.phase / Math.PI);
+      const stride = Math.floor((this.phase - Math.PI / 2) / Math.PI);
       this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
-      // A foot comes down every half cycle.
-      if (!this.modelTrail && this.air === 0 && Math.floor(this.phase / Math.PI) !== stride) {
-        this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
+      // Match each foot's heel strike in the gait, including every strike
+      // crossed by a long frame. The model supplies its own footfalls.
+      if (!this.modelTrail && this.air === 0 && this.windUp < 0 && !this.combat.busy && !this.combat.charge) {
+        const last = Math.floor((this.phase - Math.PI / 2) / Math.PI);
+        for (let k = stride + 1; k <= last; k++) {
+          const j = k % 2 === 0 ? 1 : 0;
+          // Reduce to one cycle so floating-point drift cannot sample the
+          // instant before touchdown once the phase grows large.
+          const touchdown = Math.PI / 2 + (j === 0 ? Math.PI : 0);
+          const foot = gaitPlan(touchdown, this.run)[j].print;
+          const at = rotY([foot[0], 0, foot[1]], this.heading);
+          this.events.push({
+            type: 'step',
+            x: this.x + at[0] * toCols,
+            y: this.y + at[2] * toRows,
+            strength: 0.3 + 0.7 * this.run,
+          });
+        }
       }
     }
 
@@ -296,6 +312,8 @@ export class Player {
         this.events.push({ type: 'land', x: this.x, y: this.y, strength: 0.6 });
       } else if (e.type === 'whirl') {
         this.events.push({ type: 'whirl', x: this.x, y: this.y, strength: 1 });
+      } else {
+        this.events.push({ ...e, x: this.x, y: this.y, strength: e.strength ?? 1 });
       }
     }
     cb.events.length = 0;

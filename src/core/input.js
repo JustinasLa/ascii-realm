@@ -4,6 +4,7 @@ const held = new Set();
 const tapped = new Set();
 
 window.addEventListener('keydown', (e) => {
+  if (e.target.closest?.('#audio-controls')) return;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!e.repeat) tapped.add(e.code);
   held.add(e.code);

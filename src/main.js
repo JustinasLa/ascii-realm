@@ -1,4 +1,6 @@
 import { isDown, moveAxis, wasTapped } from './core/input.js';
+import { GameAudio } from './audio/audio.js';
+import { bindAudioControls } from './audio/controls.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { Player } from './entities/player.js';
@@ -69,10 +71,26 @@ const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
+const sound = new GameAudio(world);
+sound.music.update({ night: 1 });
+const unbindAudio = bindAudioControls(sound.engine, sound.music, () => sound.pause());
+sound.engine.setListener(camera.x, camera.y);
+window.addEventListener('pagehide', (event) => {
+  if (event.persisted) {
+    sound.pause();
+    void sound.engine.suspend();
+  } else {
+    unbindAudio();
+    void sound.dispose();
+  }
+});
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted && sound.engine.context) void sound.engine.unlock();
+});
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, freeze: false };
+const debug = { player, camera, world, audio: sound.engine, sound, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -155,6 +173,7 @@ function frame(now) {
     }
   }
   for (const e of player.events) {
+    sound.play(e);
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
       footprints.add(world, e.x, e.y, time);
@@ -216,6 +235,9 @@ function frame(now) {
   dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
+  if (debug.freeze) sound.pause();
+  else sound.update(dt, time, player, camera, fireflies.list);
+  unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }

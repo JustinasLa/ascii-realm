@@ -50,7 +50,7 @@ test('a strike in the air plunges and slams only on landing', () => {
   cb.attack({ air: true });
   assert.equal(cb.move, 'plunge');
   run(cb, 1, { air: true });
-  assert.equal(cb.events.length, 0, 'slammed before landing');
+  assert.ok(!cb.events.some((e) => e.type === 'slam'), 'slammed before landing');
   run(cb, 0.2, {});
   assert.ok(cb.events.some((e) => e.type === 'slam'));
 });
