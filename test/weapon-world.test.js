@@ -76,8 +76,8 @@ function bufferRenderer(cols = 64, rows = 40) {
   };
 }
 
-function drawBow(seconds) {
-  const combat = new Combat('bow');
+function chargedProjectile(weapon, seconds) {
+  const combat = new Combat(weapon);
   combat.attack({ held: true });
   for (let time = 0; time < seconds; time += 1 / 120) {
     combat.update(Math.min(1 / 120, seconds - time), { held: true });
@@ -88,7 +88,7 @@ function drawBow(seconds) {
     const event = combat.events.find((e) => e.type === 'projectile');
     if (event) return event;
   }
-  assert.fail('a released bow emits an arrow');
+  assert.fail(`a released ${weapon} emits its charged projectile`);
 }
 
 test('axe damage persists and felling removes the tree from drawing and movement collision', () => {
@@ -199,8 +199,8 @@ test('an axe strike hits the first trunk along its bounded segment', () => {
 });
 
 test('a fully drawn bow launches a faster arrow that travels farther than a partial draw', () => {
-  const partial = drawBow(0.25);
-  const full = drawBow(0.95);
+  const partial = chargedProjectile('bow', 0.25);
+  const full = chargedProjectile('bow', 0.95);
   assert.ok(full.charge > partial.charge);
   assert.ok(full.projectile.speed > partial.projectile.speed);
   assert.ok(full.projectile.range > partial.projectile.range);
@@ -271,6 +271,53 @@ test('swept projectile collision catches the first tree even during a large move
   assert.equal(first.durability, TREE_DURABILITY, 'arrows do not chop trees');
 });
 
+test('a real charged spear catches the first trunk across a large frame without chopping it', () => {
+  const first = prop('tree', 24, 20);
+  const second = prop('tree', 42, 20);
+  const world = meadowWith(second, first);
+  const throwEvent = chargedProjectile('spear', 1.3);
+  assert.equal(throwEvent.projectile.kind, 'spear');
+  const projectiles = new Projectiles();
+  assert.ok(projectiles.launch(shot({ ...throwEvent })));
+  projectiles.update(0.25, world);
+  assert.equal(projectiles.list.length, 0);
+  assert.equal(projectiles.events.length, 1);
+  const impact = projectiles.events[0];
+  assert.equal(impact.kind, 'spear');
+  assert.equal(impact.prop, first);
+  assert.equal(impact.damage, throwEvent.damage);
+  assert.equal(first.durability, TREE_DURABILITY, 'spear damage does not fell trees');
+  assert.equal(second.durability, TREE_DURABILITY);
+});
+
+test('a real thrown spear renders a long shaft, falls under gravity, and lands once', () => {
+  const throwEvent = chargedProjectile('spear', 1.3);
+  const projectiles = new Projectiles();
+  const spear = projectiles.launch(shot({ ...throwEvent }));
+  assert.ok(spear, 'the spear projectile style accepts actual combat throw data');
+  const javelin = new Projectiles().launch(shot({ projectile: { ...throwEvent.projectile, kind: 'javelin' } }));
+  assert.ok(spear.length > javelin.length, 'the spear sprite keeps its longer polearm silhouette');
+  const world = meadowWith();
+  projectiles.update(0.02, world);
+  assert.ok(spear.x > 10);
+  assert.ok(spear.h < 12);
+  assert.ok(spear.vh < 0);
+  const renderer = bufferRenderer();
+  projectiles.draw(renderer, { x0: 0, y0: 0, cols: renderer.cols, rows: renderer.rows });
+  assert.ok(renderer.fg.some((value, i) => i % 4 === 3 && value > 0), 'the actual thrown spear is visible');
+  projectiles.update(2, world);
+  assert.equal(projectiles.list.length, 0);
+  assert.equal(projectiles.events.length, 1);
+  const impact = projectiles.events[0];
+  assert.equal(impact.kind, 'spear');
+  assert.equal(impact.prop, null);
+  for (const value of [impact.x, impact.y, impact.h, impact.damage, impact.strength]) {
+    assert.ok(Number.isFinite(value));
+  }
+  projectiles.update(1, world);
+  assert.equal(projectiles.events.length, 1, 'a landed spear cannot hit twice');
+});
+
 test('projectiles can pass above a tree but collide with a rock at its actual height', () => {
   const world = meadowWith(prop('tree', 24, 20));
   const high = new Projectiles();
@@ -314,9 +361,9 @@ test('invalid projectile launches do not introduce nonfinite or immortal state',
   assert.equal(projectiles.list.length, 0);
 });
 
-test('arrows, javelins and magic render distinct ASCII sprites into finite cell buffers', () => {
+test('arrows, spears, javelins and magic render distinct ASCII sprites into finite cell buffers', () => {
   const sprites = [];
-  for (const kind of ['arrow', 'javelin', 'magic']) {
+  for (const kind of ['arrow', 'spear', 'javelin', 'magic']) {
     const projectiles = new Projectiles();
     projectiles.launch(shot({ projectile: { kind, speed: 12, gravity: 0, lifetime: 1 } }));
     projectiles.update(0.02, meadowWith());
@@ -330,5 +377,5 @@ test('arrows, javelins and magic render distinct ASCII sprites into finite cell 
     projectiles.draw(renderer, { x0: 1000, y0: 1000, cols: renderer.cols, rows: renderer.rows });
     assert.deepEqual(renderer.fg, foreground, 'offscreen drawing does not write into the buffer');
   }
-  assert.equal(new Set(sprites).size, 3);
+  assert.equal(new Set(sprites).size, 4);
 });

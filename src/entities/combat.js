@@ -11,9 +11,15 @@ const STAMINA_REGEN = 22;
 const REGEN_DELAY = 0.45;
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
+function copyAimTarget(value) {
+  return value && Number.isFinite(value.x) && Number.isFinite(value.y)
+    ? { x: value.x, y: value.y } : null;
+}
+
 function context(value, previous = {}) {
-  if (typeof value === 'boolean') return { ...previous, moving: value };
-  const merged = { ...previous, ...(value ?? {}) };
+  const merged = typeof value === 'boolean'
+    ? { ...previous, moving: value } : { ...previous, ...(value ?? {}) };
+  if (Object.hasOwn(merged, 'aimTarget')) merged.aimTarget = copyAimTarget(merged.aimTarget);
   if (value && Object.hasOwn(value, 'grounded')) {
     merged.airborne = !value.grounded;
     if (value.grounded) merged.air = 0;
@@ -75,6 +81,8 @@ export class Combat {
     this.holding = false;
     this.holdTime = 0;
     this.charge = 0;
+    this.bowDraw = null;
+    this.bowShot = null;
     this.holdFallback = null;
     this.blocking = false;
     this.guardExhausted = false;
@@ -137,7 +145,7 @@ export class Combat {
     if (!holding && !this.move && this.stamina + 1e-9 < cost) return false;
     if (this.move) {
       this.queued = wanted;
-      this.queuedContext = { ...requested };
+      this.queuedContext = context(requested);
       return true;
     }
     // A bow starts aiming straight away. Releasing a short press therefore
@@ -146,7 +154,7 @@ export class Combat {
     if (!this.inHand) {
       this.start('draw', requested);
       this.queued = wanted;
-      this.queuedContext = { ...requested };
+      this.queuedContext = context(requested);
       return true;
     }
     const started = this.start(wanted, requested);
@@ -164,7 +172,9 @@ export class Combat {
     this.holding = false;
     const charged = this.holdTime >= CHARGE_THRESHOLD;
     const next = charged ? this.moveset.charged : this.holdFallback ?? this.chooseAttack(requested);
-    const action = { ...requested, charge: charged ? this.charge : 0 };
+    // Freeze the release target separately from live pointer input. The
+    // draw, shot and recovery may continue while the cursor moves again.
+    const action = context({ ...requested, charge: charged ? this.charge : 0 });
     if (this.move === 'charge') {
       this.move = null;
       const started = this.start(next, action);
@@ -203,6 +213,8 @@ export class Combat {
 
   cancel() {
     this.cancelAction();
+    this.bowDraw = null;
+    this.bowShot = null;
     this.move = null;
     this.queued = null;
     this.queuedContext = null;
@@ -244,7 +256,7 @@ export class Combat {
     this.calm = 0;
     this.actionStamina = cost;
     this.actionCharge = move === this.moveset.charged ? clamp(ctx.charge ?? this.charge, 0, 1) : 0;
-    this.actionContext = { ...ctx };
+    this.actionContext = context(ctx);
     if (this.moveset.combo.includes(move)) this.lastSwing = move;
     else if (definition.kind !== 'utility') this.lastSwing = '';
     return true;
@@ -319,6 +331,7 @@ export class Combat {
       lifetime: reach / (packet.projectile.speed * (1 + charge * 0.7)) * 1.5,
       count: packet.count ?? 1,
     } : undefined;
+    const aimTarget = projectile?.kind === 'arrow' ? copyAimTarget(this.actionContext.aimTarget) : null;
     this.events.push({
       type: backstab ? 'backstab' : packet.type,
       kind: definition.kind, weapon: this.weaponId, material: this.material,
@@ -327,12 +340,25 @@ export class Combat {
       strength: (definition.damage ?? 1) * (1 + charge * 0.6) * materialStrength,
       trailColor: this.weapon.trailColor,
       ...(projectile ? { projectile, count: projectile.count } : {}),
+      ...(aimTarget ? { aimTarget } : {}),
     });
-    if (!this.holding) this.charge = 0;
+    if (projectile?.kind === 'arrow') {
+      this.bowShot = { target: copyAimTarget(aimTarget), speed: projectile.speed, gravity: projectile.gravity };
+      // A second queued draw has its own charge; this arrow retains the
+      // draw captured when it was released.
+      this.bowDraw = charge;
+    }
+    if (!this.holding) {
+      // The launch frame still uses the drawn arrow's pose. Gameplay
+      // charge ends now; the string relaxes on the following update.
+      this.charge = 0;
+    }
   }
 
   update(dt, ctx = {}) {
     dt = Number.isFinite(dt) ? Math.max(0, dt) : 0;
+    this.bowDraw = null;
+    this.bowShot = null;
     this.context = context(ctx, this.context);
     const current = this.context;
     this.trailing = false;

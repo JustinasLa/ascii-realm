@@ -272,27 +272,84 @@ export function buildRig(st) {
     if (cb.inHand) {
       weapon = weaponFrame(definition, add(main.wrist, mul(blade, 0.03)), blade, forward);
       if (definition.type === 'bow') {
-        // Curved stave ends join the moving string hand. The arrow starts
-        // at that hand and stays aimed ahead as the draw pulls it back.
+        // The bow arm extends along the shot, while the drawing hand comes
+        // back beside the cheek. Its elbow bends behind the shoulder rather
+        // than reaching down across the chest as it would for a sword grip.
         const chord = definition.spriteParts.find((part) => part.material === 'string');
         const endpoints = chord ? [chord.a, chord.b].sort((a, b) => a[1] - b[1])
           : [[-0.21, -definition.reach * 0.92, 0], [-0.21, definition.reach, 0]];
-        const lower = weaponAt(weapon, endpoints[0]);
-        const upper = weaponAt(weapon, endpoints[1]);
-        const stringRest = lerp3(lower, upper, 0.48);
-        const charge = Math.max(0, Math.min(1, cb.charge ?? 0));
-        const drawTarget = torso(side([sp.hand[0], sp.hand[1] + 0.05, 0.1]));
-        const stringTarget = lerp3(stringRest, drawTarget, 0.2 + 0.8 * charge);
-        blend(off, stringTarget, [-SWORD_SIDE, -0.15, -0.5], (sp.off ?? 0) * fight, forward);
-        const string = off.hand;
-        weapon.upper = upper;
-        weapon.lower = lower;
         const stave = definition.spriteParts.filter((part) => part.material === 'wood');
-        weapon.upperMid = weaponAt(weapon, stave.at(-1)?.a ?? [-0.06, definition.reach * 0.58, 0]);
-        weapon.lowerMid = weaponAt(weapon, stave[0]?.b ?? [-0.06, -definition.reach * 0.52, 0]);
-        weapon.string = string;
-        const aim = norm(sub(weapon.grip, string));
-        weapon.arrow = { tail: string, tip: add(string, mul(aim, 0.78)) };
+        const charge = Math.max(0, Math.min(1, cb.bowDraw ?? cb.charge ?? 0));
+        const cheek = torso([-SWORD_SIDE * 0.06, 0.55, -0.06]);
+        const bodyUp = bodyDirection([0, 1, 0]);
+        const mainBase = { ...main };
+        const offBase = { ...off };
+        const arrowLength = 0.78;
+        const aimedDirection = (point, fallback) => {
+          if (typeof st.bowAimDirection !== 'function') return fallback;
+          // The player's solver uses physical world axes relative to the
+          // feet, including jump height. Only yaw is undone on its answer;
+          // torso twist must not steer an arrow away from the cursor.
+          const direction = st.bowAimDirection(rotY(point, heading));
+          if (!Array.isArray(direction) || direction.length !== 3 ||
+            !direction.every(Number.isFinite) || Math.hypot(...direction) < 1e-6) return fallback;
+          return norm(rotY(direction, -heading));
+        };
+        const aimBow = (aim) => {
+          Object.assign(main, mainBase);
+          Object.assign(off, offBase);
+          let up = sub(bodyUp, mul(aim, dot(bodyUp, aim)));
+          if (Math.hypot(...up) < 1e-4) up = sub(forward, mul(aim, dot(forward, aim)));
+          if (Math.hypot(...up) < 1e-4) up = cross(aim, [1, 0, 0]);
+          up = norm(up);
+
+          // Intersect the aiming ray with the bow shoulder's reach sphere,
+          // so the extended arm keeps both of its original bone lengths.
+          const rayStart = sub(cheek, mul(up, 0.03));
+          const offset = sub(rayStart, main.shoulder);
+          const along = dot(offset, aim);
+          const armReach = UPPER_ARM + FOREARM - 0.001;
+          const span = Math.max(0.21, -along + Math.sqrt(Math.max(0,
+            along * along + armReach * armReach - dot(offset, offset))));
+          const target = add(rayStart, mul(aim, span));
+          blend(main, target, bodyDirection([SWORD_SIDE, -0.35, -0.2]), fight, up);
+          const bow = weaponFrame(definition, add(main.wrist, mul(up, 0.03)), up, aim);
+          const restGap = Math.abs(endpoints[0][0]);
+          const rest = sub(bow.grip, mul(aim, restGap));
+          const nock = lerp3(rest, cheek, charge);
+          blend(off, sub(nock, mul(aim, 0.06)), bodyDirection([-SWORD_SIDE * 0.5, 0, -1]), fight, aim);
+          bow.upper = weaponAt(bow, endpoints[1]);
+          bow.lower = weaponAt(bow, endpoints[0]);
+          bow.upperMid = weaponAt(bow, stave.at(-1)?.a ?? [-0.06, definition.reach * 0.58, 0]);
+          bow.lowerMid = weaponAt(bow, stave[0]?.b ?? [-0.06, -definition.reach * 0.52, 0]);
+          bow.string = off.hand;
+          bow.aim = aim;
+          bow.draw = charge;
+          bow.drawDistance = Math.hypot(...sub(bow.grip, bow.string));
+          bow.arrow = { tail: bow.string, tip: add(bow.string, mul(aim, arrowLength)) };
+          return bow;
+        };
+
+        // The launch point is the posed arrowhead. Recompute the direction
+        // there until moving that point no longer changes the ballistic aim.
+        // This also keeps the held arrow parallel to its released velocity.
+        let aim = aimedDirection(weapon.grip, forward);
+        let previousError = Infinity;
+        let relaxation = 1;
+        for (let i = 0; i < 64; i++) {
+          weapon = aimBow(aim);
+          const next = aimedDirection(weapon.arrow.tip, aim);
+          const error = Math.hypot(...sub(next, aim));
+          if (error < 1e-7) break;
+          // Close ground targets can move from one side of the arrowhead
+          // to the other after a full update. Damping that oscillation
+          // converges to the same shot instead of alternating directions.
+          if (relaxation === 1 && error >= previousError * 0.5) relaxation = 0.25;
+          else if (relaxation < 1 && error >= previousError * 0.95) relaxation = Math.max(1 / 32, relaxation * 0.5);
+          aim = norm(lerp3(aim, next, relaxation));
+          previousError = error;
+        }
+        weapon = aimBow(aim);
       }
     }
   }
@@ -410,7 +467,7 @@ function toWorld(rig, heading) {
     return out;
   };
   const weaponKeys = ['grip', 'pommel', 'guard', 'tip', 'barA', 'barB', 'blade', 'across', 'side', 'normal',
-    'upper', 'lower', 'upperMid', 'lowerMid', 'string'];
+    'upper', 'lower', 'upperMid', 'lowerMid', 'string', 'aim'];
   const weapon = equipment(rig.weapon, weaponKeys);
   const out = {
     heading,

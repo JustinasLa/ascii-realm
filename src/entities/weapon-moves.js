@@ -131,12 +131,16 @@ const hammer = moveset({
   strike('charged-slam', 'raised', 'c1', 'slam', { type: 'slam', windup: 0.22, damage: 1.85, stamina: 1.9, recovery: 0.45 }),
 ], 'raised', 1.25);
 
+const thrownSpear = { kind: 'spear', speed: 9.5, gravity: 5 };
 const spear = moveset({
   guard: { hand: [0.12, 0.32, 0.12], blade: [0.02, 0.12, 1], twist: 0.24, crouch: 0.1, off: 1 },
   coil: { hand: [0.24, 0.36, -0.18], blade: [0.08, 0.1, 1], twist: 0.5, off: 1 },
   jab: { hand: [0.02, 0.3, 0.6], blade: [0, 0.1, 1], lean: 0.12, off: 1 },
   lunge: { hand: [-0.03, 0.3, 0.78], blade: [0, 0.04, 1], lean: 0.28, crouch: 0.2, off: 1 },
   sweep: { hand: [0.34, 0.32, 0.22], blade: [0.96, 0.04, 0.25], twist: 0.7, off: 1 },
+  throwReady: { hand: [0.32, 0.82, -0.15], blade: [0, -0.05, 1], twist: 0.6, lean: -0.08, off: 0.35 },
+  throwContact: { hand: [0.06, 0.75, 0.54], blade: [0, 0.06, 1], twist: -0.15, lean: 0.24, off: 0 },
+  throwEnd: { hand: [-0.02, 0.54, 0.72], blade: [-0.08, -0.12, 0.99], twist: -0.38, lean: 0.32, crouch: 0.18, off: 0 },
 }, ['jab', 'long-thrust', 'spear-sweep'], [
   strike('jab', 'coil', 'jab', 'jab', { type: 'thrust', windup: 0.1, recovery: 0.16 }),
   strike('long-thrust', 'coil', 'jab', 'lunge', { type: 'thrust', reach: 1.2, damage: 1.15, recovery: 0.22 }),
@@ -144,8 +148,8 @@ const spear = moveset({
 ], [
   strike('spear-charge', 'coil', 'jab', 'lunge', { type: 'thrust', forward: 1.8, reach: 1.25, damage: 1.4, stamina: 1.4 }),
   strike('spear-plunge', 'c0', 'c1', 'c2', { type: 'thrust', plunge: true, damage: 1.5, stamina: 1.3 }),
-  strike('piercing-thrust', 'coil', 'jab', 'lunge', { type: 'thrust', forward: 1, reach: 1.3, damage: 1.6, stamina: 1.6 }),
-], 'coil', 0.95);
+  strike('spear-throw', 'throwReady', 'throwContact', 'throwEnd', { type: 'projectile', projectile: thrownSpear, windup: 0.14, recovery: 0.3, damage: 1.6, stamina: 1.6 }),
+], 'throwReady', 0.95);
 
 const dagger = moveset({
   hilt: { hand: [0.25, 0.02, -0.08], blade: [0.1, -1, 0.05] },
@@ -166,9 +170,11 @@ const dagger = moveset({
 
 const arrow = { kind: 'arrow', speed: 18, gravity: 5 };
 const bow = moveset({
-  guard: { hand: [0.35, 0.4, 0.52], blade: [0, 1, 0], twist: 0.28, off: 0.2 },
-  aim: { hand: [0.35, 0.43, 0.55], blade: [0, 1, 0], twist: 0.32, off: 1 },
-  loose: { hand: [0.36, 0.44, 0.43], blade: [0, 1, 0], twist: 0.2, off: 0.1 },
+  // Extend the bow arm near the torso's centre so the opposite hand can
+  // pull the string back to the cheek instead of reaching across the bow.
+  guard: { hand: [0.1, 0.4, 0.46], blade: [0, 1, 0], twist: 0.28, off: 0.2 },
+  aim: { hand: [0.06, 0.45, 0.65], blade: [0, 1, 0], twist: 0.32, off: 1 },
+  loose: { hand: [0.1, 0.44, 0.56], blade: [0, 1, 0], twist: 0.2, off: 0.1 },
   carry: { hand: [0.31, 0.15, 0.2], blade: [0.2, 0.94, 0.3] },
 }, ['quick-shot', 'double-shot', 'power-shot'], [
   strike('quick-shot', 'aim', 'aim', 'loose', { type: 'projectile', projectile: arrow, windup: 0.06, swing: 0.04, follow: 0.04, recovery: 0.2, damage: 0.85 }),

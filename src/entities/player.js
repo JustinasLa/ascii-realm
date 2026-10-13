@@ -1,4 +1,5 @@
 import { ASPECT } from '../world/world.js';
+import { solveBallisticShot } from '../core/ballistics.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
@@ -36,6 +37,7 @@ export class Player {
     this.combat = new Combat(weaponId, material);
     this.moving = false;
     this.running = false;
+    this.aimTarget = null;
     // A spinning attack turns the figure without changing the direction
     // used for movement and aiming after the attack.
     this.combatSpin = 0;
@@ -70,14 +72,70 @@ export class Player {
   }
 
   combatContext(ctx = {}) {
-    return { moving: this.moving, running: this.running, air: this.air, ...ctx };
+    return { moving: this.moving, running: this.running, air: this.air, aimTarget: this.aimTarget, ...ctx };
+  }
+
+  setAimTarget(target) {
+    this.aimTarget = target && Number.isFinite(target.x) && Number.isFinite(target.y)
+      ? { x: target.x, y: target.y } : null;
+    this.combat.context = { ...this.combat.context, aimTarget: this.aimTarget && { ...this.aimTarget } };
+    return this.aimTarget !== null;
+  }
+
+  // Live draw follows the cursor; a released shot keeps its own target
+  // while it finishes, even if another pointer update arrives meanwhile.
+  bowAimState() {
+    const cb = this.combat;
+    if (cb.weaponId !== 'bow') return null;
+    // A queued draw can begin in the same frame the prior arrow launches.
+    if (cb.bowShot) return cb.bowShot;
+    const moveset = cb.moveset;
+    const packet = (move) => moveset.moves[move]?.steps?.find((s) => s.event?.projectile?.kind === 'arrow')?.event.projectile;
+    const active = packet(cb.move);
+    const queued = !cb.charging && !active && packet(cb.queued);
+    const shotContext = active ? cb.actionContext : queued ? cb.queuedContext : null;
+    const spec = active || queued || packet(moveset.charged);
+    const charge = active ? cb.actionCharge : cb.charging ? cb.charge : queued ? shotContext.charge ?? 0 : 0;
+    return {
+      target: shotContext ? shotContext.aimTarget : this.aimTarget,
+      speed: (spec?.speed ?? 18) * (1 + 0.7 * charge),
+      gravity: spec?.gravity ?? 5,
+    };
+  }
+
+  getBowAimTarget() {
+    const target = this.bowAimState()?.target;
+    return target ? { ...target } : null;
+  }
+
+  // The rig supplies a yaw-rotated point in metres relative to the feet.
+  // Return a direction in the same 3D axes; flight uses the same solver.
+  bowAimDirection(origin) {
+    const aim = this.bowAimState();
+    if (!aim?.target || !Array.isArray(origin) || origin.length < 3 || !origin.every(Number.isFinite)) return null;
+    return solveBallisticShot(
+      [this.x / toCols + origin[0], origin[1], this.y / toRows + origin[2]],
+      [aim.target.x / toCols, 0, aim.target.y / toRows], aim.speed, aim.gravity,
+    )?.direction ?? null;
+  }
+
+  aimBowHeading() {
+    if (this.combat.weaponId !== 'bow' || (!this.combat.inHand && !this.combat.charging)) return false;
+    const target = this.getBowAimTarget();
+    if (!target) return false;
+    const x = (target.x - this.x) / toCols;
+    const z = (target.y - this.y) / toRows;
+    if (Math.hypot(x, z) > 1e-6) this.heading = Math.atan2(x, z);
+    return true;
   }
 
   attack(ctx = {}) {
+    if (ctx && Object.hasOwn(ctx, 'aimTarget')) this.setAimTarget(ctx.aimTarget);
     return this.combat.attack(this.combatContext(ctx));
   }
 
   release(ctx = {}) {
+    if (ctx && Object.hasOwn(ctx, 'aimTarget')) this.setAimTarget(ctx.aimTarget);
     return this.combat.release(this.combatContext(ctx));
   }
 
@@ -87,6 +145,7 @@ export class Player {
 
   // Losing focus ends a held charge without turning it into a shot.
   cancelAction() {
+    this.setAimTarget(null);
     if (this.combat.cancelAction) return this.combat.cancelAction();
     return this.combat.cancel();
   }
@@ -151,9 +210,10 @@ export class Player {
   }
 
   update(dt, world, move, running, input = {}) {
+    if (Object.hasOwn(input, 'aimTarget')) this.setAimTarget(input.aimTarget);
     if (input.cancelled) {
       this.cancelAction();
-      input = { ...input, held: false, blocking: false };
+      input = { ...input, held: false, blocking: false, aimTarget: null };
     }
     if (!Number.isFinite(dt) || dt <= 0) return;
     this.time += dt;
@@ -170,7 +230,10 @@ export class Player {
       const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
       this.tryMove(world, (move.x / len) * speed * toCols * dt, 0);
       this.tryMove(world, 0, (move.y / len) * speed * toRows * dt);
+    }
 
+    let bowAiming = this.aimBowHeading();
+    if (moving && !bowAiming) {
       // Turn smoothly through the in-between headings rather than snapping.
       const target = Math.atan2(move.x, move.y);
       const turned = angleTo(this.heading, target) * ease(TURN_RATE);
@@ -188,6 +251,7 @@ export class Player {
       this.tryMove(world, Math.sin(this.heading) * forward * toCols * dt, 0);
       this.tryMove(world, 0, Math.cos(this.heading) * forward * toRows * dt);
     }
+    bowAiming = this.aimBowHeading() || bowAiming;
     const turn = motion.turn ?? 0;
     if (Number.isFinite(turn) && turn !== 0) {
       this.combatSpin = angleTo(0, this.combatSpin + turn * dt);
@@ -218,7 +282,7 @@ export class Player {
       }
     }
 
-    if (!moving) this.bank += -this.bank * ease(8);
+    if (!moving || bowAiming) this.bank += -this.bank * ease(8);
 
     // Ease the stride in and out so starting and stopping is not abrupt.
     this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
@@ -273,21 +337,28 @@ export class Player {
         ? e.projectile?.kind === 'arrow' ? rig.weapon.arrow?.tip ?? rig.weapon.grip : rig.weapon.tip
         : null;
       const launchHeight = e.projectile?.launchHeight;
+      const x = this.x + (launchAt ? launchAt[0] * toCols : dx * distance);
+      const y = this.y + (launchAt ? launchAt[2] * toRows : dy * distance);
+      const h = launchHeight !== undefined ? (this.air + launchHeight) * SCALE
+        : launchAt ? launchAt[1] * SCALE : (this.air + 0.75) * SCALE;
+      const aimedShot = e.projectile?.kind === 'arrow' && e.aimTarget ? solveBallisticShot(
+        [x / toCols, h / SCALE, y / toRows],
+        [e.aimTarget.x / toCols, 0, e.aimTarget.y / toRows], e.projectile.speed, e.projectile.gravity,
+      ) : null;
+      const shotDx = aimedShot ? aimedShot.direction[0] * toCols : dx;
+      const shotDy = aimedShot ? aimedShot.direction[2] * toRows : dy;
       this.events.push({
         ...e,
         originX: this.x,
         originY: this.y,
-        x: this.x + (launchAt ? launchAt[0] * toCols : dx * distance),
-        y: this.y + (launchAt ? launchAt[2] * toRows : dy * distance),
-        dx,
-        dy,
-        dirX: dx,
-        dirY: dy,
-        heading,
-        ...(projectile ? {
-          h: launchHeight !== undefined ? (this.air + launchHeight) * SCALE
-            : launchAt ? launchAt[1] * SCALE : (this.air + 0.75) * SCALE,
-        } : {}),
+        x, y,
+        dx: shotDx,
+        dy: shotDy,
+        dirX: shotDx,
+        dirY: shotDy,
+        heading: aimedShot ? Math.atan2(shotDx / toCols, shotDy / toRows) : heading,
+        ...(projectile ? { h } : {}),
+        ...(aimedShot ? { projectile: { ...e.projectile, velocity: [...aimedShot.velocity] } } : {}),
       });
     }
     this.combat.events.length = 0;

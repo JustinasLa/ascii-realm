@@ -226,7 +226,7 @@ function equipment(d, rig) {
     }, definition.shieldParts, definition, shield.carried ? -0.015 : 0.055);
   }
   if (rig.quiver) quiver(d, rig.quiver, definition);
-  if (held?.arrow) arrow(d, held.arrow, held.side, definition, 0.045);
+  if (held?.arrow) arrow(d, held.arrow, held.normal, definition, 0.045);
 }
 
 function arrow(d, points, side, definition, bias = 0) {

@@ -1,3 +1,4 @@
+import { solveBallisticShot } from '../core/ballistics.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { glyph } from '../render/glyphs.js';
 import { blocks } from './props.js';
@@ -5,6 +6,7 @@ import { ASPECT } from './world.js';
 
 const STYLES = {
   arrow: { color: [232, 218, 178], length: 0.38, speed: 20, gravity: 9.8 },
+  spear: { color: [174, 247, 204], length: 1.25, speed: 9.5, gravity: 5 },
   javelin: { color: [222, 231, 239], length: 0.8, speed: 13, gravity: 9.8 },
   magic: { color: [174, 208, 255], length: 0.25, speed: 12, gravity: 0 },
 };
@@ -22,6 +24,15 @@ function propHeight(prop) {
     for (const cell of prop.cells) height = Math.max(height, -cell.dy + 1);
   }
   return height;
+}
+
+// Exact positive ground crossing, including a downward shot whose flight
+// is too short for an ordinary frame. Rationalization preserves near hits.
+function groundTime(height, velocity, gravity) {
+  if (height <= 0) return velocity <= 0 ? 0 : gravity > 0 ? 2 * velocity / gravity : Infinity;
+  if (gravity === 0) return velocity < 0 ? -height / velocity : Infinity;
+  const root = Math.hypot(velocity, Math.sqrt(2 * gravity * height));
+  return velocity < 0 ? 2 * height / (root - velocity) : (velocity + root) / gravity;
 }
 
 // Flight is in world cells. Event dx/dy are columns/rows per metre (the
@@ -43,8 +54,14 @@ export class Projectiles {
     const gravity = spec.gravity ?? style.gravity;
     const life = spec.lifetime ?? 3;
     const range = spec.range ?? Infinity;
-    if (![x, y, dx, dy, h, speed, gravity, life].every(Number.isFinite) ||
-      Math.hypot(dx, dy) === 0 || h < 0 || speed <= 0 || gravity < 0 || life <= 0 ||
+    const aimed = spec.kind === 'arrow' && event.aimTarget != null;
+    const target = aimed ? { x: event.aimTarget.x, y: event.aimTarget.y } : null;
+    const velocity = spec.velocity;
+    const explicitVelocity = Array.isArray(velocity) && velocity.length === 3 && velocity.every(Number.isFinite);
+    if (![x, y, h, speed, gravity, life].every(Number.isFinite) ||
+      (!aimed && !explicitVelocity && (![dx, dy].every(Number.isFinite) || Math.hypot(dx, dy) === 0)) ||
+      (aimed && ![target.x, target.y].every(Number.isFinite)) ||
+      (velocity != null && !explicitVelocity) || h < 0 || speed <= 0 || gravity < 0 || life <= 0 ||
       !(range > 0)) return null;
 
     // A bow's double-shot move releases a close pair with a small fan,
@@ -62,31 +79,45 @@ export class Projectiles {
           ...event,
           dx: (fx * cos - fy * sin) * SCALE / ASPECT,
           dy: (fx * sin + fy * cos) * SCALE * TILT,
-          projectile: { ...spec, count: 1 },
+          // Paired aimed arrows share the cursor but take slightly different
+          // arcs and durations. Unaimed shots retain their original fan.
+          projectile: { ...spec, count: 1, speed: aimed ? speed * (1 + (i - (count - 1) / 2) * 0.04) : speed },
         });
         first ??= shot;
       }
       return first;
     }
 
+    const shot = aimed ? solveBallisticShot(
+      [0, h / SCALE, 0],
+      [(target.x - x) * ASPECT / SCALE, 0, (target.y - y) / (SCALE * TILT)],
+      speed, gravity,
+    ) : null;
+    if (aimed && !shot) return null;
+    const launchVelocity = shot?.velocity ?? (explicitVelocity ? velocity : null);
+
     const p = {
       kind: spec.kind,
       x, y, h,
-      vx: dx * speed,
-      vy: dy * speed,
-      vh: 0,
+      vx: launchVelocity ? launchVelocity[0] * SCALE / ASPECT : dx * speed,
+      vy: launchVelocity ? launchVelocity[2] * SCALE * TILT : dy * speed,
+      vh: launchVelocity ? launchVelocity[1] * SCALE : 0,
       gravity: gravity * SCALE,
-      life,
-      maxLife: life,
-      range,
+      life: shot?.duration ?? life,
+      maxLife: shot?.duration ?? life,
+      range: aimed ? Infinity : range,
       travelled: 0,
-      speed,
+      speed: shot?.speed ?? speed,
+      elapsed: 0,
+      flightTime: shot?.duration ?? null,
+      target,
       strength: event.strength ?? 1,
       damage: event.damage ?? 0,
       color: style.color,
       length: style.length * SCALE,
       trail: [],
     };
+    if (![p.vx, p.vy, p.vh, p.gravity].every(Number.isFinite)) return null;
     this.list.push(p);
     return p;
   }
@@ -95,8 +126,14 @@ export class Projectiles {
     if (!Number.isFinite(dt) || dt <= 0) return;
     const alive = [];
     for (const p of this.list) {
-      const duration = Math.min(dt, p.life, (p.range - p.travelled) / p.speed);
-      if (duration <= 0) continue;
+      const duration = Math.min(dt, p.life, p.target ? Infinity : (p.range - p.travelled) / p.speed);
+      if (duration <= 0) {
+        if (p.target && p.flightTime === 0) {
+          this.events.push({ type: 'impact', kind: p.kind, x: p.target.x, y: p.target.y, h: 0,
+            strength: p.strength, damage: p.damage, prop: null });
+        }
+        continue;
+      }
       const endX = p.x + p.vx * duration;
       const endY = p.y + p.vy * duration;
       const props = world.propsIn(
@@ -110,18 +147,31 @@ export class Projectiles {
         Math.abs(p.vh) * duration + p.gravity * duration * duration / 2;
       const steps = Math.max(1, Math.ceil(travel / 0.5));
       const step = duration / steps;
+      const finishesFlight = p.target && duration >= p.life;
       let hit = false;
       for (let i = 0; i < steps; i++) {
         p.trail.push({ x: p.x, y: p.y, h: p.h });
         if (p.trail.length > 5) p.trail.shift();
-        p.x += p.vx * step;
-        p.y += p.vy * step;
-        p.h += p.vh * step - p.gravity * step * step / 2;
-        p.vh -= p.gravity * step;
-        p.life -= step;
-        p.travelled += p.speed * step;
+        const crossing = groundTime(p.h, p.vh, p.gravity);
+        const arrived = finishesFlight && i === steps - 1;
+        const landed = crossing <= step || arrived;
+        const advance = Math.min(step, crossing, p.target ? Math.max(0, p.flightTime - p.elapsed) : Infinity);
+        p.x += p.vx * advance;
+        p.y += p.vy * advance;
+        p.h += p.vh * advance - p.gravity * advance * advance / 2;
+        p.vh -= p.gravity * advance;
+        p.elapsed += advance;
+        p.life = p.target ? Math.max(0, p.flightTime - p.elapsed) : p.life - advance;
+        p.travelled += p.speed * advance;
+        if (landed) {
+          p.h = 0;
+          if (p.target) {
+            p.x = p.target.x;
+            p.y = p.target.y;
+          }
+        }
         const prop = props.find((obstacle) => blocks(obstacle, p.x, p.y) && p.h <= propHeight(obstacle));
-        if (p.h <= 0 || prop) {
+        if (landed || prop) {
           p.h = Math.max(0, p.h);
           this.events.push({
             type: 'impact', kind: p.kind,
@@ -133,7 +183,7 @@ export class Projectiles {
           break;
         }
       }
-      if (!hit && p.life > 1e-9 && p.travelled < p.range - 1e-9) alive.push(p);
+      if (!hit && (p.target ? p.life > 0 : p.life > 1e-9 && p.travelled < p.range - 1e-9)) alive.push(p);
     }
     this.list = alive;
   }

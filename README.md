@@ -87,16 +87,22 @@ or keyboard (`Tab` to focus them).
 | `2` | Sword & shield | One-handed cuts, blocking and a timed parry |
 | `3` | Battle axe | Chopping attacks that can fell trees |
 | `4` | War hammer | Slow, heavy swings and a ground slam |
-| `5` | Spear | Long-reach thrusts |
+| `5` | Spear | Long-reach thrusts and a charged overarm throw |
 | `6` | Dagger | Fast combos and a backstab strike |
-| `7` | Bow | Draw and release arrows |
+| `7` | Bow | Full draw, cursor aiming and released arrows |
 | `8` | Staff | Sweeps and a charged magic shot |
 | `9` | Javelin | Thrusts and a charged throw |
 
 Each weapon has its own light combo, sprint attack, air attack and charged
 attack, ASCII shape, swing-trail colour and sheathed position. Attack while
-running or airborne to use its sprint or air move. Ranged attacks follow the
-warrior's facing direction; walk in the direction you want to aim.
+running or airborne to use its sprint or air move. With the spear, hold `J`
+or left click and release to throw; a quick tap still thrusts.
+
+With the bow, hold `J` or left click to pull the string fully back, aim with
+the cursor, then release. The warrior turns toward the cursor, and arrows
+land at its position on the ground unless an obstacle intercepts them.
+Spear and javelin throws and staff shots follow the warrior's facing direction;
+walk in the direction you want to aim them.
 
 Choose **stone → copper → bronze → iron → steel** with `M` or the Material
 selector (steel is the default). Material tiers change damage, attack timing,
@@ -109,7 +115,7 @@ to start. Weapon and material changes are ignored while drawing, sheathing,
 attacking, charging or blocking.
 
 Axe strikes can fell trees and clear their collision for the current session.
-Reloading restores the generated world. Arrows and thrown javelins travel
+Reloading restores the generated world. Arrows, spears and thrown javelins travel
 through the world and hit terrain or obstacles. There are no enemies or
 harvested resources yet.
 

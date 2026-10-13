@@ -1,4 +1,5 @@
-import { isDown, isGameplayTarget, moveAxis, wasCancelled, wasTapped } from './core/input.js';
+import { screenToWorld } from './core/aim.js';
+import { attackReleasePosition, isDown, isGameplayTarget, moveAxis, pointerPosition, wasCancelled, wasReleased, wasTapped } from './core/input.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
 import { MATERIAL_IDS, WEAPON_IDS, WEAPON_MATERIALS, WEAPONS } from './entities/weapons.js';
@@ -95,7 +96,8 @@ for (const id of MATERIAL_IDS) {
 }
 
 const HELP = {
-  bow: 'Hold J / left click to draw. Release to shoot.',
+  bow: 'Hold J / left click to fully draw. Aim with the cursor; release to shoot.',
+  spear: 'Tap J / left click to thrust. Hold and release to throw.',
   staff: 'Hold J / left click to charge. Release to cast.',
   javelin: 'Tap J / left click to thrust. Hold and release to throw.',
   'sword-shield': 'Tap J / left to strike; hold for heavy. Hold K / right to block; tap to parry.',
@@ -103,6 +105,7 @@ const HELP = {
 let currentHelp = '';
 function updateLoadout() {
   const combat = player.combat;
+  canvas.classList.toggle('bow-aiming', combat.weaponId === 'bow' && (combat.inHand || combat.charging));
   if (weaponSelect.value !== combat.weaponId) weaponSelect.value = combat.weaponId;
   if (materialSelect.value !== combat.material) materialSelect.value = combat.material;
   const stamina = Math.max(0, Math.min(combat.maxStamina, combat.stamina));
@@ -141,6 +144,7 @@ const hint = document.getElementById('hint');
 let walked = 0;
 
 let hitStop = 0;
+let displayedFrame = null;
 let last = performance.now();
 let time = 0;
 
@@ -157,6 +161,14 @@ function frame(now) {
   const blocking = isDown('KeyK', 'MouseRight');
   // Focus loss cancels a drawn bow rather than treating it as a shot release.
   if (wasCancelled()) player.cancelAction();
+  const bounds = canvas.getBoundingClientRect();
+  const releasedAttack = wasReleased('KeyJ', 'MouseLeft') && !held;
+  const releaseAimTarget = releasedAttack ? screenToWorld(attackReleasePosition(), displayedFrame, bounds) : null;
+  if (releasedAttack) {
+    player.release({ aimTarget: releaseAimTarget, moving: !!(move.x || move.y), running });
+  }
+  const aimTarget = screenToWorld(pointerPosition(), displayedFrame, bounds);
+  player.setAimTarget(aimTarget);
   for (const [index, id] of WEAPON_IDS.entries()) {
     if (wasTapped(`Digit${index + 1}`)) player.equipWeapon(id, player.combat.material);
   }
@@ -164,11 +176,13 @@ function frame(now) {
   if (wasTapped('BracketRight')) player.cycleWeapon(1);
   if (wasTapped('KeyM')) player.cycleMaterial(1);
   if (wasTapped('Space')) player.jump();
-  if (wasTapped('KeyJ', 'MouseLeft')) player.attack({ moving: !!(move.x || move.y), running, held });
+  if (wasTapped('KeyJ', 'MouseLeft')) {
+    player.attack({ moving: !!(move.x || move.y), running, held, aimTarget: releasedAttack ? releaseAimTarget : aimTarget });
+  }
   if (wasTapped('KeyF')) player.toggleSword();
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
-  if (!debug.freeze) player.update(playerDt, world, move, running, { held, blocking });
+  if (!debug.freeze) player.update(playerDt, world, move, running, { held, blocking, aimTarget });
   for (const e of player.events) {
     if (e.projectile) projectiles.launch(e);
     if (e.type === 'step') {
@@ -237,6 +251,13 @@ function frame(now) {
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   renderer.draw(view.offX, view.offY);
+  displayedFrame = {
+    width: canvas.width,
+    height: canvas.height,
+    cellW: renderer.cellW,
+    cellH: renderer.cellH,
+    view: { ...view },
+  };
   requestAnimationFrame(frame);
 }
 

@@ -14,6 +14,10 @@ body {
   outline: none;
 }
 
+#screen.bow-aiming {
+  cursor: crosshair;
+}
+
 #loadout {
   position: fixed;
   top: 16px;

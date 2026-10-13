@@ -523,6 +523,59 @@ test('javelin charged throw creates a javelin projectile instead of a melee stri
   assert.equal(hit.projectile.kind, 'javelin');
 });
 
+test('spear overarm throws wait for release and gain damage, speed, and range with charge', () => {
+  const thrown = (seconds) => {
+    const combat = drawn('spear');
+    assert.equal(combat.attack({ held: true }), true);
+    assert.equal(strikes(advance(combat, seconds, { ...GROUND, held: true })).length, 0,
+      'holding the spear never launches a projectile');
+    assert.ok(combat.pose.hand[1] > 0.65, 'the spear hand rises into an overarm throw');
+    assert.ok(combat.pose.off < 0.5, 'the other hand releases the throwing grip');
+    assert.equal(combat.release(), true);
+    const hit = oneStrike(combat, finish(combat), 'spear-throw');
+    assert.equal(hit.type, 'projectile');
+    assert.equal(hit.projectile.kind, 'spear');
+    assert.equal(hit.projectile.count, 1);
+    assert.equal(hit.charged, true);
+    assert.ok(hit.projectile.gravity > 0, 'a thrown spear follows a ballistic flight');
+    assert.equal(combat.charge, 0);
+    assert.equal(strikes(advance(combat, 0.5)).length, 0, 'a throw is delivered once');
+    return hit;
+  };
+  const partial = thrown(0.25);
+  const full = thrown(1.3);
+  assert.ok(full.damage > partial.damage);
+  assert.ok(full.projectile.speed > partial.projectile.speed);
+  assert.ok(full.projectile.range > partial.projectile.range);
+});
+
+test('spear taps stay melee and cancelled or unaffordable throws cannot launch phantom projectiles', () => {
+  const tap = drawn('spear');
+  tap.attack({ held: true });
+  advance(tap, 0.05, { ...GROUND, held: true });
+  tap.release();
+  const jab = oneStrike(tap, finish(tap), tap.weapon.combo[0]);
+  assert.equal(jab.type, 'thrust');
+  assert.equal(jab.projectile, undefined);
+  assert.equal(jab.charged, false);
+
+  const cancelled = drawn('spear');
+  cancelled.attack({ held: true });
+  advance(cancelled, 1.3, { ...GROUND, held: true });
+  cancelled.cancelAction();
+  assert.equal(cancelled.release(), false);
+  assert.equal(strikes(advance(cancelled, 1)).length, 0);
+
+  const exhausted = drawn('spear');
+  exhausted.stamina = 10;
+  exhausted.attack({ held: true });
+  advance(exhausted, 1.3, { ...GROUND, held: true });
+  assert.equal(exhausted.release(), false, 'insufficient stamina refuses the charged throw');
+  assert.equal(exhausted.busy, false);
+  assert.equal(exhausted.charge, 0);
+  assert.equal(strikes(advance(exhausted, 1)).length, 0);
+});
+
 test('cancel clears queued actions and a cancelled charge never strikes', () => {
   const combat = drawn('staff');
   combat.attack({ held: true });

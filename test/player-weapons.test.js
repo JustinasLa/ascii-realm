@@ -256,30 +256,38 @@ test('a held bow releases one charged projectile through the player into world c
   near(shot.dy, 0, 'charged arrow direction y');
 });
 
-test('airborne javelins and magic launch from their posed tips across headings', () => {
-  for (const weaponId of ['javelin', 'staff']) {
-    for (const heading of [0, Math.PI / 2]) {
-      const player = new Player(10, 11, weaponId);
-      player.heading = heading;
-      assert.equal(player.attack({ held: true }), true);
-      for (let frame = 0; frame < 240; frame++) {
-        player.events.length = 0;
-        player.update(dt, meadow, still, false, { held: true });
-      }
-      assert.equal(player.release(), true);
-      player.air = 0.8;
-      player.vy = 2;
-      let shots = 0;
-      for (let frame = 0; frame < 120; frame++) {
-        player.events.length = 0;
-        player.update(dt, meadow, still, false, { held: false });
-        for (const event of player.events.filter((entry) => entry.projectile)) {
-          shots++;
-          assert.ok(player.air > 0, `${weaponId} regression exercises an airborne release`);
-          assertLaunchMatchesRig(player, event, buildRig(player).weapon?.tip, `${weaponId} heading=${heading}`);
+test('airborne spears, javelins and magic launch from their posed tips across headings', () => {
+  for (const weaponId of ['spear', 'javelin', 'staff']) {
+    const headings = weaponId === 'spear' ? [0, Math.PI / 2, Math.PI, -Math.PI / 2] : [0, Math.PI / 2];
+    const materials = weaponId === 'spear' ? ['stone', 'steel'] : ['steel'];
+    for (const heading of headings) {
+      for (const material of materials) {
+        const player = new Player(10, 11, weaponId, material);
+        player.heading = heading;
+        assert.equal(player.attack({ held: true }), true);
+        for (let frame = 0; frame < 240; frame++) {
+          player.events.length = 0;
+          player.update(dt, meadow, still, false, { held: true });
+          assert.equal(player.events.some((event) => event.projectile), false, 'held projectiles stay on the weapon');
         }
+        assert.equal(player.release(), true);
+        player.air = 0.8;
+        player.vy = 2;
+        let shots = 0;
+        for (let frame = 0; frame < 120; frame++) {
+          player.events.length = 0;
+          player.update(dt, meadow, still, false, { held: false });
+          for (const event of player.events.filter((entry) => entry.projectile)) {
+            shots++;
+            assert.equal(event.weapon, weaponId);
+            assert.equal(event.material, material);
+            assert.equal(event.projectile.kind, weaponId === 'staff' ? 'magic' : weaponId);
+            assert.ok(player.air > 0, `${weaponId} regression exercises an airborne release`);
+            assertLaunchMatchesRig(player, event, buildRig(player).weapon?.tip, `${weaponId} heading=${heading}`);
+          }
+        }
+        assert.equal(shots, 1, `${weaponId} releases exactly one projectile`);
       }
-      assert.equal(shots, 1, `${weaponId} releases exactly one projectile`);
     }
   }
 });
