@@ -15,6 +15,8 @@ song and offers a Skip song button with the `N` shortcut. Mute and
 levels are stored in `localStorage` under `ascii-realm.audio`; the weather
 selection and intensity use `ascii-realm.weather`. Blocked storage does not
 prevent controls from working. Saved mute is applied before playback.
+The Season selector offers automatic seasons or a fixed season for music and
+ambience; this choice is stored under `ascii-realm.music`.
 
 Preview grass footsteps briefly quiets the music and ambience to play six
 recorded footfalls at a walking cadence and the effects volume. It restores
@@ -35,6 +37,13 @@ the current levels after the preview and respects mute.
   sustained noise beds and parameter smoothing. A deterministic, two-second
   noise buffer is shared by voices in each context; short cues start at varied
   positions in that buffer to vary the grain without allocating new samples.
+- `variations.js` supplies 25 immutable recipes per sound, with an independent
+  shuffled deck for each cue and engine. A deck exhausts all recipes before
+  refilling, and cannot repeat across its boundary. Recipes change filter color,
+  grain, articulation, envelope tails and layer balance; they reuse the existing
+  buffers and voice counts. Music articulation varies while note pitches and
+  beat positions stay authored. `climate.js` defines the audio seasons, weather
+  families and seasonal wildlife balance.
 - `footsteps.js` selects recorded grass contacts or layers close, unpitched
   procedural material textures: compressed dirt and grit, dense sand drag,
   low stone contact and sole scrape, or shallow-water splash and runoff. Broad
@@ -49,6 +58,13 @@ the current levels after the preview and respects mute.
   brushes on skidding. Skid particles can arrive every frame, so scrape grains
   are limited to ten per second. Fast attacks decay to low sustain levels and
   soft releases, leaving space for the music.
+- `water.js` gives wading contacts their own close slosh and droplet tails,
+  a rising wash when the boots leave the water, and a heavier splash and
+  returning wash on landing. Water strikes and spinning attacks add a
+  positional splash alongside the blade sound. These cues follow the same
+  animation events as the visible splashes, scale with contact strength,
+  use the Effects bus, and stop cleanly on pause. Skid washes are throttled;
+  standing still creates no water movement sounds.
 - `sword.js` supplies draw, sheathe, swing, slam and spinning-slash sounds. Its
   filtered-noise layers combine weathered steel scrapes, leather handling,
   broad air rush, a low pressure wake and deeply damped impact grit. `ChargeHum`
@@ -71,8 +87,9 @@ the current levels after the preview and respects mute.
   scheduler for filtered-noise beds and irregular one-shots. Each selection owns
   its source routes and cleanup; switching fades over 1.2 seconds and retains at
   most two retiring groups. Pausing releases beds and event tails.
-- `songs.js` contains immutable authored note events and instrument recipes;
-  `music.js` schedules the selected day/night pair against the audio clock and
+- `songs.js` contains 42 immutable authored scores and instrument recipes;
+  `music.js` chooses and rotates a season/weather playlist, schedules the selected
+  day/night pair against the audio clock and
   blends its two tracks through dedicated gain nodes and a shared room into the
   music bus. `music-voices.js` supplies soft music envelopes, drifting oscillator
   layers and the procedurally generated convolution reverb.
@@ -80,12 +97,18 @@ the current levels after the preview and respects mute.
 Positioned sources use stereo pan and distance attenuation relative to the
 camera, correcting for the width/height aspect ratio of world cells. Browsers
 without stereo-panner support retain distance attenuation. Shore cells touching
-a lake produce wet footsteps; other shore cells produce sand. Deep lake
-collision remains unchanged.
+a lake produce wet footsteps; other shore cells produce sand. Wading footfalls,
+takeoffs, landings and water strikes each have their own water variation bank.
 
 The audio day/night signal cycles every 240 simulation seconds, beginning at
 night. Music crossfades between day and night arrangements as this signal
 changes. The existing visual scene remains moonlit.
+Automatic audio seasons progress Spring, Summer, Autumn, Winter every 960
+simulation seconds (four day/night cycles); pausing also pauses this year.
+Spring emphasizes birds and frogs, summer insects, autumn dry leaves, and
+winter sheltered wind with fewer birds and no insect or frog calls. Stormy
+and snowy weather reduces wildlife levels. Wind, leaves and water beds smooth
+their parameter changes rather than restarting every frame.
 
 ## Grass recordings
 
@@ -100,8 +123,11 @@ soft peak control keep small contact spikes from dominating every step.
 Detailed source offsets and processing are in
 [LICENSE.txt](../assets/audio/grass/LICENSE.txt).
 
-Grass contacts cycle through these recordings directly, with level based on
-contact strength and playback rate varied by up to 2%. Synthetic splash,
+Grass contacts shuffle these six recordings, independently from a deck of 25
+articulations. All recordings play before reuse, without an immediate repeat
+at a deck boundary. Contact strength and the chosen recipe control the level;
+playback rate stays within 2% of the recording. The entire recording and its
+natural envelope remain intact. Synthetic splash,
 squeeze and noise layers are absent from grass
 footfalls. A contact that arrives before the recordings are ready stays quiet;
 the helper does not queue it or substitute a procedural grass sound.
@@ -161,10 +187,18 @@ world positions, within the same short-voice budget.
 
 ## Songs
 
-The six songs form three pairs in the order shown below. Skip song or `N`
-advances to the next pair and wraps after the third. The day/night signal still
-selects the blend within that pair; the title shows the dominant arrangement.
-An audible skip fades the old pair out and the new pair in over 0.32 seconds.
+The 42 songs form 21 pairs: three general pairs, two per season, and two each
+for rain, storms, snow/ice, wind/sand and fog. Clear-weather playlists contain
+the three general pairs and the current season's two pairs. Other weather adds
+its two matching pairs. Selecting a season or changing weather family starts a
+matching score with a 1.8-second fade. Intensity zero restores the seasonal
+playlist; changing intensity within the same family does not restart a score.
+
+Scores advance after their 16-bar arrangement, with a 1.6-second fade and a
+shuffled playlist that visits every eligible pair before reusing one. Skip song
+or `N` advances through eligible pairs in catalog order, fading over 0.32 seconds.
+The day/night signal still selects the blend within a pair; the title shows the
+dominant arrangement. Rapid changes retain at most two retiring pairs.
 `Music.skip()` can also select a pair while audio is locked without creating
 an audio context.
 
@@ -177,6 +211,29 @@ an audio context.
 | Forgotten Sanctum | Day | A harmonic minor | 56 BPM | 16 bars / 64 beats / about 68.57 seconds |
 | Embers of the Covenant | Night | A harmonic minor | 56 BPM | 16 bars / 64 beats / about 68.57 seconds |
 
+The additional authored pairs are:
+
+| Setting | Day song | Night song | Tempo |
+| --- | --- | --- | --- |
+| Spring | The First Green | Petals Under the Moon | 60 BPM |
+| Spring | Water Beneath the Roots | The Seedkeeper | 57 BPM |
+| Summer | Long Meadow Light | Moths at the Lantern | 62 BPM |
+| Summer | The Quiet Orchard | A Thousand Small Lights | 59 BPM |
+| Autumn | Ochre Fields | The Last Harvest Bell | 53 BPM |
+| Autumn | Leaves on the Old Road | Amber Vigil | 55 BPM |
+| Winter | Frost on the Threshold | Stars Above the Ice | 46 BPM |
+| Winter | The Sheltered Hearth | Ashes Until Dawn | 49 BPM |
+| Rain | Silver on the Lake | Rain at the Window | 52 BPM |
+| Rain | Rain Through the Reeds | The Sunken Ferry | 55 BPM |
+| Storm | Under an Iron Sky | Thunder Beyond the Keep | 50 BPM |
+| Storm | The Broken Spire | Oath in the Downpour | 54 BPM |
+| Snow / ice | The White Road | Footprints Without a Name | 45 BPM |
+| Snow / ice | The Buried Shrine | A Candle in the Snow | 48 BPM |
+| Wind / sand | The Wanderer Wind | Cairns in the Dark | 58 BPM |
+| Wind / sand | Dust of the Pilgrim | The Empty Watchtower | 56 BPM |
+| Fog | Where the Path Vanishes | Names in the Fog | 47 BPM |
+| Fog | The Glass Fen | A Boat Without Oars | 51 BPM |
+
 The soundtrack uses slow, spacious motifs and dark harmonies, with softly
 drifting choir and bowed tones, low drones, breathy melodies and distant bells.
 Instrument names describe oscillator recipes. Each original composition has
@@ -185,7 +242,8 @@ Each pair shares its key, tempo and harmonic progression so its arrangements
 overlap coherently at twilight. Two-bar drones hold a root and fifth beneath
 suspended choir by day and lower bowed harmonies at night. Day melodies use
 breathy tones in Runes in the Mist, bowed tones in The Sealed Gate and choir
-in Forgotten Sanctum; all night melodies use sparse ritual bells.
+in Forgotten Sanctum. New scores also give night melodies slower choir,
+bowed or breathy answers alongside sparse ritual bells.
 
 Events in `songs.js` use MIDI note numbers and beat positions/durations.
 `music.js` converts beats using each song's tempo and schedules 0.2 seconds
@@ -286,9 +344,11 @@ Serve the game locally and verify:
    and clean repeated phrases. Listen for slow, mysterious motifs, soft choir
    and bowed tones, low drones and distant bells with decaying room reflections.
    Check that the scene retains its moonlit look.
-7. Use Skip song or `N` to visit all three song pairs; the current title should
-   update and return to the first pair after three skips. Try skipping before
-   unlocking audio, while muted and after returning from a background tab.
+7. Choose every season and weather family, checking the displayed climate and
+   matching song. Use Skip song or `N` to visit the five clear-weather or seven
+   wet/windy/foggy pairs; the title should update and wrap within that playlist.
+   Let a complete score finish to hear automatic rotation. Check saved seasons,
+   intensity zero, skipping before unlock, mute and background-tab resumption.
 8. Choose each weather soundscape, then rapidly switch between several and
    Clear. Listen for smooth fades and distinct textures. Check intensity zero,
    Weather zero, Ambience zero and Master zero; each should silence weather.
@@ -300,6 +360,7 @@ console. `audio.setVolume('music', 0)`, `audio.setMuted(true)` and
 `audio.toggleMute()` use the same persisted preferences as the UI. Inspect
 `audio.context`, `audio.volumes` and `audio.buses` to check initialization and
 routing. `window.game.sound.music` exposes `currentSong`, `songCount` and
-`skip()` for soundtrack inspection.
+`skip()` for soundtrack inspection. It also exposes `season`, `seasonPreference`,
+`playlist`, `climateLabel` and `setSeason('auto' | 'spring' | 'summer' | 'autumn' | 'winter')`.
 `window.game.sound.weather` exposes `preset`, `intensity`, `presets`,
 `setPreset(id)` and `setIntensity(value)`; intensity uses the range 0 to 1.

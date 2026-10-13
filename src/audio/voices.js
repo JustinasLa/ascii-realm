@@ -116,7 +116,8 @@ function oneShot(engine, options, createSource) {
     if (options.noise) {
       // Each contact samples a different patch of the shared noise texture.
       // This varies the grain itself without allocating a new buffer.
-      source.start(at, Math.random() * source.buffer.length / context.sampleRate);
+      const offset = bounded(options.offset, Math.random(), 0, 0.999999999);
+      source.start(at, offset * source.buffer.length / context.sampleRate);
     } else {
       source.start(at);
     }
@@ -158,6 +159,7 @@ export function noise(engine, options = {}) {
     const source = context.createBufferSource();
     source.buffer = noiseBuffer(context);
     source.loop = true;
+    source.playbackRate?.setValueAtTime(bounded(options.playbackRate, 1, 0.5, 2), context.currentTime);
     return source;
   });
 }
@@ -182,6 +184,7 @@ export function loopNoise(engine, options = {}) {
     nodes.push(source);
     source.buffer = noiseBuffer(context);
     source.loop = true;
+    source.playbackRate?.setValueAtTime(bounded(options.playbackRate, 1, 0.5, 2), context.currentTime);
     const filter = filtered(context, options, 400);
     const gain = context.createGain();
     nodes.push(filter, gain);
@@ -190,7 +193,8 @@ export function loopNoise(engine, options = {}) {
     filter.connect(gain);
     gain.connect(route.input);
     source.onended = cleanup;
-    source.start();
+    source.start(context.currentTime, bounded(options.offset, Math.random(), 0, 0.999999999)
+      * source.buffer.length / context.sampleRate);
     return {
       gain,
       filter,

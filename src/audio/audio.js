@@ -1,12 +1,15 @@
 import { Ambience } from './ambience.js';
 import { AudioEngine } from './engine.js';
-import { EnvironmentSampler, surfaceAt } from './environment.js';
+import { EnvironmentSampler, nightAmount, surfaceAt } from './environment.js';
+import { FireAudio } from './fire.js';
 import { playFootstep } from './footsteps.js';
 import { prepareGrassFootsteps } from './grass-steps.js';
 import { playMovement } from './movement.js';
 import { Music } from './music.js';
 import { ChargeHum, playSword } from './sword.js';
+import { playWaterSound } from './water.js';
 import { WeatherAudio } from './weather.js';
+import { WATER } from '../world/world.js';
 
 // The game hands over animation events before clearing them. Audio never
 // drives animation or emits footsteps on its own timer.
@@ -17,6 +20,7 @@ export class GameAudio {
     this.environment = new EnvironmentSampler(world);
     this.weatherEnvironment = new EnvironmentSampler(world);
     this.ambience = new Ambience(engine);
+    this.fires = new FireAudio(engine);
     this.music = new Music(engine);
     this.charge = new ChargeHum(engine);
     this.effects = new Set();
@@ -27,31 +31,47 @@ export class GameAudio {
     if (this.engine.context?.state !== 'running') return;
     let handles;
     switch (event.type) {
-      case 'step':
-        handles = playFootstep(this.engine, surfaceAt(this.world, event.x, event.y), event);
+      case 'fire-stir':
+        handles = this.fires.react(event);
         break;
-      case 'jump': case 'land': case 'skid':
-        handles = playMovement(this.engine, event, surfaceAt(this.world, event.x, event.y));
+      case 'step': case 'jump': case 'land': case 'skid': {
+        const surface = surfaceAt(this.world, event.x, event.y);
+        handles = surface === 'water' ? playWaterSound(this.engine, event)
+          : event.type === 'step' ? playFootstep(this.engine, surface, event)
+            : playMovement(this.engine, event, surface);
         break;
-      case 'draw': case 'sheathe': case 'swing': case 'slam': case 'whirl':
+      }
+      case 'splash':
+        if (this.world.typeAt(event.x, event.y) === WATER) handles = playWaterSound(this.engine, event);
+        break;
+      case 'draw': case 'sheathe': case 'swing':
         handles = playSword(this.engine, event);
+        break;
+      case 'slam': case 'whirl':
+        handles = playSword(this.engine, event) ?? [];
+        if (this.world.typeAt(event.x, event.y) === WATER) handles.push(...playWaterSound(this.engine, event));
         break;
     }
     for (const handle of handles ?? []) if (handle && !handle.ended) this.effects.add(handle);
   }
 
-  update(dt, time, player, camera, fireflies) {
+  update(dt, time, player, camera, fireflies, fires = []) {
     for (const handle of this.effects) if (handle.ended) this.effects.delete(handle);
     this.engine.setListener(camera.x, camera.y);
     if (this.engine.context?.state !== 'running') {
+      this.music.update({ night: nightAmount(time), time,
+        weather: this.weather.preset, weatherIntensity: this.weather.intensity });
       this.pause();
       return;
     }
     const signals = this.environment.update(dt, camera.x, camera.y, time);
     void prepareGrassFootsteps(this.engine);
     this.charge.update(player.combat.charge, player.x, player.y);
-    this.ambience.update({ ...signals, time, fireflies });
-    this.music.update({ night: signals.night, time, dt });
+    this.music.update({ night: signals.night, time, dt,
+      weather: this.weather.preset, weatherIntensity: this.weather.intensity });
+    this.ambience.update({ ...signals, time, fireflies, season: this.music.season,
+      weather: this.weather.preset, weatherIntensity: this.weather.intensity });
+    this.fires.update(fires, time);
     const water = this.weather.hasRain && this.weather.intensity > 0
       ? this.weatherEnvironment.update(dt, player.x, player.y, time).water : null;
     this.weather.update({ time, dt, water });
@@ -63,6 +83,7 @@ export class GameAudio {
     this.charge.pause();
     this.music.pause();
     this.ambience.pause();
+    this.fires.pause();
     this.weather.pause();
   }
 
@@ -70,6 +91,7 @@ export class GameAudio {
     this.pause();
     this.charge.dispose();
     this.ambience.dispose();
+    this.fires.dispose();
     this.music.dispose();
     this.weather.dispose();
     await this.engine.dispose();

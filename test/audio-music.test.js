@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Music } from '../src/audio/music.js';
 import { SONGS, SONG_PAIRS, midiToFrequency } from '../src/audio/songs.js';
+import { SEASONS, SEASON_LENGTH } from '../src/audio/climate.js';
 
 function fakeEngine(currentTime = 12) {
   const nodes = [];
@@ -84,17 +85,18 @@ const modes = {
   'harmonic minor': [0, 2, 3, 5, 7, 8, 11],
 };
 
-test('six original scores contain playable ordered notes across sixteen complete bars', () => {
+test('42 original scores contain playable ordered notes across sixteen complete bars', () => {
   assert.deepEqual(Object.keys(SONGS), ['day', 'night']);
   assert.notEqual(SONGS.day.title, SONGS.night.title);
   assert.notDeepEqual(SONGS.day.events, SONGS.night.events);
-  assert.equal(SONG_PAIRS.length, 3);
+  assert.equal(SONG_PAIRS.length, 21);
   assert.ok(Object.isFrozen(SONG_PAIRS));
   assert.equal(SONG_PAIRS[0].day, SONGS.day);
   assert.equal(SONG_PAIRS[0].night, SONGS.night);
   const songs = SONG_PAIRS.flatMap(pair => [pair.day, pair.night]);
-  assert.equal(new Set(songs.map(song => song.title)).size, 6);
-  assert.equal(new Set(songs.map(song => JSON.stringify(song.events))).size, 6);
+  assert.equal(new Set(songs.map(song => song.id)).size, 42);
+  assert.equal(new Set(songs.map(song => song.title)).size, 42);
+  assert.equal(new Set(songs.map(song => JSON.stringify(song.events))).size, 42);
   for (const pair of SONG_PAIRS) {
     assert.equal(pair.day.bpm, pair.night.bpm, 'overlapping scores share a tempo');
     assert.equal(pair.day.key, pair.night.key, 'overlapping scores share a tonal mode');
@@ -302,7 +304,7 @@ test('skipping locked music cycles all pairs without allocating audio and preser
   const fake = fakeEngine();
   fake.context.state = 'suspended';
   const music = new Music(fake.engine);
-  assert.equal(music.songCount, 6);
+  assert.equal(music.songCount, 42);
   assert.equal(music.currentSong, SONG_PAIRS[0].day.title);
   music.update({ night: 1 });
   assert.equal(music.currentSong, SONG_PAIRS[0].night.title);
@@ -421,4 +423,135 @@ test('a temporarily unavailable bus during skip recovers on a later frame', () =
   assert.ok(fake.sources().length > before, 'restored bus resumes the selected score');
   music.dispose();
   assert.ok(fake.routes.every(item => item.disposals === 1));
+});
+
+test('each season and weather mood has two authored day/night pairs', () => {
+  for (const season of SEASONS) assert.equal(SONG_PAIRS.filter(pair => pair.season === season).length, 2);
+  for (const weather of ['rain', 'storm', 'snow', 'wind', 'fog']) {
+    assert.equal(SONG_PAIRS.filter(pair => pair.weather === weather).length, 2);
+  }
+});
+
+test('seasonal playlists select matching scores while locked and rotate only eligible pairs', () => {
+  const fake = fakeEngine();
+  fake.context.state = 'suspended';
+  const music = new Music(fake.engine, { storage: null });
+  for (const [index, season] of SEASONS.entries()) {
+    music.update({ time: index * SEASON_LENGTH, night: 1, weather: 'clear' });
+    assert.equal(music.season, season);
+    assert.equal(SONG_PAIRS[music.pairIndex].season, season);
+    assert.equal(music.playlist.length, 5, 'three general pairs and two seasonal pairs');
+    const seen = new Set();
+    for (let skip = 0; skip < music.playlist.length; skip++) {
+      const pair = SONG_PAIRS[music.pairIndex];
+      assert.ok(!pair.season || pair.season === season);
+      assert.ok(!pair.weather);
+      assert.equal(music.currentSong, pair.night.title);
+      seen.add(music.pairIndex);
+      music.skip();
+    }
+    assert.equal(seen.size, music.playlist.length);
+  }
+  assert.equal(fake.nodes.length, 0);
+  assert.equal(fake.routes.length, 0);
+});
+
+test('weather transitions fade matching scores, include seasonal alternatives, and release old graphs', () => {
+  const fake = fakeEngine();
+  const music = new Music(fake.engine, { storage: null });
+  music.update({ time: 0, night: 0.8, weather: 'rain', weatherIntensity: 0.6 });
+  assert.equal(SONG_PAIRS[music.pairIndex].weather, 'rain');
+  assert.equal(music.playlist.length, 7);
+  const old = fake.routes.at(-1);
+  music.update({ time: 1, night: 0.8, weather: 'blizzard' });
+  assert.equal(SONG_PAIRS[music.pairIndex].weather, 'snow');
+  assert.ok(old.input.gain.calls.some(call => call.method === 'linearRampToValueAtTime' && call.args[0] === 0));
+  assert.equal(old.disposals, 0, 'outgoing room remains for its fade');
+  const pair = music.pairIndex;
+  for (let frame = 0; frame < 30; frame++) music.update({ time: 1, night: 0.8, weather: 'snowstorm' });
+  assert.equal(music.pairIndex, pair, 'presets in the same weather family retain the score');
+  assert.equal(music.retiring.length, 1);
+  fake.advance(fake.context.currentTime + 2);
+  music.update({ night: 0.8 });
+  assert.equal(old.disposals, 1);
+  music.update({ weatherIntensity: 0, night: 0.8 });
+  assert.equal(SONG_PAIRS[music.pairIndex].season, 'spring', 'silent weather restores the seasonal soundtrack');
+  assert.ok(music.playlist.every(index => !SONG_PAIRS[index].weather));
+  music.dispose();
+  assert.ok(fake.routes.every(route => route.disposals === 1));
+  assert.ok(fake.nodes.every(node => node.disconnects === 1));
+});
+
+test('season preferences persist without audio allocation and recover from malformed or denied storage', () => {
+  const fake = fakeEngine();
+  const saved = new Map();
+  const storage = { getItem: key => saved.get(key), setItem: (key, value) => saved.set(key, value) };
+  fake.context.state = 'suspended';
+  const music = new Music(fake.engine, { storage });
+  assert.equal(music.setSeason('winter'), true);
+  assert.equal(music.setSeason('bogus'), false);
+  music.update({ time: SEASON_LENGTH, weather: 'clear', night: 1 });
+  assert.equal(music.season, 'winter');
+  assert.equal(SONG_PAIRS[music.pairIndex].season, 'winter');
+  const restored = new Music(fake.engine, { storage });
+  assert.equal(restored.seasonPreference, 'winter');
+  assert.equal(fake.nodes.length, 0);
+  restored.update({ time: 0, night: 1 });
+  assert.equal(SONG_PAIRS[restored.pairIndex].season, 'winter');
+  restored.setSeason('auto');
+  restored.update({ time: SEASON_LENGTH, night: 1 });
+  assert.equal(restored.season, 'summer');
+  assert.equal(JSON.parse(saved.get('ascii-realm.music')).season, 'auto');
+  for (const storage of [null, { getItem: () => 'bad json' },
+    { getItem: () => '{"season":"bogus"}' },
+    { getItem() { throw new Error(); }, setItem() { throw new Error(); } }]) {
+    const instance = new Music(fake.engine, { storage });
+    assert.equal(instance.seasonPreference, 'auto');
+    assert.doesNotThrow(() => instance.setSeason('autumn'));
+    assert.equal(instance.season, 'autumn');
+  }
+});
+
+test('finished scores advance automatically without repeating a pair within the playlist', () => {
+  const fake = fakeEngine(0);
+  const music = new Music(fake.engine, { storage: null });
+  music.update({ time: 0, night: 1, weather: 'clear' });
+  const played = [music.pairIndex];
+  while (played.length < music.playlist.length) {
+    const outgoing = fake.routes.at(-1);
+    const end = music.nextPairAt;
+    while (fake.context.currentTime < end) {
+      fake.advance(Math.min(end, fake.context.currentTime + 0.5));
+      music.update({ night: 1 });
+    }
+    assert.equal(outgoing.disposals, 0, 'automatic transition leaves a fading room');
+    assert.notEqual(music.pairIndex, played.at(-1));
+    played.push(music.pairIndex);
+    assert.ok(music.retiring.length <= 2);
+    assert.ok(music.voices.size <= 48);
+  }
+  assert.equal(new Set(played).size, music.playlist.length);
+  const before = music.pairIndex;
+  music.pause();
+  fake.advance(10000);
+  music.update({ night: 1 });
+  assert.equal(music.pairIndex, before, 'resumption does not replay a backlog of song changes');
+  music.dispose();
+  assert.ok(fake.nodes.every(node => node.disconnects === 1));
+  assert.ok(fake.routes.every(route => route.disposals === 1));
+});
+
+test('rapid climate changes retain at most two fading pairs and teardown remains complete', () => {
+  const fake = fakeEngine();
+  const music = new Music(fake.engine, { storage: null });
+  for (let index = 0; index < 30; index++) {
+    music.setSeason(SEASONS[index % SEASONS.length]);
+    music.update({ night: 0.5, weather: ['rain', 'gale', 'blizzard'][index % 3] });
+    assert.ok(music.retiring.length <= 2);
+    assert.ok(fake.routes.filter(route => route.disposals === 0).length <= 3);
+  }
+  music.dispose();
+  assert.ok(fake.nodes.every(node => node.disconnects === 1));
+  assert.ok(fake.routes.every(route => route.disposals === 1));
+  assert.equal(music.setSeason('spring'), false);
 });

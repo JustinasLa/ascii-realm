@@ -1,5 +1,6 @@
 import { noise } from './voices.js';
 import { playGrassFootstep } from './grass-steps.js';
+import { nextSoundVariant, varySound } from './variations.js';
 
 // Close material textures stay below the music's bells. Broad, low-Q filters
 // give shoes weight without an oscillator or a hollow resonant pitch.
@@ -47,23 +48,13 @@ export function playFootstep(engine, surface, event = {}) {
   const at = engine.context.currentTime;
   const handles = [];
   const layers = Object.hasOwn(MATERIALS, surface) ? MATERIALS[surface] : MATERIALS.dirt;
-  for (const layer of layers) {
-    // A few percent changes the texture without turning steps into random notes.
-    const timing = 0.97 + Math.random() * 0.06;
-    const cutoffVariation = 0.95 + Math.random() * 0.1;
-    const levelVariation = 0.96 + Math.random() * 0.08;
+  const variant = nextSoundVariant(engine, `step:${Object.hasOwn(MATERIALS, surface) ? surface : 'dirt'}`);
+  for (const [index, layer] of layers.entries()) {
+    const options = varySound(variant, {
+      ...layer, gain: layer.gain * weight, filterType: layer.filterType ?? 'lowpass', Q: 0.45,
+    }, index);
     const handle = noise(engine, {
-      bus: 'sfx', x, y,
-      filterType: layer.filterType ?? 'lowpass',
-      cutoff: layer.cutoff * cutoffVariation,
-      Q: 0.45,
-      when: at + (layer.delay ?? 0) * timing,
-      duration: layer.duration * timing,
-      attack: layer.attack * timing,
-      decay: layer.decay * timing,
-      sustain: layer.sustain,
-      release: layer.release * timing,
-      gain: layer.gain * weight * levelVariation,
+      ...options, bus: 'sfx', x, y, when: at + (options.delay ?? 0),
     });
     if (handle) handles.push(handle);
   }

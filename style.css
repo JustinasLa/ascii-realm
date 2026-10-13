@@ -67,7 +67,7 @@ body {
 #audio-controls :focus-visible { outline: 2px solid #a9d4ae; outline-offset: 3px; }
 .weather-controls { margin-top: 8px; padding-top: 8px; border-top: 1px solid #34483a; }
 #audio-controls .weather-controls > label[for] { display: block; margin-bottom: 6px; }
-#audio-weather {
+#audio-weather, #audio-season {
   width: 100%;
   margin-bottom: 8px;
   padding: 5px;

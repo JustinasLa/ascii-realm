@@ -1,4 +1,5 @@
 import { noise, setParam } from './voices.js';
+import { nextSoundVariant, varySound } from './variations.js';
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const finite = (value, fallback) => Number.isFinite(value) ? value : fallback;
@@ -30,7 +31,11 @@ export function playSword(engine, event = {}) {
   const strength = Math.sqrt(clamp(finite(event.strength, 1), 0, 2));
   const speed = clamp(finite(event.speed, 1), 0, 2) / 2;
   const voices = [];
-  const scheduled = (options) => ({ ...position, ...options, when: context.currentTime + (options.when ?? 0) });
+  if (!['draw', 'sheathe', 'swing', 'slam', 'whirl'].includes(event.type)) return null;
+  const variant = nextSoundVariant(engine, `sword:${event.type}`);
+  let layer = 0;
+  const scheduled = options => ({ ...position, ...varySound(variant, options, layer++),
+    when: context.currentTime + (options.when ?? 0) * variant.timing });
   const air = (options) => voices.push(noise(engine, scheduled(options)));
 
   switch (event.type) {
@@ -94,7 +99,8 @@ export class ChargeHum {
     if (!this.voice) {
       const route = this.engine.route('sword', x, y);
       if (!route?.input) return;
-      const voice = { context, route, nodes: [], cleaned: false };
+      const voice = { context, route, nodes: [], cleaned: false,
+        variant: nextSoundVariant(this.engine, 'sword:charge') };
       try {
         voice.source = context.createBufferSource();
         voice.nodes.push(voice.source);
@@ -118,7 +124,7 @@ export class ChargeHum {
         voice.highpass.connect(voice.gain);
         voice.gain.connect(route.input);
         voice.source.onended = () => this.cleanup(voice);
-        voice.source.start();
+        voice.source.start(context.currentTime, voice.variant.offset * voice.source.buffer.length / context.sampleRate);
         this.voice = voice;
       } catch {
         try { voice.source?.stop(); } catch { /* A source may not have started. */ }
@@ -133,10 +139,10 @@ export class ChargeHum {
     voice.route.update?.(x, y);
     // Slow movement in the low texture feels uneasy without becoming a note.
     const drift = Math.sin(now * 0.7) * 15;
-    setParam(voice.lowpass.frequency, 235 + progress * 125 + drift, now, 0.18);
+    setParam(voice.lowpass.frequency, (235 + progress * 125 + drift) * voice.variant.color, now, 0.18);
     setParam(voice.lowpass.Q, 0.7 + progress * 0.12, now, 0.2);
-    setParam(voice.source.playbackRate, 0.8 + Math.sin(now * 0.33) * 0.035, now, 0.3);
-    setParam(voice.gain.gain, 0.021 + progress * 0.024, now, 0.12);
+    setParam(voice.source.playbackRate, (0.8 + Math.sin(now * 0.33) * 0.035) * voice.variant.rate, now, 0.3);
+    setParam(voice.gain.gain, (0.021 + progress * 0.024) * voice.variant.level, now, 0.12);
   }
 
   release() {

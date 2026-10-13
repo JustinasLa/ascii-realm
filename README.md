@@ -54,8 +54,12 @@ For now it is a single outlaw exploring procedurally generated terrain.
   surfaces and movement effects,
   slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
   wildlife calls and rare firefly noise glints,
-  with six original, mysterious RPG songs in three day/night pairs, using drifting
+  with 42 original, mysterious RPG songs in 21 day/night pairs, using drifting
   choir, bowed tones, low drones, distant bells and a synthesized room reverb.
+  Every sound has 25 shuffled variations; grass also shuffles its six recordings.
+  Music rotates automatically through a season and weather playlist. Choose
+  automatic seasons or Spring, Summer, Autumn or Winter in the Audio panel;
+  winter quiets insects and frogs, while autumn brings out leaf rustle.
   Sword effects layer weathered steel, dry leather, low air rush and weighted
   impacts. Sound starts on your first key press or click;
   the Audio panel shows the current song, lets you skip, and saves mute and
@@ -93,7 +97,8 @@ npm test
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | `M` | Mute or unmute all sound |
-| `N` / Audio panel's Skip song button | Switch to the next day/night song pair |
+| `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
+| Audio panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
 | Audio panel's Weather sound / Intensity | Choose Clear or one of 17 weather soundscapes and adjust its intensity |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |

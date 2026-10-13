@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { GRASS_SAMPLE_URLS, GrassFootsteps, prepareGrassFootsteps, playGrassFootstep } from '../src/audio/grass-steps.js';
 import { playFootstep } from '../src/audio/footsteps.js';
+import { SOUND_VARIANT_COUNT, seededRandom } from '../src/audio/variations.js';
 
 function fakeAudio(state = 'running') {
   const nodes = [];
@@ -170,12 +171,13 @@ test('steps during loading are discarded, and grass has no synthetic fallback', 
   assertClean(audio);
 });
 
-test('grass cycles six recorded variants without repeats, at original pitch through the sfx spatial route', async t => {
-  t.mock.method(Math, 'random', () => 0.5);
+test('grass shuffles six recordings and 25 articulations through the sfx spatial route', async t => {
+  t.mock.method(Math, 'random', seededRandom(17));
   const audio = fakeAudio();
   await prepareGrassFootsteps(audio.engine, { loadBuffer: recordedLoader() });
   const variants = [];
-  for (let step = 0; step < 13; step++) {
+  const rates = [];
+  for (let step = 0; step < SOUND_VARIANT_COUNT * 2; step++) {
     const [handle] = playFootstep(audio.engine, 'grass', { strength: 1, x: 21, y: 40 });
     assert.ok(handle);
     const source = audio.nodes.at(-2);
@@ -183,7 +185,9 @@ test('grass cycles six recorded variants without repeats, at original pitch thro
     variants.push(source.buffer.id);
     assert.equal(source.loop, false);
     assert.deepEqual(source.starts, [audio.context.currentTime]);
-    assert.deepEqual(source.playbackRate.calls, [['set', 1, audio.context.currentTime]]);
+    const rate = source.playbackRate.calls[0][1];
+    rates.push(rate);
+    assert.ok(rate >= 0.98 && rate <= 1.02, 'restrained rate preserves the natural contact');
     assert.equal(gain.gain.calls.length, 4, 'only start and end fades color the recording');
     assert.equal(gain.gain.calls[1][1], gain.gain.calls[2][1], 'hold the original recorded envelope');
     assert.ok(gain.gain.calls[1][2] - audio.context.currentTime <= 0.004);
@@ -194,8 +198,12 @@ test('grass cycles six recorded variants without repeats, at original pitch thro
     });
     handle.stop();
   }
-  assert.equal(new Set(variants.slice(0, 6)).size, 6);
-  assert.deepEqual(variants.slice(0, 6), variants.slice(6, 12));
+  for (let index = 0; index < 48; index += 6) assert.equal(new Set(variants.slice(index, index + 6)).size, 6);
+  assert.notDeepEqual(variants.slice(0, 6), variants.slice(6, 12), 'recordings do not loop in a fixed six-step order');
+  for (let index = 0; index < rates.length; index += SOUND_VARIANT_COUNT) {
+    assert.equal(new Set(rates.slice(index, index + SOUND_VARIANT_COUNT)).size, SOUND_VARIANT_COUNT);
+  }
+  assert.notEqual(rates[24], rates[25], 'articulations do not repeat at refill');
   assert.ok(variants.every((name, index) => index === 0 || name !== variants[index - 1]));
   assertClean(audio);
 });

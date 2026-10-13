@@ -134,7 +134,7 @@ test('grass preview plays six recorded contacts at 420ms spacing and restores on
     assert.equal(sources(audio).length, step + 1);
   }
   const played = sources(audio);
-  assert.deepEqual(played.map(source => source.buffer.id), GRASS_SAMPLE_URLS.map(url => recording(url).id));
+  assert.deepEqual(played.map(source => source.buffer.id).sort(), GRASS_SAMPLE_URLS.map(url => recording(url).id).sort());
   for (let index = 0; index < played.length; index++) {
     assert.ok(Math.abs(played[index].starts[0] - (10 + index * 0.42)) < 1e-10);
     assert.equal(played[index].loop, false);

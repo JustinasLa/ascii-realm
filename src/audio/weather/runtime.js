@@ -1,6 +1,7 @@
 import { ASPECT } from '../../world/world.js';
 import { loopNoise, noise, setParam, tone } from '../voices.js';
 import { rainSplashes } from './rain-splashes.js';
+import { nextSoundVariant, seededRandom, varySound } from '../variations.js';
 
 const FILTERS = new Set(['lowpass', 'highpass', 'bandpass']);
 const bounded = (value, fallback, minimum, maximum) =>
@@ -67,8 +68,9 @@ export class WeatherGroup {
           Q: bounded(layer.Q, 0.45, 0, 8),
           gain: bounded(layer.gain, 0, 0, 0.14),
         };
-        const handle = loopNoise(this.facade, { ...base, gain: base.gain * this._intensity });
-        if (handle) this.layers.push({ name: base.name, base, handle });
+        const variant = nextSoundVariant(engine, `weather:${definition.id}:bed:${base.name}`, this.random);
+        const handle = loopNoise(this.facade, varySound(variant, { ...base, gain: base.gain * this._intensity }));
+        if (handle) this.layers.push({ name: base.name, base, handle, variant });
       }
       const eventDefinitions = (Array.isArray(definition.events) ? definition.events : []).slice(0, 2);
       if (this.rainfall > 0) eventDefinitions.push(rainSplashes);
@@ -221,12 +223,12 @@ export class WeatherGroup {
     for (const route of this.routes) route.follow(now);
     let updates = null;
     try { updates = this.definition.modulate?.({ now, time, intensity: this._intensity }); } catch { /* Keep safe base beds. */ }
-    for (const { name, base, handle } of this.layers) {
+    for (const { name, base, handle, variant } of this.layers) {
       const update = updates?.[name];
       const gain = this._intensity === 0 ? 0
-        : bounded(update?.gain, base.gain * this._intensity, 0, 0.14);
+        : bounded(update?.gain, base.gain * this._intensity, 0, 0.14) * variant.level;
       setParam(handle.gain.gain, gain, now, 0.4);
-      setParam(handle.filter.frequency, bounded(update?.cutoff, base.cutoff, 20, 10000), now, 0.65);
+      setParam(handle.filter.frequency, bounded((update?.cutoff ?? base.cutoff) * variant.color, base.cutoff, 20, 10000), now, 0.65);
       setParam(handle.filter.Q, bounded(update?.Q, base.Q, 0, 8), now, 0.5);
       setParam(handle.pan?.pan, bounded(update?.pan, 0, -1, 1), now, 0.2);
     }
@@ -239,12 +241,14 @@ export class WeatherGroup {
       // impacts or thunder that should already have happened.
       if (!events || gap || late || this._intensity === 0) continue;
       let cues;
+      const index = this.events.indexOf(event);
+      const variant = nextSoundVariant(this.engine, `weather:${this.definition.id}:event:${index}`, this.random);
       try {
-        cues = event.definition.create({ now, time, intensity: this._intensity, random: this.random,
+        cues = event.definition.create({ now, time, intensity: this._intensity, random: seededRandom(variant.seed),
           water: this._water, rainfall: this.rainfall });
       } catch { continue; }
       if (!Array.isArray(cues)) continue;
-      for (const cue of cues.slice(0, 16)) this._play(cue, now);
+      for (const [layer, cue] of cues.slice(0, 16).entries()) this._play(varySound(variant, cue, layer), now);
     }
     this._lastNow = now;
   }
@@ -277,6 +281,8 @@ export class WeatherGroup {
       decay: bounded(cue.decay, 0, 0, Math.max(0, duration - attack - release)),
       sustain: bounded(cue.sustain, 1, 0, 1),
       release,
+      offset: bounded(cue.offset, 0.5, 0, 0.999999999),
+      playbackRate: bounded(cue.playbackRate, 1, 0.5, 2),
       x: bounded(cue.x, listener.x + pan * 24 / ASPECT, -1e9, 1e9),
       y: bounded(cue.y, listener.y, -1e9, 1e9),
       frequency: bounded(cue.frequency, 440, 20, 10000),

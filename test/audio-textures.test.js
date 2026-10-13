@@ -4,6 +4,9 @@ import { playFootstep } from '../src/audio/footsteps.js';
 import { playMovement } from '../src/audio/movement.js';
 import { playSword, ChargeHum } from '../src/audio/sword.js';
 import { Ambience } from '../src/audio/ambience.js';
+import { FireAudio } from '../src/audio/fire.js';
+import { playWaterSound } from '../src/audio/water.js';
+import { SOUND_VARIANT_COUNT } from '../src/audio/variations.js';
 
 function fakeAudio() {
   const nodes = [];
@@ -66,6 +69,104 @@ function assertDisposed(audio) {
   assert.ok(audio.nodes.every(node => node.disconnects === 1));
   assert.deepEqual(audio.invalid, []);
 }
+
+function textureSignature(nodes) {
+  return JSON.stringify(nodes.map(node => ({ kind: node.kind,
+    cutoff: node.kind === 'filter' ? node.frequency.value : undefined,
+    frequency: node.kind === 'oscillator' ? node.frequency.calls.map(call => call.args[0]) : undefined,
+    levels: node.kind === 'gain' ? node.gain.calls.filter(call => !call.method.startsWith('cancel')).map(call => call.args[0]) : undefined,
+    duration: node.kind === 'noise' ? node.stops[0] - node.starts[0] : undefined,
+  })));
+}
+
+test('every material, movement, sword and water cue plays 25 distinct textures without extra voices', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  const cues = [
+    ...['dirt', 'sand', 'rock', 'water'].map(surface => [surface, engine => playFootstep(engine, surface)]),
+    ...['grass', 'dirt', 'sand', 'rock', 'water'].flatMap(surface =>
+      ['jump', 'land', 'skid'].map(type => [`${type}:${surface}`, engine => playMovement(engine, { type, strength: 1 }, surface)])),
+    ...['draw', 'sheathe', 'swing', 'slam', 'whirl'].map(type => [type, engine => playSword(engine, { type })]),
+    ...['step', 'jump', 'land', 'skid', 'splash', 'slam', 'whirl'].map(type => [`water:${type}`, engine => playWaterSound(engine, { type })]),
+  ];
+  for (const [name, play] of cues) {
+    const audio = fakeAudio();
+    const signatures = new Set();
+    for (let index = 0; index < SOUND_VARIANT_COUNT; index++) {
+      audio.context.currentTime += 1;
+      const before = audio.nodes.length;
+      const handles = play(audio.engine);
+      assert.ok(handles.length > 0 && handles.length <= 6, name);
+      signatures.add(textureSignature(audio.nodes.slice(before)));
+      handles.forEach(handle => handle?.stop());
+    }
+    assert.equal(signatures.size, SOUND_VARIANT_COUNT, name);
+    assertDisposed(audio);
+  }
+});
+
+test('all wildlife phrases and firefly glints play 25 distinct variations with complete cleanup', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  for (const timer of wildlifeTimers) {
+    const audio = fakeAudio();
+    const ambience = new Ambience(audio.engine);
+    const environment = { night: ['nextBird', 'nextInsect'].includes(timer) ? 0 : 1,
+      gust: 1, water: { x: 20, y: 40, strength: 1 }, time: 0,
+      fireflies: [{ x: 20, y: 40, phase: Math.PI / 2 }] };
+    ambience.update(environment);
+    for (const name of wildlifeTimers) ambience[name] = Infinity;
+    const signatures = new Set();
+    for (let index = 0; index < SOUND_VARIANT_COUNT; index++) {
+      const before = audio.nodes.length;
+      ambience[timer] = 0;
+      ambience.update(environment);
+      const nodes = audio.nodes.slice(before);
+      assert.ok(nodes.length > 0, timer);
+      signatures.add(textureSignature(nodes));
+      for (const note of ambience.notes) note.handle.stop();
+      ambience.notes.length = 0;
+    }
+    assert.equal(signatures.size, SOUND_VARIANT_COUNT, timer);
+    ambience.dispose();
+    assertDisposed(audio);
+  }
+});
+
+test('winter removes actual insect and frog voices while still allowing nocturnal owls', () => {
+  for (const timer of ['nextCricket', 'nextInsect', 'nextBuzz', 'nextFrog']) {
+    assert.equal(recordWildlife(timer, { season: 'winter', night: timer === 'nextInsect' ? 0 : 1,
+      water: { x: 20, y: 40, strength: 1 } }).length, 0, timer);
+  }
+  assert.ok(recordWildlife('nextOwl', { season: 'winter', night: 1 }).length > 0);
+});
+
+test('charge textures and campfire crackles visit 25 variations without accumulating voices', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  const audio = fakeAudio();
+  const charge = new ChargeHum(audio.engine);
+  const charges = new Set();
+  for (let index = 0; index < SOUND_VARIANT_COUNT; index++) {
+    charge.update(0.5, 3, 4);
+    charges.add(charge.voice.lowpass.frequency.calls.at(-1).args[0]);
+    charge.pause();
+  }
+  assert.equal(charges.size, SOUND_VARIANT_COUNT);
+  charge.dispose();
+  const fires = new FireAudio(audio.engine);
+  const sources = [{ id: 1, x: 3, y: 4, seed: 17, age: 20, strength: 1 }];
+  fires.update(sources, 0);
+  const pops = new Set();
+  for (let index = 0; index < SOUND_VARIANT_COUNT; index++) {
+    fires.voices.get(1).nextPop = audio.context.currentTime;
+    const before = audio.nodes.length;
+    fires.update(sources, 0);
+    pops.add(textureSignature(audio.nodes.slice(before)));
+    assert.ok(fires.pops.size <= 16);
+    for (const pop of fires.pops) pop.stop();
+  }
+  assert.equal(pops.size, SOUND_VARIANT_COUNT);
+  fires.dispose();
+  assertDisposed(audio);
+});
 
 test('draw, sheath, swing and whirl use material and air noise through the sword bus', () => {
   for (const type of ['draw', 'sheathe', 'swing', 'whirl']) {
@@ -368,5 +469,93 @@ test('ambience clock jumps prune expired notes and keep wildlife bounded with co
   const totalRoutes = audio.routes.length;
   ambience.update(environment);
   assert.equal(audio.routes.length, totalRoutes);
+  assertDisposed(audio);
+});
+
+test('campfire sound stays lazy, uses ambience, and updates listener attenuation once', () => {
+  const audio = fakeAudio();
+  const fires = new FireAudio(audio.engine);
+  const sources = [{ id: 1, x: 3, y: 4, seed: 17 }];
+  audio.context.state = 'suspended';
+  fires.update(sources, 1);
+  assert.equal(audio.nodes.length, 0);
+  audio.context.state = 'running';
+  fires.update(sources, 1);
+  const bed = fires.voices.get(1).bed;
+  const gain = bed.gain.gain.calls.findLast(call => call.method === 'setTargetAtTime').args[0];
+  assert.ok(gain > 0 && gain <= 0.075 * 0.8);
+  assert.equal(audio.routes[0].bus, 'ambience');
+  assert.equal(audio.routes[0].x, undefined, 'noise bed applies spatial gain only in its live parameter');
+  assert.equal(bed.pan.pan.calls.at(-1).args[0], 0.2);
+  audio.engine.spatial = () => ({ gain: 0.4, pan: -0.6 });
+  fires.update(sources, 1);
+  assert.equal(fires.voices.get(1).bed, bed);
+  assert.ok(Math.abs(bed.gain.gain.calls.at(-1).args[0] - gain / 2) < 1e-9);
+  assert.equal(bed.pan.pan.calls.at(-1).args[0], -0.6);
+  fires.pause();
+  assertDisposed(audio);
+});
+
+test('campfire crackles are positioned, bounded, and released on extinguishing and pause', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  const audio = fakeAudio();
+  const fires = new FireAudio(audio.engine);
+  const sources = Array.from({ length: 8 }, (_, id) => ({ id, x: id * 5, y: 4, seed: id }));
+  fires.update(sources, 0);
+  assert.equal(fires.voices.size, 4);
+  for (let i = 0; i < 20; i++) {
+    audio.context.currentTime += 1;
+    fires.update(sources, i);
+    assert.ok(fires.pops.size <= 16);
+  }
+  assert.ok(audio.routes.some(route => route.x === 0 && route.y === 4));
+  assert.ok(audio.routes.every(route => route.bus === 'ambience'));
+  assert.equal(audio.nodes.filter(node => node.kind === 'oscillator').length, 0);
+  fires.update([], 21);
+  assert.equal(fires.voices.size, 0);
+  assert.equal(fires.pops.size, 0);
+  assertDisposed(audio);
+  fires.update(sources, 22);
+  assert.equal(fires.voices.size, 4);
+  audio.context.state = 'suspended';
+  fires.update(sources, 23);
+  assert.equal(fires.voices.size, 0);
+  fires.dispose();
+  audio.context.state = 'running';
+  fires.update(sources, 24);
+  assert.equal(fires.voices.size, 0);
+  assertDisposed(audio);
+});
+
+test('fire audio replaces old-context voices and drops distant sources', () => {
+  const a = fakeAudio();
+  const b = fakeAudio();
+  const fires = new FireAudio(a.engine);
+  const sources = [{ id: 1, x: 0, y: 4, seed: 1 }];
+  fires.update(sources, 0);
+  fires.engine = b.engine;
+  fires.update(sources, 1);
+  assertDisposed(a);
+  assert.equal(fires.voices.size, 1);
+  b.engine.spatial = () => ({ gain: 0.01, pan: 1 });
+  fires.update(sources, 2);
+  assert.equal(fires.voices.size, 0);
+  assertDisposed(b);
+});
+
+test('fire sound builds with flame intensity and stops at extinction', () => {
+  const audio = fakeAudio();
+  const fires = new FireAudio(audio.engine);
+  const fire = { id: 1, x: 3, y: 4, seed: 17, intensity: 0.18 };
+  fires.update([fire], 1);
+  const bed = fires.voices.get(1).bed;
+  const initial = bed.gain.gain.calls.at(-1).args[0];
+  fire.intensity = 1;
+  fires.update([fire], 1);
+  assert.equal(fires.voices.get(1).bed, bed);
+  assert.ok(bed.gain.gain.calls.at(-1).args[0] > initial * 5);
+  fire.intensity = 0;
+  fires.update([fire], 1);
+  assert.equal(fires.voices.size, 0);
   assertDisposed(audio);
 });

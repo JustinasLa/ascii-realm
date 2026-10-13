@@ -6,6 +6,7 @@ import { WeatherGroup } from '../src/audio/weather/runtime.js';
 import { WEATHER_PRESETS } from '../src/audio/weather/presets.js';
 import { rainSplashes } from '../src/audio/weather/rain-splashes.js';
 import { ASPECT } from '../src/world/world.js';
+import { SOUND_VARIANT_COUNT } from '../src/audio/variations.js';
 
 const expectedIds = ['rain', 'drizzle', 'heavy-rain', 'thunderstorm', 'distant-thunder',
   'wind-gusts', 'gale', 'light-snow', 'snowstorm', 'blizzard', 'hail', 'sleet',
@@ -97,6 +98,35 @@ function fakeAudio() {
 function sources(audio) {
   return audio.nodes.filter(node => node.kind === 'noise' || node.kind === 'oscillator');
 }
+
+test('every weather event and shoreline splash plays 25 distinct variants within its existing budget', () => {
+  for (const preset of WEATHER_PRESETS) {
+    const eventCount = preset.events.length + (preset.rainfall > 0 ? 1 : 0);
+    for (let eventIndex = 0; eventIndex < eventCount; eventIndex++) {
+      const audio = fakeAudio();
+      const group = new WeatherGroup(audio.engine, preset, { random: () => 0.5, intensity: 0.6 });
+      const signatures = new Set();
+      for (const event of group.events) event.next = Infinity;
+      for (let variant = 0; variant < SOUND_VARIANT_COUNT; variant++) {
+        group.events[eventIndex].next = audio.context.currentTime;
+        const before = audio.nodes.length;
+        group.update({ water: { x: 20, y: 40, strength: 1 } });
+        const nodes = audio.nodes.slice(before);
+        assert.ok(nodes.some(node => node.kind === 'noise'), `${preset.id}:${eventIndex}`);
+        signatures.add(JSON.stringify(nodes.filter(node => node.kind === 'filter' || node.kind === 'gain')
+          .map(node => ({ kind: node.kind, cutoff: node.frequency?.value,
+            levels: node.gain?.calls.map(call => call.args[0]) }))));
+        assert.ok(group.budget.voices.size <= 64);
+        for (const voice of group.voices) voice.handle.stop();
+        group.prune(audio.context.currentTime);
+        assert.equal(group.budget.voices.size, 0);
+      }
+      assert.equal(signatures.size, SOUND_VARIANT_COUNT, `${preset.id}:${eventIndex}`);
+      group.dispose();
+      assertDisposed(audio);
+    }
+  }
+});
 
 function assertDisposed(audio) {
   assert.ok(audio.routes.every(route => route.disposals === 1), 'every route disposed once');
@@ -411,19 +441,20 @@ test('weather cues use filtered noise and keep their pan relative to the moving 
   const source = sources(audio).at(-1);
   const filter = source.connections[0];
   assert.equal(filter.type, 'bandpass');
-  assert.equal(filter.frequency.value, 5460);
-  assert.ok(Math.abs(filter.Q.value - 0.72) < 1e-12);
+  bounded(filter.frequency.value, 2400, 7200, 'varied drizzle filter');
+  bounded(filter.Q.value, 0.45, 0.75, 'drizzle resonance');
   const gain = filter.connections[0];
   const input = gain.connections[0];
   const panner = input.connections[0];
   assert.equal(panner.kind, 'panner');
-  assert.ok(Math.abs(panner.pan.value - 0.64) < 1e-12);
+  const originalPan = panner.pan.value;
+  bounded(originalPan, -0.8, 0.8, 'varied drizzle pan');
   assert.ok(source.starts[0] >= 11.4 && source.starts[0] <= audio.context.currentTime);
   assert.ok(audio.routes.every(route => route.bus === 'weather'), 'all textures share the weather bus');
   audio.engine.listener = { x: 220, y: -60 };
   audio.context.currentTime += 0.01;
   weather.update();
-  assert.ok(Math.abs(panner.pan.value - 0.64) < 1e-12, 'camera movement keeps a weather tick at its relative side');
+  assert.ok(Math.abs(panner.pan.value - originalPan) < 1e-12, 'camera movement keeps a weather tick at its relative side');
   source.onended();
   weather.update();
   assert.equal(weather._budget.voices.size, 0);

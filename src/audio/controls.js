@@ -7,6 +7,8 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
   const status = root.querySelector('#audio-status');
   const skip = root.querySelector('#audio-skip');
   const song = root.querySelector('#audio-song');
+  const seasonSelect = root.querySelector('#audio-season');
+  const climate = root.querySelector('#audio-climate');
   const weatherSelect = root.querySelector('#audio-weather');
   const weatherIntensity = root.querySelector('#weather-intensity');
   const weatherDescription = root.querySelector('#weather-description');
@@ -44,7 +46,10 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
   const updateSong = () => {
     const title = music.currentSong;
     if (song.textContent !== title) song.textContent = title;
+    if (climate && climate.textContent !== music.climateLabel) climate.textContent = music.climateLabel ?? '';
+    if (seasonSelect) seasonSelect.value = music.seasonPreference ?? 'auto';
   };
+  const selectSeason = () => { music.setSeason(seasonSelect.value); updateSong(); };
   const skipSong = () => { music.skip(); updateSong(); };
   const previewGrass = async () => {
     stopPreview();
@@ -87,11 +92,23 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
     weatherDescription.textContent = weather.presets.find(p => p.id === weather.preset)?.description
       ?? 'The meadow’s wind, water and wildlife.';
   };
-  const selectWeather = () => { weather.setPreset(weatherSelect.value); updateWeather(); };
+  const syncClimate = () => {
+    music.update?.({ night: music.night, time: music.simulationTime,
+      weather: weather.preset, weatherIntensity: weather.intensity });
+    updateSong();
+  };
+  const selectWeather = () => { weather.setPreset(weatherSelect.value); updateWeather(); syncClimate(); };
   const changeIntensity = () => {
     weather.setIntensity(Number(weatherIntensity.value) / 100);
     updateWeather();
+    syncClimate();
   };
+  for (const season of music.seasonOptions ?? []) {
+    const option = document.createElement('option');
+    option.value = season.id;
+    option.textContent = season.label;
+    seasonSelect?.append(option);
+  }
   for (const preset of weather.presets) {
     const option = document.createElement('option');
     option.value = preset.id;
@@ -128,6 +145,7 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
   }
   mute.addEventListener('click', muteClick);
   skip.addEventListener('click', skipSong);
+  seasonSelect?.addEventListener('change', selectSeason);
   previewButton.addEventListener('click', previewGrass);
   weatherSelect.addEventListener('change', selectWeather);
   weatherIntensity.addEventListener('input', changeIntensity);
@@ -142,6 +160,7 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
     stopPreview();
     mute.removeEventListener('click', muteClick);
     skip.removeEventListener('click', skipSong);
+    seasonSelect?.removeEventListener('change', selectSeason);
     previewButton.removeEventListener('click', previewGrass);
     weatherSelect.removeEventListener('change', selectWeather);
     weatherIntensity.removeEventListener('input', changeIntensity);

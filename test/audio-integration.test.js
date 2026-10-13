@@ -5,12 +5,12 @@ import { GameAudio } from '../src/audio/audio.js';
 test('suspended game audio clears persistent voices even without another animation frame', () => {
   const audio = new GameAudio({}, { context: { state: 'suspended' }, setListener() {} });
   const paused = [];
-  for (const key of ['charge', 'music', 'ambience', 'weather']) audio[key].pause = () => paused.push(key);
+  for (const key of ['charge', 'music', 'ambience', 'fires', 'weather']) audio[key].pause = () => paused.push(key);
   audio.update(0.016, 1, {}, { x: 2, y: 3 }, []);
-  assert.deepEqual(paused, ['charge', 'music', 'ambience', 'weather']);
+  assert.deepEqual(paused, ['charge', 'music', 'ambience', 'fires', 'weather']);
   paused.length = 0;
   audio.pause();
-  assert.deepEqual(paused, ['charge', 'music', 'ambience', 'weather']);
+  assert.deepEqual(paused, ['charge', 'music', 'ambience', 'fires', 'weather']);
 });
 
 test('locked event playback never queries terrain or allocates audio', () => {
@@ -39,6 +39,8 @@ test('audio signals follow the camera and source charge follows the player', () 
   };
   audio.charge.update = (...args) => assert.deepEqual(args, [0.5, 9, 10]);
   const fireflies = [{ x: 1, y: 2, phase: 0 }];
+  const fires = [{ id: 1, x: 4, y: 5, seed: 7 }];
+  audio.fires.update = (...args) => assert.deepEqual(args, [fires, 42]);
   audio.ambience.update = signals => {
     assert.equal(signals.time, 42);
     assert.equal(signals.gust, 0.4);
@@ -46,7 +48,7 @@ test('audio signals follow the camera and source charge follows the player', () 
   };
   audio.music.update = signals => assert.equal(signals.night, 0.8);
   audio.weather.update = signals => assert.deepEqual(signals, { time: 42, dt: 0.016, water: null });
-  audio.update(0.016, 42, { x: 9, y: 10, combat: { charge: 0.5 } }, { x: 2, y: 3 }, fireflies);
+  audio.update(0.016, 42, { x: 9, y: 10, combat: { charge: 0.5 } }, { x: 2, y: 3 }, fireflies, fires);
   assert.deepEqual(listener, [2, 3]);
 });
 

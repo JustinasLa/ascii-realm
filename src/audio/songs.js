@@ -208,9 +208,167 @@ const covenant = score({
   ],
 });
 
+// Additional scores use authored scale-degree phrases, not random notes or
+// transpositions of the original three. Each climate has two distinct pairs.
+const modes = {
+  Aeolian: [0, 2, 3, 5, 7, 8, 10],
+  Phrygian: [0, 1, 3, 5, 7, 8, 10],
+  'harmonic minor': [0, 2, 3, 5, 7, 8, 11],
+};
+
+function climatePair({ id, titles, root, key, bpm, chords, day, night,
+  season, weather, lead = 'breath', nightLead = 'bell', rhythm = 0, color = 0.9 }) {
+  const scale = modes[key.slice(2)];
+  const note = degree => root + 24 + Math.floor(degree / 7) * 12 + scale[((degree % 7) + 7) % 7];
+  const harmony = chords.map(degree => [note(degree), note(degree + 2)]);
+  const phrasing = [[0.75, 2], [1, 1.75], [0.5, 2.5], [1.5, 1.5]][rhythm];
+  const melody = (degrees, nocturnal) => degrees.map((degree, bar) => {
+    const [offset, length] = nocturnal ? [phrasing[0] + 0.25, phrasing[1] - 0.25] : phrasing;
+    const notes = [[offset, note(degree), length]];
+    if (bar % 4 === (nocturnal ? 2 : 1)) notes.push([3.25, note(degrees[(bar + 3) % 16]), 0.5]);
+    return notes;
+  });
+  return Object.freeze({
+    season, weather,
+    day: score({ id: `${id}-day`, title: titles[0], bpm, key, root,
+      harmony, melody: melody(day, false), lead, color }),
+    night: score({ id: `${id}-night`, title: titles[1], bpm, key, root,
+      harmony, melody: melody(night, true), night: true, lead: nightLead, color: color * 0.94 }),
+  });
+}
+
+const climateScores = [
+  {
+    id: 'bloom', season: 'spring', titles: ['The First Green', 'Petals Under the Moon'],
+    root: 38, key: 'D Aeolian', bpm: 60, chords: [0, 3, 1, 4, 2, 5, 3, 0],
+    day: [0, 2, 4, 3, 1, 3, 5, 4, 7, 6, 4, 5, 3, 2, 1, 0],
+    night: [7, 4, 5, 2, 3, 1, 2, 0, 9, 7, 6, 4, 5, 3, 1, 0],
+  },
+  {
+    id: 'thaw', season: 'spring', titles: ['Water Beneath the Roots', 'The Seedkeeper'],
+    root: 45, key: 'A harmonic minor', bpm: 57, chords: [0, 2, 4, 1, 3, 5, 2, 0],
+    day: [4, 2, 3, 0, 1, 4, 6, 5, 7, 9, 8, 6, 4, 3, 6, 7],
+    night: [2, 0, 4, 3, 6, 4, 1, 2, 7, 6, 9, 7, 5, 3, 1, 0],
+    lead: 'choir', rhythm: 2,
+  },
+  {
+    id: 'meadow', season: 'summer', titles: ['Long Meadow Light', 'Moths at the Lantern'],
+    root: 43, key: 'G Aeolian', bpm: 62, chords: [0, 4, 3, 1, 5, 2, 4, 0],
+    day: [4, 5, 7, 6, 4, 2, 3, 1, 7, 8, 9, 7, 5, 4, 2, 0],
+    night: [9, 7, 4, 5, 6, 3, 4, 2, 8, 6, 7, 5, 4, 1, 2, 0],
+    rhythm: 1,
+  },
+  {
+    id: 'lantern', season: 'summer', titles: ['The Quiet Orchard', 'A Thousand Small Lights'],
+    root: 38, key: 'D Aeolian', bpm: 59, chords: [2, 0, 3, 5, 1, 4, 3, 0],
+    day: [2, 4, 3, 5, 4, 7, 6, 3, 8, 7, 5, 6, 4, 2, 3, 0],
+    night: [4, 7, 5, 3, 6, 4, 2, 1, 9, 8, 6, 7, 5, 3, 4, 0],
+    lead: 'bowed', rhythm: 2,
+  },
+  {
+    id: 'harvest', season: 'autumn', titles: ['Ochre Fields', 'The Last Harvest Bell'],
+    root: 40, key: 'E Phrygian', bpm: 53, chords: [0, 1, 3, 2, 4, 1, 5, 0],
+    day: [7, 5, 4, 1, 3, 2, 1, 0, 8, 6, 5, 3, 4, 2, 1, 0],
+    night: [4, 1, 0, 2, 5, 3, 1, 0, 7, 4, 5, 2, 3, 1, 2, 0],
+    lead: 'bowed', rhythm: 3,
+  },
+  {
+    id: 'leaves', season: 'autumn', titles: ['Leaves on the Old Road', 'Amber Vigil'],
+    root: 45, key: 'A harmonic minor', bpm: 55, chords: [3, 0, 2, 4, 1, 5, 3, 0],
+    day: [6, 7, 4, 2, 5, 3, 1, 0, 9, 8, 6, 4, 7, 5, 3, 0],
+    night: [7, 6, 3, 4, 2, 1, 4, 0, 8, 9, 7, 6, 4, 3, 6, 7],
+    lead: 'choir', rhythm: 1, color: 0.85,
+  },
+  {
+    id: 'frost', season: 'winter', titles: ['Frost on the Threshold', 'Stars Above the Ice'],
+    root: 38, key: 'D Aeolian', bpm: 46, chords: [0, 3, 5, 1, 4, 2, 3, 0],
+    day: [0, 4, 3, 1, 2, 5, 4, 0, 7, 4, 6, 5, 3, 1, 2, 0],
+    night: [7, 9, 6, 4, 8, 5, 3, 4, 9, 7, 5, 2, 4, 1, 3, 0],
+    lead: 'bell', rhythm: 3, color: 0.74,
+  },
+  {
+    id: 'hearth', season: 'winter', titles: ['The Sheltered Hearth', 'Ashes Until Dawn'],
+    root: 41, key: 'F Aeolian', bpm: 49, chords: [0, 2, 5, 3, 1, 4, 2, 0],
+    day: [3, 2, 0, 4, 5, 3, 1, 2, 7, 5, 4, 2, 3, 1, 4, 0],
+    night: [4, 2, 3, 0, 6, 4, 1, 2, 8, 7, 4, 5, 3, 2, 1, 0],
+    lead: 'bowed', nightLead: 'breath', rhythm: 2, color: 0.8,
+  },
+  {
+    id: 'silver-rain', weather: 'rain', titles: ['Silver on the Lake', 'Rain at the Window'],
+    root: 43, key: 'G Aeolian', bpm: 52, chords: [0, 3, 2, 5, 1, 4, 2, 0],
+    day: [4, 3, 5, 2, 6, 4, 2, 1, 8, 7, 5, 4, 6, 3, 1, 0],
+    night: [7, 5, 3, 4, 2, 0, 1, 3, 9, 6, 4, 5, 3, 2, 4, 0],
+    lead: 'bell', nightLead: 'bowed', rhythm: 1, color: 0.82,
+  },
+  {
+    id: 'reeds', weather: 'rain', titles: ['Rain Through the Reeds', 'The Sunken Ferry'],
+    root: 38, key: 'D Aeolian', bpm: 55, chords: [2, 4, 0, 3, 5, 1, 4, 0],
+    day: [2, 5, 4, 0, 3, 6, 5, 2, 7, 9, 6, 4, 5, 3, 1, 0],
+    night: [5, 2, 4, 1, 6, 3, 0, 2, 8, 5, 7, 4, 6, 2, 3, 0],
+    rhythm: 2,
+  },
+  {
+    id: 'iron-sky', weather: 'storm', titles: ['Under an Iron Sky', 'Thunder Beyond the Keep'],
+    root: 40, key: 'E Phrygian', bpm: 50, chords: [0, 1, 4, 2, 3, 5, 1, 0],
+    day: [0, 1, 4, 3, 2, 5, 1, 0, 7, 8, 5, 4, 3, 1, 2, 0],
+    night: [4, 1, 3, 0, 5, 2, 4, 1, 8, 7, 4, 2, 5, 3, 1, 0],
+    lead: 'bowed', nightLead: 'choir', rhythm: 3, color: 0.84,
+  },
+  {
+    id: 'broken-spire', weather: 'storm', titles: ['The Broken Spire', 'Oath in the Downpour'],
+    root: 45, key: 'A harmonic minor', bpm: 54, chords: [0, 4, 1, 3, 5, 2, 4, 0],
+    day: [6, 4, 7, 3, 5, 2, 6, 4, 9, 6, 8, 5, 7, 4, 6, 0],
+    night: [7, 6, 4, 1, 3, 6, 5, 2, 8, 9, 6, 4, 5, 3, 6, 7],
+    lead: 'choir', rhythm: 0, color: 0.86,
+  },
+  {
+    id: 'white-road', weather: 'snow', titles: ['The White Road', 'Footprints Without a Name'],
+    root: 41, key: 'F Aeolian', bpm: 45, chords: [0, 5, 2, 3, 1, 4, 5, 0],
+    day: [4, 0, 2, 5, 3, 1, 4, 2, 7, 3, 5, 8, 6, 4, 2, 0],
+    night: [9, 7, 4, 2, 6, 3, 1, 0, 8, 5, 7, 4, 2, 3, 1, 0],
+    lead: 'bell', rhythm: 3, color: 0.7,
+  },
+  {
+    id: 'buried-shrine', weather: 'snow', titles: ['The Buried Shrine', 'A Candle in the Snow'],
+    root: 38, key: 'D Aeolian', bpm: 48, chords: [3, 0, 4, 1, 5, 2, 3, 0],
+    day: [3, 5, 2, 0, 4, 1, 3, 5, 7, 4, 8, 6, 5, 2, 1, 0],
+    night: [5, 3, 0, 2, 7, 4, 1, 3, 9, 6, 4, 7, 5, 1, 2, 0],
+    lead: 'choir', nightLead: 'breath', rhythm: 2, color: 0.78,
+  },
+  {
+    id: 'wanderer', weather: 'wind', titles: ['The Wanderer Wind', 'Cairns in the Dark'],
+    root: 43, key: 'G Aeolian', bpm: 58, chords: [0, 4, 2, 5, 3, 1, 4, 0],
+    day: [0, 3, 4, 7, 5, 2, 6, 4, 8, 9, 7, 5, 4, 6, 2, 0],
+    night: [7, 4, 2, 5, 3, 6, 4, 0, 9, 8, 5, 7, 6, 3, 1, 0],
+    rhythm: 0,
+  },
+  {
+    id: 'dune', weather: 'wind', titles: ['Dust of the Pilgrim', 'The Empty Watchtower'],
+    root: 40, key: 'E Phrygian', bpm: 56, chords: [0, 2, 1, 4, 5, 3, 1, 0],
+    day: [1, 4, 2, 3, 5, 1, 0, 4, 8, 6, 5, 3, 4, 2, 1, 0],
+    night: [4, 5, 1, 0, 2, 4, 3, 1, 7, 8, 4, 6, 5, 2, 1, 0],
+    lead: 'bowed', rhythm: 1,
+  },
+  {
+    id: 'lost-path', weather: 'fog', titles: ['Where the Path Vanishes', 'Names in the Fog'],
+    root: 38, key: 'D Aeolian', bpm: 47, chords: [0, 3, 1, 5, 2, 4, 3, 0],
+    day: [2, 0, 3, 1, 5, 4, 2, 0, 7, 5, 8, 6, 4, 3, 1, 0],
+    night: [5, 4, 1, 3, 2, 0, 4, 1, 8, 7, 3, 5, 6, 2, 1, 0],
+    lead: 'choir', nightLead: 'bowed', rhythm: 3, color: 0.76,
+  },
+  {
+    id: 'glass-fen', weather: 'fog', titles: ['The Glass Fen', 'A Boat Without Oars'],
+    root: 45, key: 'A harmonic minor', bpm: 51, chords: [2, 0, 5, 3, 1, 4, 2, 0],
+    day: [4, 6, 3, 1, 2, 5, 4, 0, 8, 6, 9, 7, 5, 3, 6, 7],
+    night: [6, 4, 0, 2, 3, 1, 5, 4, 9, 7, 6, 3, 4, 2, 1, 0],
+    lead: 'breath', rhythm: 2, color: 0.8,
+  },
+].map(climatePair);
+
 export const SONGS = Object.freeze({ day: runes, night: veil });
 export const SONG_PAIRS = Object.freeze([
   SONGS,
   Object.freeze({ day: gate, night: deep }),
   Object.freeze({ day: sanctum, night: covenant }),
+  ...climateScores,
 ]);

@@ -1,5 +1,7 @@
 import { tone, noise, loopNoise, setParam } from './voices.js';
 import { ASPECT } from '../world/world.js';
+import { climateAmbience } from './climate.js';
+import { nextSoundVariant, varySound } from './variations.js';
 
 const clamp01 = value => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
 const between = (low, high) => low + Math.random() * (high - low);
@@ -33,7 +35,8 @@ export class Ambience {
     this.disposed = false;
   }
 
-  update({ time = 0, gust = 0, night = 0, water = null, fireflies = [] } = {}) {
+  update({ time = 0, gust = 0, night = 0, water = null, fireflies = [],
+    season = 'spring', weather = 'clear', weatherIntensity = 0.6 } = {}) {
     const context = this.engine.context;
     if (this.disposed || context?.state !== 'running') return;
     const now = context.currentTime;
@@ -51,16 +54,21 @@ export class Ambience {
       this.nextRustle = now + between(4, 8);
     }
     if (!this.wind) {
-      this.wind = loopNoise(this.engine, { bus: 'ambience', cutoff: 260, gain: 0, Q: 0.45 });
+      this.windVariant = nextSoundVariant(this.engine, 'ambience:wind');
+      this.wind = loopNoise(this.engine, varySound(this.windVariant,
+        { bus: 'ambience', cutoff: 260, gain: 0, Q: 0.45 }));
     }
     if (!this.leaves) {
-      this.leaves = loopNoise(this.engine, {
+      this.leafVariant = nextSoundVariant(this.engine, 'ambience:leaves');
+      this.leaves = loopNoise(this.engine, varySound(this.leafVariant, {
         bus: 'ambience', cutoff: 1000, filterType: 'bandpass', gain: 0, Q: 0.45,
-      });
+      }));
     }
     if (!this.water && water) {
       // The route stays unpositioned; apply current spatial gain exactly once.
-      this.water = loopNoise(this.engine, { bus: 'ambience', cutoff: 650, gain: 0, Q: 0.45 });
+      this.waterVariant = nextSoundVariant(this.engine, 'ambience:water');
+      this.water = loopNoise(this.engine, varySound(this.waterVariant,
+        { bus: 'ambience', cutoff: 650, gain: 0, Q: 0.45 }));
     }
     for (let index = this.notes.length - 1; index >= 0; index--) {
       if (this.notes[index].end <= now) {
@@ -73,14 +81,16 @@ export class Ambience {
     const darkness = clamp01(night);
     const daylight = 1 - darkness;
     const clock = Number.isFinite(time) ? time : now;
+    const climate = climateAmbience(season, weather, weatherIntensity);
     const turbulence = 0.89 + 0.08 * Math.sin(clock * 0.31) + 0.03 * Math.sin(clock * 0.83);
     if (this.wind) {
-      setParam(this.wind.gain.gain, (0.009 + wind * 0.028) * turbulence, now, 1.1);
-      setParam(this.wind.filter.frequency, 120 + wind * 430 * turbulence, now, 1.3);
+      setParam(this.wind.gain.gain, (0.009 + wind * 0.028) * turbulence * this.windVariant.level, now, 1.1);
+      setParam(this.wind.filter.frequency, (120 + wind * 430 * turbulence) * this.windVariant.color, now, 1.3);
     }
     if (this.leaves) {
-      setParam(this.leaves.gain.gain, (0.00035 + wind * wind * 0.0028) * turbulence, now, 0.9);
-      setParam(this.leaves.filter.frequency, 800 + wind * 550, now, 1.1);
+      setParam(this.leaves.gain.gain, (0.00035 + wind * wind * 0.0028) * turbulence
+        * climate.leaves * this.leafVariant.level, now, 0.9);
+      setParam(this.leaves.filter.frequency, (800 + wind * 550) * this.leafVariant.color, now, 1.1);
     }
     if (this.water) {
       let gain = 0;
@@ -89,18 +99,19 @@ export class Ambience {
         const spatial = this.engine.spatial(water.x, water.y);
         // Two gentle swells follow world time, like the visible shoreline.
         const lap = 0.74 + 0.17 * Math.sin(clock * 0.43) + 0.09 * Math.sin(clock * 0.91);
-        gain = 0.048 * clamp01(water.strength) * spatial.gain * lap;
+        gain = 0.048 * clamp01(water.strength) * spatial.gain * lap * climate.water * this.waterVariant.level;
         pan = spatial.pan;
       }
       setParam(this.water.gain.gain, gain, now, 0.65);
       setParam(this.water.pan?.pan, pan, now, 0.15);
     }
 
-    this._wildlife(now, daylight, darkness, water, wind);
+    this._wildlife(now, daylight, darkness, water, wind, climate);
 
     if (now >= this.nextCricket) {
       this.nextCricket = now + between(6, 12);
-      if (darkness > 0.25) {
+      if (darkness > 0.25 && climate.insects > 0) {
+        this._beginCue('cricket', now, climate.insects);
         const pitch = between(2600, 3300);
         const position = this._position(15, 30);
         const spacing = between(0.1, 0.14);
@@ -135,6 +146,7 @@ export class Ambience {
         }
       }
       if (nearest && nearestGain > 0.1) {
+        this._beginCue('firefly', now);
         this.nextShimmer = now + between(11, 20);
         this._breath({
           x: nearest.x, y: nearest.y, cutoff: between(850, 1200),
@@ -153,6 +165,7 @@ export class Ambience {
 
   _note(options, end) {
     if (this.notes.length >= 48) return;
+    options = this._vary(options);
     const handle = tone(this.engine, options);
     if (handle) this.notes.push({
       handle, end: end ?? (options.when ?? this.context.currentTime) + options.duration + 0.03,
@@ -161,6 +174,7 @@ export class Ambience {
 
   _breath(options) {
     if (this.notes.length >= 48) return;
+    options = this._vary(options);
     const handle = noise(this.engine, { bus: 'ambience', ...options });
     if (handle) this.notes.push({
       handle, end: (options.when ?? this.context.currentTime) + options.duration + 0.03,
@@ -177,12 +191,25 @@ export class Ambience {
     };
   }
 
-  _wildlife(now, daylight, darkness, water, wind) {
+  _beginCue(key, now, level = 1) {
+    this.cueVariant = nextSoundVariant(this.engine, `ambience:${key}`);
+    this.cueStart = now;
+    this.cueLayer = 0;
+    this.cueLevel = level;
+  }
+
+  _vary(options) {
+    const varied = varySound(this.cueVariant, { ...options, gain: options.gain * this.cueLevel }, this.cueLayer++);
+    return { ...varied, when: this.cueStart + ((options.when ?? this.cueStart) - this.cueStart) * this.cueVariant.timing };
+  }
+
+  _wildlife(now, daylight, darkness, water, wind, climate) {
     if (now >= this.nextBird) {
       this.nextBird = now + between(11, 22);
       if (daylight > 0.3) {
+        this._beginCue('bird', now, climate.birds);
         const position = this._position(20, 38);
-        const call = BIRD_CALLS[Math.floor(Math.random() * BIRD_CALLS.length)];
+        const call = BIRD_CALLS[this.cueVariant.id % BIRD_CALLS.length];
         const pitch = between(0.9, 1.07);
         const pace = between(1, 1.25);
         for (const [offset, duration, start, finish] of call) {
@@ -205,6 +232,7 @@ export class Ambience {
     if (now >= this.nextOwl) {
       this.nextOwl = now + between(27, 45);
       if (darkness > 0.55) {
+        this._beginCue('owl', now, climate.shelter);
         const position = this._position(28, 45);
         const pitch = between(235, 285);
         for (const [offset, duration, level] of [[0, 0.32, 0.65], [0.56, 0.72, 1]]) {
@@ -230,7 +258,8 @@ export class Ambience {
     if (now >= this.nextFrog) {
       this.nextFrog = now + between(16, 28);
       if (water && Number.isFinite(water.x) && Number.isFinite(water.y)
-          && clamp01(water.strength) > 0.18 && darkness > 0.2) {
+          && clamp01(water.strength) > 0.18 && darkness > 0.2 && climate.frogs > 0) {
+        this._beginCue('frog', now, climate.frogs);
         // Use the actual lake location; the voice route attenuates it once.
         const position = { x: water.x, y: water.y };
         const level = clamp01(water.strength) * darkness;
@@ -248,6 +277,7 @@ export class Ambience {
     }
 
     if (now >= this.nextAnimal) {
+      this._beginCue('deer', now, climate.shelter);
       this.nextAnimal = now + between(48, 78);
       const position = this._position(37, 52);
       // A soft, distant deer-like nasal contact call, with a breathy ending.
@@ -267,7 +297,8 @@ export class Ambience {
 
     if (now >= this.nextInsect) {
       this.nextInsect = now + between(19, 33);
-      if (daylight > 0.4) {
+      if (daylight > 0.4 && climate.insects > 0) {
+        this._beginCue('insect', now, climate.insects);
         const position = this._position(16, 28);
         let offset = 0;
         for (let pulse = 0; pulse < 4; pulse++) {
@@ -282,20 +313,24 @@ export class Ambience {
 
     if (now >= this.nextBuzz) {
       this.nextBuzz = now + between(26, 43);
-      const position = this._position(7, 15);
-      const pitch = between(140, 200);
-      this._note({ bus: 'ambience', ...position, frequency: pitch,
-        endFrequency: pitch * 0.9, type: 'triangle', cutoff: 650, Q: 0.4,
-        duration: 0.4, gain: 0.0018, attack: 0.1, decay: 0.1,
-        sustain: 0.18, release: 0.18, when: now });
-      this._breath({ ...position, cutoff: 1600, filterType: 'bandpass', Q: 0.6,
-        duration: 0.06, gain: 0.002, attack: 0.012,
-        decay: 0.01, sustain: 0.15, release: 0.035, when: now + 0.38 });
+      if (climate.insects > 0) {
+        this._beginCue('buzz', now, climate.insects);
+        const position = this._position(7, 15);
+        const pitch = between(140, 200);
+        this._note({ bus: 'ambience', ...position, frequency: pitch,
+          endFrequency: pitch * 0.9, type: 'triangle', cutoff: 650, Q: 0.4,
+          duration: 0.4, gain: 0.0018, attack: 0.1, decay: 0.1,
+          sustain: 0.18, release: 0.18, when: now });
+        this._breath({ ...position, cutoff: 1600, filterType: 'bandpass', Q: 0.6,
+          duration: 0.06, gain: 0.002, attack: 0.012,
+          decay: 0.01, sustain: 0.15, release: 0.035, when: now + 0.38 });
+      }
     }
 
     if (now >= this.nextRustle) {
       this.nextRustle = now + between(9, 17);
       if (wind > 0.45) {
+        this._beginCue('rustle', now, climate.leaves);
         const position = this._position(10, 22);
         this._breath({ ...position, cutoff: 1250, filterType: 'bandpass', Q: 0.45,
           duration: between(1.1, 1.8), gain: 0.0025 * wind,

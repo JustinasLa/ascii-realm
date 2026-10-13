@@ -1,4 +1,5 @@
 import { noise } from './voices.js';
+import { nextSoundVariant, varySound } from './variations.js';
 
 // Dark, close textures under leather boots. The body of a landing comes from
 // unpitched weight, leaving room for the distant, arcane musical atmosphere.
@@ -19,7 +20,12 @@ export function playMovement(engine, event, surface = 'dirt') {
   if (type !== 'jump' && type !== 'land' && type !== 'skid') return [];
   const voices = [];
   const retain = voice => { if (voice) voices.push(voice); };
-  const playNoise = options => retain(noise(engine, options));
+  let variant;
+  let layer = 0;
+  const playNoise = options => {
+    variant ??= nextSoundVariant(engine, `movement:${type}:${surface}`);
+    retain(noise(engine, varySound(variant, options, layer++)));
+  };
   const strength = Number.isFinite(event.strength)
     ? Math.max(0, Math.min(1.2, event.strength))
     : 0.6;

@@ -1,6 +1,8 @@
 // Recorded grass brushing and foot contact keep their natural envelope.
 // Samples load only after unlock;
 // contacts missed while loading are deliberately discarded.
+import { nextSoundVariant, ShuffleBag } from './variations.js';
+
 export const GRASS_SAMPLE_URLS = Object.freeze([
   'grass-L1.wav', 'grass-R1.wav', 'grass-L2.wav',
   'grass-R2.wav', 'grass-L3.wav', 'grass-R3.wav',
@@ -27,7 +29,7 @@ export class GrassFootsteps {
     this.loading = null;
     this.retryAt = 0;
     this.failures = 0;
-    this.nextVariant = 0;
+    this.recordings = new ShuffleBag(GRASS_SAMPLE_URLS.map((_, index) => index));
     this.handles = new Set();
   }
 
@@ -40,7 +42,7 @@ export class GrassFootsteps {
       this.loading = null;
       this.retryAt = 0;
       this.failures = 0;
-      this.nextVariant = 0;
+      this.recordings = new ShuffleBag(GRASS_SAMPLE_URLS.map((_, index) => index));
     }
     return context;
   }
@@ -95,7 +97,8 @@ export class GrassFootsteps {
       return [];
     }
 
-    const buffer = this.buffers[this.nextVariant];
+    const variant = nextSoundVariant(this.engine, 'step:grass');
+    const buffer = this.buffers[this.recordings.next()];
     const nodes = [];
     let route;
     let source;
@@ -124,9 +127,11 @@ export class GrassFootsteps {
       const gain = context.createGain();
       nodes.push(gain);
       const at = context.currentTime;
-      const rate = 0.98 + Math.random() * 0.04;
+      // Keep the recorded contact intact; vary articulation without cropping,
+      // extra noise, or a conspicuous pitch shift.
+      const rate = 0.98 + variant.id / 24 * 0.04;
       const duration = buffer.duration / rate;
-      const level = 0.8 * Math.min(0.12, 0.095 * Math.sqrt(strength) * volume);
+      const level = 0.8 * Math.min(0.12, 0.095 * Math.sqrt(strength) * volume) * variant.level;
       const fadeIn = Math.min(0.003, duration * 0.1);
       const fadeOut = Math.min(0.008, duration * 0.2);
       source.buffer = buffer;
@@ -140,7 +145,6 @@ export class GrassFootsteps {
       gain.connect(route.input);
       source.onended = cleanup;
       source.start(at);
-      this.nextVariant = (this.nextVariant + 1) % this.buffers.length;
       handle = {
         context,
         get ended() { return cleaned; },
