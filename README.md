@@ -52,7 +52,9 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 - **Procedural audio.** Surface-aware footsteps, sword and movement effects,
   wind and grass rustle, lakes, birds, bugs, distant wildlife and firefly shimmer,
-  with six original songs in three day/night pairs. Sword effects use dry scrapes,
+  with six original, mysterious RPG songs in three day/night pairs, using drifting
+  choir, bowed tones, low drones, distant bells and a synthesized room reverb.
+  Sword effects use dry scrapes,
   air rush and damped metal impacts. Sound starts on your first key press or click;
   the Audio panel shows the current song, lets you skip, and saves mute and
   master, music, effects, sword and ambience levels. See [audio notes](docs/audio.md).

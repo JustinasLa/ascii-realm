@@ -1,5 +1,6 @@
-import { SONG_PAIRS, midiToFrequency } from './songs.js';
-import { tone, setParam } from './voices.js';
+import { SONG_PAIRS } from './songs.js';
+import { setParam } from './voices.js';
+import { createMusicRoom, playMusicNote } from './music-voices.js';
 
 const LOOKAHEAD = 0.2;
 const START_DELAY = 0.04;
@@ -20,6 +21,7 @@ export class Music {
     this.pairIndex = 0;
     this.night = 0;
     this.retiring = [];
+    this.room = null;
   }
 
   get currentSong() {
@@ -44,13 +46,14 @@ export class Music {
       this._fade(this.route.input.gain, 0, now);
       this.retiring.push({
         route: this.route, tracks: this.tracks,
-        voices: this.voices, end: now + SKIP_FADE,
+        room: this.room, voices: this.voices, end: now + SKIP_FADE,
       });
       // Rapid repeated skips cannot retain an unbounded number of audio graphs.
       while (this.retiring.length > MAX_RETIRING_PAIRS) {
         this._disposeGroup(this.retiring.shift());
       }
       this.route = null;
+      this.room = null;
       this.tracks = [];
       this.voices = new Set();
       this.lastTime = null;
@@ -80,7 +83,7 @@ export class Music {
     const now = context.currentTime;
     this._cleanRetiring(now);
     for (const voice of this.voices) {
-      if (voice.end <= now) this.voices.delete(voice);
+      if (voice.handle.ended || voice.end <= now) this.voices.delete(voice);
     }
     // If the tab missed updates, skip old score events instead of replaying them.
     if (this.lastTime !== null && now - this.lastTime > 1) {
@@ -101,12 +104,8 @@ export class Music {
         // Keep both scores in phase, while not allocating voices for inaudible tracks.
         if (levels[index] > 0.002 && scheduled < MAX_VOICES_PER_UPDATE) {
           const duration = Math.max(0.06, event.beats * track.secondsPerBeat * event.length);
-          const handle = tone(track.instrument, {
-            bus: 'music', frequency: midiToFrequency(event.note), type: event.type,
-            when: Math.max(now, when), duration, gain: event.gain,
-            attack: Math.min(event.attack, duration * 0.4),
-          });
-          if (handle) this.voices.add({ handle, end: Math.max(now, when) + duration + 0.02 });
+          const handle = playMusicNote(track.instrument, event, Math.max(now, when), duration);
+          if (handle) this.voices.add({ handle, end: handle.end });
           scheduled++;
         }
         this._advance(track);
@@ -121,6 +120,8 @@ export class Music {
     this.route = route;
     const levels = [Math.cos(night * Math.PI / 2), Math.sin(night * Math.PI / 2)];
     try {
+      this.room = createMusicRoom(context, route.input);
+      if (!this.room) throw new Error('Music room could not be created');
       if (fadeIn) {
         route.input.gain.setValueAtTime(0, context.currentTime);
         route.input.gain.linearRampToValueAtTime(1, context.currentTime + SKIP_FADE);
@@ -128,7 +129,6 @@ export class Music {
       for (const [index, song] of Object.values(SONG_PAIRS[this.pairIndex]).entries()) {
         const gain = context.createGain();
         gain.gain.value = levels[index];
-        gain.connect(route.input);
         const track = {
           song, gain, index: 0, loop: 0,
           start: context.currentTime + START_DELAY, secondsPerBeat: 60 / song.bpm,
@@ -136,6 +136,7 @@ export class Music {
           instrument: { context, route: () => ({ input: gain, dispose() {} }) },
         };
         this.tracks.push(track);
+        gain.connect(this.room.input);
       }
       return true;
     } catch {
@@ -169,11 +170,12 @@ export class Music {
   }
 
   _clear() {
-    this._disposeGroup({ voices: this.voices, tracks: this.tracks, route: this.route });
+    this._disposeGroup({ voices: this.voices, tracks: this.tracks, room: this.room, route: this.route });
     for (const group of this.retiring) this._disposeGroup(group);
     this.retiring = [];
     this.tracks = [];
     this.route = null;
+    this.room = null;
     this.context = null;
     this.lastTime = null;
   }
@@ -203,6 +205,7 @@ export class Music {
     for (const track of group.tracks) {
       try { track.gain.disconnect(); } catch { /* Context already closed. */ }
     }
+    try { group.room?.dispose(); } catch { /* Room already disposed. */ }
     try { group.route?.dispose(); } catch { /* Route already disposed. */ }
   }
 

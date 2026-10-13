@@ -6,6 +6,7 @@ import { SONGS, SONG_PAIRS, midiToFrequency } from '../src/audio/songs.js';
 function fakeEngine(currentTime = 12) {
   const nodes = [];
   const routes = [];
+  const buffers = [];
   const context = { state: 'running', currentTime, sampleRate: 48000 };
   function param() {
     const calls = [];
@@ -42,6 +43,16 @@ function fakeEngine(currentTime = 12) {
   context.createOscillator = () => Object.assign(node('oscillator'), {
     frequency: param(), detune: param(),
   });
+  context.createBufferSource = () => node('bufferSource');
+  context.createBiquadFilter = () => Object.assign(node('filter'), { frequency: param(), Q: param() });
+  context.createConvolver = () => node('convolver');
+  context.createBuffer = (channels, length, sampleRate) => {
+    const data = Array.from({ length: channels }, () => new Float32Array(length));
+    const buffer = { numberOfChannels: channels, length, sampleRate,
+      getChannelData: channel => data[channel] };
+    buffers.push(buffer);
+    return buffer;
+  };
   const engine = {
     context,
     route(bus) {
@@ -52,20 +63,26 @@ function fakeEngine(currentTime = 12) {
   };
   function advance(time) {
     context.currentTime = time;
-    for (const source of nodes.filter(item => item.kind === 'oscillator')) {
+    for (const source of nodes.filter(item => ['oscillator', 'bufferSource'].includes(item.kind))) {
       if (!source.ended && source.stops.some(at => at !== undefined && at <= time)) {
         source.ended = true;
         source.onended();
       }
     }
   }
-  return { engine, context, nodes, routes, advance,
-    sources: () => nodes.filter(item => item.kind === 'oscillator') };
+  return { engine, context, nodes, routes, buffers, advance,
+    sources: () => nodes.filter(item => ['oscillator', 'bufferSource'].includes(item.kind)) };
 }
 
 const target = gain => gain.calls.findLast(call => call.method === 'setTargetAtTime').args[0];
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9,
   `${actual} is approximately ${expected}`);
+const pitchClasses = { A: 9, B: 11, C: 0, D: 2, E: 4, F: 5, G: 7 };
+const modes = {
+  Aeolian: [0, 2, 3, 5, 7, 8, 10],
+  Phrygian: [0, 1, 3, 5, 7, 8, 10],
+  'harmonic minor': [0, 2, 3, 5, 7, 8, 11],
+};
 
 test('six original scores contain playable ordered notes across sixteen complete bars', () => {
   assert.deepEqual(Object.keys(SONGS), ['day', 'night']);
@@ -78,6 +95,12 @@ test('six original scores contain playable ordered notes across sixteen complete
   const songs = SONG_PAIRS.flatMap(pair => [pair.day, pair.night]);
   assert.equal(new Set(songs.map(song => song.title)).size, 6);
   assert.equal(new Set(songs.map(song => JSON.stringify(song.events))).size, 6);
+  for (const pair of SONG_PAIRS) {
+    assert.equal(pair.day.bpm, pair.night.bpm, 'overlapping scores share a tempo');
+    assert.equal(pair.day.key, pair.night.key, 'overlapping scores share a tonal mode');
+    assert.equal(pair.day.duration, pair.night.duration, 'paired loops stay aligned');
+    assert.ok(pair.day.bpm >= 40 && pair.day.bpm <= 65, 'the soundtrack uses a slow pulse');
+  }
   close(midiToFrequency(69), 440);
   close(midiToFrequency(81), 880);
   for (const song of songs) {
@@ -86,17 +109,29 @@ test('six original scores contain playable ordered notes across sixteen complete
     assert.equal(song.beats, song.bars * 4);
     close(song.duration, song.beats * 60 / song.bpm);
     assert.ok(song.duration >= 30 && song.duration <= 120);
+    const [tonic, mode] = [song.key.slice(0, 1), song.key.slice(2)];
+    assert.ok(modes[mode], 'score declares one of the soundtrack minor modes');
+    const allowedNotes = new Set(modes[mode].map(interval => (pitchClasses[tonic] + interval) % 12));
     const bars = new Set();
     let previousBeat = -1;
     for (const event of song.events) {
       assert.ok(Object.isFrozen(event));
       assert.ok(Number.isInteger(event.note) && event.note >= 24 && event.note <= 96);
+      assert.ok(allowedNotes.has(event.note % 12), `${song.key}: note ${event.note} stays in its declared mode`);
       assert.ok(midiToFrequency(event.note) >= 20 && midiToFrequency(event.note) <= 20000);
       assert.ok(event.beat >= previousBeat && event.beat >= 0 && event.beat < song.beats);
       assert.ok(event.beats > 0 && event.beat + event.beats <= song.beats);
       assert.ok(event.length > 0 && event.length <= 1);
       assert.ok(event.gain > 0 && event.gain < 0.1);
       assert.ok(Number.isFinite(event.attack) && event.attack > 0);
+      assert.equal(typeof event.voice, 'string');
+      assert.ok(Number.isFinite(event.release) && event.release > 0);
+      assert.ok(Number.isFinite(event.decay) && event.decay > 0);
+      assert.ok(Number.isFinite(event.sustain) && event.sustain >= 0 && event.sustain <= 1);
+      assert.ok(Number.isFinite(event.cutoff) && event.cutoff >= 20 && event.cutoff <= 20000);
+      for (const field of ['detune', 'spread', 'ratio']) {
+        if (event[field] !== undefined) assert.ok(Number.isFinite(event[field]));
+      }
       assert.ok(['sine', 'triangle', 'square', 'sawtooth'].includes(event.type));
       bars.add(Math.floor(event.beat / 4));
       previousBeat = event.beat;

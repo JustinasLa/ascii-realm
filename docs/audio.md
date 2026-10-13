@@ -47,7 +47,9 @@ does not prevent controls from working. Saved mute is applied before playback.
   calls are synthesized atmosphere; they do not add visible animal entities.
 - `songs.js` contains immutable authored note events and instrument recipes;
   `music.js` schedules the selected day/night pair against the audio clock and
-  blends its two tracks through dedicated gain nodes into the music bus.
+  blends its two tracks through dedicated gain nodes and a shared room into the
+  music bus. `music-voices.js` supplies soft music envelopes, drifting oscillator
+  layers and the procedurally generated convolution reverb.
 
 Positioned sources use stereo pan and distance attenuation relative to the
 camera, correcting for the width/height aspect ratio of world cells. Browsers
@@ -70,28 +72,46 @@ an audio context.
 
 | Song | Setting | Key | Tempo | Loop |
 | --- | --- | --- | --- | --- |
-| Meadow Road | Day | D dorian | 72 BPM | 16 bars / 64 beats / about 53.33 seconds |
-| Lanterns on the Lake | Night | D minor | 60 BPM | 16 bars / 64 beats / 64 seconds |
-| Orchard Waltz | Day | G major | 68 BPM | 16 bars / 64 beats / about 56.47 seconds |
-| Firefly Reverie | Night | E minor | 54 BPM | 16 bars / 64 beats / about 71.11 seconds |
-| The Wandering Brook | Day | A mixolydian | 76 BPM | 16 bars / 64 beats / about 50.53 seconds |
-| Under the Quiet Stars | Night | A minor | 58 BPM | 16 bars / 64 beats / about 66.21 seconds |
+| Runes in the Mist | Day | D Aeolian | 54 BPM | 16 bars / 64 beats / about 71.11 seconds |
+| Beneath the Veil | Night | D Aeolian | 54 BPM | 16 bars / 64 beats / about 71.11 seconds |
+| The Sealed Gate | Day | E Phrygian | 50 BPM | 16 bars / 64 beats / 76.8 seconds |
+| Whispers of the Deep | Night | E Phrygian | 50 BPM | 16 bars / 64 beats / 76.8 seconds |
+| Forgotten Sanctum | Day | A harmonic minor | 56 BPM | 16 bars / 64 beats / about 68.57 seconds |
+| Embers of the Covenant | Night | A harmonic minor | 56 BPM | 16 bars / 64 beats / about 68.57 seconds |
 
-Meadow Road layers a triangle-wave lute melody, quiet sine pads and triangle
-bass, with occasional flute answers. Lanterns on the Lake uses sine bells with
-a quiet octave partial over pads and bass. These instrument names describe
-oscillator recipes, rather than sampled recordings. Each score has deliberate
-phrase variations and rests.
-
-The other pairs feature reed and soft glass-like melodies in Orchard Waltz /
-Firefly Reverie, and harp and flute melodies in The Wandering Brook / Under the
-Quiet Stars. Each melody sits over quiet pads and bass.
+The soundtrack uses slow, spacious motifs and dark harmonies, with softly
+drifting choir and bowed tones, low drones, breathy melodies and distant bells.
+Instrument names describe oscillator recipes. Each original composition has
+authored phrase variations and rests, with room reflections carrying its tails.
+Each pair shares its key, tempo and harmonic progression so its arrangements
+overlap coherently at twilight. Two-bar drones hold a root and fifth beneath
+suspended choir by day and lower bowed harmonies at night. Day melodies use
+breathy tones in Runes in the Mist, bowed tones in The Sealed Gate and choir
+in Forgotten Sanctum; all night melodies use sparse ritual bells.
 
 Events in `songs.js` use MIDI note numbers and beat positions/durations.
 `music.js` converts beats using each song's tempo and schedules 0.2 seconds
 ahead, capped at 48 voices per update. It keeps each loop's own musical clock
 while using an equal-power day/night crossfade. Long gaps skip missed notes;
 audio suspension clears scheduled voices and resumes with a fresh phrase.
+
+## Music voices and room
+
+`playMusicNote(engine, event, when, duration)` uses a full attack, decay, sustain
+and release envelope, with the release continuing beyond the note's gate. Choir,
+bowed and drone profiles can layer gently detuned oscillators that drift over
+the note. Bells combine a sine fundamental with a quiet inharmonic partial;
+breathy tones combine sine and triangle layers. Lowpass filters soften the
+upper harmonics. These are original synthesis recipes, with no recorded voices
+or instruments.
+
+`createMusicRoom(context, destination)` gives each active score pair a shared
+dry path and a darker wet path. A deterministic stereo impulse is generated
+locally, normalized for sample rate, and cached per context. Its 2.8-second
+decaying reflections feed a convolution node followed by a 2200 Hz lowpass
+filter. This produces the distant stone-room atmosphere without loading an
+impulse-response asset. A skip fades and disposes the retiring pair's room
+along with its notes; pausing or teardown clears both dry and reverberant paths.
 
 ## Authoring synthesized sounds
 
@@ -150,7 +170,9 @@ Serve the game locally and verify:
    insect chirrs, crickets, owls and occasional distant calls remain subtle. Near
    water, listen for frog croaks at night and occasional firefly shimmer.
 6. Listen through a complete 240-second audio cycle for gentle song transitions
-   and clean repeated phrases. Check that the scene retains its moonlit look.
+   and clean repeated phrases. Listen for slow, mysterious motifs, soft choir
+   and bowed tones, low drones and distant bells with decaying room reflections.
+   Check that the scene retains its moonlit look.
 7. Use Skip song or `N` to visit all three song pairs; the current title should
    update and return to the first pair after three skips. Try skipping before
    unlocking audio, while muted and after returning from a background tab.
