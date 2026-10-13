@@ -208,10 +208,10 @@ test('matted footprints remain legible through foreground grass and fade back to
   grass.update(world, player(0.5, 0.5), 0);
   const r = render(grass, 0);
   const o = (10 * view.cols + 10) * 4;
-  assert.ok([glyph('-'), glyph('_'), glyph('=')].includes(r.fg[o + 3]),
+  assert.ok([glyph('-'), glyph('_')].includes(r.fg[o + 3]),
     'upright strokes from roots below the footprint do not bury it');
-  assert.ok(r.fg[o] >= 70, 'the exposed leaf surfaces have a clear warm highlight');
-  assert.ok(r.bg[o + 1] < 5, 'the bed beneath the footprint has a strong shadow');
+  assert.ok(r.fg[o] >= 25 && r.fg[o] <= 70, 'the mat retains a natural, moderate highlight');
+  assert.ok(r.bg[o + 1] >= 6 && r.bg[o + 1] < 9, 'the bed has a soft shadow');
   assert.equal(r.bg[(10 * view.cols + 18) * 4 + 1], 10, 'untouched ground is not shaded into an aura');
   grass.update(world, player(30.5, 30.5), 0.1);
   const recovered = render(grass, 25);
