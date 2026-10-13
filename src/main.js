@@ -1,6 +1,10 @@
-import { isDown, moveAxis, wasTapped } from './core/input.js';
+import { isDown, isUiTarget, moveAxis, wasTapped } from './core/input.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
+import { MultiplayerClient } from './multiplayer/client.js';
+import { bindMultiplayerControls } from './multiplayer/controls.js';
+import { cleanName, cleanSeed, playerState, PLAYER_COLORS } from './multiplayer/protocol.js';
+import { RemotePlayers } from './multiplayer/remote-players.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
@@ -47,22 +51,24 @@ function updateZoom(dt) {
 // Mouse wheel or +/- to zoom in and out. Trackpads send many tiny deltas and
 // mice a few large ones, so scale by the distance scrolled.
 window.addEventListener('wheel', (e) => {
+  if (isUiTarget(e.target)) return;
   e.preventDefault();
   const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
   zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
+  if (isUiTarget(e.target)) return;
   if (e.key === '+' || e.key === '=') zoomBy(1.15);
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
 
 const params = new URLSearchParams(location.search);
-const seed = Number(params.get('seed')) || 1;
+const seed = cleanSeed(params.has('seed') ? Number(params.get('seed')) : 1);
 // Shown above the warrior's head; ?name=... picks another.
-const name = (params.get('name') || 'Kael').slice(0, 24);
-const world = new World(seed);
+let name = cleanName(params.get('name') || 'Kael');
+let world = new World(seed);
 const { spawn } = world;
-const player = new Player(spawn.x, spawn.y);
+let player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
@@ -72,6 +78,31 @@ const footprints = new Footprints();
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const debug = { player, camera, world, freeze: false };
 if (params.has('debug')) window.game = debug;
+
+const remotePlayers = new RemotePlayers();
+const multiplayer = new MultiplayerClient({
+  getState: () => playerState(player),
+  onJoin: (lobby) => {
+    if (!lobby.resumed) {
+      world = new World(lobby.seed);
+      player = new Player(lobby.self.state.x, lobby.self.state.y);
+      camera.x = player.x;
+      camera.y = player.y - 11;
+      dust.list.length = 0;
+      footprints.list.length = 0;
+      hitStop = 0;
+      debug.world = world;
+      debug.player = player;
+    }
+    name = lobby.self.name;
+  },
+  onSnapshot: (members, selfId) => remotePlayers.sync(members, selfId),
+});
+debug.multiplayer = multiplayer;
+debug.remotePlayers = remotePlayers;
+bindMultiplayerControls(multiplayer, { name, seed: () => world.seed, onName: (value) => { name = value; } });
+window.addEventListener('pagehide', () => multiplayer.leave(false));
+window.addEventListener('pageshow', (event) => { if (event.persisted) multiplayer.leave(); });
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
@@ -102,6 +133,7 @@ function frame(now) {
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
   if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  remotePlayers.update(dt, now);
   for (const e of player.events) {
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
@@ -126,31 +158,46 @@ function frame(now) {
   camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
-  drawGround(renderer, world, view, time, player);
-  drawSkyReflection(renderer, view, time);
+  const worldTime = multiplayer.worldTime(time);
+  const peers = remotePlayers.visible(view);
+  drawGround(renderer, world, view, worldTime, [player, ...peers.map((peer) => peer.player)]);
+  drawSkyReflection(renderer, view, worldTime);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
+  for (const peer of peers) drawShadow(renderer, view, peer.player.x, peer.player.y, peer.player.air);
 
   // Props up to a screen above the view can still be reflected into it.
   const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
     view.y0 + view.rows + 50);
 
-  const mirror = reflector(time, view);
+  const mirror = reflector(worldTime, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
   const figure = dressFigure(player);
   drawFigure(renderer, view, player, figure, mirror);
+  for (const peer of peers) {
+    peer.figure = dressFigure(peer.player);
+    drawFigure(renderer, view, peer.player, peer.figure, mirror);
+  }
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
   drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player, figure) });
+  for (const peer of peers) {
+    drawables.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure) });
+  }
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
 
   drawTrail(renderer, view, player.trail, player.time);
-  drawNameTag(renderer, view, player, figure, name);
+  const ownColor = multiplayer.players.find((member) => member.id === multiplayer.id)?.color;
+  drawNameTag(renderer, view, player, figure, name, PLAYER_COLORS[ownColor]);
+  for (const peer of peers) {
+    drawTrail(renderer, view, peer.player.trail, peer.trailTime);
+    drawNameTag(renderer, view, peer.player, peer.figure, peer.name, PLAYER_COLORS[peer.color]);
+  }
   dust.draw(renderer, view);
-  fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
-  fireflies.draw(renderer, view, time);
+  fireflies.update(dt, worldTime, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
+  fireflies.draw(renderer, view, worldTime);
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }

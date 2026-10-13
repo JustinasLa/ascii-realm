@@ -3,13 +3,20 @@ const held = new Set();
 // Keys pressed since the game last asked, so a quick tap is never missed.
 const tapped = new Set();
 
+export function isUiTarget(target) {
+  return !!target?.closest?.('[data-game-ui], input, textarea, select, button, [contenteditable="true"]');
+}
+
 window.addEventListener('keydown', (e) => {
+  if (isUiTarget(e.target)) return;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!e.repeat) tapped.add(e.code);
   held.add(e.code);
 });
 window.addEventListener('keyup', (e) => held.delete(e.code));
-window.addEventListener('blur', () => held.clear());
+const clear = () => { held.clear(); tapped.clear(); };
+window.addEventListener('blur', clear);
+window.addEventListener('focusin', (e) => { if (isUiTarget(e.target)) clear(); });
 
 // True once for each press of any of the keys.
 export function wasTapped(...codes) {

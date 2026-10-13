@@ -9,6 +9,40 @@
   </head>
   <body>
     <canvas id="screen"></canvas>
+    <details id="multiplayer-controls" data-game-ui>
+      <summary id="multiplayer-summary">Multiplayer · Solo</summary>
+      <p id="multiplayer-status" role="status" aria-live="polite">Play solo, create a lobby, or join with a code.</p>
+      <form id="lobby-form">
+        <label for="lobby-name">Your name</label>
+        <input id="lobby-name" type="text" maxlength="24" autocomplete="nickname" placeholder="Kael" />
+        <label for="lobby-code">Lobby code</label>
+        <input id="lobby-code" type="text" maxlength="6" minlength="6" pattern="[A-Za-z0-9]{6}" required
+          autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB7K2D"
+          title="Enter the six letters and numbers shared by your friend" />
+        <div class="lobby-actions">
+          <button id="lobby-create" type="button">Create lobby</button>
+          <button id="lobby-join" type="submit">Join lobby</button>
+        </div>
+        <details class="lobby-server-settings">
+          <summary>Lobby server</summary>
+          <label for="lobby-server">Server address</label>
+          <input id="lobby-server" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="Same as this website" />
+          <p>Use the same server as your friends.</p>
+        </details>
+      </form>
+      <div id="lobby-session" hidden>
+        <p class="lobby-label">Share this lobby code</p>
+        <output id="lobby-room-code" aria-label="Your lobby code"></output>
+        <div class="lobby-actions">
+          <button id="lobby-copy-code" type="button">Copy code</button>
+          <button id="lobby-copy-invite" type="button">Copy invite</button>
+        </div>
+        <input id="lobby-share" type="text" aria-label="Select and copy this invitation" readonly hidden />
+        <p class="lobby-label">Players</p>
+        <ul id="lobby-players" aria-label="Players in your lobby"></ul>
+      </div>
+      <button id="lobby-leave" type="button" hidden>Leave lobby</button>
+    </details>
     <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump &middot; J / click — strike &middot; F — draw or sheathe &middot; scroll — zoom</div>
     <script type="module" src="src/main.js"></script>
   </body>

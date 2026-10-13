@@ -34,6 +34,7 @@ const WAVE_DOT = glyph('·');
 // renderer's buffers because this runs for every visible cell every frame.
 export function drawGround(r, world, view, t, bend) {
   const { fg, bg, cols } = r;
+  const bends = Array.isArray(bend) ? bend : [bend];
   let chunk = null;
   let ccx = 0;
   let ccy = 0;
@@ -68,10 +69,12 @@ export function drawGround(r, world, view, t, bend) {
         const gust = valueNoise(wx * ASPECT * 0.035 - t * 0.55, wy * 0.035 + t * 0.12, world.seed + 900);
         let lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
         // Blades near the wanderer's feet are pushed aside.
-        const pdx = (wx + 0.5 - bend.x) * ASPECT;
-        const pdy = wy + 0.5 - bend.y;
-        const pd = pdx * pdx + pdy * pdy;
-        if (pd < BEND_R2) lean += Math.sign(pdx) * (1 - pd / BEND_R2) * 3;
+        for (const feet of bends) {
+          const pdx = (wx + 0.5 - feet.x) * ASPECT;
+          const pdy = wy + 0.5 - feet.y;
+          const pd = pdx * pdx + pdy * pdy;
+          if (pd < BEND_R2) lean += Math.sign(pdx) * (1 - pd / BEND_R2) * 3;
+        }
         if (rnd < 0.12) ch = STUBBLE[Math.floor(rnd * 33) % STUBBLE.length];
         else ch = BLADE[lean < -0.35 ? 0 : lean > 0.35 ? 2 : 1];
         // Pick one of a few greens per blade, darken whole patches with the
