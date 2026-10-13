@@ -180,6 +180,7 @@ export class ModelFigure {
     this.oneShot = null;
     this.lastMove = null;
     this.landed = false;
+    this.windingUp = false;
     this.cells = [];
   }
 
@@ -289,9 +290,14 @@ export class ModelFigure {
       w.rest = p.kneel;
     }
     // Jumping.
-    if (p.windUp >= 0 || p.air > 0) {
+    const windingUp = p.windUp >= 0;
+    // Unused one-shot clips still advance with the mixer; replay anticipation
+    // once when gathering for each jump.
+    if (windingUp && !this.windingUp) this.actions.jumpStart.reset().play();
+    this.windingUp = windingUp;
+    if (windingUp || p.air > 0) {
       for (const k in w) w[k] = 0;
-      if (p.windUp >= 0) w.jumpStart = 1;
+      if (windingUp) w.jumpStart = 1;
       else w.jumpLoop = 1;
       this.landed = false;
     } else if (!this.landed && p.landed > 0) {

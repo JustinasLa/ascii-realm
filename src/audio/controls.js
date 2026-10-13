@@ -41,6 +41,9 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
       : 'Press a key or click to enable sound';
   };
   const unlock = () => { void engine.unlock().then(refresh); };
+  // Touch and pen gestures gain user activation on release, unlike the mouse.
+  const pointerdown = event => { if (event.pointerType === 'mouse') unlock(); };
+  const pointerup = event => { if (event.pointerType !== 'mouse') unlock(); };
   const updateSong = () => {
     const title = music.currentSong;
     if (song.textContent !== title) song.textContent = title;
@@ -86,6 +89,7 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
     weatherSelect.append(option);
   }
   const keydown = event => {
+    if (event.ctrlKey || event.metaKey || event.altKey || event.code === 'Escape') return;
     if (event.code === 'KeyM' && !event.repeat) engine.toggleMute();
     if (event.code === 'KeyN' && !event.repeat) skipSong();
     unlock();
@@ -119,7 +123,8 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
   weatherSelect.addEventListener('change', selectWeather);
   weatherIntensity.addEventListener('input', changeIntensity);
   window.addEventListener('keydown', keydown);
-  window.addEventListener('pointerdown', unlock);
+  window.addEventListener('pointerdown', pointerdown);
+  window.addEventListener('pointerup', pointerup);
   document.addEventListener('visibilitychange', visibility);
   refresh();
   updateSong();
@@ -134,7 +139,8 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
     weatherIntensity.removeEventListener('input', changeIntensity);
     for (const slider of sliders) slider.removeEventListener('input', volume);
     window.removeEventListener('keydown', keydown);
-    window.removeEventListener('pointerdown', unlock);
+    window.removeEventListener('pointerdown', pointerdown);
+    window.removeEventListener('pointerup', pointerup);
     document.removeEventListener('visibilitychange', visibility);
   };
   unbind.updateSong = updateSong;

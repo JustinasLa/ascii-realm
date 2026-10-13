@@ -4,6 +4,8 @@ import { playFootstep } from '../src/audio/footsteps.js';
 import { playMovement } from '../src/audio/movement.js';
 import { playSword, ChargeHum } from '../src/audio/sword.js';
 import { Ambience } from '../src/audio/ambience.js';
+import { Fireflies } from '../src/world/fireflies.js';
+import { WATER } from '../src/world/world.js';
 
 function fakeAudio() {
   const nodes = [];
@@ -336,6 +338,30 @@ test('firefly glints are rare night-gated positioned noise, without musical ping
   assert.equal(audio.routes.length, routes);
   ambience.dispose();
   assertDisposed(audio);
+});
+
+test('firefly glints ignore failed spawns and invalid phases without hiding a bright source', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  const fireflies = new Fireflies();
+  fireflies.update(0, 0, { typeAt: () => WATER }, 20, 40, 10, 5);
+  assert.ok(fireflies.list.length > 0);
+  assert.ok(fireflies.list.every(firefly => firefly.retryAt > 0));
+  const inactive = [
+    ...fireflies.list,
+    { x: 20, y: 40, phase: NaN },
+    { x: 20, y: 40, phase: Infinity },
+    { x: 20, y: 40, phase: Math.PI / 2, retryAt: 1 },
+  ];
+  const environment = { time: 0, night: 1, fireflies: inactive };
+  assert.deepEqual(recordWildlife('nextShimmer', environment), []);
+
+  const bright = { x: 120, y: 40, phase: Math.PI / 2 };
+  const calls = recordWildlife('nextShimmer', {
+    ...environment, fireflies: [...inactive, bright],
+  });
+  assert.ok(calls.length > 0);
+  assert.ok(calls.every(call => call.options.x === bright.x && call.options.y === bright.y));
+  assert.ok(calls.every(call => Number.isFinite(call.options.gain) && call.options.gain > 0));
 });
 
 test('ambience clock jumps prune expired notes and keep wildlife bounded with complete cleanup', t => {

@@ -124,6 +124,7 @@ export class Ambience {
       let nearestGain = 0;
       let brightness = 0;
       for (const firefly of darkness > 0.4 ? (fireflies ?? []) : []) {
+        if (firefly.retryAt !== undefined || !Number.isFinite(firefly.phase)) continue;
         if (!Number.isFinite(firefly.x) || !Number.isFinite(firefly.y)) continue;
         const pulse = Math.max(0, Math.sin(clock * 1.4 + firefly.phase));
         if (pulse < 0.8) continue;

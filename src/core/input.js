@@ -5,12 +5,16 @@ const tapped = new Set();
 
 window.addEventListener('keydown', (e) => {
   if (e.target.closest?.('#audio-controls')) return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!e.repeat) tapped.add(e.code);
   held.add(e.code);
 });
 window.addEventListener('keyup', (e) => held.delete(e.code));
-window.addEventListener('blur', () => held.clear());
+window.addEventListener('blur', () => {
+  held.clear();
+  tapped.clear();
+});
 
 // True once for each press of any of the keys.
 export function wasTapped(...codes) {
