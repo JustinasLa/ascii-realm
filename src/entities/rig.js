@@ -117,6 +117,19 @@ function gaitTrack(name, u, run) {
   return Array.isArray(w) ? w.map((v, k) => v + (r[k] - v) * run) : w + (r - w) * run;
 }
 
+// A foot's track, `u` of the way through its own cycle. A walking foot is
+// down for longer than a running one, so before blending, each recording is
+// time-warped so its touchdown and lift-off fall where the blended gait's
+// do; otherwise a half-walk, half-run would mix a planted foot with a lifted
+// one.
+function footTrack(name, u, run) {
+  const beta = dutyFactor(run);
+  const warp = (b) => (u < beta ? (u / beta) * b : b + ((u - beta) / (1 - beta)) * (1 - b));
+  const w = sample(WALK[name], warp(WALK.beta));
+  const r = sample(RUN[name], warp(RUN.beta));
+  return w.map((v, k) => v + (r[k] - v) * run);
+}
+
 // How far the body travels over one full gait cycle (two steps), in metres.
 export function strideCycle(run) {
   return mix(WALK.stride, RUN.stride, run);
@@ -133,7 +146,7 @@ const footU = (phase, s) => frac(cycleAt(phase) - (s > 0 ? 0 : 0.5));
 // The left foot's footprint in the body frame, `u` of the way through its
 // cycle: where the ankle came down, sliding back as the body passes.
 function printAt(u, run) {
-  const a = gaitTrack('ankle', 0, run);
+  const a = footTrack('ankle', 0, run);
   return [a[0], a[2] - strideCycle(run) * u];
 }
 
@@ -184,8 +197,8 @@ function mocapLegs(st, phase, run, crouch) {
   const legs = [-1, 1].map((s, j) => {
     const u = footU(phase, s);
     const side = (p) => (s > 0 ? p : mirror(p));
-    let ankle = side(gaitTrack('ankle', u, run));
-    let toe = side(gaitTrack('toe', u, run));
+    let ankle = side(footTrack('ankle', u, run));
+    let toe = side(footTrack('toe', u, run));
     ankle[1] += st.air ?? 0;
     toe[1] += st.air ?? 0;
 
