@@ -317,6 +317,30 @@ test('saplings and walkable bushes form a varied layer below mature trees', () =
   assert.ok(heights.size >= 4, 'sapling species have different proportions');
 });
 
+test('moonlit crowns are paler on top and trunks stay warm in every growth stage', () => {
+  const brightness = (c) => c.r + c.gg + c.b;
+  const mean = (cells) => cells.reduce((sum, c) => sum + brightness(c), 0) / cells.length;
+  for (const species of TREE_SPECIES) {
+    const prop = tree(species);
+    const leaves = prop.cells.filter((c) => c.foliage);
+    const top = Math.min(...leaves.map((c) => c.dy));
+    const bottom = Math.max(...leaves.map((c) => c.dy));
+    const third = (bottom - top) / 3;
+    assert.ok(mean(leaves.filter((c) => c.dy < top + third)) > mean(leaves.filter((c) => c.dy > bottom - third)) * 1.2,
+      `${species} crown top is lit`);
+    const trunk = prop.cells.filter((c) => !c.foliage && c.dy > -6);
+    if (species !== 'birch') assert.ok(trunk.every((c) => c.r >= c.b), `${species} warm bark`);
+    // Deeply shaded bark under a leafy cell must still choose a real glyph.
+    for (let i = 0; i < 24; i++) {
+      for (const growth of ['sapling', 'bush']) {
+        const young = makeTree(i * 37.5, 300.5 + i, mulberry32(i + 1), { species, seed: 42, growth });
+        assert.ok(young.cells.every((c) => Number.isInteger(c.g) && c.g > 0 && c.g < [...GLYPHS].length),
+          `${species} ${growth} ${i} glyphs`);
+      }
+    }
+  }
+});
+
 test('nearby player reveal removes only local foliage behind the tree', () => {
   const prop = freezeTree(tree());
   let t = 0;

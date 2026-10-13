@@ -1,6 +1,7 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { glyph } from '../render/glyphs.js';
+import { MOSS } from '../render/palette.js';
 import { ASPECT } from './world.js';
 
 export const DEADWOOD_CONDITIONS = Object.freeze(['fallen', 'snag', 'stump', 'beaver']);
@@ -72,7 +73,7 @@ export function makeDeadwood(x, y, rand, { condition = 'fallen', species = 'oak'
   const spriteSeed = Math.floor(hash2(Math.floor(x), Math.floor(y), seed + 763) * 2 ** 32);
   const random = rand ?? mulberry32(spriteSeed);
   const radius = 1.9 + random() * 2.1;
-  const bark = species === 'birch' ? [168, 176, 172] : [107, 83, 65];
+  const bark = species === 'birch' ? [176, 182, 184] : [140, 96, 64];
   const woodColor = [194, 146, 86];
   const branches = [];
   const chips = [];
@@ -120,7 +121,7 @@ export function makeDeadwood(x, y, rand, { condition = 'fallen', species = 'oak'
         const exposed = grain > 0.8;
         const moss = normal < -0.3 && grain < 0.27;
         const s = timber(px, py, 0.62 - normal * 0.27, exposed, exposed ? G['='] : grain < 0.5 ? G[':'] : G['%']);
-        if (moss) s.color = [50 + grain * 40, 87 + grain * 45, 57];
+        if (moss) s.color = MOSS.map((v) => v * (0.8 + grain * 0.6));
         return s;
       }
       for (const b of branches) {
