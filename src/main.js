@@ -9,6 +9,8 @@ import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
+import { Fires } from './world/fire.js';
+import { fireWeatherWind } from './world/fire-wind.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
@@ -75,6 +77,8 @@ const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
 const splashes = new Splashes();
+const fires = new Fires();
+fires.addStarter(world);
 const sound = new GameAudio(world);
 sound.music.update({ night: 1 });
 const unbindAudio = bindAudioControls(sound.engine, sound.music, sound.weather, () => sound.pause());
@@ -94,12 +98,24 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, splashes, renderer, audio: sound.engine, sound, freeze: false };
+const debug = { player, camera, world, splashes, fires, renderer, audio: sound.engine, sound, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
 let walked = 0;
+const fireStatus = document.getElementById('fire-status');
+let fireNoticeUntil = 0;
+const fireMessages = {
+  lit: 'Campfire lit. Press C nearby to put it out.', out: 'Campfire extinguished.',
+  water: 'Find dry ground to build a campfire.', air: 'Land before building a campfire.',
+  blocked: 'Find an open patch of dry ground.', limit: 'Put out a campfire before building another.',
+};
+function fireNotice(message) {
+  fireStatus.textContent = message;
+  fireStatus.classList.add('visible');
+  fireNoticeUntil = time + 3;
+}
 
 // A click on the scene swings the sword.
 // Holding it down charges a spin.
@@ -161,10 +177,13 @@ function frame(now) {
   if (wasTapped('Space')) player.jump();
   if (wasTapped('KeyJ') || clicked) player.attack();
   if (wasTapped('KeyF')) player.toggleSword();
+  if (wasTapped('KeyC') && !debug.freeze) fireNotice(fireMessages[fires.toggle(world, player)]);
+  if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
   clicked = false;
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
   const held = isDown('KeyJ') || mouseHeld;
+  const fromX = player.x, fromY = player.y, fromAir = player.air;
   if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {
     if (!debug.freeze) model.update(playerDt, player);
@@ -176,7 +195,9 @@ function frame(now) {
         tx: player.x + blade.tip[0], ty: player.y + blade.tip[1] });
     }
   }
+  if (!debug.freeze) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
+    if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
     splashes.react(world, e);
     if (e.type === 'step') {
@@ -206,6 +227,15 @@ function frame(now) {
   camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
+  const blownOut = debug.freeze ? [] : fires.update(dt, time, world, fireWeatherWind(sound.weather, time));
+  for (const reaction of fires.events) {
+    sound.play(reaction);
+    if (reaction.extinguished) fireNotice('The impact smothered the fire.');
+  }
+  fires.events.length = 0;
+  if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
+    fireNotice('Strong wind put out the campfire.');
+  }
   drawGround(renderer, world, view, time, player);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
@@ -217,6 +247,8 @@ function frame(now) {
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
+  const visibleFires = fires.prepare(view, time);
+  for (const fire of visibleFires) fires.draw(renderer, view, fire, time, mirror);
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
   if (model) {
@@ -232,6 +264,7 @@ function frame(now) {
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
+  for (const fire of visibleFires) drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
   drawables.push({
     y: player.y,
     draw: () => (model ? model.draw(renderer, putCell) : drawFigure(renderer, view, player, figure)),
@@ -239,16 +272,18 @@ function frame(now) {
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
   splashes.drawContacts(renderer, view, time, contacts);
+  fires.light(renderer, view, time, visibleFires);
 
   drawTrail(renderer, view, player.trail, player.time);
   if (model) drawName(model.top);
   else drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
+  fires.drawParticles(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   if (debug.freeze) sound.pause();
-  else sound.update(dt, time, player, camera, fireflies.list);
+  else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);

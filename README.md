@@ -53,6 +53,20 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
+- **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
+  drifting smoke, rising embers, warm light on the surroundings and rippling
+  lake reflections. Fires start small and grow brighter over about 20 seconds,
+  with their glow and crackling building together. The same gusts that sway
+  the grass bend the flames, including wind from the weather settings;
+  sustained strong wind weakens and extinguishes
+  them, while brief gusts let them recover. One waits beside the spawn clearing.
+  Press `C` to build another on open, dry ground, or put out the nearest fire
+  within reach.
+  Extinguished fires leave a persistent patch of scorched grass and ash.
+  Sword cuts bend the flames and scatter embers; walking, running, skidding,
+  jumping and landing stir the fire according to their force. Heavy or repeated
+  contacts can smother it, with flying coals and ash lingering after it goes out.
+  Nearby fires crackle through the Ambience volume control.
 - **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
   surfaces and movement effects,
   slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
@@ -99,6 +113,7 @@ npm test
 | `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
+| `C` | Build a campfire on dry ground, or extinguish a nearby fire |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
 | Audio panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
@@ -114,7 +129,7 @@ src/
   core/              input, hashing, noise
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   render/            glyph atlas, WebGL renderer, cell writers
-  world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
+  world/             terrain, grass and water shading, props, sky, reflections, fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
 ```
 
