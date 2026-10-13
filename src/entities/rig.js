@@ -85,72 +85,142 @@ const SWEEP = (a) => Math.asin(SOFT * Math.sin(a)) / Math.asin(SOFT);
 // for a given amount of running. A planted foot sweeps back through the
 // whole stride angle, so this is what keeps the feet from sliding.
 export function strideCycle(run) {
-  return 1.4 + 0.9 * run;
+  return 1.45 + 1.35 * run;
 }
 
-// The fraction of the walk cycle each foot spends on the ground: half when
-// walking, so one foot is always down, less when running, which leaves a
-// moment between steps with both feet in the air.
-const dutyFactor = (run) => 0.5 - 0.15 * run;
+// The fraction of the walk cycle each foot spends on the ground. Walking it
+// is over half, so for a moment at each step both feet are down; running it
+// is well under half, which leaves a moment with both feet in the air.
+const dutyFactor = (run) => 0.62 - 0.29 * run;
 
 const smooth = (t) => t * t * (3 - 2 * t);
 const frac = (x) => x - Math.floor(x);
+const mix = (a, b, t) => a + (b - a) * t;
+
+// The foot, relative to the ankle when standing flat: the heel it lands on,
+// the ball it pushes off from, and the tip of the toes.
+const HEEL = [0, -0.065, -0.045];
+const BALL = [0, -0.05, 0.13];
+const TOES = [0, -0.015, 0.15];
+
+// A point on the foot once it is pitched by `p` (positive tips the toes down).
+const tilt = (v, p) => rotX(v, p);
+
+// How long the leg is from hip to ankle with the knee bent by `bend`.
+const reachWith = (bend) => Math.sqrt(THIGH * THIGH + SHIN * SHIN + 2 * THIGH * SHIN * Math.cos(bend));
+
+// Where a foot is, `u` of the way through its cycle (0 is the moment it
+// touches down). Positions are in the body's frame: the ankle, the foot's
+// pitch, and its footprint on the ground (null while it is in the air).
+//
+// A walking foot strikes the ground heel first with the toes up, rolls flat,
+// then peels up onto its ball to push off; a running foot lands further
+// forward on the foot and pushes off harder. Once lifted, the heel rises
+// behind the body, then the foot skims forward low and reaches out for the
+// next step.
+//
+// `lock` may pin the foot to where it really is: `print` is the footprint
+// of a planted foot and `lift` where a lifted foot left the ground, both as
+// [x, z] in the body's frame. The player keeps these anchored in the world,
+// so feet stay put as the body turns over them.
+function footAt(u, x, beta, half, run, lock = null) {
+  const strike = -0.3 * (1 - run);
+  const pushOff = 0.62 + 0.15 * run;
+  if (u < beta) {
+    const t = u / beta;
+    // The footprint itself never moves: relative to the body it slides back
+    // at exactly the speed the body moves forward.
+    const flat = lock?.print ? [lock.print[0], 0.065, lock.print[1]] : [x, 0.065, half - 2 * half * t];
+    const print = [flat[0], 0, flat[2]];
+    const heelOff = 0.55 - 0.15 * run;
+    if (t < 0.15 && strike < 0) {
+      const p = strike * (1 - smooth(t / 0.15));
+      const pivot = add(flat, HEEL);
+      return { ankle: sub(pivot, tilt(HEEL, p)), pitch: p, contact: print };
+    }
+    if (t > heelOff) {
+      const p = pushOff * smooth((t - heelOff) / (1 - heelOff));
+      const pivot = add(flat, BALL);
+      return { ankle: sub(pivot, tilt(BALL, p)), pitch: p, contact: print };
+    }
+    return { ankle: flat, pitch: 0, contact: print };
+  }
+  const t = (u - beta) / (1 - beta);
+  const from = footAt(beta - 1e-6, x, beta, half, run, lock?.lift ? { print: lock.lift } : null);
+  const to = footAt(0, x, beta, half, run);
+  const e = smooth(t);
+  // The heel lifts most early in the swing, just behind the body, rather
+  // than in a high march out in front. Running, it kicks right up behind.
+  const lift = (0.09 + 0.22 * run) * Math.sin(Math.PI * t ** (0.6 - 0.15 * run)) * (1 - 0.35 * t);
+  const ankle = [x, mix(from.ankle[1], to.ankle[1], t) + lift, mix(from.ankle[2], to.ankle[2], e)];
+  const pitch = mix(from.pitch, to.pitch, e) + 0.25 * Math.sin(Math.PI * t) * (1 - t);
+  return { ankle, pitch, contact: null };
+}
+
+// Where each foot is in its cycle for a given walk phase: how far through
+// (`u`, 0 at touchdown), whether it is on the ground, and where its
+// footprint would be in the body's frame if nothing pinned it.
+export function gaitPlan(phase, run) {
+  const beta = dutyFactor(run);
+  const half = (strideCycle(run) * beta) / 2;
+  const width = 0.085 - 0.04 * run;
+  return [-1, 1].map((s) => {
+    const lp = phase + (s > 0 ? 0 : Math.PI);
+    const u = frac((lp - Math.PI / 2) / (Math.PI * 2));
+    return { s, u, grounded: u < beta, print: [s * width, half - (2 * half * u) / beta] };
+  });
+}
 
 // Legs for walking and running, placed by where the feet should be rather
-// than by joint angles. A planted foot stays exactly where it landed while
-// the body travels over it; a lifted foot swings forward along an arc to its
-// next footprint. The hips ride a little lower than the legs' full length,
-// so the knees, solved to join hip and foot, are always softly bent.
+// than by joint angles: each planted foot stays exactly where it landed
+// while the body travels over it, and the knees are solved to join hips to
+// feet.
 //
-// Returns the pelvis and legs in the body's frame.
+// Walking, the hips ride as high as the planted legs allow, so the body
+// vaults up over each foot and dips as the weight passes from one to the
+// next. Running, the legs are springs: the body sinks into each footfall and
+// is thrown up between them.
+//
+// Returns the pelvis and legs in the body's frame, and how many feet are on
+// the ground.
 function plantedLegs(st, phase, run, crouch, twist, sway) {
   const beta = dutyFactor(run);
   const half = (strideCycle(run) * beta) / 2;
 
-  // Where we are in the pair of steps, and whether both feet are up.
-  const q = frac((phase - Math.PI / 2) / (Math.PI * 2)) % 0.5;
-  const flight = beta < 0.5 && q >= beta ? run * 0.06 * Math.sin((Math.PI * (q - beta)) / (0.5 - beta)) : 0;
-  // A planted leg is a spring: walking vaults up over it, running sinks
-  // into it.
-  const load = q < beta ? Math.sin((Math.PI * q) / beta) : 0;
-  const bob = load * (0.045 * (1 - run) - 0.02 * run);
-  const air = (st.air ?? 0) + flight;
-  const pelvis = [sway, 0.915 - 0.015 * run - crouch * 0.35 + bob + air, 0];
+  const feet = gaitPlan(phase, run).map((g, j) => ({
+    s: g.s,
+    ...footAt(g.u, g.print[0], beta, half, run, st.locks?.[j]),
+  }));
 
-  const legs = [];
-  for (const s of [-1, 1]) {
-    const lp = phase + (s > 0 ? 0 : Math.PI);
-    const u = frac((lp - Math.PI / 2) / (Math.PI * 2));
-    // How far the heel has peeled up off the ground at the end of a step.
-    const heelEnd = 0.05 + 0.05 * run;
-    let z;
-    let y;
-    let pitch;
-    if (u < beta) {
-      // Planted: sliding back under the body at exactly the body's speed.
-      const t = u / beta;
-      z = half - 2 * half * t;
-      const heel = t > 0.65 ? ((t - 0.65) / 0.35) ** 2 * heelEnd : 0;
-      y = 0.065 + heel;
-      pitch = Math.asin((0.015 + heel) / 0.15);
-    } else {
-      // Lifted: the heel kicks up behind, then the foot swings through and
-      // reaches out flat for the next step. Running, the foot rises higher
-      // and sooner, folding the leg up tight.
-      const t = (u - beta) / (1 - beta);
-      z = -half + 2 * half * smooth(t);
-      const lift = (0.1 + 0.24 * run) * Math.sin(Math.PI * t ** (0.85 - 0.3 * run));
-      y = 0.065 + heelEnd * (1 - t) ** 2 + lift;
-      const start = Math.asin((0.015 + heelEnd) / 0.15);
-      pitch = start + (0.1 - start) * smooth(t) + 0.35 * Math.sin(Math.PI * t) * (1 - t);
-    }
-    const hip = add(pelvis, rotY([s * 0.09, -0.04, 0], -twist * 0.6));
-    const target = [sway + s * 0.08, y + air, z];
-    const [knee, ankle] = reach(hip, target, THIGH, SHIN, [s * 0.15, 0.1, 1]);
-    const toe = add(ankle, [0, -Math.sin(pitch) * 0.15, Math.cos(pitch) * 0.15]);
-    legs.push({ s, hip, knee, ankle, toe });
+  // Walking: as high as the planted legs reach with the knee barely bent.
+  let walkHip = 0.95;
+  const longest = reachWith(0.1);
+  for (const f of feet) {
+    if (!f.contact) continue;
+    const dx = f.ankle[0] - f.s * 0.09;
+    const room = longest * longest - f.ankle[2] * f.ankle[2] - dx * dx;
+    walkHip = Math.min(walkHip, f.ankle[1] + Math.sqrt(Math.max(0, room)));
   }
-  return { pelvis, legs };
+  // Running: sinking into each footfall, thrown up between them.
+  const q = frac((phase - Math.PI / 2) / (Math.PI * 2)) % 0.5;
+  const runHip = q < beta
+    ? 0.83 - 0.05 * Math.sin((Math.PI * q) / beta)
+    : 0.83 + 0.06 * Math.sin((Math.PI * (q - beta)) / (0.5 - beta));
+  const hipY = mix(walkHip, runHip, run) - crouch * 0.35 + (st.air ?? 0);
+  // The hip of the swinging leg drops a little: the pelvis tilts down
+  // towards the side that is unsupported.
+  const pelvis = [sway, hipY + 0.04, 0];
+
+  const legs = feet.map((f) => {
+    const drop = f.contact ? 0 : 0.018 * (1 - run);
+    const hip = add(pelvis, rotY([f.s * 0.09, -0.04 - drop, 0], -twist * 0.6));
+    const target = add(f.ankle, [0, st.air ?? 0, 0]);
+    const [knee, ankle] = reach(hip, target, THIGH, SHIN, [f.s * 0.12, 0.05, 1]);
+    // Feet turn out a little, as they do in a natural stance.
+    const toe = add(ankle, rotY(tilt(TOES, f.pitch), f.s * 0.22));
+    return { s: f.s, hip, knee, ankle, toe, contact: f.contact };
+  });
+  return { pelvis, legs, grounded: feet.filter((f) => f.contact).length };
 }
 
 // Builds the posed skeleton. `st` holds:
@@ -171,14 +241,14 @@ export function buildRig(st) {
   // The upper body does not move in lockstep with the legs: it follows a
   // beat behind, which is what makes a stride look loose rather than
   // mechanical.
-  const upper = phase - (0.3 + 0.15 * run) * walk;
+  const upper = phase - 0.12 * walk;
   // Running, the chest also pitches with each stride: forward as a foot
   // pushes off, back up as the next one lands.
-  const pitch = walk * run * 0.07 * Math.cos(2 * upper - 0.8);
-  const lean = 0.06 * walk + 0.3 * run + pitch - (st.brace ?? 0) * 0.45 + (st.lean ?? 0) + crouchAll * 0.45 +
+  const pitch = walk * run * 0.03 * Math.cos(2 * upper - 0.8);
+  const lean = 0.04 * walk + 0.16 * run + pitch - (st.brace ?? 0) * 0.45 + (st.lean ?? 0) + crouchAll * 0.45 +
     (sp ? sp.lean * fight : 0) + (st.kneel ?? 0) * 0.18;
   // Shoulders counter-rotate against the hips as the legs swing.
-  const twist = Math.sin(upper) * (0.14 + 0.08 * run) * walk * (1 - fight * 0.6) +
+  const twist = Math.sin(upper) * (0.09 + 0.1 * run) * walk * (1 - fight * 0.6) +
     (sp ? SWORD_SIDE * sp.twist * fight : 0);
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;
 
@@ -261,12 +331,17 @@ export function buildRig(st) {
 
   // While striding, the legs are placed by their footprints instead, blended
   // in as the warrior gets going so starting and stopping stay smooth.
+  // `grounded` counts the feet on the ground, and each leg's `contact` is
+  // its footprint, which stays put on the ground for as long as it is down.
+  let grounded = 2;
   if (walk > 0.001) {
     const p = plantedLegs(st, phase, run, crouchAll, twist, sway + shift);
     for (let i = 0; i < 3; i++) pelvis[i] += (p.pelvis[i] - pelvis[i]) * walk;
     legs.forEach((l, j) => {
       for (const k of ['hip', 'knee', 'ankle', 'toe']) l[k] = lerp3(l[k], p.legs[j][k], walk);
+      l.contact = p.legs[j].contact;
     });
+    grounded = p.grounded;
   }
 
   // Everything above the hips hangs off the torso frame.
@@ -274,7 +349,7 @@ export function buildRig(st) {
   // The chest leans a touch the other way to the hip sway, to balance.
   // The shoulders also roll from side to side with the stride, a beat
   // after the hips.
-  const bank = (st.bank ?? 0) + sway * 1.2 + walk * (0.025 + 0.045 * run) * Math.sin(upper - 0.4);
+  const bank = (st.bank ?? 0) + sway * 0.6 + walk * (0.012 + 0.02 * run) * Math.sin(upper - 0.4);
   const torso = (p) => add(pelvis, rotY(rotZ(rotX(p, lean), bank), twist));
   const turn = (d) => rotY(rotZ(rotX(d, lean * 0.5), bank), twist);
 
@@ -284,16 +359,20 @@ export function buildRig(st) {
     // Each arm swings with the opposite leg, a beat behind it, and the
     // forearm trails the upper arm a little further still.
     // `reach` raises both arms forward, e.g. to balance in the air.
-    const swing = -Math.sin(lp) * (0.45 + 0.5 * run) * walk + (st.reach ?? 0);
+    const swing = -Math.sin(lp) * (0.3 + 0.32 * run) * walk + (st.reach ?? 0);
     // Running, the elbow folds as the arm drives forward and opens out as it
     // swings back, rather than staying locked.
     const fwd = -Math.sin(lp - 0.5);
-    const elbow = 0.22 + 0.15 * walk + run * walk * (0.95 + 0.45 * fwd) + 0.3 * Math.max(0, swing) * (1 - run);
+    const elbow = 0.18 + walk * (1 - run) * (0.12 + 0.22 * Math.max(0, fwd)) + run * walk * (1.05 + 0.2 * fwd);
     const shoulder = torso([s * 0.175, 0.46 + breath * 0.008, 0]);
-    // Arms hang a little away from the armour, more so when at rest.
-    const elbowP = add(shoulder, mul(turn(limb(swing, s * (0.16 + 0.06 * still))), UPPER_ARM));
-    const wrist = add(elbowP, mul(turn(limb(swing + elbow, s * 0.08)), FOREARM));
-    const hand = add(wrist, mul(turn(limb(swing + elbow, s * 0.05)), 0.06));
+    // Arms hang a little away from the body, more so when at rest, and
+    // swing in towards the middle as they come forward; running, the
+    // forearms cut across in front of the chest.
+    const inward = Math.max(0, swing) * walk;
+    const elbowP = add(shoulder, mul(turn(limb(swing, s * (0.16 + 0.06 * still - 0.1 * inward))), UPPER_ARM));
+    const across = s * (0.08 - (0.15 + 0.35 * run) * inward);
+    const wrist = add(elbowP, mul(turn(limb(swing + elbow, across)), FOREARM));
+    const hand = add(wrist, mul(turn(limb(swing + elbow, across * 0.6)), 0.06));
     arms.push({ s, shoulder, elbow: elbowP, wrist, hand });
   }
 
@@ -359,6 +438,7 @@ export function buildRig(st) {
     eyes: st.blink === undefined ? 1 : 1 - st.blink,
     // How far the knees reach ahead of and behind the hips, so cloth hanging
     // from the waist can be pushed out of their way.
+    grounded,
     // How high the legs alone would hold the body this frame, before the
     // player's spring smooths it.
     gait,
@@ -382,7 +462,10 @@ function toWorld(rig, heading) {
     chest: w(rig.chest),
     neck: w(rig.neck),
     head: w(rig.head),
-    legs: rig.legs.map((l) => ({ s: l.s, hip: w(l.hip), knee: w(l.knee), ankle: w(l.ankle), toe: w(l.toe) })),
+    legs: rig.legs.map((l) => ({
+      s: l.s, hip: w(l.hip), knee: w(l.knee), ankle: w(l.ankle), toe: w(l.toe), contact: l.contact && w(l.contact),
+    })),
+    grounded: rig.grounded,
     arms: rig.arms.map((a) => ({
       s: a.s, shoulder: w(a.shoulder), elbow: w(a.elbow), wrist: w(a.wrist), hand: w(a.hand),
     })),

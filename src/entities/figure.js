@@ -104,8 +104,8 @@ function dress(rig, capeSim) {
 
   for (const a of rig.arms) {
     // Loose sleeves, a leather bracer on each forearm and gloved hands.
-    d.limb(a.shoulder, a.elbow, 0.062, 0.054, 'tunic');
-    d.limb(a.elbow, a.wrist, 0.05, 0.046, 'tunic');
+    d.limb(a.shoulder, a.elbow, 0.062, 0.054, 'sleeve');
+    d.limb(a.elbow, a.wrist, 0.05, 0.046, 'sleeve');
     d.limb(lerp3(a.elbow, a.wrist, 0.3), a.wrist, 0.054, 0.05, 'bracer', 0.01);
     d.limb(a.wrist, a.hand, 0.046, 0.042, 'leather', 0.015);
   }
@@ -460,12 +460,15 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
   const [mr, mg, mb] = mat.color;
 
   if (hits < SAMPLES - 2) {
-    // The silhouette: an outline glyph, lit by the moon on the near side.
+    // The silhouette: an outline glyph over a dark backing, so every limb
+    // stands out cleanly against the grass. It catches a faint cold rim all
+    // round, brightest where the edge faces the moon.
     const o = outline(mx, my, hits / SAMPLES);
     const l = 0.45 + 0.25 * lum;
-    const t = Math.min(1, o.rim * 0.85);
+    const t = Math.min(1, 0.3 + o.rim * 0.65);
+    const cover = hits / SAMPLES;
     write(r, sx, sy, o.g, mr * l + (RIM[0] - mr * l) * t, mg * l + (RIM[1] - mg * l) * t,
-      mb * l + (RIM[2] - mb * l) * t, base);
+      mb * l + (RIM[2] - mb * l) * t, base, 3 + 4 * cover, 4 + 4 * cover, 7 + 5 * cover);
     return;
   }
 

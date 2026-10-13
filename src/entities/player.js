@@ -1,13 +1,13 @@
 import { ASPECT } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
-import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
+import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
 // SCALE row units, but a metre up or down the screen is foreshortened by
 // the camera tilt, exactly as the figure's own feet are, so a planted foot
 // stays planted whichever way the warrior walks.
-const WALK_SPEED = 1.8;
+const WALK_SPEED = 1.6;
 const RUN_SPEED = 4.6;
 const toCols = SCALE / ASPECT;
 const toRows = SCALE * TILT;
@@ -77,6 +77,12 @@ export class Player {
     // Ground velocity in metres per second (x across the screen, z down it).
     this.vx = 0;
     this.vz = 0;
+    // Where each foot is pinned in the world, in metres: the footprint of a
+    // planted foot, or where a lifted one left the ground. Handed to the rig
+    // as `locks` in the body's frame.
+    this.anchors = [null, null];
+    this.liftAnchors = [null, null];
+    this.locks = [null, null];
     // The spring-smoothed height of the body above the planted foot, and
     // how fast it is moving.
     this.bob = undefined;
@@ -217,8 +223,8 @@ export class Player {
     // Ease the stride in and out so starting and stopping is not abrupt.
     this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
     this.run += ((moving && running ? 1 : 0) - this.run) * ease(5);
-    // Settle into a neutral stance once stopped.
-    if (!moving && this.walk < 0.02) this.phase = 0;
+    // The walk cycle is not reset on stopping: its effect fades out with
+    // `walk`, and picking up where it left off keeps the feet pinned.
 
     this.updateJump(dt);
 
@@ -274,6 +280,8 @@ export class Player {
     }
     cb.events.length = 0;
 
+    this.pinFeet();
+
     // Spring the body's bob towards where the legs put it: stiff enough to
     // follow every stride, soft enough to round off its corners.
     const want = buildRig({ ...this, bob: undefined, air: 0 }).gait;
@@ -302,6 +310,40 @@ export class Player {
     const wind = [2.2 + Math.sin(t * 0.7) * 1.6 + Math.cos(this.heading) * rush, 0,
       Math.sin(t * 0.43) * 1.2 - Math.sin(this.heading) * rush];
     this.cape.update(dt, ...this.capeMount(rig), moved, wind);
+  }
+
+  // Keeps planted feet where they landed. A foot touching down is pinned
+  // to the ground at its footprint; while it stays down the rig is told
+  // where that is relative to the body, however the body has moved or
+  // turned since. When it lifts, its swing starts from that same spot.
+  pinFeet() {
+    const heading = this.heading + this.combat.spin;
+    const here = [(this.x * ASPECT) / SCALE, 0, this.y / toRows];
+    const toWorld = (b) => {
+      const w = rotY([b[0], 0, b[1]], heading);
+      return [here[0] + w[0], here[2] + w[2]];
+    };
+    const toBody = (w) => {
+      const b = rotY([w[0] - here[0], 0, w[1] - here[2]], -heading);
+      return [b[0], b[2]];
+    };
+    if (this.walk <= 0.001) {
+      this.anchors = [null, null];
+      this.liftAnchors = [null, null];
+      this.locks = [null, null];
+      return;
+    }
+    gaitPlan(this.phase, this.run).forEach((g, j) => {
+      if (g.grounded) {
+        this.anchors[j] ??= toWorld(g.print);
+        this.liftAnchors[j] = null;
+        this.locks[j] = { print: toBody(this.anchors[j]) };
+      } else {
+        if (this.anchors[j]) this.liftAnchors[j] = this.anchors[j];
+        this.anchors[j] = null;
+        this.locks[j] = this.liftAnchors[j] ? { lift: toBody(this.liftAnchors[j]) } : null;
+      }
+    });
   }
 
   // Remembers where the blade is while it cuts, in world cells.
