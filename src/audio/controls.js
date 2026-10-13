@@ -1,9 +1,37 @@
 // Keep the sound controls available after the movement hint fades away.
-export function bindAudioControls(engine, music, onPause = () => {}, root = document.getElementById('audio-controls')) {
+import { playGrassFootstep, prepareGrassFootsteps } from './grass-steps.js';
+import { setParam } from './voices.js';
+
+export function bindAudioControls(engine, music, weather, onPause = () => {}, root = document.getElementById('audio-controls')) {
   const mute = root.querySelector('#audio-mute');
   const status = root.querySelector('#audio-status');
   const skip = root.querySelector('#audio-skip');
   const song = root.querySelector('#audio-song');
+  const weatherSelect = root.querySelector('#audio-weather');
+  const weatherIntensity = root.querySelector('#weather-intensity');
+  const weatherDescription = root.querySelector('#weather-description');
+  const previewButton = root.querySelector('#grass-preview');
+  let previewHandles = [];
+  let previewTimer = null;
+  let previewGeneration = 0;
+  let previewDucked = false;
+  let bound = true;
+  const stopPreview = () => {
+    previewGeneration++;
+    clearTimeout(previewTimer);
+    previewTimer = null;
+    for (const handle of previewHandles) handle.stop();
+    previewHandles = [];
+    if (previewDucked && engine.context) {
+      const now = engine.context.currentTime;
+      for (const bus of ['music', 'ambience']) {
+        setParam(engine.buses[bus]?.gain, engine.volumes[bus], now, 0.08);
+      }
+    }
+    previewDucked = false;
+    previewButton.disabled = false;
+    previewButton.textContent = 'Preview grass footsteps';
+  };
   const sliders = [...root.querySelectorAll('input[data-volume]')];
   const refresh = () => {
     mute.textContent = engine.muted ? 'Unmute (M)' : 'Mute (M)';
@@ -18,6 +46,45 @@ export function bindAudioControls(engine, music, onPause = () => {}, root = docu
     if (song.textContent !== title) song.textContent = title;
   };
   const skipSong = () => { music.skip(); updateSong(); };
+  const previewGrass = async () => {
+    stopPreview();
+    const generation = previewGeneration;
+    previewButton.disabled = true;
+    previewButton.textContent = 'Loading footsteps…';
+    const unlocked = await engine.unlock();
+    const ready = unlocked && await prepareGrassFootsteps(engine);
+    if (!bound || generation !== previewGeneration || document.hidden) return;
+    previewButton.disabled = false;
+    previewButton.textContent = 'Preview grass footsteps';
+    if (!ready) {
+      status.textContent = 'Footstep audio could not load';
+      return;
+    }
+    const now = engine.context.currentTime;
+    for (const bus of ['music', 'ambience']) setParam(engine.buses[bus]?.gain, 0, now, 0.03);
+    previewDucked = true;
+    previewHandles = playGrassFootstep(engine, { strength: 0.65,
+      x: engine.listener.x, y: engine.listener.y });
+    previewTimer = setTimeout(stopPreview, 550);
+  };
+  const updateWeather = () => {
+    weatherSelect.value = weather.preset;
+    weatherIntensity.value = Math.round(weather.intensity * 100);
+    weatherIntensity.nextElementSibling.value = `${weatherIntensity.value}%`;
+    weatherDescription.textContent = weather.presets.find(p => p.id === weather.preset)?.description
+      ?? 'The meadow’s wind, water and wildlife.';
+  };
+  const selectWeather = () => { weather.setPreset(weatherSelect.value); updateWeather(); };
+  const changeIntensity = () => {
+    weather.setIntensity(Number(weatherIntensity.value) / 100);
+    updateWeather();
+  };
+  for (const preset of weather.presets) {
+    const option = document.createElement('option');
+    option.value = preset.id;
+    option.textContent = preset.label;
+    weatherSelect.append(option);
+  }
   const keydown = event => {
     if (event.code === 'KeyM' && !event.repeat) engine.toggleMute();
     if (event.code === 'KeyN' && !event.repeat) skipSong();
@@ -26,6 +93,7 @@ export function bindAudioControls(engine, music, onPause = () => {}, root = docu
   };
   const visibility = () => {
     if (document.hidden) {
+      stopPreview();
       onPause();
       void engine.suspend().then(refresh);
     } else if (engine.context) {
@@ -47,14 +115,23 @@ export function bindAudioControls(engine, music, onPause = () => {}, root = docu
   }
   mute.addEventListener('click', muteClick);
   skip.addEventListener('click', skipSong);
+  previewButton.addEventListener('click', previewGrass);
+  weatherSelect.addEventListener('change', selectWeather);
+  weatherIntensity.addEventListener('input', changeIntensity);
   window.addEventListener('keydown', keydown);
   window.addEventListener('pointerdown', unlock);
   document.addEventListener('visibilitychange', visibility);
   refresh();
   updateSong();
+  updateWeather();
   const unbind = () => {
+    bound = false;
+    stopPreview();
     mute.removeEventListener('click', muteClick);
     skip.removeEventListener('click', skipSong);
+    previewButton.removeEventListener('click', previewGrass);
+    weatherSelect.removeEventListener('change', selectWeather);
+    weatherIntensity.removeEventListener('input', changeIntensity);
     for (const slider of sliders) slider.removeEventListener('input', volume);
     window.removeEventListener('keydown', keydown);
     window.removeEventListener('pointerdown', unlock);

@@ -1,0 +1,18 @@
+Grass/sand footsteps by Fantozzi, sliced by qubodup.
+
+License: Creative Commons CC0 1.0 Universal
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Source and license declaration:
+https://opengameart.org/content/fantozzis-footsteps-grasssand-stone
+Original recordings:
+https://www.freesound.org/people/Fantozzi/packs/10338/
+
+grass-L1.wav through grass-L3.wav derive from Fantozzi-SandL1.flac
+through Fantozzi-SandL3.flac; grass-R1.wav through grass-R3.wav derive
+from the corresponding Fantozzi-SandR recordings.
+
+The source pack describes these as suitable for grass and sand.
+Adaptation for ASCII Realm: mono 16-bit PCM at 22050 Hz, 80 Hz highpass
+to remove low recording rumble. No synthetic squeeze, splash or noise
+layers are mixed into grass footfalls.

@@ -156,6 +156,20 @@ test('sword volume is independent while still respecting the effects and master 
   await engine.dispose();
 });
 
+test('weather has independent volume within ambience and master routing', async () => {
+  const { engine } = fixture();
+  await engine.unlock();
+  assert.ok(engine.buses.weather.connections.includes(engine.buses.ambience));
+  engine.setVolume('weather', 0);
+  assert.equal(engine.buses.weather.gain.value, 0);
+  assert.equal(engine.buses.ambience.gain.value, DEFAULT_VOLUMES.ambience);
+  assert.equal(engine.buses.master.gain.value, DEFAULT_VOLUMES.master);
+  const route = engine.route('weather', 10, 20);
+  assert.ok(route);
+  route.dispose();
+  await engine.dispose();
+});
+
 test('persisted preferences clamp invalid levels and retain defaults for malformed values', async () => {
   let saved;
   const engine = new AudioEngine({

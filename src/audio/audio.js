@@ -2,9 +2,11 @@ import { Ambience } from './ambience.js';
 import { AudioEngine } from './engine.js';
 import { EnvironmentSampler, surfaceAt } from './environment.js';
 import { playFootstep } from './footsteps.js';
+import { prepareGrassFootsteps } from './grass-steps.js';
 import { playMovement } from './movement.js';
 import { Music } from './music.js';
 import { ChargeHum, playSword } from './sword.js';
+import { WeatherAudio } from './weather.js';
 
 // The game hands over animation events before clearing them. Audio never
 // drives animation or emits footsteps on its own timer.
@@ -17,6 +19,7 @@ export class GameAudio {
     this.music = new Music(engine);
     this.charge = new ChargeHum(engine);
     this.effects = new Set();
+    this.weather = new WeatherAudio(engine);
   }
 
   play(event) {
@@ -44,9 +47,11 @@ export class GameAudio {
       return;
     }
     const signals = this.environment.update(dt, camera.x, camera.y, time);
+    void prepareGrassFootsteps(this.engine);
     this.charge.update(player.combat.charge, player.x, player.y);
     this.ambience.update({ ...signals, time, fireflies });
     this.music.update({ night: signals.night, time, dt });
+    this.weather.update({ time, dt });
   }
 
   pause() {
@@ -55,6 +60,7 @@ export class GameAudio {
     this.charge.pause();
     this.music.pause();
     this.ambience.pause();
+    this.weather.pause();
   }
 
   async dispose() {
@@ -62,6 +68,7 @@ export class GameAudio {
     this.charge.dispose();
     this.ambience.dispose();
     this.music.dispose();
+    this.weather.dispose();
     await this.engine.dispose();
   }
 }

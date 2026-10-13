@@ -67,37 +67,6 @@ function assertDisposed(audio) {
   assert.deepEqual(audio.invalid, []);
 }
 
-test('grass footsteps are brief dry contacts with crisp leaf detail and quickly damped tails', t => {
-  t.mock.method(Math, 'random', () => 0.5);
-  const audio = fakeAudio();
-  const handles = playFootstep(audio.engine, 'grass', { strength: 1, x: 21, y: 40 });
-  assert.ok(handles.length >= 2 && handles.length <= 8);
-  assert.equal(audio.nodes.filter(node => node.kind === 'oscillator').length, 0);
-  const sources = audio.nodes.filter(node => node.kind === 'noise');
-  assert.equal(sources.length, handles.length);
-  const filters = audio.nodes.filter(node => node.kind === 'filter');
-  assert.ok(filters.some(filter => filter.type === 'highpass' && filter.frequency.value >= 1400), 'crisp dry leaf detail');
-  assert.ok(filters.some(filter => filter.type === 'bandpass' && filter.frequency.value >= 1000), 'dry granular contact');
-  assert.ok(filters.every(filter => filter.frequency.value >= 400), 'no low hollow body');
-  for (const gain of audio.nodes.filter(node => node.kind === 'gain')) {
-    const envelope = gain.gain.calls;
-    const start = envelope[0].args[1];
-    const end = envelope.at(-1).args[1];
-    assert.ok(end - start <= 0.12, 'each audible contact ends quickly');
-    assert.ok(end - audio.context.currentTime <= 0.14, 'the whole step stays compact');
-    const ramps = envelope.filter(call => call.method === 'linearRampToValueAtTime');
-    assert.ok(ramps.length >= 3, 'contact has a separate rapid decay');
-    const peak = ramps[0].args[0];
-    assert.ok(peak > 0);
-    assert.ok(ramps[1].args[0] <= peak * 0.08 + 1e-10, 'the sustained tail is faint');
-    assert.ok(ramps[1].args[1] - ramps[0].args[1] <= 0.04, 'weight falls away before it becomes a wet swish');
-    assert.equal(envelope.at(-1).args[0], 0);
-  }
-  assert.ok(audio.routes.every(route => route.bus === 'sfx' && route.x === 21 && route.y === 40));
-  handles.forEach(handle => { handle.stop(); handle.stop(); });
-  assertDisposed(audio);
-});
-
 test('draw, sheath, swing and whirl use material and air noise through the sword bus', () => {
   for (const type of ['draw', 'sheathe', 'swing', 'whirl']) {
     const audio = fakeAudio();
@@ -129,11 +98,11 @@ test('sword impact is a short unpitched, decaying contact', () => {
   assertDisposed(audio);
 });
 
-test('all five footstep materials use distinct noise colors and envelopes, with strength and position', t => {
+test('four procedural footstep materials keep distinct colors and envelopes, with strength and position', t => {
   t.mock.method(Math, 'random', () => 0.5);
   const colors = new Set();
   const envelopes = new Set();
-  for (const surface of ['grass', 'dirt', 'sand', 'rock', 'water']) {
+  for (const surface of ['dirt', 'sand', 'rock', 'water']) {
     const audio = fakeAudio();
     const handles = playFootstep(audio.engine, surface, { strength: 1, x: 32, y: 47 });
     assert.ok(handles.length >= 2 && handles.length <= 10, surface);
@@ -160,8 +129,8 @@ test('all five footstep materials use distinct noise colors and envelopes, with 
     assertDisposed(audio);
     assertDisposed(soft);
   }
-  assert.equal(colors.size, 5, 'material filters differ');
-  assert.equal(envelopes.size, 5, 'material contact timing differs');
+  assert.equal(colors.size, 4, 'material filters differ');
+  assert.equal(envelopes.size, 4, 'material contact timing differs');
   const silent = fakeAudio();
   assert.deepEqual(playFootstep(silent.engine, 'dirt', { strength: 0 }), []);
   silent.context.state = 'suspended';

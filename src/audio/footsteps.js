@@ -1,16 +1,9 @@
 import { noise } from './voices.js';
+import { playGrassFootstep } from './grass-steps.js';
 
 // Close material textures stay below the music's bells. Broad, low-Q filters
 // give shoes weight without an oscillator or a hollow resonant pitch.
 const MATERIALS = {
-  grass: [
-    // Dry boot contact and quick blade friction. Long, low swishes read as
-    // wet squeezing; keep the light grass detail above the short sole tap.
-    { cutoff: 620, duration: 0.038, gain: 0.052, attack: 0.0015, decay: 0.007, sustain: 0.03, release: 0.028 },
-    { cutoff: 1450, filterType: 'bandpass', delay: 0.006, duration: 0.043, gain: 0.029, attack: 0.001, decay: 0.012, sustain: 0.04, release: 0.024 },
-    { cutoff: 2200, filterType: 'highpass', delay: 0.015, duration: 0.032, gain: 0.013, attack: 0.001, decay: 0.007, sustain: 0.025, release: 0.019 },
-    { cutoff: 1700, filterType: 'highpass', delay: 0.019, duration: 0.079, gain: 0.006, attack: 0.002, decay: 0.021, sustain: 0.035, release: 0.047 },
-  ],
   dirt: [
     // Damp soil compresses; small grains scrape after the weight lands.
     { cutoff: 340, duration: 0.07, gain: 0.1, attack: 0.005, decay: 0.027, sustain: 0.18, release: 0.03 },
@@ -40,6 +33,7 @@ const MATERIALS = {
 
 /** Gait-synchronized material contact; returned voices stop cleanly on pause. */
 export function playFootstep(engine, surface, event = {}) {
+  if (surface === 'grass') return playGrassFootstep(engine, event);
   if (engine?.context?.state !== 'running') return [];
 
   const strength = Number.isFinite(event?.strength)

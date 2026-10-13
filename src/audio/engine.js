@@ -1,6 +1,6 @@
 import { ASPECT } from '../world/world.js';
 
-export const DEFAULT_VOLUMES = Object.freeze({ master: 0.7, music: 0.35, sfx: 0.8, ambience: 0.6, sword: 0.65 });
+export const DEFAULT_VOLUMES = Object.freeze({ master: 0.7, music: 0.35, sfx: 0.8, ambience: 0.6, sword: 0.65, weather: 0.6 });
 const STORAGE_KEY = 'ascii-realm.audio';
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 
@@ -51,6 +51,8 @@ export class AudioEngine {
           }
           this.buses.sword = context.createGain();
           this.buses.sword.connect(this.buses.sfx);
+          this.buses.weather = context.createGain();
+          this.buses.weather.connect(this.buses.ambience);
           // Apply saved mute/levels before any source can become audible.
           this._applyVolumes(true);
         } catch {

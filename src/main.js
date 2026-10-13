@@ -51,11 +51,13 @@ function updateZoom(dt) {
 // Mouse wheel or +/- to zoom in and out. Trackpads send many tiny deltas and
 // mice a few large ones, so scale by the distance scrolled.
 window.addEventListener('wheel', (e) => {
+  if (e.target.closest?.('#audio-controls')) return;
   e.preventDefault();
   const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
   zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
+  if (e.target.closest?.('#audio-controls')) return;
   if (e.key === '+' || e.key === '=') zoomBy(1.15);
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
@@ -73,7 +75,7 @@ const dust = new Dust();
 const footprints = new Footprints();
 const sound = new GameAudio(world);
 sound.music.update({ night: 1 });
-const unbindAudio = bindAudioControls(sound.engine, sound.music, () => sound.pause());
+const unbindAudio = bindAudioControls(sound.engine, sound.music, sound.weather, () => sound.pause());
 sound.engine.setListener(camera.x, camera.y);
 window.addEventListener('pagehide', (event) => {
   if (event.persisted) {

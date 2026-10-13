@@ -1,16 +1,23 @@
 # Audio
 
-ASCII Realm creates its soundtrack and effects with Web Audio oscillators and
-filtered noise. All compositions and sound recipes are original; there are no
-audio downloads, samples, media assets or additional dependencies.
+ASCII Realm creates its original soundtrack, weather and most effects with
+Web Audio oscillators and filtered noise. Grass footfalls use six local CC0
+recordings of human footsteps. Audio adds no runtime library dependencies;
+the recordings are served with the game, without requests to third-party sites.
 
 Sound starts after the first keyboard or pointer gesture. `M` toggles mute, and
-the Audio panel offers master, music, effects, sword and ambience sliders. The
-Sword control changes sword effects and charge independently; its bus feeds the
-Effects bus, so Effects and Master also affect it. The panel shows the current
+the Audio panel offers master, music, effects, sword, ambience and weather
+sliders. The Sword control changes sword effects and charge independently; its bus feeds the
+Effects bus, so Effects and Master also affect it. Weather feeds Ambience, then
+Master, so all three controls affect weather. The panel shows the current
 song and offers a Skip song button with the `N` shortcut. Mute and
-levels are stored in `localStorage` under `ascii-realm.audio`; blocked storage
-does not prevent controls from working. Saved mute is applied before playback.
+levels are stored in `localStorage` under `ascii-realm.audio`; the weather
+selection and intensity use `ascii-realm.weather`. Blocked storage does not
+prevent controls from working. Saved mute is applied before playback.
+
+Preview grass footsteps briefly quiets the music and ambience to audition one
+recorded footfall at the effects volume. It restores the current levels after
+the preview and respects mute.
 
 ## Structure
 
@@ -22,16 +29,20 @@ does not prevent controls from working. Saved mute is applied before playback.
   music, SFX and ambience gain buses through the master bus. It owns preference
   persistence, listener position, positional routes and context teardown. The
   sword gain bus feeds SFX for both separate sword adjustment and overall effects
-  control.
+  control. The weather gain bus feeds ambience.
 - `voices.js` provides enveloped oscillator tones, filtered noise bursts,
   sustained noise beds and parameter smoothing. A deterministic, two-second
   noise buffer is shared by voices in each context; short cues start at varied
   positions in that buffer to vary the grain without allocating new samples.
-- `footsteps.js` layers close, unpitched material textures: dry boot contact
-  and brief grass-blade rustle, compressed dirt and grit, dense sand drag,
+- `footsteps.js` selects recorded grass contacts or layers close, unpitched
+  procedural material textures: compressed dirt and grit, dense sand drag,
   low stone contact and sole scrape, or shallow-water splash and runoff. Broad
   filters, falling envelopes and small timing/level variations keep them earthy.
   Footfalls follow animation contact events rather than an independent timer.
+- `grass-steps.js` loads and decodes the six local grass recordings once per
+  audio context, varies the chosen recording and plays it through the positional
+  Effects route. Loading begins after audio unlock. Contacts while locked or
+  loading stay quiet, and old contacts are not replayed after decoding finishes.
 - `movement.js` uses short, close filtered-noise textures for cloth/leather
   tension on jumping, weight and damped surface resonance on landing, and quiet
   brushes on skidding. Skid particles can arrive every frame, so scrape grains
@@ -54,6 +65,11 @@ does not prevent controls from working. Saved mute is applied before playback.
   rare nighttime filtered-noise glints when a nearby rendered firefly pulse is
   bright. Wildlife calls are synthesized atmosphere; they do not add visible
   animal entities.
+- `weather.js` manages the selected weather soundscape and its saved intensity.
+  The 17 definitions in `weather/presets.js` use the shared `weather/runtime.js`
+  scheduler for filtered-noise beds and irregular one-shots. Each selection owns
+  its source routes and cleanup; switching fades over 1.2 seconds and retains at
+  most two retiring groups. Pausing releases beds and event tails.
 - `songs.js` contains immutable authored note events and instrument recipes;
   `music.js` schedules the selected day/night pair against the audio clock and
   blends its two tracks through dedicated gain nodes and a shared room into the
@@ -69,6 +85,65 @@ collision remains unchanged.
 The audio day/night signal cycles every 240 simulation seconds, beginning at
 night. Music crossfades between day and night arrangements as this signal
 changes. The existing visual scene remains moonlit.
+
+## Grass recordings
+
+The six files in `assets/audio/grass` come from Fantozzi's grass/sand footsteps,
+sliced by qubodup and published as
+[Fantozzi's Footsteps (Grass/Sand & Stone)](https://opengameart.org/content/fantozzis-footsteps-grasssand-stone)
+under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+`grass-L1.wav` through `grass-L3.wav` and `grass-R1.wav` through `grass-R3.wav`
+are mono 16-bit PCM at 22,050 Hz, about 0.30–0.44 seconds each and 95 KB total.
+An 80 Hz highpass removes recording rumble. Detailed provenance is in
+[LICENSE.txt](../assets/audio/grass/LICENSE.txt).
+
+Grass contacts cycle through these recordings directly, with level based on
+contact strength and playback rate varied by up to 2%. Synthetic splash,
+squeeze and noise layers are absent from grass
+footfalls. A contact that arrives before the recordings are ready stays quiet;
+the helper does not queue it or substitute a procedural grass sound.
+
+## Weather soundscapes
+
+Use **Weather sound** in the Audio panel to choose a preset and **Intensity**
+to adjust its strength from 0 to 100%. A fresh profile starts on **Clear** at
+60% intensity; saved choices are restored on reload. Clear leaves the meadow's
+ordinary wind, lakes and wildlife audible. The selector changes audio only;
+terrain, movement and rendering keep their existing behavior.
+
+The separate **Weather** volume slider adjusts this category. Its routing is
+Weather → Ambience → Master, so setting any of those levels to zero silences
+weather. Intensity zero silences the selected preset's beds and event tails.
+Selecting a preset while sound is locked saves the choice without allocating
+an audio context. Events follow the audio clock; missed rain impacts or thunder
+are skipped after pauses rather than replayed in a burst.
+
+| Preset | Sound texture |
+| --- | --- |
+| Gentle rain | Soft shower, fine patter and leaf drips |
+| Drizzle | Thin rain on foliage with scattered ticks |
+| Heavy rain | Dense downpour, low rushing roar and ground impacts |
+| Thunderstorm | Wind-driven rain with nearby rolling thunder |
+| Distant thunder | Restrained wind and dark rolls beyond the horizon |
+| Hail | Hard ice pellets rattling and bouncing |
+| Sleet | Wind-slanted ice grains, damp wash and uneven taps |
+| Light snowfall | Sheltered cold air and rare soft powder brushes |
+| Snowstorm | Muted cold wind and dry powder sweeps |
+| Blizzard | Heavy cold wind and slow surges of blowing snow |
+| Meadow wind gusts | Rolling breezes brushing dry grass and foliage |
+| Gale | Deep wind pressure and turbulent gusts |
+| Sandstorm | Muffled wind, dry sand hiss and rubbing grit |
+| Coastal storm | Offshore surf, tearing wind and long gritty breakers |
+| Foggy stillness | Sheltered air and rare distant leaf or reed brushes |
+| Ice storm | Fine freezing rain, brittle ice and strained branches |
+| Forest squall | Canopy wind, rattling leaves and creaking branches |
+
+Definitions are plain, side-effect-free objects with an ID, label, description,
+up to three filtered-noise layers and up to two event groups. Modulation and
+event gains include intensity; callbacks receive audio time, simulation time
+and a supplied random function. The shared runtime smooths parameters, bounds
+cue values and caps short voices across active and fading selections. Definitions
+do not create audio contexts or timers.
 
 ## Songs
 
@@ -125,7 +200,8 @@ along with its notes; pausing or teardown clears both dry and reverberant paths.
 ## Authoring synthesized sounds
 
 Use `tone(engine, options)` for a pitched note or `noise(engine, options)` for a
-short texture. Options include `bus` (`music`, `sfx`, `sword` or `ambience`), `gain`,
+short texture. Options include `bus` (`music`, `sfx`, `sword`, `ambience` or
+`weather`), `gain`,
 `duration`, `attack`, `decay`, `sustain`, `release`, `cutoff`, `filterType`, `Q`,
 and optional world coordinates `x`/`y`. Tones also accept `frequency`,
 `endFrequency`, `detune` and `type`
@@ -199,6 +275,11 @@ Serve the game locally and verify:
 7. Use Skip song or `N` to visit all three song pairs; the current title should
    update and return to the first pair after three skips. Try skipping before
    unlocking audio, while muted and after returning from a background tab.
+8. Choose each weather soundscape, then rapidly switch between several and
+   Clear. Listen for smooth fades and distinct textures. Check intensity zero,
+   Weather zero, Ambience zero and Master zero; each should silence weather.
+   Reload to check the saved selection and intensity. Hide and restore the tab
+   to confirm clean resumption without accumulated impacts or thunder.
 
 With `?debug` in the URL, `window.game.audio` exposes the engine in the browser
 console. `audio.setVolume('music', 0)`, `audio.setMuted(true)` and
@@ -206,3 +287,5 @@ console. `audio.setVolume('music', 0)`, `audio.setMuted(true)` and
 `audio.context`, `audio.volumes` and `audio.buses` to check initialization and
 routing. `window.game.sound.music` exposes `currentSong`, `songCount` and
 `skip()` for soundtrack inspection.
+`window.game.sound.weather` exposes `preset`, `intensity`, `presets`,
+`setPreset(id)` and `setIntensity(value)`; intensity uses the range 0 to 1.

@@ -50,7 +50,8 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
-- **Procedural audio.** Earthy surface-aware footsteps and movement effects,
+- **Audio.** Recorded human grass footsteps, procedural footsteps on other
+  surfaces and movement effects,
   slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
   wildlife calls and rare firefly noise glints,
   with six original, mysterious RPG songs in three day/night pairs, using drifting
@@ -58,7 +59,11 @@ For now it is a single outlaw exploring procedurally generated terrain.
   Sword effects layer weathered steel, dry leather, low air rush and weighted
   impacts. Sound starts on your first key press or click;
   the Audio panel shows the current song, lets you skip, and saves mute and
-  master, music, effects, sword and ambience levels. See [audio notes](docs/audio.md).
+  master, music, effects, sword, ambience and weather levels. See [audio notes](docs/audio.md).
+- **Weather sounds.** Choose from 17 soundscapes, including rain, thunder,
+  hail, snow, wind, sandstorms and coastal storms, with a separate intensity
+  control and smooth transitions. Clear is the default; your selection is saved.
+  These choices control the audio atmosphere.
 
 ## Running
 
@@ -89,6 +94,8 @@ npm test
 | `F` | Draw or sheathe the sword |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next day/night song pair |
+| Audio panel's Weather sound / Intensity | Choose Clear or one of 17 weather soundscapes and adjust its intensity |
+| Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
 
 ## Layout
@@ -97,7 +104,7 @@ npm test
 src/
   main.js            game loop and wiring
   core/              input, hashing, noise
-  audio/             lazy Web Audio engine, procedural voices, effects, ambience and music
+  audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   render/            glyph atlas, WebGL renderer, cell writers
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
@@ -114,3 +121,9 @@ The player character and its idle, walk, jog, jump and sword animations are
 from Quaternius' [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)
 (CC0), rendered with [three.js](https://threejs.org/) (MIT, vendored in
 `vendor/three`).
+
+Grass footsteps use six recordings by Fantozzi, sliced by qubodup, from
+[Fantozzi's Footsteps (Grass/Sand & Stone)](https://opengameart.org/content/fantozzis-footsteps-grasssand-stone),
+released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+The adapted WAV files are served locally from `assets/audio/grass`; see their
+[provenance and conversion notes](assets/audio/grass/LICENSE.txt).
