@@ -129,7 +129,7 @@ function frame(now) {
   camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
-  drawGround(renderer, world, view, time, grass);
+  drawGround(renderer, world, view, time);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);

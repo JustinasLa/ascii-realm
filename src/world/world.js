@@ -16,6 +16,10 @@ const CHUNK = 64;
 export const WATER_LEVEL = 0.4;
 const SHORE_LEVEL = 0.415;
 const STONE_LEVEL = 0.7;
+const smoothRange = (a, b, x) => {
+  const u = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
 
 export class World {
   constructor(seed = 1) {
@@ -40,7 +44,8 @@ export class World {
     const elev = new Float32Array(n);
     const shade = new Float32Array(n);
     const rnd = new Float32Array(n);
-    const grassHeight = new Uint8Array(n);
+    const grassHeight = new Float32Array(n);
+    const grassDensity = new Float32Array(n);
     const reeds = new Uint8Array(n);
     const s = this.seed;
 
@@ -65,21 +70,29 @@ export class World {
         shade[i] = fbm(nx * 0.05, y * 0.05, s + 31, 3);
         rnd[i] = hash2(x, y, s + 5);
         if (t === GRASS || t === SHORE) {
-          // Smooth, world-anchored patches keep neighbouring chunks seamless.
-          // Paths have a cropped verge; wetter banks carry taller reed stems.
+          // Blend the verge into the meadow instead of cutting out a lawn
+          // at one noise threshold. Fractional heights are dithered per root
+          // when drawn, so even the cell grid has no hard height bands.
           const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
-          if (t === GRASS && path < 0.025) grassHeight[i] = 1;
-          else if (e < 0.445 && meadow > 0.44) {
-            grassHeight[i] = 10 + Math.floor(rnd[i] * 3);
+          const wet = 1 - smoothRange(0.41, 0.45, e);
+          const lush = smoothRange(0.35, 0.68, meadow);
+          if (t === GRASS) {
+            const verge = smoothRange(0.009, 0.035, path);
+            const fieldHeight = 2.6 + lush * 1.3;
+            const bank = wet * smoothRange(0.35, 0.6, meadow);
+            const target = fieldHeight + (4.7 - fieldHeight) * bank;
+            grassHeight[i] = 2 + (target - 2) * verge;
+            grassDensity[i] = 0.22 + verge * (0.035 + lush * 0.025);
+            reeds[i] = wet > 0.5 && meadow > 0.48 && verge > 0.3 ? 1 : 0;
+          } else if (meadow > 0.43) {
+            grassHeight[i] = 3.3 + lush * 1.3;
+            grassDensity[i] = 0.15 + lush * 0.06;
             reeds[i] = 1;
-          } else if (t === GRASS) {
-            grassHeight[i] = meadow > 0.58 ? 7 + Math.min(2, Math.floor((meadow - 0.58) * 20)) :
-              meadow > 0.43 ? 3 : 2;
           }
         }
       }
     }
-    return { cx, cy, type, elev, shade, rnd, grassHeight, reeds, props: null };
+    return { cx, cy, type, elev, shade, rnd, grassHeight, grassDensity, reeds, props: null };
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays

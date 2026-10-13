@@ -35,6 +35,8 @@ export class Player {
     this.combat = new Combat();
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
+    // The active blade on the ground plane, for its wake through the grass.
+    this.swordSweep = null;
     // Height above the ground in metres, rising speed, and the crouch used
     // to wind up a jump and soak up the landing.
     this.air = 0;
@@ -221,9 +223,17 @@ export class Player {
 
   // Remembers where the blade is while it cuts, in world cells.
   recordTrail(rig) {
+    this.swordSweep = null;
     const keep = this.time - 0.16;
     this.trail = this.trail.filter((p) => p.t > keep);
     if (!this.combat.trailing || !rig.sword) return;
+    this.swordSweep = {
+      hx: this.x + rig.sword.guard[0] * SCALE / ASPECT,
+      hy: this.y + rig.sword.guard[2] * SCALE * TILT,
+      tx: this.x + rig.sword.tip[0] * SCALE / ASPECT,
+      ty: this.y + rig.sword.tip[2] * SCALE * TILT,
+      t: this.time,
+    };
     const h = project(rig.sword.guard);
     const tip = project(rig.sword.tip);
     this.trail.push({
