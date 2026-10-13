@@ -22,7 +22,6 @@ function meadow(roots = null) {
           cx, cy,
           type: new Uint8Array(n).fill(GRASS),
           grassHeight: new Float32Array(n),
-          reeds: new Uint8Array(n),
           grassStyle: new Uint8Array(n),
           shade: new Float32Array(n).fill(0.6),
           rnd: new Float32Array(n).fill(0.91),
@@ -93,9 +92,7 @@ test('grass biome heights are cached and deterministic, with reeds on shoreline 
     assert.ok(ca.grassHeight instanceof Float32Array);
     assert.ok(ca.grassDensity instanceof Float32Array);
     assert.ok(ca.grassStyle instanceof Uint8Array);
-    assert.ok(ca.reeds instanceof Uint8Array);
     assert.deepEqual(ca.grassHeight, cb.grassHeight);
-    assert.deepEqual(ca.reeds, cb.reeds);
     assert.deepEqual(ca.grassDensity, cb.grassDensity);
     assert.deepEqual(ca.grassStyle, cb.grassStyle);
     for (let i = 0; i < ca.type.length; i++) {
@@ -104,17 +101,17 @@ test('grass biome heights are cached and deterministic, with reeds on shoreline 
       assert.ok(ca.grassStyle[i] <= 5);
       if ([WATER, DIRT, STONE].includes(ca.type[i])) {
         assert.equal(h, 0);
-        assert.equal(ca.reeds[i], 0);
+        assert.notEqual(ca.grassStyle[i], 5);
       } else if (ca.type[i] === SHORE) {
         if (h) {
-          assert.ok(ca.reeds[i]);
+          assert.equal(ca.grassStyle[i], 5);
           assert.ok(h >= 3 && h <= 5);
           reeds++;
         }
       } else {
         assert.ok(h >= 2);
         heights.add(h);
-        if (ca.reeds[i]) {
+        if (ca.grassStyle[i] === 5) {
           reeds++;
           assert.ok(h >= 2 && h <= 5);
         }

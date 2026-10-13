@@ -1,0 +1,143 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import { Player } from '../src/entities/player.js';
+import { ASPECT, GRASS } from '../src/world/world.js';
+
+const noop = () => {};
+
+// Run the real frame loop and player state with browser, rendering and audio I/O stubbed.
+async function loadGame() {
+  const taps = new Set();
+  const canvas = new EventTarget();
+  const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
+  const hint = { classList: { add: noop } };
+  let nextFrame;
+  let now = 0;
+  let bladeSamples = 0;
+  let cellHeight;
+  const model = {
+    gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
+    update: noop,
+    rasterise: noop,
+    draw: noop,
+    swordLine: () => {
+      bladeSamples++;
+      return { base: [0, 0], tip: [1, 1] };
+    },
+  };
+  const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), {
+    console, URLSearchParams, window,
+    document: { getElementById: id => id === 'screen' ? canvas : hint },
+    location: { search: '?debug' },
+    performance: { now: () => 0 },
+    requestAnimationFrame: callback => { nextFrame = callback; },
+    isDown: () => false,
+    moveAxis: () => ({ x: 0, y: 0 }),
+    wasTapped: code => taps.delete(code),
+    Player, ASPECT, GRASS,
+    World: class {
+      constructor() { this.spawn = { x: 0, y: 0 }; }
+      isWalkable() { return true; }
+      typeAt() { return GRASS; }
+      propsIn() { return []; }
+    },
+    Camera: class {
+      constructor(x, y) { this.x = x; this.y = y; }
+      follow() {}
+      shake() {}
+      view() { return { x0: 0, y0: 0, rows: 60, cols: 80 }; }
+    },
+    Fireflies: class { constructor() { this.list = []; } update() {} draw() {} },
+    Grass: class { update() {} drawTracks() {} drawReflections() {} drawLayered() {} },
+    Dust: class { update() {} draw() {} burst() {} sparks() {} },
+    Footprints: class { draw() {} },
+    AsciiRenderer: class {
+      resize(width, height, pixelRatio, cellW, cellH) { cellHeight = cellH; }
+      draw() {}
+    },
+    buildAtlas: noop, glyph: noop, drawGround: noop, drawSkyReflection: noop,
+    drawShadow: noop, drawProp: noop, reflector: noop, dressFigure: noop,
+    drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop,
+    ModelFigure: { load: () => Promise.resolve(model) },
+    GameAudio: class {
+      constructor() { this.music = { update: noop }; this.engine = { setListener: noop }; }
+      play() {}
+      pause() {}
+      update() {}
+    },
+    bindAudioControls: () => Object.assign(() => {}, { updateSong: noop }),
+  });
+  await Promise.resolve();
+  return {
+    game: window.game,
+    frame: (dt = 1 / 60) => nextFrame(now += dt * 1000),
+    bladeSamples: () => bladeSamples,
+    cellHeight: () => cellHeight,
+    keydown(key, modifiers = {}) {
+      const event = Object.assign(new Event('keydown', { cancelable: true }), { key, ...modifiers });
+      window.dispatchEvent(event);
+      return event;
+    },
+    tap(action) {
+      if (action !== 'mouse') {
+        taps.add(action);
+        return;
+      }
+      canvas.dispatchEvent(Object.assign(new Event('mousedown'), { button: 0 }));
+      window.dispatchEvent(Object.assign(new Event('mouseup'), { button: 0 }));
+    },
+  };
+}
+
+test('browser zoom shortcuts do not also change game zoom', async () => {
+  const { game, frame, keydown, cellHeight } = await loadGame();
+  game.freeze = true;
+  for (const modifier of ['ctrlKey', 'metaKey', 'altKey']) {
+    for (const key of ['+', '=', '-', '_']) {
+      const event = keydown(key, { [modifier]: true });
+      frame();
+      assert.equal(event.defaultPrevented, false);
+      assert.equal(cellHeight(), 8, `${modifier} + ${key}`);
+    }
+  }
+  keydown('+');
+  frame();
+  assert.ok(cellHeight() > 8, 'unmodified zoom keys still zoom the game');
+});
+
+test('a coarse frame applies the remaining hit stop before returning to normal speed', async () => {
+  const { game, frame } = await loadGame();
+  game.freeze = true;
+  game.player.events.push({ type: 'slam', x: 0, y: 0, strength: 1 });
+  frame();
+  game.freeze = false;
+  frame(0.1);
+  assert.ok(Math.abs(game.player.time - 0.024) < 1e-12, `player time: ${game.player.time}`);
+});
+
+for (const action of ['Space', 'KeyJ', 'KeyF', 'mouse']) {
+  test(`freezing consumes ${action} without changing the pose or replaying it on resume`, async () => {
+    const { game, frame, tap } = await loadGame();
+    const player = game.player;
+    game.freeze = true;
+    tap(action);
+    frame();
+    assert.equal(player.time, 0);
+    assert.equal(player.windUp, -1);
+    assert.equal(player.combat.move, null);
+
+    game.freeze = false;
+    frame();
+    assert.ok(player.time > 0);
+    assert.equal(player.windUp, -1);
+    assert.equal(player.combat.move, null);
+
+    tap(action);
+    frame();
+    if (action === 'Space') assert.ok(player.windUp >= 0);
+    else assert.equal(player.combat.move, 'draw');
+  });
+}

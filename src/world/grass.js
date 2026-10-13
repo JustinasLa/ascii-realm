@@ -259,7 +259,7 @@ export class Grass {
       const i = (y - cy * CHUNK_SIZE) * CHUNK_SIZE + x - cx * CHUNK_SIZE;
       const rnd = chunk.rnd[i];
       const profile = chunk.grassHeight[i];
-      const style = chunk.grassStyle?.[i] ?? (chunk.reeds[i] ? 5 : 0);
+      const style = chunk.grassStyle[i];
       const density = (chunk.grassDensity?.[i] ?? 0.26) * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1);
       if (profile < 2 || rnd < 1 - density) continue;
       const height = Math.min(MAX_GRASS_HEIGHT,

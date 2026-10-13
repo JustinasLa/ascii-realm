@@ -29,7 +29,7 @@ export class World {
   }
 
   chunk(cx, cy) {
-    const key = (cx + 32768) * 65536 + (cy + 32768);
+    const key = `${cx},${cy}`;
     let c = this.chunks.get(key);
     if (!c) {
       c = this.generate(cx, cy);
@@ -47,7 +47,6 @@ export class World {
     const grassHeight = new Float32Array(n);
     const grassDensity = new Float32Array(n);
     const grassStyle = new Uint8Array(n);
-    const reeds = new Uint8Array(n);
     const s = this.seed;
 
     for (let ly = 0; ly < CHUNK; ly++) {
@@ -77,6 +76,7 @@ export class World {
           const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
           const wet = 1 - smoothRange(0.41, 0.45, e);
           const lush = smoothRange(0.35, 0.68, meadow);
+          let reed = false;
           if (t === GRASS) {
             const verge = smoothRange(0.009, 0.035, path);
             const fieldHeight = 2.6 + lush * 1.3;
@@ -84,19 +84,19 @@ export class World {
             const target = fieldHeight + (4.7 - fieldHeight) * bank;
             grassHeight[i] = 2 + (target - 2) * verge;
             grassDensity[i] = 0.22 + verge * (0.035 + lush * 0.025);
-            reeds[i] = wet > 0.5 && meadow > 0.48 && verge > 0.3 ? 1 : 0;
+            reed = wet > 0.5 && meadow > 0.48 && verge > 0.3;
           } else if (meadow > 0.43) {
             grassHeight[i] = 3.3 + lush * 1.3;
             grassDensity[i] = 0.15 + lush * 0.06;
-            reeds[i] = 1;
+            reed = true;
           }
           const species = valueNoise(nx * 0.012, y * 0.012, s + 1801);
           const edge = (hash2(x, y, s + 1802) - 0.5) * 0.7;
-          grassStyle[i] = reeds[i] ? 5 : Math.max(0, Math.min(4, Math.floor(species * 5 + edge)));
+          grassStyle[i] = reed ? 5 : Math.max(0, Math.min(4, Math.floor(species * 5 + edge)));
         }
       }
     }
-    return { cx, cy, type, elev, shade, rnd, grassHeight, grassDensity, grassStyle, reeds, props: null };
+    return { cx, cy, type, elev, shade, rnd, grassHeight, grassDensity, grassStyle, props: null };
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays
@@ -125,7 +125,9 @@ export class World {
   propsIn(x0, y0, x1, y1) {
     const out = [];
     for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
-      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+      // The final procedural grid column can jitter 11 cells beyond its
+      // source chunk, where its props remain stored.
+      for (let cx = Math.floor((x0 - 11) / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
         for (const p of this.propsOf(cx, cy)) out.push(p);
       }
     }
@@ -134,7 +136,8 @@ export class World {
 
   isWalkable(x, y) {
     if (this.typeAt(x, y) === WATER) return false;
-    for (const p of this.propsIn(x - 4, y - 2, x + 4, y + 2)) {
+    // Rock footprints reach almost 10 columns from their base.
+    for (const p of this.propsIn(x - 10, y - 2, x + 10, y + 2)) {
       if (blocks(p, x, y)) return false;
     }
     return true;
