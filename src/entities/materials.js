@@ -37,17 +37,19 @@ function iron(l, u, v, s) {
   return pick(IRON, l);
 }
 
-// Wool: a dense weave that reads clearly against the grass, with deep folds
-// running down the cloth.
+// Wool: shaded smoothly by the light, so the form of the body reads, with a
+// few deep folds running down the wider pieces of cloth.
 function wool(l, u, v, s) {
-  const fold = Math.sin(v * 5 + u * 0.15);
-  if (fold > 0.85 && l > 0.3) {
-    s.k *= 0.6;
+  if (Math.sin(v * 4.2 + u * 0.12) > 0.93 && l > 0.3) {
+    s.k *= 0.65;
     return glyph('|');
   }
-  const weave = ((Math.floor(u * 2) + Math.floor(v * 4)) & 1) * 0.5;
-  return WOOL[Math.min(WOOL.length - 1, Math.floor(l * WOOL.length + weave))];
+  return pick(WOOL, l);
 }
+
+// Close-fitting cloth on the limbs: shading only, nothing to break up the
+// shape of a moving leg.
+const fitted = (l) => pick(WOOL, l);
 
 // Leather with a line of stitching along each edge.
 function leather(l, u, v) {
@@ -66,8 +68,7 @@ function jerkin(l, u, v, s) {
 }
 
 // Boots of soft, creased leather.
-function boot(l, u, v) {
-  if (frac(u * 1.2 + v * 0.3) < 0.18 && l > 0.35) return glyph('~');
+function boot(l) {
   return pick(LEATHER, l);
 }
 
@@ -84,19 +85,21 @@ function feather(l, u, v) {
 }
 
 export const MATERIALS = {
-  // Forest green wool.
-  tunic: { color: [104, 126, 72], tex: wool },
-  hood: { color: [84, 104, 62], tex: wool },
-  cloak: { color: [74, 94, 58], tex: wool },
+  // Dark, undyed wool: charcoal, umber and slate, so the figure reads as a
+  // shadow against the bright grass, picked out by its moonlit outline.
+  tunic: { color: [92, 74, 60], tex: wool },
+  hood: { color: [70, 68, 74], tex: wool },
+  cloak: { color: [58, 56, 64], tex: wool },
   // The cloak's darker inner face, seen when it swings round to the camera.
-  lining: { color: [48, 58, 40], tex: wool },
-  hose: { color: [104, 94, 70], tex: wool },
+  lining: { color: [34, 32, 38], tex: wool },
+  hose: { color: [72, 72, 82], tex: fitted },
+  sleeve: { color: [92, 74, 60], tex: fitted },
   // Worn leather.
-  leather: { color: [98, 68, 46], tex: leather },
-  jerkin: { color: [138, 98, 60], tex: jerkin },
-  bracer: { color: [104, 72, 44], tex: leather },
-  boot: { color: [118, 84, 54], tex: boot },
-  quiver: { color: [96, 64, 40], tex: leather },
+  leather: { color: [86, 60, 42], tex: leather },
+  jerkin: { color: [108, 78, 52], tex: jerkin },
+  bracer: { color: [90, 64, 42], tex: leather },
+  boot: { color: [78, 56, 40], tex: boot },
+  quiver: { color: [84, 58, 38], tex: leather },
   // Bow staves, arrow shafts and fletching, and iron fittings.
   wood: { color: [132, 98, 62], tex: wood },
   feather: { color: [210, 204, 190], tex: feather },
