@@ -34,17 +34,18 @@ For now it is a single outlaw exploring procedurally generated terrain.
   a simulated cloak. Every part is rasterised into glyphs with supersampling:
   outlines follow the silhouette with a moonlit rim, and each material (wool,
   leather, wood, feather, iron) has its own glyph texture.
-- **Animation.** Walk and run cycles driven by the ground actually covered, so
-  planted feet stay planted, with hip sway, a steady head, leaning into turns
-  and into speeding up or stopping. An idle stance that shifts its weight and
-  looks around, then kneels to rest; blinking eyes and breath fogging in the
-  cold air; jumping with a wind-up and landing squash; a sprint with high
-  knees, pumping arms and a skid to a halt; and sword play: draw, guard, a
-  combo (forehand, then backhand or uppercut, then an overhead chop that
-  strikes sparks, shakes the camera and freezes for a beat on impact), a
-  lunging thrust from a sprint, a plunging strike from the air and a charged
-  spinning slash, all with glowing swing trails.
-  Footsteps kick up dust and grass and leave prints in dirt and sand.
+- **Animation.** Walking and running are played back from real motion
+  capture (one recorded cycle of each, blended by speed), with the knees
+  solved to the game skeleton's proportions and every planted foot pinned to
+  the ground where it lands, so it never slides, even turning or stopping.
+  An idle stance that shifts its weight and looks around, then kneels to
+  rest; blinking eyes and breath fogging in the cold air; jumping with a
+  wind-up and landing squash; a skid to a halt from a sprint; and sword play:
+  draw, guard, a combo (forehand, then backhand or uppercut, then an overhead
+  chop that strikes sparks, shakes the camera and freezes for a beat on
+  impact), a lunging thrust from a sprint, a plunging strike from the air and
+  a charged spinning slash, all with glowing swing trails. Footsteps kick up
+  dust and grass and leave prints in dirt and sand.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
@@ -88,3 +89,10 @@ src/
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
 ```
+
+## Credits
+
+Walk and run motion from the [CMU Graphics Lab Motion Capture
+Database](http://mocap.cs.cmu.edu/) (subjects 8 and 9), via the BVH
+conversion by Bruce Hahne ([cgspeed](https://sites.google.com/a/cgspeed.com/cgspeed/motion-capture/the-daz-friendly-bvh-release-of-cmus-motion-capture-database)).
+The database was created with funding from NSF EIA-0196217.

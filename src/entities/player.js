@@ -7,8 +7,8 @@ import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './r
 // SCALE row units, but a metre up or down the screen is foreshortened by
 // the camera tilt, exactly as the figure's own feet are, so a planted foot
 // stays planted whichever way the warrior walks.
-const WALK_SPEED = 1.6;
-const RUN_SPEED = 4.6;
+const WALK_SPEED = 1.75;
+const RUN_SPEED = 4.2;
 const toCols = SCALE / ASPECT;
 const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second
@@ -19,6 +19,16 @@ const SPRINT_GRIP = 5;
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
 const WIND_UP = 0.1; // seconds spent crouching before leaving the ground
+
+// Moves `x` (with velocity `v`) towards `target` like a critically damped
+// spring with natural frequency `w`, exactly for any time step.
+function spring(x, v, target, w, dt) {
+  const d = x - target;
+  const e = Math.exp(-w * dt);
+  const nx = (d + (v + w * d) * dt) * e;
+  const nv = (v - w * (v + w * d) * dt) * e;
+  return [target + nx, nv];
+}
 
 // Shortest signed angle from a to b.
 function angleTo(a, b) {
@@ -34,6 +44,8 @@ export class Player {
     this.phase = 0;
     this.walk = 0;
     this.run = 0;
+    this.walkV = 0;
+    this.runV = 0;
     this.time = 0;
     this.cape = new Cape();
     this.combat = new Combat();
@@ -221,8 +233,12 @@ export class Player {
     if (!moving) this.bank += -this.bank * ease(8);
 
     // Ease the stride in and out so starting and stopping is not abrupt.
-    this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
-    this.run += ((moving && running ? 1 : 0) - this.run) * ease(5);
+    // Critically damped springs: they ease in as well as out, so neither
+    // setting off nor pulling up jolts the limbs in the first frame.
+    [this.walk, this.walkV] = spring(this.walk, this.walkV, going ? 1 : 0, 11, dt);
+    [this.run, this.runV] = spring(this.run, this.runV, moving && running ? 1 : 0, 6, dt);
+    this.walk = Math.max(0, Math.min(1, this.walk));
+    this.run = Math.max(0, Math.min(1, this.run));
     // The walk cycle is not reset on stopping: its effect fades out with
     // `walk`, and picking up where it left off keeps the feet pinned.
 
