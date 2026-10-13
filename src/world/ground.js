@@ -1,6 +1,10 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { glyph } from '../render/glyphs.js';
+import {
+  FOAM, NIGHT, PATH, PATH_GAP, PEBBLE_GAP, PEBBLES, STONE_DARK, STONE_GAP, STONE_LIT, STONE_MID, SWELL,
+  WATER_DEEP, WATER_SHALLOW,
+} from '../render/palette.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, WATER_LEVEL } from './world.js';
 import { windGust } from './wind.js';
 
@@ -91,9 +95,9 @@ export function drawGround(r, world, view, t, bend) {
           cg = 215 * tw;
           cb = 200 * tw;
         }
-        br = 4;
-        bgG = 10;
-        bb = 6;
+        br = NIGHT[0];
+        bgG = NIGHT[1];
+        bb = NIGHT[2];
       } else if (type === WATER) {
         // Long horizontal streaks that drift slowly, like moonlight broken up
         // by a gentle swell.
@@ -104,38 +108,38 @@ export function drawGround(r, world, view, t, bend) {
         else if (v > 0.63) ch = WAVE_MID;
         else if (v > 0.53) ch = WAVE_LO;
         else if (v > 0.47 && rnd < 0.4) ch = WAVE_DOT;
-        const k = (0.45 + Math.max(0, v - 0.45) * 1.6) * (1 - depth * 0.3);
-        cr = 66 * k;
-        cg = 86 * k;
-        cb = 128 * k;
+        const k = (0.3 + Math.max(0, v - 0.47) * 2.2) * (1 - depth * 0.3);
+        cr = SWELL[0] * k;
+        cg = SWELL[1] * k;
+        cb = SWELL[2] * k;
         // Thin lapping foam right where the water meets the shore.
         if (depth < 0.07) {
           const lap = Math.sin(t * 1.8 + wx * ASPECT * 0.5 + rnd * 2);
           ch = lap > 0.1 ? WAVE_MID : WAVE_LO;
           const f = 0.6 + 0.4 * Math.max(0, lap);
-          cr = 120 * f;
-          cg = 138 * f;
-          cb = 160 * f;
+          cr = FOAM[0] * f;
+          cg = FOAM[1] * f;
+          cb = FOAM[2] * f;
         }
-        br = 3 + 4 * (1 - depth);
-        bgG = 5 + 6 * (1 - depth);
-        bb = 13 + 6 * (1 - depth);
+        br = WATER_DEEP[0] + (WATER_SHALLOW[0] - WATER_DEEP[0]) * (1 - depth);
+        bgG = WATER_DEEP[1] + (WATER_SHALLOW[1] - WATER_DEEP[1]) * (1 - depth);
+        bb = WATER_DEEP[2] + (WATER_SHALLOW[2] - WATER_DEEP[2]) * (1 - depth);
       } else if (type === SHORE) {
         ch = SHORE_CH[Math.floor(rnd * SHORE_CH.length)];
-        cr = 90;
-        cg = 92;
-        cb = 80;
-        br = 7;
-        bgG = 8;
-        bb = 9;
+        cr = PEBBLES[0];
+        cg = PEBBLES[1];
+        cb = PEBBLES[2];
+        br = PEBBLE_GAP[0];
+        bgG = PEBBLE_GAP[1];
+        bb = PEBBLE_GAP[2];
       } else if (type === DIRT) {
         ch = DIRT_CH[Math.floor(rnd * DIRT_CH.length)];
-        cr = 150;
-        cg = 110;
-        cb = 60;
-        br = 12;
-        bgG = 9;
-        bb = 5;
+        cr = PATH[0];
+        cg = PATH[1];
+        cb = PATH[2];
+        br = PATH_GAP[0];
+        bgG = PATH_GAP[1];
+        bb = PATH_GAP[2];
       } else if (type === STONE) {
         // Rocky ground is a field of irregular slabs: find the nearest two
         // jittered seed points and draw a dark crack where they tie.
@@ -163,20 +167,23 @@ export function drawGround(r, world, view, t, bend) {
         }
         if (d2 - d1 < 0.3) {
           ch = rnd < 0.5 ? CRACK_A : CRACK_B;
-          cr = 40;
-          cg = 42;
-          cb = 48;
+          cr = STONE_DARK[0];
+          cg = STONE_DARK[1];
+          cb = STONE_DARK[2];
         } else {
           const l = Math.max(0, Math.min(0.999, 0.35 + id * 0.4 - (ox + oy) * 0.08 + shade * 0.2));
           const fam = SLAB_FAMILIES[Math.floor(l * SLAB_FAMILIES.length)];
           ch = fam[Math.floor(rnd * 101) % fam.length];
-          cr = 112 * (0.55 + l);
-          cg = 116 * (0.55 + l);
-          cb = 126 * (0.55 + l);
+          // Slabs facing the moon are lit toward a pale lavender; the rest
+          // sink into blue-grey shade.
+          const lit = l * l;
+          cr = (STONE_MID[0] + (STONE_LIT[0] - STONE_MID[0]) * lit) * (0.45 + l * 0.75);
+          cg = (STONE_MID[1] + (STONE_LIT[1] - STONE_MID[1]) * lit) * (0.45 + l * 0.75);
+          cb = (STONE_MID[2] + (STONE_LIT[2] - STONE_MID[2]) * lit) * (0.45 + l * 0.75);
         }
-        br = 8;
-        bgG = 9;
-        bb = 11;
+        br = STONE_GAP[0];
+        bgG = STONE_GAP[1];
+        bb = STONE_GAP[2];
       }
 
       r.mask[sy * cols + sx] = type;

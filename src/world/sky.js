@@ -1,6 +1,7 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { glyph } from '../render/glyphs.js';
+import { MOON, STARLIGHT } from '../render/palette.js';
 import { WATER } from './world.js';
 
 // The sky is never drawn directly (the camera looks down at the ground), but
@@ -48,9 +49,9 @@ export function drawSkyReflection(r, view, t) {
       const starY = (gy + hash2(gx, gy, 4244)) * grid;
       if (Math.abs(starX - px) > cellW / 2 || Math.abs(starY - py) > cellH / 2) continue;
       const tw = 0.45 + 0.35 * Math.sin(t * (1.5 + h * 3) + h * 500);
-      fg[o] = 170 * tw;
-      fg[o + 1] = 180 * tw;
-      fg[o + 2] = 215 * tw;
+      fg[o] = STARLIGHT[0] * tw;
+      fg[o + 1] = STARLIGHT[1] * tw;
+      fg[o + 2] = STARLIGHT[2] * tw;
       fg[o + 3] = STAR_CH[Math.floor(h * 1e5) % STAR_CH.length];
     }
   }
@@ -70,9 +71,9 @@ function moon(fg, o, dx, dy, x, y, t) {
   if (b < 0.12) return false;
 
   const k = Math.min(1, b);
-  fg[o] = 185 * k;
-  fg[o + 1] = 192 * k;
-  fg[o + 2] = 210 * k;
+  fg[o] = MOON[0] * k;
+  fg[o + 1] = MOON[1] * k;
+  fg[o + 2] = MOON[2] * k;
   fg[o + 3] = MOON_CH[Math.min(MOON_CH.length - 1, Math.floor(k * MOON_CH.length))];
   return true;
 }

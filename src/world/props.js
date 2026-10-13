@@ -2,6 +2,7 @@ import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
+import { MOSS, STONE_LIT, STONE_MID } from '../render/palette.js';
 import { deadwoodBlocks, deadwoodInClearing, makeDeadwood } from './deadwood.js';
 import { makeBush, makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
@@ -42,6 +43,9 @@ function bake(w, top, bottom, sample, seed) {
       const b = Math.max(0, Math.min(0.999, lum / hits));
       const fam = FAMILIES[Math.floor(b * FAMILIES.length)];
       const k = 1.3 / hits;
+      // A fully covered cell also darkens the ground behind it, so the rock
+      // reads as one solid form rather than glyphs scattered on the grass.
+      const solid = hits === SUB_X.length * SUB_Y.length;
       cells.push({
         dx,
         dy,
@@ -49,6 +53,9 @@ function bake(w, top, bottom, sample, seed) {
         r: cr * k,
         gg: cg * k,
         b: cb * k,
+        br: solid ? cr * k * 0.16 : undefined,
+        bgG: solid ? cg * k * 0.16 : undefined,
+        bb: solid ? cb * k * 0.18 : undefined,
       });
     }
   }
@@ -58,15 +65,15 @@ function bake(w, top, bottom, sample, seed) {
 function makeRock(x, y, rand) {
   const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.65 + rand() * 0.2);
-  const stone = [118, 120, 124];
-  const moss = [70, 104, 70];
   const sample = (px, py) => {
     const nx = px / rx;
     const ny = (py + ry) / ry;
     const d2 = nx * nx + ny * ny;
     if (d2 > 1 || py > 0) return null;
-    const l = 0.6 - nx * 0.35 - ny * 0.3;
-    return { l, c: ny < -0.3 && rand() < 0.4 ? moss : stone };
+    // The moonlit crown of the boulder is pale lavender, its flanks drop
+    // into blue-grey shadow.
+    const l = 0.5 - nx * 0.3 - ny * 0.45;
+    return { l, c: ny < -0.3 && rand() < 0.4 ? MOSS : l > 0.6 ? STONE_LIT : STONE_MID };
   };
   const w = Math.ceil(rx / ASPECT) + 1;
   return {
