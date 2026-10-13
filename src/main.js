@@ -171,8 +171,9 @@ function frame(now) {
     if (sword) player.toggleSword();
   }
   clicked = false;
-  hitStop = Math.max(0, hitStop - dt);
-  const playerDt = hitStop > 0 ? dt * 0.05 : dt;
+  const stoppedDt = Math.min(dt, hitStop);
+  hitStop -= stoppedDt;
+  const playerDt = dt - stoppedDt + stoppedDt * 0.05;
   const held = isDown('KeyJ') || mouseHeld;
   const paused = debug.freeze || builder.enabled;
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
