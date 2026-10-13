@@ -5,7 +5,7 @@ import { playMovement } from '../src/audio/movement.js';
 import { playSword, ChargeHum } from '../src/audio/sword.js';
 import { Ambience } from '../src/audio/ambience.js';
 import { FireAudio } from '../src/audio/fire.js';
-import { playWaterSound } from '../src/audio/water.js';
+import { playWaterSound, prepareWaterSounds } from '../src/audio/water.js';
 import { SOUND_VARIANT_COUNT } from '../src/audio/variations.js';
 
 function fakeAudio() {
@@ -79,7 +79,7 @@ function textureSignature(nodes) {
   })));
 }
 
-test('every material, movement, sword and water cue plays 25 distinct textures without extra voices', t => {
+test('every material, movement, sword and water cue plays 25 distinct textures without extra voices', async t => {
   t.mock.method(Math, 'random', () => 0.5);
   const cues = [
     ...['dirt', 'sand', 'rock', 'water'].map(surface => [surface, engine => playFootstep(engine, surface)]),
@@ -90,6 +90,9 @@ test('every material, movement, sword and water cue plays 25 distinct textures w
   ];
   for (const [name, play] of cues) {
     const audio = fakeAudio();
+    if (name === 'water' || name.startsWith('water:')) await prepareWaterSounds(audio.engine, {
+      loadBuffer: async () => ({ duration: 0.4 }),
+    });
     const signatures = new Set();
     for (let index = 0; index < SOUND_VARIANT_COUNT; index++) {
       audio.context.currentTime += 1;
@@ -199,11 +202,11 @@ test('sword impact is a short unpitched, decaying contact', () => {
   assertDisposed(audio);
 });
 
-test('four procedural footstep materials keep distinct colors and envelopes, with strength and position', t => {
+test('three procedural footstep materials keep distinct colors and envelopes, with strength and position', t => {
   t.mock.method(Math, 'random', () => 0.5);
   const colors = new Set();
   const envelopes = new Set();
-  for (const surface of ['dirt', 'sand', 'rock', 'water']) {
+  for (const surface of ['dirt', 'sand', 'rock']) {
     const audio = fakeAudio();
     const handles = playFootstep(audio.engine, surface, { strength: 1, x: 32, y: 47 });
     assert.ok(handles.length >= 2 && handles.length <= 10, surface);
@@ -230,8 +233,8 @@ test('four procedural footstep materials keep distinct colors and envelopes, wit
     assertDisposed(audio);
     assertDisposed(soft);
   }
-  assert.equal(colors.size, 4, 'material filters differ');
-  assert.equal(envelopes.size, 4, 'material contact timing differs');
+  assert.equal(colors.size, 3, 'material filters differ');
+  assert.equal(envelopes.size, 3, 'material contact timing differs');
   const silent = fakeAudio();
   assert.deepEqual(playFootstep(silent.engine, 'dirt', { strength: 0 }), []);
   silent.context.state = 'suspended';

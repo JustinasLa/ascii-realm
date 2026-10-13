@@ -1,0 +1,50 @@
+Recorded water sounds for ASCII Realm
+
+All sources are released under Creative Commons CC0 1.0 Universal:
+https://creativecommons.org/publicdomain/zero/1.0/
+
+"Walking through water" by rosenberg3 (April 7, 2022)
+https://freesound.org/people/rosenberg3/sounds/627004/
+Author describes walking through water in a creek.
+Public HQ preview: https://cdn.freesound.org/previews/627/627004_13855267-hq.mp3
+
+"Water splash, emptying a bucket 2" by wormer2 (January 17, 2018)
+https://freesound.org/people/wormer2/sounds/415670/
+Public HQ preview: https://cdn.freesound.org/previews/415/415670_2383863-hq.mp3
+
+"Water splash, emptying a bucket 3" by wormer2 (January 17, 2018)
+https://freesound.org/people/wormer2/sounds/415669/
+Public HQ preview: https://cdn.freesound.org/previews/415/415669_2383863-hq.mp3
+
+"Big Water Splash" by Iwan Gabovitch / qubodup (October 12, 2018)
+https://freesound.org/people/qubodup/sounds/442773/
+Public HQ preview: https://cdn.freesound.org/previews/442/442773_71257-hq.mp3
+Author's composite of the two wormer2 sounds above and:
+"Large Splash" by roboroo, https://freesound.org/people/roboroo/sounds/436792/
+"SPLASH (by blaukreuz)" by qubodup / Tom Chapman,
+https://freesound.org/people/qubodup/sounds/212143/
+All four component recordings are CC0 according to the composite's source page.
+
+Excerpts (source start and duration, in seconds):
+  wade-1: Walking through water, 0.610 / 0.520
+  wade-2: Walking through water, 1.255 / 0.550
+  wade-3: Walking through water, 2.315 / 0.560
+  wade-4: Walking through water, 3.860 / 0.580
+  wade-5: Walking through water, 4.925 / 0.590
+  wade-6: Walking through water, 5.870 / 0.560
+  lift-1: Walking through water, 0.520 / 0.620
+  lift-2: Walking through water, 3.700 / 0.710
+  skid-1: Walking through water, 3.105 / 0.240
+  skid-2: Walking through water, 5.625 / 0.240
+  wash-1: Bucket 2, 1.180 / 1.050
+  wash-2: Bucket 3, 1.080 / 1.160
+  splash-1: Bucket 2, 0.310 / 2.350
+  splash-2: Bucket 3, 0.100 / 2.680
+  splash-big: Big Water Splash, 0.000 / 2.17225
+
+Processing: converted to mono 24,000 Hz, 16-bit PCM. Second-order 55 Hz
+high-pass removes subsonic rumble, DC is removed, then levels are balanced to
+peaks of 0.55 (skid), 0.60 (wash), 0.65 (wade/lift), 0.78 (splash), 0.85 (big).
+4 ms sine-squared entry fades and 45-240 ms cosine-squared exit fades avoid
+edit clicks. The natural water displacement, bubbles and returning droplets
+remain; no generated noise, compression, looping or reversed audio is added.
