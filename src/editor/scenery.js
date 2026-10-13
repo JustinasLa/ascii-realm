@@ -1,8 +1,8 @@
 import { hash2 } from '../core/rng.js';
 import { createProp } from '../world/props.js';
+import { PROP_KINDS } from '../world/prop-catalog.js';
 import { ASPECT, STONE, WATER } from '../world/world.js';
 
-const KINDS = new Set(['tree', 'rock', 'bush']);
 const HISTORY_LIMIT = 64;
 const COORD_LIMIT = 1_000_000;
 const TERRAIN_LIMIT = 50_000;
@@ -27,7 +27,7 @@ function checkType(type) {
 
 function checkProp(kind, x, y, scale, seed) {
   checkPoint(x, y);
-  if (!KINDS.has(kind)) throw new Error('Unknown scenery prop kind.');
+  if (!PROP_KINDS.has(kind)) throw new Error('Unknown scenery prop kind.');
   if (!Number.isFinite(scale) || scale < 0.25 || scale > 3) throw new Error('Prop scale must be between 0.25 and 3.');
   if (!validSeed(seed)) throw new Error('Prop seed must be a safe integer.');
 }

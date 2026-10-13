@@ -86,10 +86,14 @@ npm test
 Press `B` to enter build mode and open the testing panel; press it again to return
 to play. You can also open the panel by clicking its summary, then choose
 **Start building**. Paint grass, dirt, shore, water or stone with terrain brushes,
-or spawn trees, rocks and shrubs. Adjust the brush radius or prop scale in the
-panel; the eraser removes props only. While building, `W A S D` pans the view and
-normal player movement is paused. With the canvas or page body focused, `Enter`
-applies the selected tool at the centre of the view.
+or choose from the **Nature** and **Camp** prop palettes: trees, pines, rocks,
+bushes, stumps, logs, flowers, mushrooms, reeds, crates, barrels, fences, tents,
+campfires and signposts. Flowers, mushrooms and reeds are decorative and can be
+walked through; the other props block movement. Adjust the brush radius or prop
+scale in the panel and preview props before placing them; the eraser removes
+props only. While building, `W A S D` pans the view and normal player movement
+is paused. With the canvas or page body focused, `Enter` applies the selected
+tool at the centre of the view.
 
 Each stroke can be undone with `Ctrl`/`Cmd` + `Z` and redone with
 `Ctrl`/`Cmd` + `Shift` + `Z` or `Ctrl` + `Y`. **Save** and **Load** keep scenery

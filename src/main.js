@@ -218,9 +218,7 @@ function frame(now) {
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
-  // Props up to a screen above the view can still be reflected into it.
-  const props = world.propsIn(view.x0 - world.propRenderW, view.y0 - view.rows,
-    view.x0 + view.cols + world.propRenderW, view.y0 + view.rows + world.propRenderH);
+  const props = world.propsInView(view);
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);

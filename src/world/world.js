@@ -201,6 +201,15 @@ export class World {
     return out;
   }
 
+  // A tall prop can reach the viewport directly from below, or reflect into
+  // water from above. Include both silhouettes plus the horizontal ripple.
+  propsInView(view) {
+    return this.propsIn(view.x0 - this.propRenderW - 2,
+      view.y0 - Math.max(view.rows, this.propRenderH) - 1,
+      view.x0 + view.cols + this.propRenderW + 2,
+      view.y0 + view.rows + this.propRenderH);
+  }
+
   isWalkable(x, y) {
     if (this.typeAt(x, y) === WATER) return false;
     // A large prop may straddle a chunk edge while its base lies outside the

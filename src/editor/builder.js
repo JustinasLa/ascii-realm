@@ -1,12 +1,13 @@
 import { clearInput, isControlTarget } from '../core/input.js';
 import { createProp, drawProp } from '../world/props.js';
+import { PROP_CATALOG, PROP_KINDS, propDefinition } from '../world/prop-catalog.js';
 import { ASPECT, DIRT, GRASS, SHORE, STONE, WATER } from '../world/world.js';
 import { brushSize, screenToWorld, worldToScreen } from './coordinates.js';
 import { findPlayPosition } from './recovery.js';
 import { Scenery } from './scenery.js';
 
 const TERRAIN = { grass: GRASS, dirt: DIRT, shore: SHORE, water: WATER, stone: STONE };
-const PROPS = new Set(['tree', 'rock', 'bush']);
+const PROPS = PROP_KINDS;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
 // The panel owns editor interaction; the world still owns shading, reflections
@@ -35,6 +36,7 @@ export class SceneryBuilder {
     this.redoButton = byId('redo');
     this.radiusInput = byId('radius');
     this.scaleInput = byId('scale');
+    this.buildPalette(byId('props'));
     this.tools = [...this.panel.querySelectorAll('[data-tool]')];
     this.modeButton.addEventListener('click', () => this.setEnabled(!this.enabled));
     this.panel.addEventListener('toggle', () => {
@@ -47,7 +49,9 @@ export class SceneryBuilder {
         this.ghost = null;
         this.setEnabled(true);
         this.canvas.focus({ preventScroll: true });
-        this.refresh(`Selected ${this.tool === 'erase' ? 'erase props' : this.tool}.`);
+        const label = propDefinition(this.tool)?.label ?? (this.tool === 'erase' ? 'erase props' : this.tool);
+        const walkThrough = propDefinition(this.tool)?.solid === false ? ' Walk-through decoration.' : '';
+        this.refresh(`Selected ${label}.${walkThrough}`);
       });
     }
     this.radiusInput.addEventListener('input', () => {
@@ -101,6 +105,34 @@ export class SceneryBuilder {
       this.pointer = null;
     });
     this.refresh(`Seed ${world.seed}. Choose a tool or start building.`);
+  }
+
+  buildPalette(container) {
+    for (const group of new Set(PROP_CATALOG.map((prop) => prop.group))) {
+      const section = document.createElement('div');
+      section.className = 'builder-prop-group';
+      const heading = document.createElement('h3');
+      heading.id = `builder-props-${group.toLowerCase()}`;
+      heading.textContent = group;
+      const grid = document.createElement('div');
+      grid.className = 'builder-tool-grid builder-prop-grid';
+      grid.setAttribute('role', 'group');
+      grid.setAttribute('aria-labelledby', heading.id);
+      for (const { kind, label, symbol, solid } of PROP_CATALOG.filter((prop) => prop.group === group)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.tool = kind;
+        button.setAttribute('aria-pressed', 'false');
+        button.title = solid ? `${label}: solid scenery` : `${label}: walk-through decoration`;
+        const icon = document.createElement('span');
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = symbol;
+        button.append(icon, document.createTextNode(` ${label}`));
+        grid.append(button);
+      }
+      section.append(heading, grid);
+      container.append(section);
+    }
   }
 
   setEnabled(enabled) {

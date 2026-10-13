@@ -2,9 +2,12 @@ import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
+import { makeCampProp } from './camp-props.js';
+import { makeNaturalProp } from './natural-props.js';
+import { propDefinition } from './prop-catalog.js';
 import { ASPECT, GRASS } from './world.js';
 
-// Trees and boulders. Each prop is rasterised once, when its chunk is
+// Scenery props. Each prop is rasterised once, when its chunk is
 // generated, into a list of cells relative to its base (the point where it
 // touches the ground). Drawing is then just copying those cells.
 
@@ -187,7 +190,8 @@ function scaleCells(cells, scale) {
 // Builder props use their own seed so moving an item does not change its
 // appearance. Keep generateProps below on its original random stream.
 export function createProp(kind, x, y, options = {}) {
-  if (!['tree', 'rock', 'bush'].includes(kind)) throw new TypeError(`Unknown scenery prop: ${kind}`);
+  const definition = propDefinition(kind);
+  if (!definition) throw new TypeError(`Unknown scenery prop: ${kind}`);
   if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y)) {
     throw new TypeError('Scenery prop coordinates must be finite numbers');
   }
@@ -202,13 +206,16 @@ export function createProp(kind, x, y, options = {}) {
     throw new TypeError('Scenery prop seed must be a finite number');
   }
   const rand = mulberry32(seed);
-  const make = kind === 'tree' ? makeTree : kind === 'rock' ? makeRock : makeBush;
-  const prop = make(x, y, rand, seed);
+  const make = { tree: makeTree, rock: makeRock, bush: makeBush }[kind];
+  const prop = make ? make(x, y, rand, seed)
+    : makeNaturalProp(kind, x, y, rand, seed, bake) ?? makeCampProp(kind, x, y, rand, seed, bake);
+  if (!prop) throw new TypeError(`Scenery prop has no factory: ${kind}`);
   prop.cells = scaleCells(prop.cells, scale);
   prop.footW *= scale;
   prop.footH *= scale;
   prop.scale = scale;
   prop.seed = seed;
+  prop.solid = definition.solid;
   return prop;
 }
 
@@ -248,6 +255,7 @@ export function drawProp(r, view, prop, write = putCell) {
 }
 
 export function blocks(prop, x, y) {
+  if (prop.solid === false) return false;
   const dx = (x - prop.x) / prop.footW;
   const dy = (y - prop.y) / prop.footH;
   return dx * dx + dy * dy < 1;
