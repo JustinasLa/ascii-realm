@@ -44,7 +44,7 @@ test('HUD ASCII bars and accessible values follow rounded, bounded player vitals
   assert.equal(health.maximum, 100);
   assert.equal(stamina.current, 25);
   assert.equal(stamina.maximum, 100);
-  assert.match(health.element.textContent, /\[#{8}-{8}\]/);
+  assert.match(health.element.textContent, /50\s*\/\s*100/);
 
   player.vitals.health = 50.43;
   hud.update(0, view);

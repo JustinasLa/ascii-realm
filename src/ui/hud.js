@@ -1,4 +1,5 @@
 import { ITEMS } from '../inventory/items.js';
+import { itemArt } from './item-art.js';
 
 const BAR_CELLS = 16;
 const MAX_TOASTS = 5;
@@ -44,12 +45,17 @@ function makeVital(label, kind) {
   attribute(node, 'role', 'meter');
   attribute(node, 'aria-label', label);
   attribute(node, 'aria-valuemin', 0);
-  const caption = element('span', 'hud-vital-label', kind === 'health' ? 'HP' : 'STA');
+  const caption = element('span', 'hud-vital-label', label);
   const bar = element('pre', 'hud-vital-bar');
   attribute(bar, 'aria-hidden', 'true');
+  const filled = element('span', 'hud-vital-filled');
+  const empty = element('span', 'hud-vital-empty');
+  bar.append(filled, empty);
   const value = element('span', 'hud-vital-value');
-  node.append(caption, bar, value);
-  return { node, bar, value };
+  const heading = element('div', 'hud-vital-heading');
+  heading.append(caption, value);
+  node.append(heading, bar);
+  return { node, bar, filled, empty, value };
 }
 
 /** Persistent ASCII controls and short-lived feedback from real game events. */
@@ -74,7 +80,7 @@ export class Hud {
 
     const status = element('section', 'hud-status hud-panel');
     attribute(status, 'aria-label', 'Player status');
-    status.append(element('div', 'hud-name', `[ ${String(name || 'Wanderer').slice(0, 24)} ]`));
+    status.append(element('div', 'hud-name', String(name || 'Wanderer').slice(0, 24)));
     this.health = makeVital('Health', 'health');
     this.stamina = makeVital('Stamina', 'stamina');
     status.append(this.health.node, this.stamina.node);
@@ -84,7 +90,7 @@ export class Hud {
     this.compassTape = element('pre', 'hud-compass-tape');
     attribute(this.compassTape, 'aria-hidden', 'true');
     this.compassDirection = element('div', 'hud-compass-direction');
-    compass.append(this.compassTape, this.compassDirection);
+    compass.append(element('span', 'hud-compass-marker', 'v'), this.compassTape, this.compassDirection);
     this.element.append(status, compass);
 
     if (debug) {
@@ -94,6 +100,7 @@ export class Hud {
     }
 
     const hotbarWrap = element('div', 'hud-hotbar-wrap');
+    this.selectedItem = element('div', 'hud-selected-item');
     const hotbar = element('div', 'hud-hotbar');
     attribute(hotbar, 'role', 'group');
     attribute(hotbar, 'aria-label', 'Quick slots. Use number keys 1 to 9 to select.');
@@ -101,7 +108,7 @@ export class Hud {
       const button = element('button', 'hud-slot');
       button.type = 'button';
       button.dataset.slot = String(index + 1);
-      const key = element('span', 'hud-slot-number', `[${index + 1}]`);
+      const key = element('span', 'hud-slot-number', String(index + 1));
       const glyph = element('pre', 'hud-slot-glyph');
       attribute(glyph, 'aria-hidden', 'true');
       const count = element('span', 'hud-slot-count');
@@ -111,12 +118,15 @@ export class Hud {
       hotbar.append(button);
       return { button, glyph, count, state, signature: '' };
     });
-    const inventoryButton = element('button', 'hud-inventory-button', '[I] Inventory');
+    const inventoryButton = element('button', 'hud-inventory-button');
     inventoryButton.type = 'button';
     attribute(inventoryButton, 'aria-label', 'Open inventory. Keyboard shortcut I.');
     attribute(inventoryButton, 'aria-haspopup', 'dialog');
+    const bag = element('pre', 'hud-inventory-glyph', '  __  \n /==\\ \n|    |\n|____|');
+    attribute(bag, 'aria-hidden', 'true');
+    inventoryButton.append(bag, element('span', 'hud-inventory-label', 'Inventory'), element('kbd', 'hud-inventory-key', 'I'));
     inventoryButton.addEventListener('click', () => this.onInventory());
-    hotbarWrap.append(hotbar, inventoryButton);
+    hotbarWrap.append(this.selectedItem, hotbar, inventoryButton);
     this.element.append(hotbarWrap);
 
     this.toastLayer = element('div', 'hud-toasts');
@@ -136,7 +146,8 @@ export class Hud {
     const max = available ? maximum : 1;
     const current = available ? clamp(value, 0, max) : 0;
     const filled = available ? Math.ceil((current / max) * BAR_CELLS) : 0;
-    text(vital.bar, `[${'#'.repeat(filled)}${'-'.repeat(BAR_CELLS - filled)}]`);
+    text(vital.filled, '|'.repeat(filled));
+    text(vital.empty, '.'.repeat(BAR_CELLS - filled));
     text(vital.value, available ? `${number(current)} / ${number(max)}` : '-- / --');
     attribute(vital.node, 'aria-valuemax', number(max));
     attribute(vital.node, 'aria-valuenow', number(current));
@@ -151,7 +162,7 @@ export class Hud {
       const count = item && Number.isFinite(entry.count) ? Math.max(0, Math.floor(entry.count)) : 0;
       const selected = this.inventory.selectedHotbar === index;
       const equipped = Boolean(item && (entry.equipped || entry.source === 'equipment'));
-      const glyph = item ? String(item.glyph || '?').slice(0, 96) : '.';
+      const glyph = item ? itemArt(item.id, String(item.glyph || '?').slice(0, 96)) : '';
       const name = item?.name || 'Empty';
       const signature = JSON.stringify([item?.id, name, glyph, count, selected, equipped]);
       if (signature === slot.signature) continue;
@@ -159,13 +170,16 @@ export class Hud {
       slot.button.classList.toggle('empty', !item);
       slot.button.classList.toggle('selected', selected);
       slot.button.classList.toggle('equipped', equipped);
+      slot.button.dataset.itemId = item?.id || '';
       text(slot.glyph, glyph);
-      text(slot.count, item ? `x${count}` : '-');
-      text(slot.state, equipped ? 'EQUIPPED' : selected ? 'SELECTED' : '');
+      text(slot.count, item && count > 1 ? `x${count}` : '');
+      text(slot.state, equipped ? '*' : '');
       attribute(slot.button, 'aria-pressed', selected);
       attribute(slot.button, 'aria-label', `Slot ${index + 1}: ${name}${item ? `, count ${count}` : ''}${equipped ? ', equipped' : ''}${selected ? ', selected' : ''}`);
       attribute(slot.button, 'title', `${index + 1}: ${name}${equipped ? ' (equipped)' : ''}`);
     }
+    const selected = this.inventory.getHotbar();
+    text(this.selectedItem, selected?.item.name || 'Quick slots');
   }
 
   update(dt, view) {
@@ -184,8 +198,8 @@ export class Hud {
       const label = DIRECTIONS[(direction + offset + DIRECTIONS.length) % DIRECTIONS.length];
       return offset === 0 ? `[${label}]` : label;
     });
-    text(this.compassTape, around.join(' - '));
-    text(this.compassDirection, `FACING ${DIRECTIONS[direction]}  ${Math.round(bearing) % 360} deg`);
+    text(this.compassTape, around.map((label) => label.replace(/[\[\]]/g, '').padStart(3).padEnd(5)).join(' '));
+    text(this.compassDirection, `${DIRECTIONS[direction]}  ${Math.round(bearing) % 360}\u00b0`);
 
     if (this.coordinates) {
       const x = Number.isFinite(this.player.x) ? number(this.player.x) : '--';
@@ -209,8 +223,7 @@ export class Hud {
   notify(message, kind = 'pickup') {
     if (this.destroyed || !String(message || '').trim()) return;
     const category = /^[a-z-]+$/.test(kind) ? kind : 'info';
-    const prefix = category === 'pickup' || category === 'success' ? '[+]' : category === 'warning' || category === 'error' ? '[!]' : '[i]';
-    const node = element('div', 'hud-toast', `${prefix} ${String(message).trim().slice(0, 160)}`);
+    const node = element('div', 'hud-toast', String(message).trim().slice(0, 160));
     node.dataset.kind = category;
     if (this.toasts.length >= MAX_TOASTS) this.toasts.shift().node.remove();
     this.toastLayer.append(node);

@@ -48,10 +48,13 @@ For now it is a single warrior exploring procedurally generated terrain.
   it recovers after a short delay. Hunger, thirst and temperature are planned
   for later.
 - **Inventory and equipment.** A keyboard-controlled bag, seven-slot paper
-  doll, item tooltips and a 40-unit carrying limit. Assign items to the hotbar,
+  doll drawn with the warrior's actual glyphs, item tooltips and a 40-unit
+  carrying limit. Assign items to the hotbar,
   equip the greatsword, and use starter consumables to restore health or stamina.
   Opening the inventory blocks movement, jumping and attacks while the world
   keeps running.
+
+![Inventory with equipped gear around the warrior, a satchel and selected item details](docs/inventory.png)
 
 ## Running
 
@@ -109,3 +112,19 @@ src/
   inventory/         items, bag, equipment, hotbar and carry weight
   ui/                ASCII HUD, inventory panel, tooltips and notifications
 ```
+
+## Tests and coverage
+
+Use Node.js 24 or newer and install the locked development dependencies with
+`npm ci`. Run `npm test` for the behavioral suite or `npm run test:coverage` to
+run it with a strict per-file 100% statement, branch, function, and line gate.
+Every application module under `src/` is included, including modules a test
+has not imported. Generated reports are written to `coverage/index.html`,
+`coverage/lcov.info`, and `coverage/coverage-summary.json`.
+
+The suite exercises the real game loop, world and figure rendering, player
+resources and combat, inventory transactions, keyboard and pointer controls,
+HUD feedback, and equipment portraits. JSDOM supplies the browser DOM and a
+recording WebGL boundary supplies the GPU calls. Targeted alternate catalog
+and portrait-writer fixtures check optional data and invalid glyph handling;
+the rest of the suite uses the shipped implementations and item catalog.
