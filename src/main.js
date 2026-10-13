@@ -198,8 +198,9 @@ function frame(now) {
     view.y0 + view.rows + 50);
   const visibleItems = items.in(view.x0 - 3, view.y0 - 4, view.x0 + view.cols + 3,
     view.y0 + view.rows + 3);
-  const resources = harvesting.resourcesIn(view.x0 - 4, view.y0 - 7,
-    view.x0 + view.cols + 4, view.y0 + view.rows + 5);
+  // Bushes can extend into the view from below or reflect from above it.
+  const resources = harvesting.resourcesIn(view.x0 - 9, view.y0 - 12,
+    view.x0 + view.cols + 9, view.y0 + view.rows + 12);
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);

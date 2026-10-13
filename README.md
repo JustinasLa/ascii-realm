@@ -34,6 +34,10 @@ For now it is a single warrior exploring procedurally generated terrain.
   a tree three times for logs, or cut tall grass for straw and plant fibre.
   Stationary pickups make the warrior crouch and grab. A soft pickup sound is
   enabled by your first key press or click.
+- **Berry bushes.** Leafy shrubs with bright ripe berries grow throughout the
+  meadows, including one near the starting clearing. Press `E` nearby to pick
+  4–7 wild berries for your food supplies. Picked bushes keep their branches
+  and leaves; excess berries stay on the ground when your bag is full.
 - **Bag.** Open the 24-slot inventory with `I` or `Tab` to see stack counts,
   item details and carried weight. Its 40 kg limit leaves excess loot on the
   ground. Select a slot and press `Q` to drop one item. Collected resources,

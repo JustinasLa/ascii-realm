@@ -5,6 +5,7 @@ import { Collection } from '../src/inventory/collection.js';
 import { Inventory } from '../src/inventory/inventory.js';
 import { ITEMS } from '../src/inventory/items.js';
 import { Harvesting } from '../src/world/harvesting.js';
+import { generateResources } from '../src/world/gatherables.js';
 import { GroundItems } from '../src/world/items.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from '../src/world/world.js';
 
@@ -315,4 +316,33 @@ test('E gathering emits persistent loose berries and a depleted bush cannot be g
   assert.equal(resources[0], bush);
   assert.equal(state.collection.interact(state.player).status, 'empty');
   assert.equal(carried(state.inventory, 'berries') + loose(state.items, 'berries'), 2);
+});
+
+test('procedural berry bushes supply their seeded food yield even when only part fits in the bag', () => {
+  const state = scene({ capacity: ITEMS.berries.weight * 2.5 });
+  const bush = generateResources(state.world, 0, 0).find((resource) => resource.kind === 'bush');
+  assert.ok(bush);
+  assert.ok(bush.berryCount >= 4 && bush.berryCount <= 7);
+  assert.ok(ITEMS.berries.tags.includes('food'));
+  bush.x = state.player.x;
+  bush.y = state.player.y + 2;
+  state.world.chunk(0, 0).resources.push(bush);
+  const amount = bush.berryCount;
+
+  assert.equal(state.collection.prompt(state.player), `E Gather ${amount} berries`);
+  assert.equal(state.collection.interact(state.player).count, amount);
+  assert.equal(bush.harvested, true);
+  state.collection.update(0.35, state.player);
+  assert.equal(carried(state.inventory, 'berries'), 2);
+  assert.equal(loose(state.items, 'berries'), amount - 2);
+  assert.equal(carried(state.inventory, 'berries') + loose(state.items, 'berries'), amount);
+
+  visitDistantChunk(state);
+  assert.equal(state.harvesting.resourcesOf(0, 0)[0], bush);
+  assert.equal(bush.harvested, true);
+  state.inventory.capacity = 40;
+  assert.equal(state.collection.interact(state.player).count, amount - 2);
+  assert.equal(carried(state.inventory, 'berries'), amount);
+  assert.equal(loose(state.items, 'berries'), 0);
+  assert.equal(state.collection.interact(state.player).status, 'empty');
 });

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
+import { Collection } from '../src/inventory/collection.js';
+import { Inventory } from '../src/inventory/inventory.js';
+import { ITEMS } from '../src/inventory/items.js';
 import { Harvesting } from '../src/world/harvesting.js';
+import { GroundItems } from '../src/world/items.js';
 import { blocks, drawProp, generateProps } from '../src/world/props.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from '../src/world/world.js';
 
@@ -16,10 +20,11 @@ function fixture(resources = [], props = []) {
     seed: 9,
     spawn: { x: 10000, y: 10000 },
     chunk(cx, cy) {
-      if (!chunks.has(key(cx, cy))) chunks.set(key(cx, cy), { cx, cy, resources: [] });
+      if (!chunks.has(key(cx, cy))) chunks.set(key(cx, cy), { cx, cy, resources: [], items: [] });
       return chunks.get(key(cx, cy));
     },
     typeAt() { return GRASS; },
+    isWalkable() { return true; },
     propsIn() { return props; },
   };
   for (const resource of resources) {
@@ -93,6 +98,79 @@ test('gathering berries depletes its bush once and creates delayed loose rewards
   assert.equal(groundItems.drops[0].pickupAfter, 4.25);
   assert.equal(harvesting.interact(player).status, 'empty');
   assert.equal(groundItems.drops.length, 1);
+});
+
+test('seeded berry yields appear in prompts and harvest exactly once without removing the plant', () => {
+  for (const berryCount of [4, 5, 6, 7]) {
+    const bush = { ...node('bush', 3, 0), berryCount };
+    const { world, harvesting, groundItems } = fixture([bush]);
+    const player = { x: 0, y: 0 };
+    assert.equal(harvesting.nearby(player).action, `Gather ${berryCount} berries`);
+    const result = harvesting.interact(player);
+    assert.equal(result.id, 'berries');
+    assert.equal(result.count, berryCount);
+    assert.equal(result.message, `Gathered ${berryCount} berries.`);
+    assert.deepEqual(result.rewards, [{ id: 'berries', count: berryCount }]);
+    assert.equal(groundItems.drops[0].count, berryCount);
+    assert.equal(groundItems.drops[0].pickupAfter, 4.25);
+    assert.equal(world.chunk(0, 0).resources[0], bush, 'the harvested bush remains available to render');
+    assert.equal(bush.berryCount, berryCount, 'depletion preserves the seeded plant data');
+    harvesting.resourcesOf(20, -20);
+    assert.equal(harvesting.interact(player).status, 'empty');
+    assert.equal(groundItems.drops.length, 1);
+    assert.equal(groundItems.drops[0].count, berryCount);
+  }
+});
+
+test('legacy and invalid berry yields retain the bounded original reward and prompt', () => {
+  for (const berryCount of [undefined, null, NaN, Infinity, -1, 0, 1, 2, 3, 4.5, 8, 1000, '5', true]) {
+    const bush = { ...node('bush', 3, 0), berryCount };
+    const { harvesting, groundItems } = fixture([bush]);
+    const player = { x: 0, y: 0 };
+    assert.equal(harvesting.nearby(player).action, 'Gather berries');
+    assert.equal(harvesting.interact(player).count, 2);
+    assert.equal(groundItems.drops[0].count, 2);
+  }
+});
+
+test('full and partial bag capacity conserve every seeded berry in real loose stacks', () => {
+  for (const initialSpace of [0, 3]) {
+    const bush = { ...node('bush', 3, 0), berryCount: 7 };
+    const { world } = fixture([bush]);
+    const items = new GroundItems(world);
+    const inventory = new Inventory({ starter: false, capacity: ITEMS.berries.weight * initialSpace });
+    const harvesting = new Harvesting(world, items);
+    const collection = new Collection(world, inventory, items, harvesting);
+    const player = { x: bush.x, y: bush.y };
+    const carried = () => inventory.slots.reduce((sum, stack) => sum + (stack?.id === 'berries' ? stack.count : 0), 0);
+    const loose = () => items.in(-10, -10, 10, 10).reduce((sum, item) => sum + (item.id === 'berries' ? item.count : 0), 0);
+
+    assert.ok(ITEMS.berries.tags.includes('food'));
+    assert.equal(collection.prompt(player), 'E Gather 7 berries');
+    assert.equal(collection.interact(player).count, 7);
+    assert.equal(carried(), 0);
+    assert.equal(loose(), 7, 'a full bag must not prevent the food reward from dropping');
+    assert.equal(collection.interact(player).status, 'empty', 'the settling drop cannot cause a repeated harvest');
+    collection.update(0.1, player);
+    assert.equal(carried(), 0, 'berries retain their short settling delay');
+    collection.update(0.2, player);
+    assert.equal(carried(), initialSpace);
+    assert.equal(loose(), 7 - initialSpace);
+    assert.equal(carried() + loose(), 7);
+    assert.equal(harvesting.interact(player).status, 'empty');
+    assert.equal(world.chunk(0, 0).resources[0], bush);
+    assert.equal(bush.harvested, true);
+
+    items.of(30, -30);
+    harvesting.resourcesOf(30, -30);
+    assert.equal(loose(), 7 - initialSpace, 'leaving the chunk preserves uncollected berries');
+    inventory.capacity = ITEMS.berries.weight * 7;
+    collection.update(0, player);
+    assert.equal(carried(), 7);
+    assert.equal(loose(), 0);
+    assert.equal(collection.interact(player).status, 'empty');
+    assert.equal(carried() + loose(), 7);
+  }
 });
 
 test('nearby interaction cannot reach across water or another prop', () => {

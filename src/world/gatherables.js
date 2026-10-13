@@ -62,8 +62,11 @@ function item(world, id, x, y, count = 1) {
 }
 
 function resource(world, kind, x, y) {
-  return { uid: `resource:${kind}:${Math.floor(x)}:${Math.floor(y)}`, kind, x, y,
+  const node = { uid: `resource:${kind}:${Math.floor(x)}:${Math.floor(y)}`, kind, x, y,
     harvested: false, phase: phase(world, x, y, 1511) };
+  // Food yield has its own hash so it never changes placement or grass rolls.
+  if (kind === 'bush') node.berryCount = 4 + Math.floor(hash2(Math.floor(x), Math.floor(y), world.seed + 1543) * 4);
+  return node;
 }
 
 function add(out, occupied, entry) {

@@ -9,6 +9,8 @@ import { GRASS, WATER } from '../src/world/world.js';
 const id = Object.keys(ITEMS)[0];
 const item = { uid: 'test-item', id, count: 1, x: 4.5, y: 4.5, phase: 0 };
 const view = { x0: -8, y0: -8, cols: 24, rows: 24 };
+const ripeFruit = args => (args[3] === glyph('o') || args[3] === glyph(':'))
+  && args[4] > args[5] * 2 && args[6] > args[5];
 
 function buffer(type = GRASS) {
   const r = { cols: 24, rows: 24,
@@ -102,10 +104,103 @@ test('resource nodes render harvestable tufts and berries, then visible depleted
     assert.notDeepEqual(whole.map(args => args.slice(1)), harvested.map(args => args.slice(1)));
     if (kind === 'grass') assert.ok(harvested.every(args => args[2] === args[7]));
     if (kind === 'bush') {
-      assert.ok(whole.some(args => args[4] > args[5]));
-      assert.ok(harvested.every(args => args[5] > args[4]));
+      assert.ok(whole.some(ripeFruit));
+      assert.equal(harvested.some(ripeFruit), false);
+      assert.deepEqual(whole.filter(args => !ripeFruit(args)).map(args => args.slice(1)),
+        harvested.map(args => args.slice(1)),
+        'picking removes the fruit while preserving every leaf, branch and root');
     }
   }
+});
+
+test('berry bushes show their harvest count as distinct ripe fruit clusters', () => {
+  const node = { uid: 'berry-bush', kind: 'bush', x: 4.5, y: 10.5, phase: 0 };
+  for (const count of [4, 5, 6, 7]) {
+    const writes = [];
+    drawResource(buffer(), view, { ...node, berryCount: count }, 0, (...args) => writes.push(args));
+    const berries = writes.filter(args => ripeFruit(args) && args[3] === glyph('o'));
+    const pips = writes.filter(args => ripeFruit(args) && args[3] === glyph(':'));
+    assert.equal(berries.length, count);
+    assert.equal(pips.length, count);
+    assert.equal(new Set(berries.map(args => `${args[1]},${args[2]}`)).size, count);
+    assert.ok(writes.every(args => args[7] === 18));
+  }
+});
+
+test('legacy and invalid berry counts retain the two-cluster harvest fallback', () => {
+  const node = { uid: 'legacy-bush', kind: 'bush', x: 4.5, y: 10.5, phase: 0 };
+  for (const count of [undefined, null, 0, -1, 2, 3, 8, 100, 4.5, NaN, Infinity, '5']) {
+    const writes = [];
+    drawResource(buffer(), view, { ...node, berryCount: count }, 0, (...args) => writes.push(args));
+    assert.equal(writes.filter(args => ripeFruit(args) && args[3] === glyph('o')).length, 2);
+  }
+});
+
+test('layered berry bushes have visible woody forks and sway above planted roots', () => {
+  const node = { uid: 'shrub', kind: 'bush', x: 4.5, y: 10.5, phase: 0, berryCount: 7 };
+  const still = [];
+  const wind = [];
+  const varied = [];
+  drawResource(buffer(), view, node, 0, (...args) => still.push(args));
+  drawResource(buffer(), view, node, 1.3, (...args) => wind.push(args));
+  drawResource(buffer(), view, { ...node, phase: 1 }, 0, (...args) => varied.push(args));
+  const xs = still.map(args => args[1]);
+  const ys = still.map(args => args[2]);
+  assert.equal(Math.max(...xs) - Math.min(...xs) + 1, 13);
+  assert.equal(Math.max(...ys) - Math.min(...ys) + 1, 9);
+  assert.ok(still.some(args => args[3] === glyph('|') && args[4] > args[5] && args[6] < args[5]));
+  assert.ok(still.some(args => args[3] === glyph('/') && args[2] < args[7] - 2));
+  assert.ok(still.some(args => args[3] === glyph('\\') && args[2] < args[7] - 2));
+  assert.ok(still.some(args => args[5] > args[4] * 1.5), 'the canopy stays green');
+  assert.deepEqual(still.filter(args => args[2] === args[7]).map(args => args.slice(1)),
+    wind.filter(args => args[2] === args[7]).map(args => args.slice(1)));
+  const stillTop = still.filter(args => args[2] === args[7] - 8);
+  const movingTop = wind.filter(args => args[2] === args[7] - 8);
+  assert.deepEqual(stillTop.map(args => args[1] + 1), movingTop.map(args => args[1]));
+  assert.notDeepEqual(still.filter(ripeFruit).map(args => args.slice(1, 3)),
+    varied.filter(ripeFruit).map(args => args.slice(1, 3)));
+  assert.ok(wind.every(args => args[7] === 18));
+});
+
+test('large bushes remain visible when only their high leaves enter the viewport', () => {
+  const edgeView = { ...view, x0: 0, y0: 0 };
+  const below = { uid: 'below', kind: 'bush', x: 11.5, y: 31.5, phase: 0, berryCount: 7 };
+  const r = buffer();
+  drawResource(r, edgeView, below, 0);
+  const lastRow = r.fg.slice(23 * r.cols * 4);
+  assert.ok(lastRow.some(value => value > 0));
+  assert.equal(r.fg.slice(0, 23 * r.cols * 4).some(value => value > 0), false);
+
+  const outside = buffer();
+  drawResource(outside, edgeView, { ...below, y: 32.5 }, 0);
+  assert.equal(outside.fg.some(value => value > 0), false);
+
+  const right = buffer();
+  drawResource(right, edgeView, { ...below, x: 29.5, y: 10.5 }, 0);
+  assert.ok(right.fg.some(value => value > 0), 'the broad canopy reaches six columns from the base');
+  const pastRight = buffer();
+  drawResource(pastRight, edgeView, { ...below, x: 30.5, y: 10.5 }, 0);
+  assert.equal(pastRight.fg.some(value => value > 0), false);
+});
+
+test('large bushes above the viewport still cast water-only reflections into it', () => {
+  const edgeView = { ...view, x0: 0, y0: 0 };
+  const above = { uid: 'above', kind: 'bush', x: 11.5, y: -6.5, phase: 0, berryCount: 7 };
+  const wet = buffer(WATER);
+  const dry = buffer();
+  const source = buffer();
+  drawResource(wet, edgeView, above, 0, reflector(0, edgeView));
+  drawResource(dry, edgeView, above, 0, reflector(0, edgeView));
+  drawResource(source, edgeView, above, 0);
+  assert.ok(wet.fg.some(value => value > 0));
+  assert.equal(dry.fg.some(value => value > 0), false);
+  assert.equal(source.fg.some(value => value > 0), false);
+  assert.equal(wet.fg.slice(3 * wet.cols * 4).some(value => value > 0), false,
+    'the upper leaves reflect no farther than nine rows below the fixed base');
+
+  const beyond = buffer(WATER);
+  drawResource(beyond, edgeView, { ...above, y: -10.5 }, 0, reflector(0, edgeView));
+  assert.equal(beyond.fg.some(value => value > 0), false);
 });
 
 test('resource reflections use the fixed ground base and water mask', () => {

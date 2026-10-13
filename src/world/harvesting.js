@@ -15,6 +15,11 @@ const LABELS = {
 
 const distance = (a, b) => Math.hypot((a.x - b.x) * ASPECT, a.y - b.y);
 
+// Generated bushes carry their seeded yield. Older or externally supplied
+// nodes keep the original reward rather than accepting an unbounded count.
+const berryYield = (node) => Number.isInteger(node.berryCount) && node.berryCount >= 4 && node.berryCount <= 7
+  ? node.berryCount : 2;
+
 // The blade travels from the warrior towards the emitted strike point. A
 // narrow corridor catches trunks near the hands as well as the blade tip,
 // preserving the strike's original circular footprint at its impact centre.
@@ -92,6 +97,7 @@ export class Harvesting {
       if (d > nearestDistance || !this.reachable(player, node)) continue;
       nearestDistance = d;
       nearest = { kind: node.kind, node, x: node.x, y: node.y, ...LABELS[node.kind] };
+      if (node.kind === 'bush' && berryYield(node) > 2) nearest.action = `Gather ${berryYield(node)} berries`;
     }
     return nearest;
   }
@@ -108,7 +114,7 @@ export class Harvesting {
   harvest(node) {
     if (node.harvested) return null;
     const rewards = node.kind === 'bush'
-      ? [{ id: 'berries', count: 2 }]
+      ? [{ id: 'berries', count: berryYield(node) }]
       : [{ id: 'straw', count: 1 }, { id: 'fibre', count: 1 }];
     node.harvested = true;
     this.drop(node, rewards);
@@ -122,7 +128,7 @@ export class Harvesting {
       rewards,
       id: rewards.length === 1 ? rewards[0].id : undefined,
       count: rewards.reduce((total, reward) => total + reward.count, 0),
-      message: node.kind === 'bush' ? 'Gathered berries.' : 'Gathered straw and fibre.',
+      message: node.kind === 'bush' ? `Gathered ${rewards[0].count} berries.` : 'Gathered straw and fibre.',
     };
   }
 

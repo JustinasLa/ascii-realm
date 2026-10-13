@@ -42,6 +42,29 @@ test('real-world gatherables are deterministic regardless of chunk exploration o
   assert.notDeepEqual(generateLooseItems(fixture(37), 0, 0), generateLooseItems(fixture(38), 0, 0));
 });
 
+test('only berry bushes carry deterministic food yields between four and seven', () => {
+  const yields = new Set();
+  let grassCount = 0;
+  for (const seed of [1, 2, 7, 37]) {
+    const world = fixture(seed);
+    for (const [cx, cy] of [[-1, -1], [0, 0], [1, -1]]) {
+      const nodes = generateResources(world, cx, cy);
+      assert.deepEqual(nodes, generateResources(world, cx, cy), 'food yield survives repeated generation');
+      for (const node of nodes) {
+        if (node.kind === 'bush') {
+          assert.ok(Number.isInteger(node.berryCount) && node.berryCount >= 4 && node.berryCount <= 7);
+          yields.add(node.berryCount);
+        } else {
+          grassCount++;
+          assert.equal(Object.hasOwn(node, 'berryCount'), false, 'grass remains a fibre resource');
+        }
+      }
+    }
+  }
+  assert.ok(grassCount > 0);
+  assert.deepEqual([...yields].sort(), [4, 5, 6, 7], 'bush yields vary within the advertised range');
+});
+
 test('geology is continuous, seed-dependent, and independent of generated chunks', () => {
   const world = fixture(12);
   const types = new Set();
@@ -98,6 +121,7 @@ test('tree sticks use their actual owning chunk across positive and negative edg
   ];
   const world = fixture(6, () => GRASS, trees);
   const all = [];
+  const allNodes = [];
   for (let cy = -2; cy <= 0; cy++) {
     for (let cx = -1; cx <= 1; cx++) {
       const items = generateLooseItems(world, cx, cy);
@@ -108,6 +132,7 @@ test('tree sticks use their actual owning chunk across positive and negative edg
         assert.equal(Math.floor(entry.y / CHUNK_SIZE), cy);
       }
       all.push(...items);
+      allNodes.push(...nodes);
     }
   }
   const sticks = all.filter(p => p.id === 'stick');
@@ -116,23 +141,33 @@ test('tree sticks use their actual owning chunk across positive and negative edg
   assert.ok(sticks.some(p => p.x < 0 && p.y < -64), 'negative edges use floor ownership');
   assert.equal(new Set(all.map(p => p.uid)).size, all.length, 'no cross-border duplicates');
   assert.equal(new Set(all.map(p => `${p.x},${p.y}`)).size, all.length, 'one loose item per cell');
+  assert.equal(new Set(allNodes.map(p => p.uid)).size, allNodes.length, 'food bushes belong to only one chunk');
+  assert.ok(allNodes.some(p => p.kind === 'bush' && p.x < 0 && p.y < 0 && p.berryCount >= 4));
+  assert.ok(allNodes.some(p => p.kind === 'bush' && p.x >= CHUNK_SIZE && p.berryCount >= 4));
 });
 
-test('spawn clearing has discoverable starter finds and harvest nodes without items underfoot', () => {
-  const world = fixture(1, () => GRASS, [], { x: 0.5, y: 0.5 });
-  const chunks = [[-1, -1], [-1, 0], [0, -1], [0, 0]];
-  const generated = [...snapshot(world, chunks).values()];
-  const items = generated.flatMap(p => p.items);
-  const nodes = generated.flatMap(p => p.resources);
-  const nearbyItems = items.filter(p => Math.hypot((p.x - world.spawn.x) * ASPECT, p.y - world.spawn.y) < 17);
-  const nearbyNodes = nodes.filter(p => Math.hypot((p.x - world.spawn.x) * ASPECT, p.y - world.spawn.y) < 17);
-  for (const id of ['flint', 'berries', 'mushroom']) {
-    assert.ok(nearbyItems.some(p => p.id === id), `${id} is discoverable at spawn`);
+test('spawn clearings across seeds have food bushes and starter finds without items underfoot', () => {
+  for (const seed of [1, 2, 7, 37]) {
+    const world = new World(seed);
+    const chunks = [];
+    for (let cy = Math.floor((world.spawn.y - 17) / CHUNK_SIZE); cy <= Math.floor((world.spawn.y + 17) / CHUNK_SIZE); cy++) {
+      for (let cx = Math.floor((world.spawn.x - 17 / ASPECT) / CHUNK_SIZE); cx <= Math.floor((world.spawn.x + 17 / ASPECT) / CHUNK_SIZE); cx++) {
+        chunks.push([cx, cy]);
+      }
+    }
+    const generated = [...snapshot(world, chunks).values()];
+    const items = generated.flatMap(p => p.items);
+    const nodes = generated.flatMap(p => p.resources);
+    const nearbyItems = items.filter(p => Math.hypot((p.x - world.spawn.x) * ASPECT, p.y - world.spawn.y) < 17);
+    const nearbyNodes = nodes.filter(p => Math.hypot((p.x - world.spawn.x) * ASPECT, p.y - world.spawn.y) < 17);
+    for (const id of ['flint', 'berries', 'mushroom']) {
+      assert.ok(nearbyItems.some(p => p.id === id), `${id} is discoverable at spawn for seed ${seed}`);
+    }
+    assert.ok(nearbyItems.some(p => ['granite', 'basalt', 'limestone'].includes(p.id)));
+    assert.ok(nearbyNodes.some(p => p.kind === 'grass'));
+    assert.ok(nearbyNodes.some(p => p.kind === 'bush' && p.berryCount >= 4 && p.berryCount <= 7), `food bush for seed ${seed}`);
+    assert.ok([...items, ...nodes].every(p => Math.hypot((p.x - world.spawn.x) * ASPECT, p.y - world.spawn.y) >= 6));
   }
-  assert.ok(nearbyItems.some(p => ['granite', 'basalt', 'limestone'].includes(p.id)));
-  assert.ok(nearbyNodes.some(p => p.kind === 'grass'));
-  assert.ok(nearbyNodes.some(p => p.kind === 'bush'));
-  assert.ok([...items, ...nodes].every(p => Math.hypot((p.x - world.spawn.x) * ASPECT, p.y - world.spawn.y) >= 6));
 });
 
 test('water-only chunks produce no loose items or harvest nodes', () => {

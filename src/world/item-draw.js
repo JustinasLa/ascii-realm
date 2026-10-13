@@ -5,8 +5,37 @@ import { glyph } from '../render/glyphs.js';
 const GLINT = glyph('+');
 const BLADES = [...'\\|/'].map(glyph);
 const STUBBLE = [..."'`,"].map(glyph);
-const LEAVES = [...'ox*'].map(glyph);
 const BERRY = glyph('o');
+const BERRY_PIPS = glyph(':');
+
+// Several leafy lobes leave gaps around the woody forks. The exposed stems
+// and paired ripe fruit distinguish this plant from the ground's moss.
+const BUSH_CANOPY = [
+  '     .v.     ',
+  '   ,vOvO,    ',
+  ' ,vOO OOvOv, ',
+  'vOOvOxOxOOxOv',
+  ' xOOv v OvO, ',
+  '  vOx   Ov   ',
+  '    vOxv     ',
+].flatMap((row, i) => [...row].flatMap((ch, x) => ch === ' ' ? [] : [{
+  dx: x - 6, dy: i - 8, g: glyph(ch), edge: '.,v'.includes(ch),
+}]));
+
+const BUSH_STEMS = [
+  [-1, 0, '/'], [0, 0, '|'], [1, 0, '\\'],
+  [-1, -1, '/'], [0, -1, '|'], [1, -1, '\\'],
+  [-1, -2, '/'], [0, -2, '|'], [1, -2, '\\'],
+  [-2, -3, '/'], [0, -3, '|'], [2, -3, '\\'],
+  [-3, -4, '/'], [0, -4, '|'], [3, -4, '\\'],
+  [-3, -5, '|'], [-1, -5, '/'], [1, -5, '\\'], [3, -5, '|'],
+  [-4, -6, '/'], [0, -6, '|'], [4, -6, '\\'],
+  [-1, -7, '/'], [1, -7, '\\'],
+].map(([dx, dy, ch]) => ({ dx, dy, g: glyph(ch) }));
+
+// Each site has room for a round berry and a pair of smaller fruit beside
+// it. Counts select distinct sites, so the visible harvest matches the food.
+const BERRY_SITES = [[-3, -6], [2, -6], [-5, -5], [4, -5], [-2, -4], [2, -3], [0, -2]];
 
 // A reflected cell can land below the view even when its source is above
 // it. Include that destination range (and the water's sideways sway) when
@@ -45,7 +74,8 @@ export function drawResource(r, view, node, time, write = putCell) {
   if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
   const sx = Math.floor(node.x) - view.x0;
   const base = Math.floor(node.y) - view.y0;
-  if (!visible(r, sx, base, 3, 5, write)) return;
+  const bush = node.kind === 'bush';
+  if (!visible(r, sx, base, bush ? 6 : 2, bush ? 8 : 4, write)) return;
   const phase = node.phase ?? 0;
 
   if (node.kind === 'grass') {
@@ -68,19 +98,33 @@ export function drawResource(r, view, node, time, write = putCell) {
     return;
   }
 
-  if (node.kind !== 'bush') return;
-  for (let dy = -4; dy <= 0; dy++) {
-    for (let dx = -3; dx <= 3; dx++) {
-      const distance = (dx / 3.6) ** 2 + ((dy + 2) / 2.5) ** 2;
-      if (distance > 1) continue;
-      const leaf = LEAVES[(dx + dy + 9) % LEAVES.length];
-      const light = 0.8 + Math.sin(time * 1.2 + phase + dx * 0.6) * 0.08
-        - dx * 0.025 - dy * 0.025;
-      const berry = !node.harvested && dy < 0 && (dx + dy + 9) % 4 === 0;
-      write(r, sx + dx, base + dy, berry ? BERRY : leaf,
-        (berry ? 217 : 47) * light,
-        (berry ? 79 : 127) * light,
-        (berry ? 123 : 61) * light, base);
-    }
+  if (!bush) return;
+  const wind = Math.sin(time * 1.1 + phase);
+  // Only the narrow upper lobes move a whole cell; the broad lower canopy
+  // stays within the plant's 13-column footprint and its roots stay planted.
+  const sway = dy => dy <= -6 ? Math.round(wind * 0.85 * -dy / 8) : 0;
+  const tint = Math.sin(phase * 2.3) * 0.06;
+  for (const cell of BUSH_CANOPY) {
+    const light = 0.78 - cell.dy * 0.025 - cell.dx * 0.022 + tint
+      + Math.sin(time * 1.1 + phase + cell.dx * 0.55) * 0.055;
+    const colour = cell.edge ? [87, 157, 72] : [43, 112, 59];
+    write(r, sx + cell.dx + sway(cell.dy), base + cell.dy, cell.g,
+      colour[0] * light, colour[1] * light, colour[2] * light, base);
+  }
+  for (const cell of BUSH_STEMS) {
+    const light = 0.8 - cell.dx * 0.03 - cell.dy * 0.018;
+    write(r, sx + cell.dx + sway(cell.dy), base + cell.dy, cell.g,
+      128 * light, 94 * light, 55 * light, base);
+  }
+  if (node.harvested) return;
+  const count = Number.isInteger(node.berryCount) && node.berryCount >= 4 && node.berryCount <= 7
+    ? node.berryCount : 2;
+  const first = Math.abs(Math.floor(phase * 113)) % BERRY_SITES.length;
+  for (let i = 0; i < count; i++) {
+    const [dx, dy] = BERRY_SITES[(first + i) % BERRY_SITES.length];
+    const x = sx + dx + sway(dy);
+    const light = 0.94 + Math.sin(time * 1.7 + phase + i) * 0.06;
+    write(r, x, base + dy, BERRY, 238 * light, 61 * light, 113 * light, base);
+    write(r, x + 1, base + dy, BERRY_PIPS, 191 * light, 44 * light, 97 * light, base);
   }
 }
