@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
 import { GLYPHS, glyph } from '../src/render/glyphs.js';
@@ -82,7 +83,6 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
         assert.ok(Number.isFinite(color) && color >= 0 && color <= 255, `${species} color`);
       }
       assert.equal(typeof cell.foliage, 'boolean');
-      assert.ok(Number.isFinite(cell.phase));
       assert.ok(Number.isFinite(cell.flex) && cell.flex >= 0 && cell.flex <= 1);
       if (!cell.foliage) assert.equal(cell.flex, 0, `${species} anchored wood`);
     }
@@ -91,6 +91,35 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
     silhouettes.add(JSON.stringify(shape(prop)));
   }
   assert.equal(silhouettes.size, TREE_SPECIES.length);
+});
+
+test('row culling preserves complete seeded sprites across seasons and growth stages', () => {
+  // Fingerprints from the original full-rectangle bake, excluding the unused
+  // per-cell phase. Cover negative coordinates, thin/thick trunks, and both
+  // caller-supplied and fallback random streams.
+  const fixtures = [
+    { seed: 1, x: -100.5, y: 300.5, randomSeed: 123456,
+      expected: 'fbce5f54d46f5d24540d4c3f005b134fda3880b039e07820198865acf08ed8e3' },
+    { seed: 42, x: 100.5, y: -300.5, girth: 0.6, randomSeed: 42,
+      expected: '2be0c788f0d4bfc340cf87d6f6aafbcb9b68bec58bc7172d57909e0ac29f412d' },
+    { seed: 9281, x: 63.5, y: 24.5, girth: 2, randomSeed: 9281,
+      expected: '42b05ec6aa6ff56249b7d1c0a4394c508d68c3bee6f4b0379f33e2e165b89e49' },
+    { seed: 4294967295, x: -63.5, y: -24.5,
+      expected: '8ac7e45a54a344b4c98c57e0a87a3a84f6c55893f0e7e545670c4b2ed71f246c' },
+  ];
+  for (const { expected, randomSeed, ...options } of fixtures) {
+    const digest = createHash('sha256');
+    for (const species of TREE_SPECIES) {
+      for (const season of SEASONS) {
+        for (const growth of ['mature', 'sapling', 'bush']) {
+          const random = randomSeed === undefined ? undefined : mulberry32(randomSeed);
+          const prop = makeTree(options.x, options.y, random, { ...options, species, season, growth });
+          digest.update(JSON.stringify(prop));
+        }
+      }
+    }
+    assert.equal(digest.digest('hex'), expected, `seed ${options.seed}`);
+  }
 });
 
 test('seasonal palettes preserve leafy-season geometry and the winter ground anchor', () => {

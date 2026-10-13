@@ -54,6 +54,7 @@ window.addEventListener('wheel', (e) => {
   zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === '+' || e.key === '=') zoomBy(1.15);
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
@@ -97,12 +98,18 @@ function frame(now) {
   updateZoom(dt);
 
   const move = moveAxis();
-  if (wasTapped('Space')) player.jump();
-  if (wasTapped('KeyJ') || clicked) player.attack();
-  if (wasTapped('KeyF')) player.toggleSword();
+  const jump = wasTapped('Space');
+  const attack = wasTapped('KeyJ') || clicked;
+  const sword = wasTapped('KeyF');
+  if (!debug.freeze) {
+    if (jump) player.jump();
+    if (attack) player.attack();
+    if (sword) player.toggleSword();
+  }
   clicked = false;
-  hitStop = Math.max(0, hitStop - dt);
-  const playerDt = hitStop > 0 ? dt * 0.05 : dt;
+  const stoppedDt = Math.min(dt, hitStop);
+  hitStop -= stoppedDt;
+  const playerDt = dt - stoppedDt + stoppedDt * 0.05;
   if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   for (const e of player.events) {
     if (e.type === 'step') {

@@ -277,11 +277,48 @@ function grow(shape, growth, rand) {
   return shape;
 }
 
-function makeSampler(shape, species, season, palette, seed) {
+// Keep only geometry that can touch this row. These bounds include the
+// maximum noisy leaf edge and strand bend, so sampling and cell order stay
+// unchanged while the empty space beside a tall trunk is skipped.
+function geometryAtRow(shape, y) {
+  const row = { blobs: [], tiers: [], strands: [], wood: [], left: Infinity, right: -Infinity };
+  const include = (parts, part, left, right) => {
+    parts.push(part);
+    row.left = Math.min(row.left, left);
+    row.right = Math.max(row.right, right);
+  };
+  for (const b of shape.blobs) {
+    const ny = Math.max(0, b.y - y, y - 1 - b.y) / b.ry;
+    // The sampler's squared radius is at most 0.86 + 0.24 + 0.065.
+    const reach2 = 1.17 - ny * ny;
+    if (reach2 < 0) continue;
+    const reach = b.rx * Math.sqrt(reach2);
+    include(row.blobs, b, b.x - reach, b.x + reach);
+  }
+  for (const t of shape.tiers) {
+    if (t.y > y || t.y + t.depth < y - 1) continue;
+    const v = Math.min(1, (y - t.y) / t.depth);
+    // Both noisy width factors are bounded by 1.08 * 1.04 < 1.13.
+    const reach = t.width * (0.04 + v * 0.96) * 1.13;
+    include(row.tiers, t, t.x - reach, t.x + reach);
+  }
+  for (const s of shape.strands) {
+    if (s.y > y || s.y + s.length < y - 1) continue;
+    include(row.strands, s, s.x + Math.min(0, s.bend) - s.radius - 0.24,
+      s.x + Math.max(0, s.bend) + s.radius + 0.24);
+  }
+  for (const s of shape.wood) {
+    if (s.minY > y || s.maxY < y - 1) continue;
+    include(row.wood, s, s.minX, s.maxX);
+  }
+  return row;
+}
+
+function makeSampler(species, season, palette, seed) {
   const winter = season === 'winter';
   const evergreen = EVERGREEN.has(species);
   const bark = BARK[species];
-  return (px, py) => {
+  return (px, py, shape) => {
     let leaf = null;
     const grain = hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 41);
     const clump = valueNoise(px * 0.24, py * 0.2, seed + 89);
@@ -404,7 +441,10 @@ function bake(sample, seed, species, shape) {
   const rustles = [...RUSTLE_GLYPHS].map(glyph);
   const bounds = { minX: MAX_TREE_HALF_WIDTH, minY: 0, maxX: -MAX_TREE_HALF_WIDTH, maxY: 1 - MAX_TREE_HEIGHT };
   for (let dy = minY; dy <= 0; dy++) {
-    for (let dx = minX; dx <= maxX; dx++) {
+    const row = geometryAtRow(shape, dy);
+    const rowMinX = Math.max(minX, Math.floor(row.left / ASPECT - 1));
+    const rowMaxX = Math.min(maxX, Math.ceil(row.right / ASPECT + 1));
+    for (let dx = rowMinX; dx <= rowMaxX; dx++) {
       let hits = 0;
       let foliageHits = 0;
       let red = 0;
@@ -416,7 +456,7 @@ function bake(sample, seed, species, shape) {
       let woodDetail = null;
       for (const oy of SUB_Y) {
         for (const ox of SUB_X) {
-          const s = sample((dx + ox) * ASPECT, dy + oy);
+          const s = sample((dx + ox) * ASPECT, dy + oy, row);
           if (!s) continue;
           hits++;
           if (s.foliage) foliageHits++;
@@ -458,7 +498,6 @@ function bake(sample, seed, species, shape) {
         bb: hits >= 5 ? Math.round(blue / hits * 0.17) : undefined,
         foliage,
         flex,
-        phase,
         phaseSin: Math.sin(phase),
         phaseCos: Math.cos(phase),
         rustle: foliage ? rustles[Math.floor(hash2(dx, dy, seed + 103) * rustles.length)] : g,
@@ -498,7 +537,7 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
   shape.footW *= thickness;
   shape.footH *= Math.sqrt(thickness);
   const palette = leafPalette(species, season, random() - 0.5);
-  const sample = makeSampler(shape, species, season, palette, spriteSeed);
+  const sample = makeSampler(species, season, palette, spriteSeed);
   const { cells, bounds } = bake(sample, spriteSeed, species, shape);
   const top = bounds.minY;
   return {

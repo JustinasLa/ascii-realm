@@ -27,7 +27,7 @@ export class World {
   }
 
   chunk(cx, cy) {
-    const key = (cx + 32768) * 65536 + (cy + 32768);
+    const key = `${cx},${cy}`;
     let c = this.chunks.get(key);
     if (!c) {
       c = this.generate(cx, cy);
