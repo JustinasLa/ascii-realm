@@ -15,6 +15,8 @@ import { SCALE, TILT } from './rig.js';
 const SX = 4;
 const SY = 6;
 const N = SX * SY;
+// How high the foot bone sits above the ground when the foot is flat.
+const FOOT_FLOOR = 0.1;
 // The region drawn around the feet, in cells.
 const COLS = 36;
 const ROWS = 32;
@@ -53,15 +55,17 @@ const CLIPS = {
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 
 // The jog in the library is an athlete's bounding stride, far too long for
-// someone carrying a sword and pack. Its leg swing and bounce are pulled in
-// towards their average by this much, keeping the timing, which shortens
-// every step.
+// someone carrying a sword and pack. Its leg swing is pulled in towards its
+// average by this much, keeping the timing, which shortens every step.
 const STRIDE_SCALE = { jog: 0.58, sprint: 0.6 };
 const LEG_BONES = ['DEF-thigh.L', 'DEF-shin.L', 'DEF-foot.L', 'DEF-toe.L', 'DEF-thigh.R', 'DEF-shin.R', 'DEF-foot.R',
   'DEF-toe.R'].map((n) => THREE.PropertyBinding.sanitizeNodeName(n));
+// How much of the hips' rise and fall in a stride is kept; the rest is taken
+// up by the planted knee, so the body glides instead of bobbing.
+const BOB_KEEP = 0.4;
 
-// Scales the swing of a clip's leg rotations and the hips' bounce about
-// their averages, in place.
+// Scales the swing of a clip's leg rotations about their averages, in
+// place. (The body's bounce is handled each frame, see update.)
 function shortenStride(clip, k) {
   for (const track of clip.tracks) {
     const [node, prop] = track.name.split('.');
@@ -86,14 +90,39 @@ function shortenStride(clip, k) {
         if (q.dot(mean) < 0) q.set(-q.x, -q.y, -q.z, -q.w);
         mean.clone().slerp(q, k).toArray(v, i * 4);
       }
-    } else if (prop === 'position' && node === THREE.PropertyBinding.sanitizeNodeName('DEF-hips')) {
-      const n = v.length / 3;
-      let my = 0;
-      for (let i = 0; i < n; i++) my += v[i * 3 + 1];
-      my /= n;
-      for (let i = 0; i < n; i++) v[i * 3 + 1] = my + (v[i * 3 + 1] - my) * k;
     }
   }
+}
+
+// Turns a bone so its world orientation becomes `world`.
+function setWorldQuaternion(b, world) {
+  const parent = b.parent.getWorldQuaternion(new THREE.Quaternion());
+  b.quaternion.copy(parent.invert().multiply(world));
+  b.updateMatrixWorld(true);
+}
+
+// Two-bone IK: bends the knee and swings the thigh so the foot lands on
+// `target`, keeping the leg in its current plane.
+function reachFor(leg, target) {
+  const A = leg.thigh.getWorldPosition(new THREE.Vector3());
+  const B = leg.shin.getWorldPosition(new THREE.Vector3());
+  const C = leg.foot.getWorldPosition(new THREE.Vector3());
+  const a = A.distanceTo(B);
+  const b = B.distanceTo(C);
+  const d = Math.min(A.distanceTo(target), a + b - 1e-4);
+  const BA = A.clone().sub(B).normalize();
+  const BC = C.clone().sub(B).normalize();
+  const axis = new THREE.Vector3().crossVectors(BA, BC);
+  if (axis.lengthSq() > 1e-10) {
+    axis.normalize();
+    const now = Math.acos(Math.max(-1, Math.min(1, BA.dot(BC))));
+    const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
+    const turn = new THREE.Quaternion().setFromAxisAngle(axis, want - now);
+    setWorldQuaternion(leg.shin, turn.multiply(leg.shin.getWorldQuaternion(new THREE.Quaternion())));
+  }
+  const C2 = leg.foot.getWorldPosition(new THREE.Vector3());
+  const swing = new THREE.Quaternion().setFromUnitVectors(C2.sub(A).normalize(), target.clone().sub(A).normalize());
+  setWorldQuaternion(leg.thigh, swing.multiply(leg.thigh.getWorldQuaternion(new THREE.Quaternion())));
 }
 
 // Picks the outline glyph for a partly covered cell from the direction the
@@ -151,6 +180,12 @@ export class ModelFigure {
     });
 
     this.sword = this.makeSword();
+    this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
+    this.legs = ['L', 'R'].map((side) => ({
+      thigh: this.bones[bone(`DEF-thigh.${side}`)],
+      shin: this.bones[bone(`DEF-shin.${side}`)],
+      foot: this.bones[bone(`DEF-foot.${side}`)],
+    }));
 
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50);
     this.camera.position.set(0, TILT * 20, COS * 20);
@@ -247,18 +282,13 @@ export class ModelFigure {
     const speed = p.speed;
     const w = { idle: 0, walk: 0, jog: 0, sprint: 0, guard: 0, attack: 0, jumpStart: 0, jumpLoop: 0, jumpLand: 0, rest: 0 };
 
-    // Locomotion: blend the clips whose ground speed brackets ours.
-    const [wk, jg, sp] = this.gaits;
-    const moving = Math.min(1, speed / (wk.speed * 0.5));
-    let loco;
-    if (speed <= wk.speed) loco = { walk: 1 };
-    else if (speed <= jg.speed) {
-      const t = (speed - wk.speed) / (jg.speed - wk.speed);
-      loco = { walk: 1 - t, jog: t };
-    } else {
-      const t = Math.min(1, (speed - jg.speed) / (sp.speed - jg.speed));
-      loco = { jog: 1 - t, sprint: t };
-    }
+    // Locomotion: pure walk at the player's walking speed, pure jog at
+    // their running speed, blended in between while speeding up or slowing.
+    const walkAt = p.walkSpeed;
+    const runAt = p.runSpeed;
+    const moving = Math.min(1, speed / (walkAt * 0.5));
+    const t = Math.max(0, Math.min(1, (speed - walkAt) / (runAt - walkAt)));
+    const loco = { walk: 1 - t, jog: t };
     // Advance one shared gait cycle by ground covered, so the feet keep pace
     // with the ground whichever clips are mixed.
     let perMetre = 0;
@@ -330,8 +360,43 @@ export class ModelFigure {
 
     this.sword.visible = cb.inHand;
     this.model.rotation.y = p.heading + (cb.spin ?? 0);
-    this.model.position.y = p.air;
+    // Keep the stride on the ground. The run clip throws the body well clear
+    // of it between steps and drives it down into each landing, which a
+    // shorter, laden stride would not; with its legs shortened, the planted
+    // foot would sink into the ground at the bottom. Find the lowest foot and
+    // move the body so it rests on the ground, leaving only a trace of time
+    // in the air.
+    this.model.position.y = 0;
     this.model.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    let lowest = Infinity;
+    for (const f of this.feet) lowest = Math.min(lowest, f.getWorldPosition(v).y);
+    const off = lowest - FOOT_FLOOR;
+    const lift = (off > 0 ? off * 0.85 : off) * moving;
+    this.model.position.y = p.air - lift;
+    this.model.updateMatrixWorld(true);
+    this.steady(dt, moving);
+  }
+
+  // Evens out the hips' rise and fall while striding. The body is moved
+  // towards a running average of its height, and each planted foot is put
+  // back where it was by bending or straightening its knee.
+  steady(dt, moving) {
+    const hips = this.bones[bone('DEF-hips')];
+    const v = new THREE.Vector3();
+    const y = hips.getWorldPosition(v).y;
+    this.level = this.level === undefined ? y : this.level + (y - this.level) * (1 - Math.exp(-dt * 3));
+    if (moving < 0.01) return;
+    const planted = this.legs.map((l) => {
+      const at = l.foot.getWorldPosition(new THREE.Vector3());
+      return at.y < FOOT_FLOOR + 0.035 ? at : null;
+    });
+    const shift = (this.level + (y - this.level) * BOB_KEEP - y) * moving;
+    this.model.position.y += shift;
+    this.model.updateMatrixWorld(true);
+    this.legs.forEach((l, i) => {
+      if (planted[i]) reachFor(l, planted[i]);
+    });
   }
 
   // Starts a one-shot clip from the beginning at a given playback rate.

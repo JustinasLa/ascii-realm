@@ -105,11 +105,11 @@ ModelFigure.load('assets/ual1.glb')
     model = m;
     debug.model = m;
     player.modelTrail = true;
-    // Walk a touch quicker than the walking clip, and run at exactly the
-    // jog's own ground speed so the feet never slide.
+    // Walk and run a little quicker than the clips' own ground speeds; the
+    // cadence rises to match, so the feet still keep pace.
     const gait = Object.fromEntries(m.gaits.map((g) => [g.key, g]));
-    player.walkSpeed = gait.walk.speed * 1.3;
-    player.runSpeed = gait.jog.speed;
+    player.walkSpeed = gait.walk.speed * 1.3 * 1.2;
+    player.runSpeed = gait.jog.speed * 1.2;
   })
   .catch((e) => console.error('Could not load the character model', e));
 
