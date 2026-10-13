@@ -74,6 +74,7 @@ export class Player {
     // measured against (metres per second).
     this.lean = 0;
     this.speed = 0;
+    this.groundSpeed = 0;
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -223,6 +224,9 @@ export class Player {
     const speedNow = this.skid > 0 ? this.speed : metres / Math.max(dt, 1e-3);
     const accel = (speedNow - this.speed) / Math.max(dt, 1e-3);
     this.speed += (speedNow - this.speed) * ease(8);
+    // How fast the body really moved this frame, unsmoothed, for anything
+    // that must stop the instant the body does, such as the legs.
+    this.groundSpeed = metres / Math.max(dt, 1e-3);
     const leanTo = Math.max(0, Math.min(0.15, accel * 0.02));
     this.lean += (leanTo - this.lean) * ease(6);
     if (going) {

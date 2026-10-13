@@ -279,7 +279,10 @@ export class ModelFigure {
   // Sets the pose for this frame from the player's state.
   update(dt, p) {
     const cb = p.combat;
-    const speed = p.speed;
+    // The legs follow the ground actually covered this frame: as soon as the
+    // body stops, so do they, rather than running on in place while a
+    // smoothed speed dies away.
+    const speed = p.groundSpeed ?? p.speed;
     const w = { idle: 0, walk: 0, jog: 0, sprint: 0, guard: 0, attack: 0, jumpStart: 0, jumpLoop: 0, jumpLand: 0, rest: 0 };
 
     // Locomotion: pure walk at the player's walking speed, pure jog at
