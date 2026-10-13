@@ -63,9 +63,22 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
     const now = engine.context.currentTime;
     for (const bus of ['music', 'ambience']) setParam(engine.buses[bus]?.gain, 0, now, 0.03);
     previewDucked = true;
-    previewHandles = playGrassFootstep(engine, { strength: 0.65,
-      x: engine.listener.x, y: engine.listener.y });
-    previewTimer = setTimeout(stopPreview, 550);
+    previewButton.disabled = true;
+    previewButton.textContent = 'Playing grass footsteps…';
+    let remaining = 6;
+    const nextStep = () => {
+      if (!bound || generation !== previewGeneration || document.hidden
+          || engine.context?.state !== 'running') {
+        stopPreview();
+        return;
+      }
+      previewHandles = previewHandles.filter(handle => !handle.ended);
+      previewHandles.push(...playGrassFootstep(engine, { strength: 0.65,
+        x: engine.listener.x, y: engine.listener.y }));
+      remaining--;
+      previewTimer = setTimeout(remaining > 0 ? nextStep : stopPreview, remaining > 0 ? 420 : 550);
+    };
+    nextStep();
   };
   const updateWeather = () => {
     weatherSelect.value = weather.preset;

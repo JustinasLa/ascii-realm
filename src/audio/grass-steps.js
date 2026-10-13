@@ -1,10 +1,10 @@
-// Recorded dry leaf grains and faint sole contacts stay unfiltered at runtime.
+// Recorded grass brushing and foot contact keep their natural envelope.
 // Samples load only after unlock;
 // contacts missed while loading are deliberately discarded.
 export const GRASS_SAMPLE_URLS = Object.freeze([
   'grass-L1.wav', 'grass-R1.wav', 'grass-L2.wav',
   'grass-R2.wav', 'grass-L3.wav', 'grass-R3.wav',
-].map(name => new URL(`../../assets/audio/grass/${name}`, import.meta.url)));
+].map(name => new URL(`../../assets/audio/grass/${name}?v=grass-field-1`, import.meta.url)));
 
 const players = new WeakMap();
 const clamp = (value, fallback, min, max) =>

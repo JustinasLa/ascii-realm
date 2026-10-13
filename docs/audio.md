@@ -2,7 +2,7 @@
 
 ASCII Realm creates its original soundtrack, weather and most effects with
 Web Audio oscillators and filtered noise. Grass footfalls use six local CC0
-dry foliage recordings mixed with faint sole contacts. Audio adds no runtime
+recordings of grass brushing and foot contact. Audio adds no runtime
 library dependencies; the recordings are served with the game, without
 requests to third-party sites.
 
@@ -16,9 +16,9 @@ levels are stored in `localStorage` under `ascii-realm.audio`; the weather
 selection and intensity use `ascii-realm.weather`. Blocked storage does not
 prevent controls from working. Saved mute is applied before playback.
 
-Preview grass footsteps briefly quiets the music and ambience to audition one
-recorded footfall at the effects volume. It restores the current levels after
-the preview and respects mute.
+Preview grass footsteps briefly quiets the music and ambience to play six
+recorded footfalls at a walking cadence and the effects volume. It restores
+the current levels after the preview and respects mute.
 
 ## Structure
 
@@ -89,14 +89,14 @@ changes. The existing visual scene remains moonlit.
 
 ## Grass recordings
 
-The six files in `assets/audio/grass` combine short grains from qubodup's
-[20 Rustles of dry leaves](https://opengameart.org/content/20-rustles-dry-leaves)
-with faint sole contacts from [Kenney's Impact Sounds](https://kenney.nl/assets/impact-sounds),
-both under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+The six files in `assets/audio/grass` are excerpts from gabytoledosci's
+[Walking on grass.wav](https://freesound.org/people/gabytoledosci/sounds/398266/),
+released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 `grass-L1.wav` through `grass-L3.wav` and `grass-R1.wav` through `grass-R3.wav`
-are mono 16-bit PCM at 22,050 Hz, 0.15–0.18 seconds each and 44 KB total.
-The dry-leaf grains carry the texture; sole contacts are quiet and end within
-85 ms. Filtering removes low wash, and short envelopes cut off trailing scuffs.
+are mono 16-bit PCM at 22,050 Hz, 0.32 seconds each and 85 KB total.
+The recorded brush keeps its natural envelope, with short boundary fades.
+Filtering reduces rumble and sharp treble; restrained level balancing and
+soft peak control keep small contact spikes from dominating every step.
 Detailed source offsets and processing are in
 [LICENSE.txt](../assets/audio/grass/LICENSE.txt).
 
@@ -270,7 +270,7 @@ Serve the game locally and verify:
    charge stop. Set Effects to zero: both sword and movement sounds should stop.
    Reload to check saved settings, including starting muted.
 3. Walk and sprint across grass, dirt, stone and shore. Listen for contact-synced
-   dry foliage on grass and distinct material changes, including low wet splashes
+   soft brushing on grass and distinct material changes, including low wet splashes
    at lake edges; deep water still blocks movement. Jump, land and stop from a sprint to hear short cloth,
    weighted material contact and skid brushes.
 4. Draw and sheathe with `F`, strike with `J` or left click, and hold then release

@@ -50,7 +50,7 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
-- **Audio.** Short recorded dry foliage footfalls, procedural footsteps on other
+- **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
   surfaces and movement effects,
   slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
   wildlife calls and rare firefly noise glints,
@@ -122,9 +122,8 @@ from Quaternius' [Universal Animation Library](https://quaternius.com/packs/univ
 (CC0), rendered with [three.js](https://threejs.org/) (MIT, vendored in
 `vendor/three`).
 
-Grass footsteps combine short excerpts from qubodup's
-[20 Rustles of dry leaves](https://opengameart.org/content/20-rustles-dry-leaves)
-with faint sole contacts from [Kenney's Impact Sounds](https://kenney.nl/assets/impact-sounds),
-both released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+Grass footsteps use six excerpts from gabytoledosci's recorded
+[Walking on grass.wav](https://freesound.org/people/gabytoledosci/sounds/398266/),
+released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 The adapted WAV files are served locally from `assets/audio/grass`; see their
 [provenance and conversion notes](assets/audio/grass/LICENSE.txt).
