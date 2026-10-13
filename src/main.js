@@ -91,8 +91,8 @@ let last = performance.now();
 let time = 0;
 
 function frame(now) {
-  // Clamp dt so a backgrounded tab does not produce one enormous step.
-  const dt = Math.min((now - last) / 1000, 0.1);
+  // Clamp dt for early first-frame timestamps and long pauses in background tabs.
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1));
   last = now;
   time += dt;
   updateZoom(dt);
@@ -110,7 +110,7 @@ function frame(now) {
   const stoppedDt = Math.min(dt, hitStop);
   hitStop -= stoppedDt;
   const playerDt = dt - stoppedDt + stoppedDt * 0.05;
-  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  if (!debug.freeze && playerDt > 0) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
   for (const e of player.events) {
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
