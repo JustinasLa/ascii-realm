@@ -53,6 +53,8 @@ export class Player {
     this.walkSpeed = WALK_SPEED;
     this.runSpeed = RUN_SPEED;
     this.combat = new Combat();
+    // A lit torch occupies the free hand; T stows it or draws a fresh one.
+    this.torch = true;
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
     // Height above the ground in metres, rising speed, and the crouch used
@@ -269,7 +271,7 @@ export class Player {
     this.idle = moving || this.air > 0 || held ? 0 : this.idle + dt;
     // Left alone long enough with the sword away, the warrior kneels to
     // rest, and springs up again the moment there is something to do.
-    const rest = this.idle > 12 && !this.combat.inHand && !this.combat.busy;
+    const rest = this.idle > 12 && !this.torch && !this.combat.inHand && !this.combat.busy;
     this.kneel += ((rest ? 1 : 0) - this.kneel) * ease(rest ? 2.2 : 9);
     const glance = Math.min(1, Math.max(0, (this.idle - 3) / 1.5)) * (1 - this.kneel);
     const lookTo = glance * (Math.sin(this.idle * 0.55) * 0.75 + Math.sin(this.idle * 1.3) * 0.15);

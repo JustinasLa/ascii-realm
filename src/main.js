@@ -9,12 +9,15 @@ import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
+import { Fires } from './world/fire.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
+import { Splashes } from './world/splashes.js';
+import { Torches } from './world/torch.js';
 import { ASPECT, GRASS, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
@@ -73,6 +76,10 @@ const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
+const splashes = new Splashes();
+const fires = new Fires();
+fires.addStarter(world);
+const torches = new Torches();
 const sound = new GameAudio(world);
 sound.music.update({ night: 1 });
 const unbindAudio = bindAudioControls(sound.engine, sound.music, sound.weather, () => sound.pause());
@@ -92,12 +99,39 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, audio: sound.engine, sound, freeze: false };
+const debug = { player, camera, world, fires, torches, splashes, renderer, audio: sound.engine, sound, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
+const fireStatus = document.getElementById('fire-status');
+const carriedItem = document.getElementById('carried-item');
+const fireMessages = {
+  lit: 'Campfire lit. Press C nearby to put it out.',
+  out: 'Fire extinguished.',
+  water: 'Find dry ground to build a campfire.',
+  air: 'Land before building a campfire.',
+  blocked: 'Find an open patch of dry ground.',
+  limit: 'Put out a fire before building another.',
+};
+const torchMessages = {
+  drawn: 'Fire torch drawn. G to throw it, T to stow it.',
+  stowed: 'Torch stowed. Press T to draw a lit torch.',
+  thrown: 'Torch thrown. Press T to draw another.',
+  empty: 'Press T to draw a torch before throwing.',
+  busy: 'Wait for a thrown torch to land.',
+  lit: 'The torch started a fire. Press C nearby to put it out.',
+  water: 'The water put out the torch.',
+  blocked: 'The torch went out. Find open ground or put out a fire with C.',
+};
+let fireNoticeUntil = 0;
 let walked = 0;
+
+function fireNotice(message) {
+  fireStatus.textContent = message;
+  fireStatus.classList.add('visible');
+  fireNoticeUntil = time + 3;
+}
 
 // A click on the scene swings the sword.
 // Holding it down charges a spin.
@@ -159,6 +193,12 @@ function frame(now) {
   if (wasTapped('Space')) player.jump();
   if (wasTapped('KeyJ') || clicked) player.attack();
   if (wasTapped('KeyF')) player.toggleSword();
+  if (wasTapped('KeyT') && !debug.freeze) fireNotice(torchMessages[torches.toggle(player)]);
+  if (wasTapped('KeyG') && !debug.freeze) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
+  if (wasTapped('KeyC') && !debug.freeze) fireNotice(fireMessages[fires.toggle(world, player)]);
+  const itemHint = player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
+  if (carriedItem.textContent !== itemHint) carriedItem.textContent = itemHint;
+  if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
   clicked = false;
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
@@ -195,6 +235,21 @@ function frame(now) {
   }
   player.events.length = 0;
   dust.update(dt);
+  splashes.update(dt);
+  if (!debug.freeze) {
+    for (const impact of torches.update(dt, world, fires)) {
+      fireNotice(torchMessages[impact.type]);
+      if (impact.type === 'water') {
+        const splash = { type: 'land', x: impact.x, y: impact.y, strength: 0.3 };
+        splashes.react(world, splash);
+        sound.play(splash);
+      }
+    }
+    const blownOut = fires.update(dt, time, world);
+    if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
+      fireNotice('Strong wind put out the fire.');
+    }
+  }
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
@@ -212,6 +267,10 @@ function frame(now) {
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
+  const visibleFires = fires.prepare(view, time);
+  for (const fire of visibleFires) fires.draw(renderer, view, fire, time, mirror);
+  const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
+  for (const torch of visibleTorches) torches.draw(renderer, view, torch, mirror);
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
   if (model) {
@@ -224,21 +283,35 @@ function frame(now) {
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
+  for (const fire of visibleFires) {
+    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
+  }
+  for (const torch of visibleTorches) {
+    if (!torch.carried) drawables.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch) });
+  }
   drawables.push({
     y: player.y,
-    draw: () => (model ? model.draw(renderer, putCell) : drawFigure(renderer, view, player, figure)),
+    draw: () => {
+      if (model) model.draw(renderer, putCell);
+      else drawFigure(renderer, view, player, figure);
+      for (const torch of visibleTorches) if (torch.carried) torches.draw(renderer, view, torch);
+    },
   });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
+  splashes.drawSurface(renderer, view, time);
+  fires.light(renderer, view, time, visibleFires);
+  torches.light(renderer, view, time, visibleTorches);
 
   drawTrail(renderer, view, player.trail, player.time);
   if (model) drawName(model.top);
   else drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
+  splashes.drawSpray(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   if (debug.freeze) sound.pause();
-  else sound.update(dt, time, player, camera, fireflies.list);
+  else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);

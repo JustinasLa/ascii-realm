@@ -113,6 +113,36 @@ function outline(mx, my, cover) {
   return { g, rim: Math.max(0, nx * -0.6 + ny * -0.8) };
 }
 
+// Aim a bone in world space, independent of the animated parent rotation.
+function setWorldQuaternion(b, world) {
+  const parent = b.parent.getWorldQuaternion(new THREE.Quaternion());
+  b.quaternion.copy(parent.invert().multiply(world));
+  b.updateMatrixWorld(true);
+}
+
+// Bend the free arm so its hand reaches the torch-carrying position.
+function holdTorch(arm, target) {
+  const A = arm.upper.getWorldPosition(new THREE.Vector3());
+  const B = arm.fore.getWorldPosition(new THREE.Vector3());
+  const C = arm.hand.getWorldPosition(new THREE.Vector3());
+  const a = A.distanceTo(B);
+  const b = B.distanceTo(C);
+  const d = Math.min(A.distanceTo(target), a + b - 1e-4);
+  const BA = A.clone().sub(B).normalize();
+  const BC = C.clone().sub(B).normalize();
+  const axis = new THREE.Vector3().crossVectors(BA, BC);
+  if (axis.lengthSq() > 1e-10) {
+    axis.normalize();
+    const now = Math.acos(Math.max(-1, Math.min(1, BA.dot(BC))));
+    const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
+    const turn = new THREE.Quaternion().setFromAxisAngle(axis, want - now);
+    setWorldQuaternion(arm.fore, turn.multiply(arm.fore.getWorldQuaternion(new THREE.Quaternion())));
+  }
+  const C2 = arm.hand.getWorldPosition(new THREE.Vector3());
+  const swing = new THREE.Quaternion().setFromUnitVectors(C2.sub(A).normalize(), target.clone().sub(A).normalize());
+  setWorldQuaternion(arm.upper, swing.multiply(arm.upper.getWorldQuaternion(new THREE.Quaternion())));
+}
+
 export class ModelFigure {
   static async load(url) {
     const gltf = await new GLTFLoader().loadAsync(url);
@@ -152,6 +182,13 @@ export class ModelFigure {
     });
 
     this.sword = this.makeSword();
+    this.torchArm = {
+      upper: this.bones[bone('DEF-upper_arm.L')],
+      fore: this.bones[bone('DEF-forearm.L')],
+      hand: this.bones[bone('DEF-hand.L')],
+    };
+    this.torchLight = new THREE.PointLight(0xffa444, 0, 3, 2);
+    this.scene.add(this.torchLight);
 
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50);
     this.camera.position.set(0, TILT * 20, COS * 20);
@@ -340,6 +377,14 @@ export class ModelFigure {
     }
     this.model.position.y = p.air;
     this.model.updateMatrixWorld(true);
+    if (p.torch) {
+      const shoulder = this.torchArm.upper.getWorldPosition(new THREE.Vector3());
+      const offset = new THREE.Vector3(0.18, -0.22, 0.28).applyQuaternion(this.model.quaternion);
+      holdTorch(this.torchArm, shoulder.add(offset));
+      this.torchLight.position.copy(this.torchArm.hand.getWorldPosition(new THREE.Vector3()));
+      this.torchLight.position.y += 0.55;
+    }
+    this.torchLight.intensity = p.torch ? 1.6 + Math.sin(p.time * 13.7) * 0.2 : 0;
   }
 
   // Starts a one-shot clip from the beginning at a given playback rate.
@@ -362,6 +407,12 @@ export class ModelFigure {
     const base = this.sword.localToWorld(this.sword.userData.base.clone());
     const tip = this.sword.localToWorld(this.sword.userData.tip.clone());
     return { base: this.toScreen(base), tip: this.toScreen(tip) };
+  }
+
+  // Hand coordinates locate the ASCII torch, its glow and its throw origin.
+  torchPose() {
+    const hand = this.torchArm.hand.getWorldPosition(new THREE.Vector3());
+    return { x: hand.x * SCALE / ASPECT, y: hand.z * SCALE * TILT, h: hand.y * SCALE * COS };
   }
 
   // Renders the model for the feet at world cell (x, y) and turns the image
