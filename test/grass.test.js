@@ -5,6 +5,7 @@ import { Player } from '../src/entities/player.js';
 import { SCALE, TILT, buildRig } from '../src/entities/rig.js';
 import { glyph } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
+import { drawGround } from '../src/world/ground.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, World } from '../src/world/world.js';
 
 // Terrain-only fixtures keep blade geometry and interaction tests independent
@@ -55,6 +56,7 @@ function renderer(view, onPut = () => {}) {
     cols: view.cols,
     rows: view.rows,
     fg: new Float32Array(view.cols * view.rows * 4),
+    bg: new Float32Array(view.cols * view.rows * 4),
     mask: new Uint8Array(view.cols * view.rows),
     put(x, y, g, cr, cg, cb) {
       if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) return;
@@ -176,6 +178,46 @@ test('player contact visibly flattens a short blade, then restores its wind-driv
   grass.update(world, player(30.5, 0.5), 0.1);
   assert.ok(grass.pressAt(2, 0, 0.2) > 0.6, 'the flattened trail remains briefly');
   assert.deepEqual(rowCells(grass, world, view, 8, 0), rowCells(new Grass(), world, view, 8, 0));
+});
+
+test('a contacted five-cell stalk lies fully flat and spreads into a visible mat', () => {
+  const world = meadow(new Map([['0,0', 5]]));
+  const grass = new Grass();
+  const view = { x0: -10, y0: -10, cols: 30, rows: 30 };
+  const standing = rowCells(grass, world, view, 0, 0);
+  grass.update(world, player(0.5, 0.5), 0);
+  const flat = rowCells(grass, world, view, 0, 0);
+  assert.ok(standing.some(c => c.y === 6), 'the unpressed stalk is five cells tall');
+  assert.ok(flat.every(c => c.y === 10), 'fresh contact leaves no upright stem');
+  assert.ok(new Set(flat.map(c => c.x)).size >= 5, 'fallen strands spread along the ground');
+  assert.ok(flat.some(c => c.g === glyph('-')));
+});
+
+test('matted footprints remain legible through foreground grass and fade back to the original field', () => {
+  const world = meadow();
+  for (const cx of [-1, 0]) for (const cy of [-1, 0]) world.chunk(cx, cy).grassHeight.fill(5);
+  const grass = new Grass();
+  const view = { x0: -10, y0: -10, cols: 24, rows: 24 };
+  const render = (g, t) => {
+    const r = renderer(view);
+    drawGround(r, world, view, t);
+    g.drawTracks(r, view, t);
+    g.drawLayered(r, world, view, t, []);
+    return r;
+  };
+  grass.update(world, player(0.5, 0.5), 0);
+  const r = render(grass, 0);
+  const o = (10 * view.cols + 10) * 4;
+  assert.ok([glyph('-'), glyph('_'), glyph('=')].includes(r.fg[o + 3]),
+    'upright strokes from roots below the footprint do not bury it');
+  assert.ok(r.fg[o] >= 70, 'the exposed leaf surfaces have a clear warm highlight');
+  assert.ok(r.bg[o + 1] < 5, 'the bed beneath the footprint has a strong shadow');
+  assert.equal(r.bg[(10 * view.cols + 18) * 4 + 1], 10, 'untouched ground is not shaded into an aura');
+  grass.update(world, player(30.5, 30.5), 0.1);
+  const recovered = render(grass, 25);
+  const untouched = render(new Grass(), 25);
+  assert.deepEqual(recovered.fg, untouched.fg);
+  assert.deepEqual(recovered.bg, untouched.bg);
 });
 
 test('only boot soles trample grass, leaving the gap and surroundings untouched', () => {

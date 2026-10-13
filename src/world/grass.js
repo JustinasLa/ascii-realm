@@ -6,7 +6,7 @@ import { glyph } from '../render/glyphs.js';
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 
 export const MAX_GRASS_HEIGHT = 5;
-const SIDE_PAD = 6;
+const SIDE_PAD = 8;
 const SOLE_RADIUS = SCALE * 0.1;
 const HOLD = 0.25;
 const LIFE = 2;
@@ -23,6 +23,8 @@ const DOT = glyph('.');
 const SEED = glyph(':');
 const FINE = glyph("'");
 const DRY = glyph('`');
+const MAT = [112, 136, 74];
+const MATTED = [FLAT, glyph('_'), glyph('=')];
 // Fine blue-green blades, leafy tufts, curved emerald grass, seed heads,
 // dry gold grass, and olive shoreline reeds.
 const PALETTES = [
@@ -31,7 +33,11 @@ const PALETTES = [
 ];
 
 function drawBlade(r, view, write, x, y, height, lean, press, light, tone, head) {
-  const rise = (height - 1) * (1 - Math.min(1, press) * 0.88);
+  // Firm contact lays even the tallest stalk right on the ground. Ease out
+  // of the flat pose only as pressure recovers, rather than leaving little
+  // upright stems in the fresh footprint.
+  const flat = 1 - (1 - Math.min(1, press)) ** 3;
+  const rise = (height - 1) * (1 - flat);
   const base = y - view.y0;
   const steps = Math.ceil(height + Math.abs(lean) * 2);
   let lastX = 0;
@@ -44,8 +50,12 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, head)
     let ch = k && sy === lastY && offset !== lastX ? FLAT :
       offset < lastX ? LEFT : offset > lastX ? RIGHT : STEM;
     if (k === steps) ch = press > 0.6 ? FLAT : head || (lean < 0 ? LEFT : RIGHT);
-    const l = light * (0.55 + u * 0.6);
-    write(r, x - view.x0 + offset, sy, ch, tone[0] * l, tone[1] * l, tone[2] * l, base);
+    const l = light * (0.55 + u * 0.6 + flat * 0.3);
+    const mat = flat * 0.8;
+    write(r, x - view.x0 + offset, sy, ch,
+      (tone[0] + (MAT[0] - tone[0]) * mat) * l,
+      (tone[1] + (MAT[1] - tone[1]) * mat) * l,
+      (tone[2] + (MAT[2] - tone[2]) * mat) * l, base);
     lastX = offset;
     lastY = sy;
   }
@@ -208,11 +218,15 @@ export class Grass {
       const pressure = track.press * this.trackRecovery(track, t);
       if (pressure < 0.1) continue;
       const o = (sy * r.cols + sx) * 4;
-      const dim = 1 - pressure * 0.18;
-      r.fg[o] *= dim;
-      r.fg[o + 1] *= dim;
-      r.fg[o + 2] *= dim;
-      if (pressure > 0.5) r.fg[o + 3] = FLAT;
+      const mat = 1 - (1 - pressure) ** 3;
+      const texture = Math.abs(track.x * 7 + track.y * 13) % MATTED.length;
+      for (let c = 0; c < 3; c++) {
+        r.fg[o + c] += (MAT[c] * 0.8 - r.fg[o + c]) * mat;
+        // The compressed bed is dark; exposed, horizontal leaf surfaces
+        // catch the moonlight and make the walked route easy to read.
+        r.bg[o + c] *= 1 - mat * 0.65;
+      }
+      if (pressure > 0.45) r.fg[o + 3] = MATTED[texture];
     }
   }
 
@@ -220,6 +234,22 @@ export class Grass {
     const cy = Math.floor(y / CHUNK_SIZE);
     let chunk = null;
     let lastCx;
+    // Overhanging ASCII strokes must not paint an upright stalk back across
+    // a matted footprint. This uses the existing, world-anchored sole marks
+    // and is shared by the normal and reflected views.
+    const paint = (renderer, sx, sy, ch, cr, cg, cb, base) => {
+      const wx = sx + view.x0;
+      const wy = sy + view.y0;
+      const track = this.tracks.get(`${wx},${wy}`);
+      const pressure = track ? track.press * this.trackRecovery(track, t) : 0;
+      if (pressure > 0.45) {
+        ch = MATTED[Math.abs(wx * 7 + wy * 13) % MATTED.length];
+        cr = MAT[0] * 0.8;
+        cg = MAT[1] * 0.8;
+        cb = MAT[2] * 0.8;
+      }
+      write(renderer, sx, sy, ch, cr, cg, cb, base);
+    };
     for (let x = view.x0 - SIDE_PAD; x < view.x0 + view.cols + SIDE_PAD; x++) {
       const cx = Math.floor(x / CHUNK_SIZE);
       if (!chunk || cx !== lastCx) {
@@ -239,15 +269,17 @@ export class Grass {
       const wind = grassWind(x, y, t, world.seed, rnd);
       const variation = hash2(x, y, world.seed + 1217);
       const curve = (variation - 0.5) * (style === 2 ? 2.2 : 0.6) * (1 - press);
-      const lean = Math.max(-4, Math.min(4, wind * Math.min(1.3, height * 0.35) + curve + bend * 2.8));
+      const flat = 1 - (1 - Math.min(1, press)) ** 3;
+      const lean = Math.max(-6, Math.min(6, wind * Math.min(1.3, height * 0.35) * (1 - flat) +
+        curve + bend * (2 + height * 0.8)));
       const light = (0.48 + chunk.shade[i] * 0.65 + Math.max(0, wind) * 0.1) * (0.85 + variation * 0.3);
       const head = style === 5 ? SEED_HEAD : style === 3 ? (variation < 0.5 ? DOT : SEED) :
         style === 4 ? DRY : style === 0 && variation > 0.6 ? FINE : style === 1 && variation > 0.75 ? LEAF : 0;
       const tone = PALETTES[style];
-      drawBlade(r, view, write, x, y, height, lean, press, light, tone, head);
+      drawBlade(r, view, paint, x, y, height, lean, press, light, tone, head);
       if (style === 1 || (style === 4 && variation > 0.55)) {
-        const fan = Math.max(-4, Math.min(4, lean + (variation < 0.5 ? -1.6 : 1.6) * (1 - press * 0.7)));
-        drawBlade(r, view, write, x, y, Math.max(2, height - 1), fan, press, light * 0.85,
+        const fan = Math.max(-6, Math.min(6, lean + (variation < 0.5 ? -1.6 : 1.6) * (1 - press * 0.7)));
+        drawBlade(r, view, paint, x, y, Math.max(2, height - 1), fan, press, light * 0.85,
           tone, style === 4 ? FINE : 0);
       }
     }
