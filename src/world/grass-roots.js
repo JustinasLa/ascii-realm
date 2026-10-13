@@ -31,7 +31,7 @@ export function grassRoots(chunk, seed, size) {
       const style = chunk.grassStyle[i];
       const wx = chunk.cx * size + x;
       const wy = chunk.cy * size + y;
-      const flower = chunk.grassHeight[i] >= 2.4 && style < 4 && hash2(wx, wy, seed + 1401) < 0.016;
+      const flower = chunk.grassHeight[i] >= 2.4 && style < 4 && hash2(wx, wy, seed + 1401) < 0.04;
       const density = chunk.grassDensity[i] * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1) *
         clumpAt(wx, wy, seed);
       if (chunk.grassHeight[i] < 2 || (!flower && chunk.rnd[i] < 1 - density)) continue;

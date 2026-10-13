@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { FLAT_GLYPHS, Grass, MAX_GRASS_HEIGHT, grassWind } from '../src/world/grass.js';
+import { Grass, MAX_GRASS_HEIGHT, grassWind } from '../src/world/grass.js';
 import { clumpAt, grassRoots } from '../src/world/grass-roots.js';
 import { hash2 } from '../src/core/rng.js';
 import { Player } from '../src/entities/player.js';
 import { SCALE, TILT, buildRig } from '../src/entities/rig.js';
-import { GLYPHS, glyph } from '../src/render/glyphs.js';
+import { FLAT_GLYPHS, STROKE_STEPS, strokeGlyph } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, World } from '../src/world/world.js';
@@ -526,55 +526,34 @@ test('reflected grass rows interleave with reflected entities in the same rooted
   assert.ok(back < backRoot && backRoot < front && front < frontRoot, events.join(', '));
 });
 
-const BLADE = new Set([...'|/\\'].map(glyph));
-const TIPS = new Set([..."'`/,."].map(glyph));
+const strokes = new Map();
+for (let tip = 0; tip < 3; tip++) {
+  for (let b = 0; b < STROKE_STEPS; b++) {
+    for (let t = 0; t < STROKE_STEPS; t++) strokes.set(strokeGlyph(b, t, tip), { b, t, tip });
+  }
+}
 const tipOf = (cells) => cells.reduce((a, c) => (c.y < a.y ? c : a));
 
-test('upright blades are long ASCII strokes: each row continues from the row below', () => {
+test('upright blades are long joined strokes: each row starts where the row below ended', () => {
   const world = meadow(new Map([['0,0', 5]]));
   const view = { x0: -12, y0: -20, cols: 32, rows: 40 };
-  const shapes = new Set();
   for (const t of [0, 1.3, 4.2, 7.7]) {
     const cells = rowCells(new Grass(), world, view, t, 0);
+    assert.ok(cells.every((c) => strokes.has(c.g)));
     const rows = [...new Set(cells.map((c) => c.y))].sort((a, b) => b - a);
     assert.ok(rows.length >= 5, 'a five-cell profile draws a blade at least five rows long');
     assert.deepEqual(rows, rows.map((_, k) => 20 - k), 'every row from the root up holds a stroke');
+    const ends = (y, side) => cells.filter((c) => c.y === y)
+      .map((c) => c.x + (strokes.get(c.g)[side] + 0.5) / STROKE_STEPS);
     for (let k = 1; k < rows.length; k++) {
-      const below = cells.filter((c) => c.y === rows[k - 1]).map((c) => c.x);
-      const above = cells.filter((c) => c.y === rows[k]).map((c) => c.x);
-      assert.ok(above.some((x) => below.some((b) => Math.abs(x - b) <= 1)), `row ${rows[k]} continues at t=${t}`);
+      const gap = Math.min(...ends(rows[k - 1], 't').flatMap((a) => ends(rows[k], 'b').map((b) => Math.abs(a - b))));
+      assert.ok(gap < 0.4, `row ${rows[k]} joins the row below at t=${t}`);
     }
-    const top = cells.filter((c) => c.y === rows.at(-1));
-    assert.ok(top.some((c) => TIPS.has(c.g)), 'the blade ends in a tip mark');
-    assert.ok(cells.filter((c) => c.y > rows.at(-1)).every((c) => BLADE.has(c.g)), 'the body is | / and \\');
-    assert.ok(top[0].cg > cells.find((c) => c.y === 20).cg, 'the tip is a little lighter than the root');
-    shapes.add(cells.map((c) => c.g).join());
+    const tips = cells.filter((c) => strokes.get(c.g).tip > 0);
+    assert.equal(tips.length, 1, 'the blade ends in one tapered tip');
+    assert.equal(tips[0].y, rows.at(-1));
+    assert.ok(tips[0].cg > cells.find((c) => c.y === 20).cg, 'the tip is lighter than the root');
   }
-  assert.ok(shapes.size > 1, 'the glyphs follow the blade as it sways');
-});
-
-test('grass and flowers only ever emit printable ASCII drawn from the font', () => {
-  const world = new World(19);
-  const grass = new Grass();
-  const view = { x0: 40, y0: 40, cols: 60, rows: 40 };
-  const emitted = new Set();
-  const record = (_r, _x, _y, g) => emitted.add(g);
-  const r = renderer(view);
-  for (let i = 0; i < 24; i++) {
-    const t = i * 0.53;
-    // Walk, swing and stand still so pressed, parted and matted blades all show.
-    const x = 70 + i;
-    grass.update(world, { x, y: 60.5, air: 0, swordSweep: i % 6 === 0 ? { hx: x, hy: 58, tx: x + 9, ty: 60, t } : null,
-      feet: [{ id: 1, plant: i, grounded: true, hx: x, hy: 60.5, tx: x, ty: 61 }] }, t);
-    for (let y = view.y0; y < view.y0 + view.rows + MAX_GRASS_HEIGHT; y++) grass.drawRow(r, world, view, t, y, record);
-  }
-  assert.ok(emitted.size >= 8, `a varied set of glyphs: ${[...emitted].map((g) => GLYPHS[g]).join('')}`);
-  for (const g of emitted) {
-    const code = GLYPHS.charCodeAt(g);
-    assert.ok(g < GLYPHS.length && code >= 33 && code <= 126, `glyph ${g} (${GLYPHS[g]}) is printable ASCII`);
-  }
-  for (const g of FLAT_GLYPHS) assert.ok(GLYPHS.charCodeAt(g) <= 126);
-  assert.ok([...'*o'].map(glyph).some((g) => emitted.has(g)), 'flowers are drawn with ASCII marks');
 });
 
 test('meadow roots grow in clumps with dark gaps between them', () => {
@@ -670,7 +649,7 @@ test('flowers bloom on meadow roots, sway with the wind and are pushed aside by 
   assert.ok(found, 'the seeded meadow has flowers');
   const view = { x0: found.x - 20, y0: found.y - 20, cols: 40, rows: 40 };
   const head = (grass, t) => rowCells(grass, world, view, t, found.y)
-    .find((c) => c.cr > 90 && c.cb > 90 && Math.abs(c.x - 20) < 10);
+    .find((c) => c.cr > 150 && c.cb > 150 && Math.abs(c.x - 20) < 10);
   const positions = new Set();
   for (let t = 0; t < 12; t += 0.37) {
     const h = head(new Grass(), t);

@@ -2,7 +2,7 @@ import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
-import { glyph } from '../render/glyphs.js';
+import { BLOSSOM, BUD, STROKE_STEPS, flatGlyph, glyph, strokeGlyph } from '../render/glyphs.js';
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 
 // Terrain grows blades up to five cells high; drawn blades are longer than
@@ -27,37 +27,23 @@ const MAX_PARTS = 4096;
 const SEED_HEAD = glyph('"');
 const DOT = glyph('.');
 const SEED = glyph(':');
-// Blades are plain ASCII, chosen per row like a hand-drawn line: `|` while
-// the blade climbs straight up, `/` or `\` where it steps over a column,
-// and a smaller tip mark where it ends.
-const STEM = glyph('|');
-const RIGHT = glyph('/');
-const LEFT = glyph('\\');
-const TICK = glyph("'");
-const BACK = glyph('`');
-const COMMA = glyph(',');
-const LOW = glyph('_');
-const MID = glyph('-');
-const WAVY = glyph('~');
-// Every glyph a flattened blade or matted footprint can show.
-export const FLAT_GLYPHS = [LOW, MID, WAVY];
-const MAT = [50, 78, 56];
-const MATTED = [LOW, MID, LOW];
-// Muted night greens, darker than stone and trees so the meadow stays a
-// background against the near-black ground: blue-green fine blades, leafy
-// tufts, curved emerald grass, seed heads, dry gold grass, and olive reeds.
+const MAT = [64, 104, 66];
+const MATTED = [flatGlyph(2, 2), flatGlyph(1, 2), flatGlyph(2, 1)];
+// Saturated mid greens against the near-black ground: blue-green fine
+// blades, leafy tufts, curved emerald grass, seed heads, dry gold grass,
+// and olive shoreline reeds.
 const PALETTES = [
-  [36, 100, 70], [48, 104, 58], [34, 106, 64],
-  [54, 100, 62], [76, 94, 52], [64, 94, 58],
+  [48, 118, 88], [58, 126, 72], [46, 130, 80],
+  [70, 124, 80], [96, 116, 70], [82, 116, 72],
 ];
-// Tips catch a little moonlight and pale toward this.
-const TIP = [78, 116, 96];
+// Tips catch the moonlight and pale toward this.
+const TIP = [104, 142, 124];
 const FLOWERS = [
-  [glyph('*'), 150, 156, 150], [glyph('o'), 132, 146, 150], [glyph('*'), 156, 150, 128],
-  [glyph('o'), 146, 150, 140], [glyph("'"), 150, 146, 128], [glyph('.'), 142, 152, 146],
-  [glyph(','), 144, 150, 158], [glyph('*'), 156, 156, 152],
+  [BLOSSOM, 244, 248, 240], [BUD, 214, 236, 240], [BLOSSOM, 248, 242, 214],
+  [BUD, 236, 240, 226], [glyph('°'), 240, 236, 214], [glyph('.'), 230, 244, 236],
+  [BLOSSOM, 236, 242, 250], [BLOSSOM, 248, 248, 244],
 ];
-const PETAL = glyph('o');
+const PETAL = BUD;
 // Where the last drawn blade ended: the cell just beyond its tip.
 let tipX = 0;
 let tipY = 0;
@@ -69,18 +55,7 @@ const ripple = (p) => {
   return f < 0.5 ? 16 * f * (0.5 - f) : 16 * (f - 0.5) * (f - 1);
 };
 
-// The upright stroke for one row of a blade, from where it enters the
-// bottom of the row to where it leaves the top (in columns).
-const strokeOf = (bottom, top) => {
-  const slope = top - bottom;
-  const shift = Math.floor(top) - Math.floor(bottom);
-  return shift > 0 || slope > 0.9 ? RIGHT : shift < 0 || slope < -0.9 ? LEFT : STEM;
-};
-
-// The last row narrows to a tick near the top of the cell, or to a low
-// mark for a blade that ends partway up its row.
-const tipOf = (stroke, tip) => tip === 1 ? (stroke === STEM ? TICK : stroke === LEFT ? BACK : RIGHT) :
-  stroke === RIGHT ? COMMA : DOT;
+const step = (v, steps) => v <= 0 ? 0 : v >= 1 ? steps - 1 : (v * steps) | 0;
 
 function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase = 0) {
   // Firm contact lays even the tallest stalk right on the ground. Ease out
@@ -107,9 +82,9 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
   const sx = x - view.x0;
   const dim = 1 - flat * 0.25;
   if (rise >= 0.75 && Math.abs(reach) <= rise * 1.8) {
-    // Upright: one stroke per row, stepping across columns as the blade
-    // leans. The tip bends over more than the base. A blade ending low in
-    // its last row gets a short tip there.
+    // Upright: one edge-to-edge stroke per row, joined where the blade
+    // crosses each row boundary. The tip bends over more than the base.
+    // A blade ending low in its last row gets a short tip there.
     const rows = Math.max(1, Math.ceil(rise - 0.25));
     const tip = rise - rows + 1 < 0.7 ? 2 : 1;
     const [tr, tg, tb] = tone;
@@ -121,8 +96,8 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
       // Shade along the blade with a per-blade offset, so rows of equally
       // tall blades do not line up into horizontal bands of brightness.
       const u = Math.min(1, (j + 0.5) / rows + phase);
-      const l = lit * (0.78 + u * 0.36);
-      const pale = u > 0.6 ? (u - 0.6) * 0.6 : 0;
+      const l = lit * (0.66 + u * 0.6);
+      const pale = u > 0.6 ? (u - 0.6) * 0.8 : 0;
       const cr = (tr + (TIP[0] - tr) * pale) * l;
       const cg = (tg + (TIP[1] - tg) * pale) * l;
       const cb = (tb + (TIP[2] - tb) * pale) * l;
@@ -130,14 +105,16 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
       // column it passes through its own part, so the blade has no gaps.
       const from = Math.floor(Math.min(bottom, top) + 0.25);
       const to = Math.floor(Math.max(bottom, top) - 0.25);
-      const stroke = strokeOf(bottom, top);
       if (to <= from) {
-        write(r, sx + Math.floor((bottom + top) / 2), base - j, j === rows - 1 ? tipOf(stroke, tip) : stroke,
+        const col = Math.floor((bottom + top) / 2);
+        write(r, sx + col, base - j,
+          strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS), j === rows - 1 ? tip : 0),
           cr, cg, cb, base);
       } else {
         const end = top > bottom ? to : from;
         for (let col = from; col <= to; col++) {
-          write(r, sx + col, base - j, j === rows - 1 && col === end ? tipOf(stroke, tip) : stroke, cr, cg, cb, base);
+          write(r, sx + col, base - j, strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS),
+            j === rows - 1 && col === end ? tip : 0), cr, cg, cb, base);
         }
       }
       bottom = top;
@@ -154,11 +131,10 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
     const h0 = 0.3 + rise * k / cols;
     const h1 = 0.3 + rise * (k + 1) / cols;
     const row = Math.floor((h0 + h1) / 2);
-    // Low in the cell `_`, higher `-`, and `~` where the blade lifts.
-    const a = Math.floor((h0 - row) * 3);
-    const b = Math.floor((h1 - row) * 3);
+    const a = step(1 - (h0 - row), 3);
+    const b = step(1 - (h1 - row), 3);
     const l = light * (0.4 + (k + 0.5) / cols * 0.4) * dim;
-    write(r, sx + side * k, base - row, a !== b ? WAVY : a === 0 ? LOW : MID,
+    write(r, sx + side * k, base - row, side > 0 ? flatGlyph(a, b) : flatGlyph(b, a),
       (tone[0] + (MAT[0] - tone[0]) * mat) * l,
       (tone[1] + (MAT[1] - tone[1]) * mat) * l,
       (tone[2] + (MAT[2] - tone[2]) * mat) * l, base);
@@ -520,15 +496,15 @@ export class Grass {
           curve + bend * (1.4 + height * 0.45) + field.part[fi]) * BLADE_LENGTH));
         // Gusts lay blades over to show their lit sides; the parted hollow
         // under a figure stays in shadow.
-        const light = (0.68 + chunk.shade[i] * 0.5 + Math.max(0, wind - 0.6) * 0.04) *
-          (0.88 + variation * 0.24) * (1 - sink * 0.8);
+        const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.16) *
+          (0.82 + variation * 0.36) * (1 - sink * 0.8);
         const tone = PALETTES[style];
         const length = height * BLADE_LENGTH * (0.78 + jitter * 0.3);
         drawBlade(r, view, paint, x, y, length, lean, bent, light, tone, (variation - 0.5) * 0.4);
         const flower = blades ? blades.flowers[root] : 0;
         if (flower) {
           const [ch, fr, fg, fb] = FLOWERS[flower - 1];
-          const glow = (0.75 + variation * 0.25) * (1 - sink * 0.45) * (1 - flat * 0.4);
+          const glow = (0.8 + variation * 0.25) * (1 - sink * 0.45) * (1 - flat * 0.4);
           paint(r, tipX, tipY, flat > 0.6 ? DOT : ch, fr * glow, fg * glow, fb * glow, base);
           // The last kind blooms in a little cluster across the stem.
           if (flower === FLOWERS.length && flat < 0.6) {
