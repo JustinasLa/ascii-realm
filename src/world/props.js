@@ -126,6 +126,44 @@ function makeRock(x, y, rand, seed = x * 17 + y) {
   };
 }
 
+// Hand-placed boulders have irregular outlines and distinct mineral/moss
+// patches. Procedural rocks above keep the original seeded landscape intact.
+function makeSceneryRock(x, y, rand, seed) {
+  const rx = 2.6 + rand() * 3.2;
+  const ry = rx * (0.55 + rand() * 0.3);
+  const count = 7 + Math.floor(rand() * 4);
+  const offset = rand() * Math.PI * 2;
+  const corners = Array.from({ length: count }, (_, i) => {
+    const angle = offset + i * Math.PI * 2 / count;
+    const radius = 0.76 + rand() * 0.24;
+    return { x: Math.cos(angle) * rx * radius, y: -ry + Math.sin(angle) * ry * radius };
+  });
+  const bottom = Math.max(...corners.map((corner) => corner.y));
+  for (const corner of corners) corner.y -= bottom;
+  const colors = [[109, 122, 139], [145, 127, 106], [135, 137, 143], [122, 136, 119]];
+  const stone = colors[Math.floor(rand() * colors.length)];
+  const mossCoverage = rand() * 0.65;
+  const facets = Array.from({ length: count }, () => (rand() - 0.5) * 0.15);
+  const sample = (px, py) => {
+    let inside = false;
+    for (let i = 0, j = count - 1; i < count; j = i++) {
+      const a = corners[i], b = corners[j];
+      if ((a.y > py) !== (b.y > py)
+        && px < (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    if (!inside) return null;
+    const nx = px / rx, ny = (py + ry + bottom) / ry;
+    const angle = (Math.atan2(ny, nx) - offset + Math.PI * 4) % (Math.PI * 2);
+    const facet = facets[Math.floor(angle / (Math.PI * 2) * count)];
+    const grain = (hash2(Math.floor(px * 3), Math.floor(py * 3), seed + 17) - 0.5) * 0.08;
+    const moss = ny < 0.2 && hash2(Math.floor(px * 0.9), Math.floor(py * 0.8), seed + 29) < mossCoverage;
+    return { l: 0.59 - nx * 0.26 - ny * 0.3 + facet + grain,
+      c: moss ? [68, 99 + mossCoverage * 20, 62] : stone };
+  };
+  return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4,
+    cells: bake(Math.ceil(rx / ASPECT) + 1, -Math.ceil(ry * 2), 0, sample, seed) };
+}
+
 function makeBush(x, y, rand, seed) {
   const radius = 3.5 + rand() * 2;
   const height = 4 + rand() * 2;
@@ -163,8 +201,8 @@ function makeBush(x, y, rand, seed) {
 // visited once, so shrinking cannot stack cells and enlarging fills the image
 // instead of leaving gaps between its original cells. The ground anchor stays
 // at (0, 0), just as it does for procedural props.
-function scaleCells(cells, scale) {
-  if (scale === 1) return cells;
+function scaleCells(cells, scaleX, scaleY = scaleX, mirror = false) {
+  if (scaleX === 1 && scaleY === 1 && !mirror) return cells;
   const source = new Map();
   let minX = Infinity;
   let maxX = -Infinity;
@@ -178,10 +216,10 @@ function scaleCells(cells, scale) {
     maxY = Math.max(maxY, cell.dy);
   }
   const scaled = [];
-  for (let dy = Math.ceil((minY - 0.5) * scale); dy <= Math.floor((maxY + 0.5) * scale); dy++) {
-    for (let dx = Math.ceil((minX - 0.5) * scale); dx <= Math.floor((maxX + 0.5) * scale); dx++) {
-      const cell = source.get(`${Math.round(dx / scale)},${Math.round(dy / scale)}`);
-      if (cell) scaled.push({ ...cell, dx, dy });
+  for (let dy = Math.ceil((minY - 0.5) * scaleY); dy <= Math.floor((maxY + 0.5) * scaleY); dy++) {
+    for (let dx = Math.ceil((minX - 0.5) * scaleX); dx <= Math.floor((maxX + 0.5) * scaleX); dx++) {
+      const cell = source.get(`${Math.round(dx / scaleX)},${Math.round(dy / scaleY)}`);
+      if (cell) scaled.push({ ...cell, dx: mirror ? -dx : dx, dy });
     }
   }
   return scaled;
@@ -198,24 +236,39 @@ export function createProp(kind, x, y, options = {}) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new TypeError('Scenery prop options must be an object');
   }
-  const { scale = 1, seed = 1 } = options;
+  const { scale = 1, seed = 1, variant = 1 } = options;
   if (typeof scale !== 'number' || !Number.isFinite(scale) || scale < 0.25 || scale > 3) {
     throw new RangeError('Scenery prop scale must be a number between 0.25 and 3');
   }
   if (typeof seed !== 'number' || !Number.isFinite(seed)) {
     throw new TypeError('Scenery prop seed must be a finite number');
   }
+  if (variant !== 0 && variant !== 1) throw new RangeError('Unknown scenery variation version');
   const rand = mulberry32(seed);
-  const make = { tree: makeTree, rock: makeRock, bush: makeBush }[kind];
+  const make = { tree: makeTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBush }[kind];
   const prop = make ? make(x, y, rand, seed)
     : makeNaturalProp(kind, x, y, rand, seed, bake) ?? makeCampProp(kind, x, y, rand, seed, bake);
   if (!prop) throw new TypeError(`Scenery prop has no factory: ${kind}`);
+  if (variant === 1) {
+    const variation = mulberry32((seed >>> 0) ^ 0xa341316c);
+    const width = 0.9 + variation() * 0.22;
+    const height = 0.9 + variation() * 0.2;
+    const mirrored = variation() < 0.5;
+    const brightness = 0.92 + variation() * 0.18;
+    const warmth = (variation() - 0.5) * 16;
+    const shade = (value, offset = 0) => Math.max(0, Math.min(255, value * brightness + offset));
+    prop.cells = scaleCells(prop.cells, width, height, mirrored).map((cell) => ({ ...cell,
+      r: shade(cell.r, warmth), gg: shade(cell.gg), b: shade(cell.b, -warmth) }));
+    prop.footW *= width;
+    prop.footH *= height;
+  }
   prop.cells = scaleCells(prop.cells, scale);
   prop.footW *= scale;
   prop.footH *= scale;
   prop.scale = scale;
   prop.seed = seed;
   prop.solid = definition.solid;
+  prop.variant = variant;
   return prop;
 }
 

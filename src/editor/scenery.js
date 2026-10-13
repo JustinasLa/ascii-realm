@@ -1,4 +1,4 @@
-import { hash2 } from '../core/rng.js';
+import { randomSeed } from '../core/rng.js';
 import { createProp } from '../world/props.js';
 import { PROP_KINDS } from '../world/prop-catalog.js';
 import { ASPECT, STONE, WATER } from '../world/world.js';
@@ -25,11 +25,12 @@ function checkType(type) {
   if (!Number.isInteger(type) || type < WATER || type > STONE) throw new Error('Terrain type must be an integer from 0 to 4.');
 }
 
-function checkProp(kind, x, y, scale, seed) {
+function checkProp(kind, x, y, scale, seed, variant = 1) {
   checkPoint(x, y);
   if (!PROP_KINDS.has(kind)) throw new Error('Unknown scenery prop kind.');
   if (!Number.isFinite(scale) || scale < 0.25 || scale > 3) throw new Error('Prop scale must be between 0.25 and 3.');
   if (!validSeed(seed)) throw new Error('Prop seed must be a safe integer.');
+  if (variant !== 0 && variant !== 1) throw new Error('Unknown scenery variation version.');
 }
 
 function checkTerrainBudget(terrain) {
@@ -45,8 +46,9 @@ function checkTerrainBudget(terrain) {
 // Scene changes are independent of input or DOM. The World stays the source
 // for rendering and collision while this model handles transactions and IO.
 export class Scenery {
-  constructor(world) {
+  constructor(world, { seedSource = randomSeed } = {}) {
     this.world = world;
+    this.seedSource = seedSource;
     this._undo = [];
     this._redo = [];
     this._stroke = null;
@@ -61,6 +63,16 @@ export class Scenery {
       props: this.world.addedProps.size,
       removed: this.world.removedProps.size,
     };
+  }
+
+  nextPropSeed(preferred = this.seedSource()) {
+    if (!validSeed(preferred)) throw new Error('Prop seed must be a safe integer.');
+    const used = new Set([...this.world.addedProps.values()].map((prop) => prop.seed >>> 0));
+    let seed = preferred >>> 0;
+    // Normalize to the factory's 32-bit stream and avoid duplicates even when
+    // loading older scenes or when the random source happens to repeat.
+    while (used.has(seed)) seed = (seed + 1) >>> 0;
+    return seed;
   }
 
   beginStroke() {
@@ -127,12 +139,12 @@ export class Scenery {
     });
   }
 
-  place(kind, x, y, { scale = 1, seed } = {}) {
-    if (seed === undefined) seed = Math.floor(hash2(Math.floor(x), Math.floor(y), this.world.seed + this._nextId) * 2 ** 32);
-    checkProp(kind, x, y, scale, seed);
+  place(kind, x, y, { scale = 1, seed, variant = 1 } = {}) {
+    if (seed === undefined) seed = this.nextPropSeed();
+    checkProp(kind, x, y, scale, seed, variant);
     if (this.world.addedProps.size >= PROP_LIMIT) throw new Error(`Scenery supports up to ${PROP_LIMIT} placed props.`);
     // Bake before starting the transaction so a factory error changes nothing.
-    const prop = createProp(kind, x, y, { scale, seed });
+    const prop = createProp(kind, x, y, { scale, seed, variant });
     return this._change(() => {
       if (this._nextId > MAX_PROP_ID) {
         this._nextId = 1;
@@ -196,7 +208,7 @@ export class Scenery {
       const [x, y] = key.split(',').map(Number);
       return { x, y, type };
     }).sort((a, b) => a.y - b.y || a.x - b.x);
-    const props = [...this.world.addedProps.values()].map(({ id, kind, x, y, scale, seed }) => ({ id, kind, x, y, scale, seed }))
+    const props = [...this.world.addedProps.values()].map(({ id, kind, x, y, scale, seed, variant = 0 }) => ({ id, kind, x, y, scale, seed, variant }))
       .sort((a, b) => Number(a.id.slice(2)) - Number(b.id.slice(2)));
     return { version: 1, seed: this.world.seed, terrain, props, removed: [...this.world.removedProps].sort() };
   }
@@ -230,12 +242,13 @@ export class Scenery {
     const propIds = new Set();
     const definitions = data.props.map((entry) => {
       if (!entry || typeof entry !== 'object') throw new Error('Invalid prop entry.');
-      const { id, kind, x, y, scale, seed } = entry;
+      // Scenes saved before per-item variation retain their original shapes.
+      const { id, kind, x, y, scale, seed, variant = 0 } = entry;
       if (typeof id !== 'string' || !/^s:[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id.slice(2))) || Number(id.slice(2)) > MAX_PROP_ID) throw new Error('Invalid placed prop identifier.');
       if (propIds.has(id)) throw new Error('Duplicate prop identifier.');
       propIds.add(id);
-      checkProp(kind, x, y, scale, seed);
-      return { id, kind, x, y, scale, seed };
+      checkProp(kind, x, y, scale, seed, variant);
+      return { id, kind, x, y, scale, seed, variant };
     });
     const removedIds = new Set();
     const removed = data.removed.map((id) => {

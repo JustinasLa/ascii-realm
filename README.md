@@ -91,7 +91,10 @@ bushes, stumps, logs, flowers, mushrooms, reeds, crates, barrels, fences, tents,
 campfires and signposts. Flowers, mushrooms and reeds are decorative and can be
 walked through; the other props block movement. Adjust the brush radius or prop
 scale in the panel and preview props before placing them; the eraser removes
-props only. While building, `W A S D` pans the view and normal player movement
+props only. Every placement gets a fresh variation in shape, proportions and
+color; rocks also vary their outline, mineral colors and moss. The preview shows
+the variation you will place, and saving or undoing preserves its appearance.
+While building, `W A S D` pans the view and normal player movement
 is paused. With the canvas or page body focused, `Enter` applies the selected
 tool at the centre of the view.
 

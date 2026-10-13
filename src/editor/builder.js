@@ -21,7 +21,7 @@ export class SceneryBuilder {
     this.tool = 'grass';
     this.radius = 6;
     this.scale = 1;
-    this.nextSeed = 1;
+    this.nextSeed = this.scene.nextPropSeed();
     this.pointer = null;
     this.stroke = null;
     this.ghost = null;
@@ -259,8 +259,9 @@ export class SceneryBuilder {
     const x = Math.floor(point.x) + 0.5;
     const y = Math.floor(point.y) + 0.5;
     if (PROPS.has(this.tool)) {
+      this.nextSeed = this.scene.nextPropSeed(this.nextSeed);
       this.scene.place(this.tool, x, y, { scale: this.scale, seed: this.nextSeed });
-      this.nextSeed++;
+      this.nextSeed = this.scene.nextPropSeed();
       this.ghost = null;
     } else if (this.tool === 'erase') {
       this.scene.erase(x, y, this.radius);
@@ -304,6 +305,11 @@ export class SceneryBuilder {
     const position = worldToScreen(x, y, rect, this.renderer, view);
     let size = brushSize(this.radius, rect, this.renderer);
     if (PROPS.has(this.tool)) {
+      const seed = this.scene.nextPropSeed(this.nextSeed);
+      if (seed !== this.nextSeed) {
+        this.nextSeed = seed;
+        this.ghost = null;
+      }
       if (!this.ghost) this.ghost = createProp(this.tool, 0, 0, { scale: this.scale, seed: this.nextSeed });
       const prop = { ...this.ghost, x, y };
       size = { width: prop.footW * 2 * this.renderer.cellW * rect.width / this.canvas.width,
@@ -351,6 +357,7 @@ export class SceneryBuilder {
   importScene(data, message = 'Imported scene.') {
     this.finishStroke();
     this.scene.load(data);
+    this.nextSeed = this.scene.nextPropSeed();
     this.setEnabled(true);
     this.ghost = null;
     this.onReset();
