@@ -41,21 +41,21 @@ const MID = glyph('-');
 const WAVY = glyph('~');
 // Every glyph a flattened blade or matted footprint can show.
 export const FLAT_GLYPHS = [LOW, MID, WAVY];
-const MAT = [64, 104, 66];
+const MAT = [50, 78, 56];
 const MATTED = [LOW, MID, LOW];
-// Saturated mid greens against the near-black ground: blue-green fine
-// blades, leafy tufts, curved emerald grass, seed heads, dry gold grass,
-// and olive shoreline reeds.
+// Muted night greens, darker than stone and trees so the meadow stays a
+// background against the near-black ground: blue-green fine blades, leafy
+// tufts, curved emerald grass, seed heads, dry gold grass, and olive reeds.
 const PALETTES = [
-  [48, 118, 88], [58, 126, 72], [46, 130, 80],
-  [70, 124, 80], [96, 116, 70], [82, 116, 72],
+  [36, 100, 70], [48, 104, 58], [34, 106, 64],
+  [54, 100, 62], [76, 94, 52], [64, 94, 58],
 ];
-// Tips catch the moonlight and pale toward this.
-const TIP = [104, 142, 124];
+// Tips catch a little moonlight and pale toward this.
+const TIP = [78, 116, 96];
 const FLOWERS = [
-  [glyph('*'), 244, 248, 240], [glyph('o'), 214, 236, 240], [glyph('*'), 248, 242, 214],
-  [glyph('o'), 236, 240, 226], [glyph("'"), 240, 236, 214], [glyph('.'), 230, 244, 236],
-  [glyph(','), 236, 242, 250], [glyph('*'), 248, 248, 244],
+  [glyph('*'), 150, 156, 150], [glyph('o'), 132, 146, 150], [glyph('*'), 156, 150, 128],
+  [glyph('o'), 146, 150, 140], [glyph("'"), 150, 146, 128], [glyph('.'), 142, 152, 146],
+  [glyph(','), 144, 150, 158], [glyph('*'), 156, 156, 152],
 ];
 const PETAL = glyph('o');
 // Where the last drawn blade ended: the cell just beyond its tip.
@@ -121,8 +121,8 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
       // Shade along the blade with a per-blade offset, so rows of equally
       // tall blades do not line up into horizontal bands of brightness.
       const u = Math.min(1, (j + 0.5) / rows + phase);
-      const l = lit * (0.66 + u * 0.6);
-      const pale = u > 0.6 ? (u - 0.6) * 0.8 : 0;
+      const l = lit * (0.78 + u * 0.36);
+      const pale = u > 0.6 ? (u - 0.6) * 0.6 : 0;
       const cr = (tr + (TIP[0] - tr) * pale) * l;
       const cg = (tg + (TIP[1] - tg) * pale) * l;
       const cb = (tb + (TIP[2] - tb) * pale) * l;
@@ -520,15 +520,15 @@ export class Grass {
           curve + bend * (1.4 + height * 0.45) + field.part[fi]) * BLADE_LENGTH));
         // Gusts lay blades over to show their lit sides; the parted hollow
         // under a figure stays in shadow.
-        const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.16) *
-          (0.82 + variation * 0.36) * (1 - sink * 0.8);
+        const light = (0.68 + chunk.shade[i] * 0.5 + Math.max(0, wind - 0.6) * 0.04) *
+          (0.88 + variation * 0.24) * (1 - sink * 0.8);
         const tone = PALETTES[style];
         const length = height * BLADE_LENGTH * (0.78 + jitter * 0.3);
         drawBlade(r, view, paint, x, y, length, lean, bent, light, tone, (variation - 0.5) * 0.4);
         const flower = blades ? blades.flowers[root] : 0;
         if (flower) {
           const [ch, fr, fg, fb] = FLOWERS[flower - 1];
-          const glow = (0.8 + variation * 0.25) * (1 - sink * 0.45) * (1 - flat * 0.4);
+          const glow = (0.75 + variation * 0.25) * (1 - sink * 0.45) * (1 - flat * 0.4);
           paint(r, tipX, tipY, flat > 0.6 ? DOT : ch, fr * glow, fg * glow, fb * glow, base);
           // The last kind blooms in a little cluster across the stem.
           if (flower === FLOWERS.length && flat < 0.6) {
