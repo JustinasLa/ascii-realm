@@ -67,21 +67,33 @@ function assertDisposed(audio) {
   assert.deepEqual(audio.invalid, []);
 }
 
-test('grass footsteps contain only noise, with a swish and uneven delayed leaf grains', t => {
+test('grass footsteps are brief dry contacts with crisp leaf detail and quickly damped tails', t => {
   t.mock.method(Math, 'random', () => 0.5);
   const audio = fakeAudio();
   const handles = playFootstep(audio.engine, 'grass', { strength: 1, x: 21, y: 40 });
-  assert.ok(handles.length >= 4 && handles.length <= 8);
+  assert.ok(handles.length >= 2 && handles.length <= 8);
   assert.equal(audio.nodes.filter(node => node.kind === 'oscillator').length, 0);
   const sources = audio.nodes.filter(node => node.kind === 'noise');
   assert.equal(sources.length, handles.length);
-  const delayed = [...new Set(sources.map(source => source.starts[0]))]
-    .filter(time => time > audio.context.currentTime).sort((a, b) => a - b);
-  assert.ok(delayed.length >= 3);
-  assert.ok(Math.abs((delayed[1] - delayed[0]) - (delayed[2] - delayed[1])) > 0.005);
-  assert.ok(sources.some(source => source.stops[0] - source.starts[0] > 0.2), 'a sustained brushing layer');
-  assert.ok(sources.every(source => source.stops[0] - source.starts[0] < 0.35));
-  assert.ok(audio.routes.every(route => route.x === 21 && route.y === 40));
+  const filters = audio.nodes.filter(node => node.kind === 'filter');
+  assert.ok(filters.some(filter => filter.type === 'highpass' && filter.frequency.value >= 1400), 'crisp dry leaf detail');
+  assert.ok(filters.some(filter => filter.type === 'bandpass' && filter.frequency.value >= 1000), 'dry granular contact');
+  assert.ok(filters.every(filter => filter.frequency.value >= 400), 'no low hollow body');
+  for (const gain of audio.nodes.filter(node => node.kind === 'gain')) {
+    const envelope = gain.gain.calls;
+    const start = envelope[0].args[1];
+    const end = envelope.at(-1).args[1];
+    assert.ok(end - start <= 0.12, 'each audible contact ends quickly');
+    assert.ok(end - audio.context.currentTime <= 0.14, 'the whole step stays compact');
+    const ramps = envelope.filter(call => call.method === 'linearRampToValueAtTime');
+    assert.ok(ramps.length >= 3, 'contact has a separate rapid decay');
+    const peak = ramps[0].args[0];
+    assert.ok(peak > 0);
+    assert.ok(ramps[1].args[0] <= peak * 0.08 + 1e-10, 'the sustained tail is faint');
+    assert.ok(ramps[1].args[1] - ramps[0].args[1] <= 0.04, 'weight falls away before it becomes a wet swish');
+    assert.equal(envelope.at(-1).args[0], 0);
+  }
+  assert.ok(audio.routes.every(route => route.bus === 'sfx' && route.x === 21 && route.y === 40));
   handles.forEach(handle => { handle.stop(); handle.stop(); });
   assertDisposed(audio);
 });

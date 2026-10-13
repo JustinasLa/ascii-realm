@@ -27,8 +27,8 @@ does not prevent controls from working. Saved mute is applied before playback.
   sustained noise beds and parameter smoothing. A deterministic, two-second
   noise buffer is shared by voices in each context; short cues start at varied
   positions in that buffer to vary the grain without allocating new samples.
-- `footsteps.js` layers close, unpitched material textures: cushioned grass
-  contact and uneven leaf swishes, compressed dirt and grit, dense sand drag,
+- `footsteps.js` layers close, unpitched material textures: dry boot contact
+  and brief grass-blade rustle, compressed dirt and grit, dense sand drag,
   low stone contact and sole scrape, or shallow-water splash and runoff. Broad
   filters, falling envelopes and small timing/level variations keep them earthy.
   Footfalls follow animation contact events rather than an independent timer.

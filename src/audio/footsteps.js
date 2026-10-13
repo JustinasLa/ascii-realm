@@ -4,12 +4,12 @@ import { noise } from './voices.js';
 // give shoes weight without an oscillator or a hollow resonant pitch.
 const MATERIALS = {
   grass: [
-    // Cushioned contact, a long leaf brush, then irregular bending blades.
-    { cutoff: 250, duration: 0.055, gain: 0.105, attack: 0.004, decay: 0.018, sustain: 0.2, release: 0.024 },
-    { cutoff: 1150, duration: 0.235, gain: 0.074, attack: 0.022, decay: 0.074, sustain: 0.38, release: 0.065 },
-    { cutoff: 1650, filterType: 'bandpass', delay: 0.016, duration: 0.047, gain: 0.044, attack: 0.007, decay: 0.016, sustain: 0.22, release: 0.018 },
-    { cutoff: 1250, filterType: 'bandpass', delay: 0.071, duration: 0.078, gain: 0.052, attack: 0.013, decay: 0.027, sustain: 0.3, release: 0.028 },
-    { cutoff: 1900, filterType: 'bandpass', delay: 0.151, duration: 0.061, gain: 0.033, attack: 0.009, decay: 0.021, sustain: 0.18, release: 0.024 },
+    // Dry boot contact and quick blade friction. Long, low swishes read as
+    // wet squeezing; keep the light grass detail above the short sole tap.
+    { cutoff: 620, duration: 0.038, gain: 0.052, attack: 0.0015, decay: 0.007, sustain: 0.03, release: 0.028 },
+    { cutoff: 1450, filterType: 'bandpass', delay: 0.006, duration: 0.043, gain: 0.029, attack: 0.001, decay: 0.012, sustain: 0.04, release: 0.024 },
+    { cutoff: 2200, filterType: 'highpass', delay: 0.015, duration: 0.032, gain: 0.013, attack: 0.001, decay: 0.007, sustain: 0.025, release: 0.019 },
+    { cutoff: 1700, filterType: 'highpass', delay: 0.019, duration: 0.079, gain: 0.006, attack: 0.002, decay: 0.021, sustain: 0.035, release: 0.047 },
   ],
   dirt: [
     // Damp soil compresses; small grains scrape after the weight lands.
