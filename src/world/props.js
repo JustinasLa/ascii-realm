@@ -52,7 +52,7 @@ function bake(w, top, bottom, sample, seed) {
   return cells;
 }
 
-function makeTree(x, y, rand) {
+function makeTree(x, y, rand, seed = x * 31 + y) {
   const height = 30 + rand() * 12;
   const radius = 8 + rand() * 3.5;
   const blobs = [{ x: 0, y: -height, r: radius }];
@@ -95,11 +95,11 @@ function makeTree(x, y, rand) {
     y,
     footW: 2.4,
     footH: 1.2,
-    cells: bake(w, -Math.ceil(height + radius), 0, sample, x * 31 + y),
+    cells: bake(w, -Math.ceil(height + radius), 0, sample, seed),
   };
 }
 
-function makeRock(x, y, rand) {
+function makeRock(x, y, rand, seed = x * 17 + y) {
   const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.65 + rand() * 0.2);
   const stone = [118, 120, 124];
@@ -119,8 +119,97 @@ function makeRock(x, y, rand) {
     y,
     footW: rx / ASPECT,
     footH: 1.4,
-    cells: bake(w, -Math.ceil(ry * 2), 0, sample, x * 17 + y),
+    cells: bake(w, -Math.ceil(ry * 2), 0, sample, seed),
   };
+}
+
+function makeBush(x, y, rand, seed) {
+  const radius = 3.5 + rand() * 2;
+  const height = 4 + rand() * 2;
+  const tint = rand();
+  const leaf = [48 + tint * 20, 106 + tint * 30, 62 - tint * 12];
+  const blobs = [
+    { x: -radius * 0.45, y: -height * 0.5, rx: radius * 0.7, ry: height * 0.6 },
+    { x: radius * 0.45, y: -height * 0.45, rx: radius * 0.65, ry: height * 0.55 },
+    { x: 0, y: -height * 0.75, rx: radius * 0.75, ry: height * 0.65 },
+  ];
+  const sample = (px, py) => {
+    if (py > 0) return null;
+    let best = null;
+    for (const blob of blobs) {
+      const nx = (px - blob.x) / blob.rx;
+      const ny = (py - blob.y) / blob.ry;
+      const d2 = nx * nx + ny * ny;
+      if (d2 > 1) continue;
+      const l = 0.55 - nx * 0.22 - ny * 0.28 + (1 - d2) * 0.12;
+      if (!best || l > best.l) best = { l, c: leaf };
+    }
+    return best;
+  };
+  return {
+    kind: 'bush',
+    x,
+    y,
+    footW: radius * 0.75 / ASPECT,
+    footH: 1.5,
+    cells: bake(Math.ceil(radius * 1.2 / ASPECT), -Math.ceil(height * 1.5), 0, sample, seed),
+  };
+}
+
+// Resample the baked image onto the destination grid. Each destination is
+// visited once, so shrinking cannot stack cells and enlarging fills the image
+// instead of leaving gaps between its original cells. The ground anchor stays
+// at (0, 0), just as it does for procedural props.
+function scaleCells(cells, scale) {
+  if (scale === 1) return cells;
+  const source = new Map();
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const cell of cells) {
+    source.set(`${cell.dx},${cell.dy}`, cell);
+    minX = Math.min(minX, cell.dx);
+    maxX = Math.max(maxX, cell.dx);
+    minY = Math.min(minY, cell.dy);
+    maxY = Math.max(maxY, cell.dy);
+  }
+  const scaled = [];
+  for (let dy = Math.ceil((minY - 0.5) * scale); dy <= Math.floor((maxY + 0.5) * scale); dy++) {
+    for (let dx = Math.ceil((minX - 0.5) * scale); dx <= Math.floor((maxX + 0.5) * scale); dx++) {
+      const cell = source.get(`${Math.round(dx / scale)},${Math.round(dy / scale)}`);
+      if (cell) scaled.push({ ...cell, dx, dy });
+    }
+  }
+  return scaled;
+}
+
+// Builder props use their own seed so moving an item does not change its
+// appearance. Keep generateProps below on its original random stream.
+export function createProp(kind, x, y, options = {}) {
+  if (!['tree', 'rock', 'bush'].includes(kind)) throw new TypeError(`Unknown scenery prop: ${kind}`);
+  if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y)) {
+    throw new TypeError('Scenery prop coordinates must be finite numbers');
+  }
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError('Scenery prop options must be an object');
+  }
+  const { scale = 1, seed = 1 } = options;
+  if (typeof scale !== 'number' || !Number.isFinite(scale) || scale < 0.25 || scale > 3) {
+    throw new RangeError('Scenery prop scale must be a number between 0.25 and 3');
+  }
+  if (typeof seed !== 'number' || !Number.isFinite(seed)) {
+    throw new TypeError('Scenery prop seed must be a finite number');
+  }
+  const rand = mulberry32(seed);
+  const make = kind === 'tree' ? makeTree : kind === 'rock' ? makeRock : makeBush;
+  const prop = make(x, y, rand, seed);
+  prop.cells = scaleCells(prop.cells, scale);
+  prop.footW *= scale;
+  prop.footH *= scale;
+  prop.scale = scale;
+  prop.seed = seed;
+  return prop;
 }
 
 // Scatters props over a chunk on a jittered grid. Forest density comes from

@@ -79,6 +79,26 @@ npm test
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | Mouse wheel / `+` `-` | Zoom |
+| `B` | Enter the Scenery builder, or return to play and close its panel |
+
+## Scenery builder
+
+Press `B` to enter build mode and open the testing panel; press it again to return
+to play. You can also open the panel by clicking its summary, then choose
+**Start building**. Paint grass, dirt, shore, water or stone with terrain brushes,
+or spawn trees, rocks and shrubs. Adjust the brush radius or prop scale in the
+panel; the eraser removes props only. While building, `W A S D` pans the view and
+normal player movement is paused. With the canvas or page body focused, `Enter`
+applies the selected tool at the centre of the view.
+
+Each stroke can be undone with `Ctrl`/`Cmd` + `Z` and redone with
+`Ctrl`/`Cmd` + `Shift` + `Z` or `Ctrl` + `Y`. **Save** and **Load** keep scenery
+locally for the current world seed. JSON export and import let you transfer a
+scene; imports must match the current seed. **Reset scene** restores the
+generated world and can be undone.
+
+Add `?builder` to the URL to open the panel automatically. With `?debug`, the
+current scene is available as `window.game.builder.scene` for inspection.
 
 ## Layout
 
@@ -86,6 +106,7 @@ npm test
 src/
   main.js            game loop and wiring
   core/              input, hashing, noise
+  editor/            scenery builder controls, scene history and persistence
   render/            glyph atlas, WebGL renderer, cell writers
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
