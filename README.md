@@ -19,8 +19,11 @@ For now it is a single warrior exploring procedurally generated terrain.
 - **Infinite seeded world.** Lakes, shoreline, meadows, dirt paths and rocky
   outcrops from layered noise, generated in 64×64 chunks as you walk. Add
   `?seed=42` to the URL for a different world.
-- **Living grass.** Blades lean with rolling gusts, flash lighter where the wind
-  catches them, part around your feet, and hide twinkling dew drops.
+- **Living grass.** Short lawns border paths, two- and three-row blades fill
+  meadows, and taller patches and lakeshore reeds hide the wanderer's legs.
+  Rolling gusts move the tips more than the roots and catch them with a pale
+  sheen. Grass parts around your feet, stays bent briefly, then springs back;
+  shoreline stems sway in their reflections too. Dew twinkles in the undergrowth.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
   the moon) mirrored in every lake.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own

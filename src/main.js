@@ -8,6 +8,7 @@ import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
+import { Grass } from './world/grass.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
@@ -67,10 +68,11 @@ const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
+const grass = new Grass();
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, freeze: false };
+const debug = { player, camera, world, grass, renderer, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -102,6 +104,7 @@ function frame(now) {
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
   if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  grass.update(world, player, time);
   for (const e of player.events) {
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
@@ -126,7 +129,7 @@ function frame(now) {
   camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
-  drawGround(renderer, world, view, time, player);
+  drawGround(renderer, world, view, time, grass);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
@@ -136,15 +139,19 @@ function frame(now) {
     view.y0 + view.rows + 50);
 
   const mirror = reflector(time, view);
-  for (const p of props) drawProp(renderer, view, p, mirror);
   const figure = dressFigure(player);
-  drawFigure(renderer, view, player, figure, mirror);
 
   // Painter's order: whatever stands further down the screen is in front.
-  const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
-  drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player, figure) });
+  const drawables = props.map((p) => ({ y: p.y,
+    draw: () => drawProp(renderer, view, p),
+    reflect: () => drawProp(renderer, view, p, mirror) }));
+  drawables.push({ y: player.y,
+    draw: () => drawFigure(renderer, view, player, figure),
+    reflect: () => drawFigure(renderer, view, player, figure, mirror) });
   drawables.sort((a, b) => a.y - b.y);
-  for (const d of drawables) d.draw();
+  grass.drawReflections(renderer, world, view, time, mirror,
+    drawables.map((d) => ({ y: d.y, draw: d.reflect })));
+  grass.drawLayered(renderer, world, view, time, drawables);
 
   drawTrail(renderer, view, player.trail, player.time);
   drawNameTag(renderer, view, player, figure, name);

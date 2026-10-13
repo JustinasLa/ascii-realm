@@ -40,6 +40,8 @@ export class World {
     const elev = new Float32Array(n);
     const shade = new Float32Array(n);
     const rnd = new Float32Array(n);
+    const grassHeight = new Uint8Array(n);
+    const reeds = new Uint8Array(n);
     const s = this.seed;
 
     for (let ly = 0; ly < CHUNK; ly++) {
@@ -62,9 +64,22 @@ export class World {
         elev[i] = e;
         shade[i] = fbm(nx * 0.05, y * 0.05, s + 31, 3);
         rnd[i] = hash2(x, y, s + 5);
+        if (t === GRASS || t === SHORE) {
+          // Smooth, world-anchored patches keep neighbouring chunks seamless.
+          // Paths have a cropped verge; wetter banks carry taller reed stems.
+          const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
+          if (t === GRASS && path < 0.025) grassHeight[i] = 1;
+          else if (e < 0.445 && meadow > 0.44) {
+            grassHeight[i] = 10 + Math.floor(rnd[i] * 3);
+            reeds[i] = 1;
+          } else if (t === GRASS) {
+            grassHeight[i] = meadow > 0.58 ? 7 + Math.min(2, Math.floor((meadow - 0.58) * 20)) :
+              meadow > 0.43 ? 3 : 2;
+          }
+        }
       }
     }
-    return { cx, cy, type, elev, shade, rnd, props: null };
+    return { cx, cy, type, elev, shade, rnd, grassHeight, reeds, props: null };
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays

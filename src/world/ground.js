@@ -1,6 +1,7 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { glyph } from '../render/glyphs.js';
+import { grassWind } from './grass.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, WATER_LEVEL } from './world.js';
 
 const G = (s) => [...s].map(glyph);
@@ -8,7 +9,6 @@ const G = (s) => [...s].map(glyph);
 // Blades lean with the wind: index 0 leans left, 2 leans right.
 const BLADE = G('\\|/');
 const STUBBLE = G(`',"\``);
-const BEND_R2 = 3.2 * 3.2;
 const DEW = glyph('.');
 const STAR = glyph('*');
 const GREENS = [
@@ -32,7 +32,7 @@ const WAVE_DOT = glyph('·');
 
 // Fills the grid with the terrain under the camera. Writes straight into the
 // renderer's buffers because this runs for every visible cell every frame.
-export function drawGround(r, world, view, t, bend) {
+export function drawGround(r, world, view, t, grass) {
   const { fg, bg, cols } = r;
   let chunk = null;
   let ccx = 0;
@@ -65,20 +65,18 @@ export function drawGround(r, world, view, t, bend) {
       if (type === GRASS) {
         // Slow gusts roll across the field; each blade also flutters on its
         // own phase so neighbours never move in lockstep.
-        const gust = valueNoise(wx * ASPECT * 0.035 - t * 0.55, wy * 0.035 + t * 0.12, world.seed + 900);
-        let lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
-        // Blades near the wanderer's feet are pushed aside.
-        const pdx = (wx + 0.5 - bend.x) * ASPECT;
-        const pdy = wy + 0.5 - bend.y;
-        const pd = pdx * pdx + pdy * pdy;
-        if (pd < BEND_R2) lean += Math.sign(pdx) * (1 - pd / BEND_R2) * 3;
-        if (rnd < 0.12) ch = STUBBLE[Math.floor(rnd * 33) % STUBBLE.length];
+        const tall = chunk.grassHeight[i] > 1;
+        const gust = tall ? 0 : grassWind(wx, wy, t, world.seed, rnd);
+        const lean = gust + (!tall ? grass?.bendAt(wx, wy, t) || 0 : 0) * 3;
+        // Tall blades are drawn later in depth order; subdued undergrowth
+        // leaves their connected stems and bright tips easy to read.
+        if (tall || rnd < 0.12) ch = STUBBLE[Math.floor(rnd * 33) % STUBBLE.length];
         else ch = BLADE[lean < -0.35 ? 0 : lean > 0.35 ? 2 : 1];
         // Pick one of a few greens per blade, darken whole patches with the
         // shade noise and let passing gusts flash the tips lighter.
         const tone = GREENS[Math.floor(rnd * 997) % GREENS.length];
-        const sheen = Math.max(0, gust - 0.55) * 1.6;
-        const l = 0.35 + shade * shade * 1.1 + sheen;
+        const sheen = Math.max(0, gust) * 0.35;
+        const l = (tall ? 0.24 : 0.35) + shade * shade * (tall ? 0.65 : 1.1) + sheen;
         cr = tone[0] * l;
         cg = tone[1] * l;
         cb = tone[2] * l;
