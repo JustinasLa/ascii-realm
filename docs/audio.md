@@ -150,6 +150,11 @@ to trigger a nearby strike and its thunder for testing, even with Clear or
 intensity zero. Manual thunder uses the Weather, Ambience and Master volume
 controls, and pauses with the other effects.
 
+Lightning also ignites open, dry impact cells. These persistent ground fires
+use the existing fire renderer and crackle through Ambience; strikes on water
+keep their splash effects. Repeated strikes near a fire reuse it within the
+shared fire limit.
+
 The separate **Weather** volume slider adjusts this category. Its routing is
 Weather → Ambience → Master, so setting any of those levels to zero silences
 weather. Intensity zero silences the selected preset's beds and event tails.

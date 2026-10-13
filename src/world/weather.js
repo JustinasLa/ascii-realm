@@ -46,13 +46,13 @@ const GRIT = [...".:,'"].map(glyph);
 // Read the existing saved selection, independently of audio unlock and volume.
 // Weather has its own splash budget so a downpour cannot evict footstep rings.
 export class WeatherEffects {
-  constructor({ random = Math.random } = {}) {
+  constructor({ random = Math.random, onImpact } = {}) {
     this.random = random;
     this.preset = 'clear';
     this.intensity = 0;
     this.particles = [];
     this.splashes = new Splashes();
-    this.lightning = new Lightning({ random });
+    this.lightning = new Lightning({ random, onImpact });
     this.wind = 0;
     this.flash = 0;
     this._nextFlash = 0;

@@ -9,6 +9,7 @@ const G = (s) => [...s].map(glyph);
 // Blades lean with the wind: index 0 leans left, 2 leans right.
 const BLADE = G('\\|/');
 const STUBBLE = G(`',"\``);
+const ASH = G(".,:`'");
 const BEND_R2 = 3.2 * 3.2;
 const DEW = glyph('.');
 const STAR = glyph('*');
@@ -95,6 +96,18 @@ export function drawGround(r, world, view, t, bend, wind = 0) {
         br = 4;
         bgG = 10;
         bb = 6;
+        const burnt = (chunk.burnt?.[i] ?? 0) / 255;
+        if (burnt > 0) {
+          const family = burnt > 0.6 ? ASH : STUBBLE;
+          ch = family[Math.floor(rnd * family.length)];
+          const ash = 0.7 + rnd * 0.3;
+          cr += (78 * ash - cr) * burnt;
+          cg += (64 * ash - cg) * burnt;
+          cb += (52 * ash - cb) * burnt;
+          br += (8 - br) * burnt;
+          bgG += (6 - bgG) * burnt;
+          bb += (4 - bb) * burnt;
+        }
       } else if (type === WATER) {
         // Long horizontal streaks that drift slowly, like moonlight broken up
         // by a gentle swell.

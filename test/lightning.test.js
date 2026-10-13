@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AsciiRenderer } from '../src/render/renderer.js';
+import { Fires, MAX_FIRES } from '../src/world/fire.js';
 import { Lightning, lightningPulse, MAX_BOLTS } from '../src/world/lightning.js';
 import { WeatherEffects } from '../src/world/weather.js';
-import { GRASS, WATER } from '../src/world/world.js';
+import { GRASS, WATER, World } from '../src/world/world.js';
 
 const view = { x0: -40, y0: -30, cols: 100, rows: 80 };
 const lake = { typeAt: () => WATER };
@@ -133,4 +134,64 @@ test('repeated summons stay bounded and the double flash and all water effects e
   const paused = lightning.strike(meadow, view);
   for (const dt of [0, -1, NaN, Infinity]) lightning.update(dt);
   assert.equal(paused.age, 0);
+});
+
+test('automatic and summoned ground strikes ignite the hit cell and their fires survive the bolt', () => {
+  const world = new World(1);
+  const fires = new Fires({ windAt: () => 0.3 });
+  const weather = new WeatherEffects({ random: random(),
+    onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
+  const { x, y } = world.spawn;
+  const bolt = weather.strike(world, view, { x, y });
+  assert.equal(fires.list.length, 1);
+  assert.equal(bolt.fire, fires.list[0]);
+  assert.deepEqual([bolt.fire.x, bolt.fire.y], [Math.floor(x) + 0.5, Math.floor(y) + 0.5]);
+  assert.equal(bolt.fire.kind, 'ground');
+  const { c, i } = world.locate(Math.floor(x), Math.floor(y));
+  assert.ok(c.burnt[i] > 0, 'the impact scorches the actual grass cell');
+  weather.update(0.1, 1, world, view, { preset: 'clear', intensity: 0 });
+  assert.equal(weather.lightning.bolts.length, 0);
+  assert.equal(fires.list.length, 1, 'clearing a bolt does not extinguish its fire');
+  const manual = weather.strike(world, view, { x, y, manual: true });
+  assert.equal(manual.fire, bolt.fire, 'a second strike reuses the existing fire');
+  assert.equal(fires.list.length, 1);
+  const start = manual.fire.intensity;
+  fires.update(5, 5, world);
+  weather.lightning.update(3);
+  assert.equal(weather.lightning.bolts.length, 0);
+  assert.ok(fires.list[0].intensity > start, 'the fire continues to grow after the lightning expires');
+});
+
+test('water and distant lightning never ignite, and fire ignition happens only once per dry impact', () => {
+  const calls = [];
+  const lightning = new Lightning({ random: random(), onImpact: (world, bolt) => {
+    calls.push({ world, x: bolt.x, y: bolt.y });
+    return { id: calls.length };
+  } });
+  const dry = lightning.strike(meadow, view, { x: 0.5, y: 0.5 });
+  assert.equal(calls.length, 1);
+  assert.equal(dry.fire.id, 1);
+  assert.equal(calls[0].world, meadow);
+  const wet = lightning.strike(lake, view, { x: 0.5, y: 0.5 });
+  const distant = lightning.strike(meadow, view, { distant: true });
+  assert.equal(wet.fire, null);
+  assert.equal(distant.fire, null);
+  assert.equal(calls.length, 1);
+  for (let i = 0; i < 180; i++) lightning.update(1 / 60);
+  assert.equal(calls.length, 1, 'afterglow and branch animation cannot repeat ignition');
+});
+
+test('repeated lightning respects the fire cap and occupied tiles retain the existing placement rules', () => {
+  const world = { seed: 1, typeAt: () => GRASS, isWalkable: () => true, burnGrass() {} };
+  const fires = new Fires({ windAt: () => 0.3 });
+  const lightning = new Lightning({ random: random(),
+    onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
+  for (let i = 0; i < 100; i++) lightning.strike(world, view, { x: i * 100 + 0.5, y: 0.5 });
+  assert.equal(fires.list.length, MAX_FIRES);
+  assert.equal(lightning.bolts.at(-1).fire, null, 'a full fire budget does not allocate more flames');
+  const blockedFires = new Fires();
+  const blocked = new Lightning({ random: random(),
+    onImpact: (world, bolt) => blockedFires.ignite(world, bolt.x, bolt.y) });
+  assert.equal(blocked.strike({ ...world, isWalkable: () => false }, view).fire, null);
+  assert.equal(blockedFires.list.length, 0);
 });

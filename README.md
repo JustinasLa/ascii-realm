@@ -73,6 +73,8 @@ For now it is a single outlaw exploring procedurally generated terrain.
   light the ground, reflect in lakes and throw up spray on water. Thunder
   follows the same strike when sound is enabled. Press `L`, or use the Audio
   panel's Summon lightning button, to strike beside the player in any weather.
+  Ground strikes ignite a fire on open, dry terrain. The flames grow after the
+  bolt fades and leave a scorched patch; lake strikes make spray instead.
   Intensity controls particle density, wind, haze and water impacts. Rain and
   ice throw up lake spray and spreading rings; snow leaves small melt ripples.
   Gusts bend grass and roughen the water. Clear is the default; selection and

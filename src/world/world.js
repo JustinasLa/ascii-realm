@@ -83,6 +83,26 @@ export class World {
     return c.type[i];
   }
 
+  // Scorched grass belongs to the terrain, so it survives leaving the view.
+  burnGrass(x, y) {
+    const bx = Math.floor(x);
+    const by = Math.floor(y);
+    for (let dy = -5; dy <= 5; dy++) {
+      for (let dx = -11; dx <= 11; dx++) {
+        const wx = bx + dx;
+        const wy = by + dy;
+        const distance = Math.hypot(dx / 11, dy / 4.8);
+        const edge = 0.88 + hash2(wx, wy, this.seed + 919) * 0.18;
+        if (distance >= edge) continue;
+        const { c, i } = this.locate(wx, wy);
+        if (c.type[i] !== GRASS) continue;
+        if (!c.burnt) c.burnt = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
+        const strength = Math.round(Math.min(1, (edge - distance) * 2.3) * 255);
+        c.burnt[i] = Math.max(c.burnt[i], strength);
+      }
+    }
+  }
+
   // Metres below the surface, rising gently from the bank and capped at
   // the knee regardless of how low the terrain noise goes.
   waterDepthAt(x, y) {

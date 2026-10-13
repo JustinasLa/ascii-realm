@@ -34,8 +34,9 @@ function trace(path, branch, cells) {
 }
 
 export class Lightning {
-  constructor({ random = Math.random } = {}) {
+  constructor({ random = Math.random, onImpact } = {}) {
     this.random = random;
+    this.onImpact = onImpact;
     this.bolts = [];
   }
 
@@ -81,10 +82,14 @@ export class Lightning {
     }
     trace(path, false, cells);
     const bolt = { x, y, height, strength: Math.min(1, strength), distant, manual, age: 0,
-      cells: [...cells.values()], splashes: new Splashes() };
+      cells: [...cells.values()], splashes: new Splashes(), fire: null };
     // Distant flashes stay in the sky. Nearby lake strikes throw up a plume.
-    if (!distant && world.typeAt(x, y) === WATER) {
-      bolt.splashes.react(world, { type: 'slam', x, y, strength: bolt.strength });
+    if (!distant) {
+      if (world.typeAt(x, y) === WATER) {
+        bolt.splashes.react(world, { type: 'slam', x, y, strength: bolt.strength });
+      } else {
+        bolt.fire = this.onImpact?.(world, bolt) ?? null;
+      }
     }
     this.bolts.push(bolt);
     if (this.bolts.length > MAX_BOLTS) this.bolts.shift();

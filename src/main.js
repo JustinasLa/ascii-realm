@@ -9,6 +9,7 @@ import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
+import { Fires } from './world/fire.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
@@ -76,7 +77,8 @@ const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
 const splashes = new Splashes();
-const weather = new WeatherEffects();
+const fires = new Fires();
+const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
 const sound = new GameAudio(world);
 sound.weather.onLightning = event => weather.strike(world, camera.view(renderer), event);
 let summonLightning = false;
@@ -102,7 +104,7 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, splashes, weather, renderer, audio: sound.engine, sound, freeze: false };
+const debug = { player, camera, world, splashes, weather, fires, renderer, audio: sound.engine, sound, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -220,6 +222,7 @@ function frame(now) {
     if (bolt) sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
     summonLightning = false;
   }
+  if (!debug.freeze) fires.update(dt, time, world, weather.wind);
   drawGround(renderer, world, view, time, player, weather.wind);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
@@ -231,6 +234,8 @@ function frame(now) {
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
+  const visibleFires = fires.prepare(view, time);
+  for (const fire of visibleFires) fires.draw(renderer, view, fire, time, mirror);
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
   if (model) {
@@ -247,6 +252,9 @@ function frame(now) {
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
+  for (const fire of visibleFires) {
+    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
+  }
   drawables.push({
     y: player.y,
     draw: () => (model ? model.draw(renderer, putCell) : drawFigure(renderer, view, player, figure)),
@@ -254,6 +262,7 @@ function frame(now) {
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
   splashes.drawContacts(renderer, view, time, contacts);
+  fires.light(renderer, view, time, visibleFires);
   weather.drawAtmosphere(renderer, view, time);
 
   drawTrail(renderer, view, player.trail, player.time);
@@ -265,7 +274,7 @@ function frame(now) {
   fireflies.draw(renderer, view, time);
   weather.draw(renderer, view);
   if (debug.freeze) sound.pause();
-  else sound.update(dt, time, player, camera, fireflies.list);
+  else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
