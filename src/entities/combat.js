@@ -90,9 +90,14 @@ export class Combat {
     return this.move !== null;
   }
 
+  get canAcceptAttack() {
+    return !this.move || (!this.queued && (this.move === 'draw' || 'abc'.includes(this.move)));
+  }
+
   // Swing (drawing the sword first if needed), or queue the next swing of
   // the combo if one is already under way.
   attack() {
+    if (!this.canAcceptAttack) return false;
     if (!this.move) {
       if (!this.inHand) {
         this.start('draw');
@@ -100,15 +105,30 @@ export class Combat {
       } else {
         this.start(this.calm < 0.6 && this.lastSwing ? NEXT[this.lastSwing] : 'a');
       }
-      return;
+      return true;
     }
     if (MOVES[this.move] && 'abc'.includes(this.move)) this.queued = NEXT[this.move];
     else if (this.move === 'draw') this.queued = 'a';
+    return true;
   }
 
   toggle() {
     if (this.move) return;
     this.start(this.inHand ? 'sheathe' : 'draw');
+  }
+
+  // Removing the weapon also cancels any accepted follow-up or impact.
+  cancel() {
+    this.move = null;
+    this.step = 0;
+    this.t = 0;
+    this.queued = null;
+    this.lastSwing = '';
+    this.calm = 0;
+    this.trailing = false;
+    this.inHand = false;
+    this.active = 0;
+    this.events.length = 0;
   }
 
   start(move) {

@@ -1,8 +1,12 @@
-import { isDown, moveAxis, wasTapped } from './core/input.js';
+import { clearInput, isDown, isGameplayBlocked, moveAxis, setGameplayBlocked, wasTapped } from './core/input.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { Player } from './entities/player.js';
+import { Inventory } from './inventory/inventory.js';
+import { ITEMS } from './inventory/items.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { Hud } from './ui/hud.js';
+import { InventoryScreen } from './ui/inventory.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
@@ -22,6 +26,8 @@ const MIN_CELL = 6;
 const MAX_CELL = 24;
 
 const canvas = document.getElementById('screen');
+canvas.tabIndex = 0;
+canvas.setAttribute('aria-label', 'ASCII world. Press I or Tab to open your inventory.');
 const renderer = new AsciiRenderer(canvas, buildAtlas(FONT));
 
 function resize() {
@@ -44,18 +50,6 @@ function updateZoom(dt) {
   resize();
 }
 
-// Mouse wheel or +/- to zoom in and out. Trackpads send many tiny deltas and
-// mice a few large ones, so scale by the distance scrolled.
-window.addEventListener('wheel', (e) => {
-  e.preventDefault();
-  const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-  zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
-}, { passive: false });
-window.addEventListener('keydown', (e) => {
-  if (e.key === '+' || e.key === '=') zoomBy(1.15);
-  if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
-});
-
 const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed')) || 1;
 // Shown above the warrior's head; ?name=... picks another.
@@ -63,14 +57,91 @@ const name = (params.get('name') || 'Kael').slice(0, 24);
 const world = new World(seed);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
+const inventory = new Inventory();
+player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
 
+let clicked = false;
+let wheelAt = -Infinity;
+let swordEquipped = inventory.equipment.mainHand?.id === 'greatsword';
+const hud = new Hud({
+  player, inventory, name, debug: params.has('debug'),
+  onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
+  onInventory: () => inventoryScreen.toggle(),
+});
+const inventoryScreen = new InventoryScreen({
+  inventory, player, name,
+  onToggle: (open) => {
+    setGameplayBlocked(open);
+    clearInput();
+    clicked = false;
+    wheelAt = -Infinity;
+    if (!open) canvas.focus({ preventScroll: true });
+  },
+  onNotify: (message, kind = 'info') => hud.notify(message, kind),
+});
+
+function selectHotbar(index) {
+  if (!inventory.selectHotbar(index)) return;
+  const selected = inventory.getHotbar();
+  if (selected?.item.equipmentSlot && selected.source === 'inventory') {
+    if (inventory.equip(selected.index)) hud.notify(`Equipped ${selected.item.name}`, 'equipment');
+    else hud.notify('Make room in your bag to equip this item.', 'info');
+  }
+}
+
+function useHotbar() {
+  const selected = inventory.getHotbar();
+  if (!selected) return;
+  if (selected.item.use) {
+    if (inventory.useSelected(player.vitals)) hud.notify(`Used ${selected.item.name}`, 'use');
+    else hud.notify('That item is not needed yet.', 'info');
+  } else if (selected.item.equipmentSlot) {
+    selectHotbar(inventory.selectedHotbar);
+  }
+}
+
+function hasSelectedSword() {
+  return inventory.equipment.mainHand?.id === 'greatsword'
+    && inventory.getHotbar()?.item.id === 'greatsword';
+}
+
+function isGameEvent(event) {
+  const target = event.target;
+  return !event.defaultPrevented && !isGameplayBlocked()
+    && !target?.isContentEditable
+    && !target?.closest?.('input, textarea, select, button, a[href], [contenteditable="true"], [role="button"]');
+}
+
+// Scroll selects a quick slot; Ctrl-scroll keeps the world's smooth zoom.
+// A short debounce turns a trackpad gesture into deliberate slot changes.
+window.addEventListener('wheel', (e) => {
+  if (!isGameEvent(e) || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+  if (e.ctrlKey) {
+    zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
+  } else if (performance.now() - wheelAt >= 100) {
+    wheelAt = performance.now();
+    inventory.cycleHotbar(Math.sign(px));
+    selectHotbar(inventory.selectedHotbar);
+  }
+}, { passive: false });
+window.addEventListener('keydown', (e) => {
+  if (!isGameEvent(e)) return;
+  if (e.key === '+' || e.key === '=') zoomBy(1.15);
+  if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
+});
+
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, freeze: false };
+const debug = {
+  player, camera, world, inventory, hud, inventoryScreen, freeze: false,
+  pickup: (id, count = 1) => inventory.add(id, count),
+};
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -78,10 +149,13 @@ const hint = document.getElementById('hint');
 let walked = 0;
 
 // A click on the scene swings the sword.
-let clicked = false;
 canvas.addEventListener('mousedown', (e) => {
-  if (e.button === 0) clicked = true;
+  if (e.button !== 0 || isGameplayBlocked()) return;
+  canvas.focus({ preventScroll: true });
+  clicked = true;
 });
+window.addEventListener('blur', () => { clicked = false; });
+document.addEventListener('visibilitychange', () => { if (document.hidden) clicked = false; });
 
 let hitStop = 0;
 let last = performance.now();
@@ -94,14 +168,23 @@ function frame(now) {
   time += dt;
   updateZoom(dt);
 
+  for (let index = 0; index < 9; index++) {
+    if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`)) selectHotbar(index);
+  }
+  if (wasTapped('KeyQ', 'Enter', 'NumpadEnter')) useHotbar();
+  // Hotbar selection can replace equipment. Cancel the previous weapon
+  // before its queued swing updates, while the world keeps running.
+  const equipped = inventory.equipment.mainHand?.id === 'greatsword';
+  if (swordEquipped && !equipped) player.cancelWeapon();
+  swordEquipped = equipped;
   const move = moveAxis();
   if (wasTapped('Space')) player.jump();
-  if (wasTapped('KeyJ') || clicked) player.attack();
-  if (wasTapped('KeyF')) player.toggleSword();
+  if ((wasTapped('KeyJ') || clicked) && hasSelectedSword() && !isGameplayBlocked()) player.attack();
+  if (wasTapped('KeyF') && hasSelectedSword()) player.toggleSword();
   clicked = false;
   hitStop = Math.max(0, hitStop - dt);
   const playerDt = hitStop > 0 ? dt * 0.05 : dt;
-  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'));
+  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), dt);
   for (const e of player.events) {
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
@@ -109,6 +192,7 @@ function frame(now) {
     }
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
     if (e.type === 'breath') dust.breath(e.x, e.y, e.h, e.dx, e.dy);
+    if (e.type === 'damage') hud.damage(e.amount, e.x, e.y);
     if (e.type === 'slam') {
       dust.burst(world, e.x, e.y, 22, 12);
       if (world.typeAt(e.x, e.y) !== GRASS) dust.sparks(e.x, e.y, 14);
@@ -119,6 +203,10 @@ function frame(now) {
     }
   }
   player.events.length = 0;
+  for (const event of inventory.events) {
+    if (event.type === 'pickup') hud.notify(`+${event.count} ${ITEMS[event.id].name}`, 'pickup');
+  }
+  inventory.events.length = 0;
   dust.update(dt);
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
@@ -152,6 +240,8 @@ function frame(now) {
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   renderer.draw(view.offX, view.offY);
+  hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
+  inventoryScreen.update();
   requestAnimationFrame(frame);
 }
 

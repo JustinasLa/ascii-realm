@@ -43,6 +43,15 @@ For now it is a single warrior exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
+- **ASCII HUD.** Health and stamina bars, a compass and a nine-slot hotbar match
+  the world's ASCII style. Running and sword strikes spend stamina;
+  it recovers after a short delay. Hunger, thirst and temperature are planned
+  for later.
+- **Inventory and equipment.** A keyboard-controlled bag, seven-slot paper
+  doll, item tooltips and a 40-unit carrying limit. Assign items to the hotbar,
+  equip the greatsword, and use starter consumables to restore health or stamina.
+  Opening the inventory blocks movement, jumping and attacks while the world
+  keeps running.
 
 ## Running
 
@@ -55,7 +64,7 @@ python -m http.server 8000
 
 A browser with WebGL2 is required.
 
-The rig and gait have unit tests (Node 18+, no dependencies):
+The rig, gait, inventory and HUD have unit tests (Node 18+, no dependencies):
 
 ```sh
 npm test
@@ -68,9 +77,25 @@ npm test
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
 | `Space` | Jump |
-| `J` / left click | Strike (repeat for a combo) |
+| `J` / left click | Strike with the selected, equipped greatsword (repeat for a combo) |
 | `F` | Draw or sheathe the sword |
-| Mouse wheel / `+` `-` | Zoom |
+| `1`–`9` | Select a hotbar slot |
+| `Q` / `Enter` | Use the selected hotbar item |
+| Mouse wheel | Cycle hotbar slots |
+| `Ctrl` + mouse wheel / `+` `-` | Zoom |
+| `I` / `Tab` | Open or close the inventory |
+| `Escape` | Close the inventory |
+| `G`, with inventory open | Switch between bag and equipment |
+| Arrow keys, with inventory open | Move through items in the selected pane |
+| `Enter`, with inventory open | Use or equip a bag item, or unequip selected gear |
+| `E`, with inventory open | Equip the selected bag item |
+| `U`, with inventory open | Unequip the selected gear |
+| `1`–`9`, with inventory open | Assign the selected bag item to a hotbar slot |
+
+Select a consumable in the hotbar, then press `Q` or `Enter` to use it. Selecting
+carried equipment in the hotbar equips it. The current items are a starter kit;
+injury and pickup feedback is supported, while world enemies and item pickups
+are planned for later.
 
 ## Layout
 
@@ -81,4 +106,6 @@ src/
   render/            glyph atlas, WebGL renderer, cell writers
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
   entities/          the warrior: skeleton, armour, materials, cape, combat, movement
+  inventory/         items, bag, equipment, hotbar and carry weight
+  ui/                ASCII HUD, inventory panel, tooltips and notifications
 ```

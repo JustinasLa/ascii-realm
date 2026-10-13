@@ -1,6 +1,7 @@
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
+import { SWORD_SIDE } from './combat.js';
 import { MATERIALS } from './materials.js';
 import { add, buildRig, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
@@ -81,33 +82,47 @@ class Dresser {
 const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 
 // Dresses the posed skeleton, back to front.
-function dress(rig, capeSim) {
+function dress(rig, capeSim, equipment) {
   const d = new Dresser();
-  if (capeSim?.pts) cape(d, rig, capeSim.pts);
+  // Legacy callers dress the complete warrior; an inventory supplies each slot.
+  const wearing = (slot) => equipment === undefined || Boolean(equipment?.[slot]);
+  if (wearing('cape') && capeSim?.pts) cape(d, rig, capeSim.pts);
 
   for (const l of rig.legs) {
     // Mail thighs, a plate knee cop, a greave down the shin and a sabaton.
-    d.limb(l.hip, l.knee, 0.09, 0.072, 'mail');
-    d.limb(l.knee, l.ankle, 0.075, 0.06, 'plate');
-    d.limb(l.ankle, l.toe, 0.068, 0.055, 'darkPlate', 0.01);
-    d.blob(lerp3(l.knee, l.ankle, 0.04), 0.07, 0.065, 'darkPlate', 0.02);
-    d.limb(lerp3(l.knee, l.ankle, 0.8), lerp3(l.knee, l.ankle, 0.86), 0.072, 0.07, 'trim', 0.015);
+    d.limb(l.hip, l.knee, 0.09, 0.072, wearing('legs') ? 'mail' : 'cloth');
+    d.limb(l.knee, l.ankle, 0.075, 0.06, wearing('legs') ? 'plate' : 'cloth');
+    d.limb(l.ankle, l.toe, 0.068, 0.055, wearing('legs') ? 'darkPlate' : 'leather', 0.01);
+    if (wearing('legs')) {
+      d.blob(lerp3(l.knee, l.ankle, 0.04), 0.07, 0.065, 'darkPlate', 0.02);
+      d.limb(lerp3(l.knee, l.ankle, 0.8), lerp3(l.knee, l.ankle, 0.86), 0.072, 0.07, 'trim', 0.015);
+    }
   }
 
-  cuirass(d, rig);
-  greatsword(d, rig);
+  if (wearing('chest')) cuirass(d, rig);
+  else {
+    d.limb(rig.pelvis, rig.chest, across(rig, 0.16, 0.12), across(rig, 0.17, 0.12), 'cloth');
+    d.limb(rig.chest, rig.neck, across(rig, 0.17, 0.12), 0.075, 'cloth');
+  }
+  if (equipment === undefined || equipment?.mainHand?.id === 'greatsword') greatsword(d, rig);
 
   for (const a of rig.arms) {
     // Mail sleeve, an elbow cop, a flared vambrace and a plated gauntlet.
-    d.limb(a.shoulder, a.elbow, 0.074, 0.064, 'mail');
-    d.limb(a.elbow, a.wrist, 0.058, 0.07, 'plate');
-    d.blob(a.elbow, 0.062, 0.06, 'darkPlate', 0.01);
-    d.limb(lerp3(a.elbow, a.wrist, 0.9), a.wrist, 0.074, 0.074, 'trim', 0.012);
-    d.limb(a.wrist, a.hand, 0.06, 0.055, 'darkPlate', 0.015);
-    pauldron(d, rig, a);
+    d.limb(a.shoulder, a.elbow, 0.074, 0.064, wearing('chest') ? 'mail' : 'cloth');
+    d.limb(a.elbow, a.wrist, 0.058, 0.07, wearing('hands') ? 'plate' : 'cloth');
+    if (wearing('hands')) {
+      d.blob(a.elbow, 0.062, 0.06, 'darkPlate', 0.01);
+      d.limb(lerp3(a.elbow, a.wrist, 0.9), a.wrist, 0.074, 0.074, 'trim', 0.012);
+    }
+    d.limb(a.wrist, a.hand, 0.06, 0.055, wearing('hands') ? 'darkPlate' : 'skin', 0.015);
+    if (wearing('chest')) pauldron(d, rig, a);
+  }
+  if (equipment?.offHand?.id === 'ironShield' && equipment?.mainHand?.id !== 'greatsword') {
+    buckler(d, rig);
   }
 
-  helm(d, rig);
+  if (wearing('helm')) helm(d, rig);
+  else bareHead(d, rig);
 
   return d.sorted();
 }
@@ -198,6 +213,15 @@ function greatsword(d, rig) {
   d.blob(sw.pommel, 0.036, 0.036, 'trim', 0.021);
 }
 
+// A small iron buckler rides on the forearm opposite the sword hand.
+function buckler(d, rig) {
+  const arm = rig.arms.find((a) => a.s !== SWORD_SIDE);
+  const center = add(lerp3(arm.elbow, arm.wrist, 0.75), rotY([0, 0, 0.08], rig.heading));
+  d.blob(center, across(rig, 0.16, 0.045), 0.17, 'trim', 0.025);
+  d.blob(center, across(rig, 0.145, 0.035), 0.155, 'darkPlate', 0.026);
+  d.blob(center, across(rig, 0.055, 0.025), 0.06, 'plate', 0.027);
+}
+
 // Layered shoulder plates edged in brass, with a short spike on top. They
 // ride on the torso, so they shrug with the breath but ignore the arm swing.
 function pauldron(d, rig, a) {
@@ -246,6 +270,20 @@ function helm(d, rig) {
     for (const s of [-1, 1]) {
       const eye = h([s * 0.048, -0.015, 0.118]);
       d.blob(eye, 0.026, 0.013 * rig.eyes, 'eye', front(eye) * 1.2);
+    }
+  }
+}
+
+// Removing the helm reveals a head rather than removing it from the figure.
+function bareHead(d, rig) {
+  const h = rig.headAt;
+  const z = project(rig.head)[2];
+  d.limb(rig.neck, rig.head, 0.06, 0.075, 'skin');
+  d.blob(rig.head, 0.13, 0.155, 'skin');
+  if (rig.eyes > 0.05) {
+    for (const s of [-1, 1]) {
+      const eye = h([s * 0.048, -0.015, 0.118]);
+      d.blob(eye, 0.018, 0.011 * rig.eyes, 'eye', project(eye)[2] > z ? 0.36 : -0.36);
     }
   }
 }
@@ -322,7 +360,7 @@ export function drawShadow(r, view, x, y, air = 0) {
 // Poses and dresses the figure: the list of shapes to draw, back to front.
 // Built once a frame and shared by the figure and its reflection.
 export function dressFigure(state) {
-  return dress(buildRig(state), state.cape);
+  return dress(buildRig(state), state.cape, state.equipment);
 }
 
 // Rasterises the dressed figure with its feet at world position

@@ -2,6 +2,7 @@ import { ASPECT } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
+import { ATTACK_STAMINA_COST, SPRINT_RECOVERY_STAMINA, Vitals } from './vitals.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
 // SCALE row units, but a metre up or down the screen is foreshortened by
@@ -33,6 +34,8 @@ export class Player {
     this.time = 0;
     this.cape = new Cape();
     this.combat = new Combat();
+    this.vitals = new Vitals();
+    this.sprintExhausted = false;
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
     // Height above the ground in metres, rising speed, and the crouch used
@@ -64,11 +67,31 @@ export class Player {
   }
 
   attack() {
-    this.combat.attack();
+    if (!this.combat.canAcceptAttack || !this.vitals.spendStamina(ATTACK_STAMINA_COST)) return false;
+    return this.combat.attack();
+  }
+
+  takeDamage(amount) {
+    const applied = this.vitals.takeDamage(amount);
+    if (applied > 0) this.events.push({ type: 'damage', amount: applied, x: this.x, y: this.y });
+    return applied;
+  }
+
+  heal(amount) {
+    return this.vitals.heal(amount);
+  }
+
+  restoreStamina(amount) {
+    return this.vitals.restoreStamina(amount);
   }
 
   toggleSword() {
     this.combat.toggle();
+  }
+
+  cancelWeapon() {
+    this.combat.cancel();
+    this.trail.length = 0;
   }
 
   // Starts a jump if standing on the ground.
@@ -105,17 +128,25 @@ export class Player {
     this.reach += (reachTo - this.reach) * (1 - Math.exp(-18 * dt));
   }
 
-  update(dt, world, move, running) {
+  update(dt, world, move, running, resourceDt = dt) {
+    if (!Number.isFinite(dt) || dt <= 0) return;
     this.time += dt;
     const fromX = this.x;
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
+    // Wait for a useful reserve after exhaustion rather than alternating
+    // between a frame of sprinting and a frame of recovery.
+    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
+    else if (this.vitals.stamina >= Math.min(SPRINT_RECOVERY_STAMINA, this.vitals.maxStamina)) {
+      this.sprintExhausted = false;
+    }
+    const sprinting = moving && running && !this.sprintExhausted && this.vitals.stamina > 0;
 
     if (moving) {
       // Speed up into a run gradually rather than in one jump.
-      const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
+      const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * (sprinting ? this.run : 0);
       this.tryMove(world, (move.x / len) * speed * toCols * dt, 0);
       this.tryMove(world, 0, (move.y / len) * speed * toRows * dt);
 
@@ -132,6 +163,8 @@ export class Player {
     // always matches the speed and stops when the way is blocked.
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
     const going = moving && metres > 0.15 * dt;
+    this.vitals.update(resourceDt, sprinting && metres > 0);
+    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
 
     // Pitch forward when setting off or speeding up, and rock back on the
     // heels when pulling up, then settle.
@@ -153,7 +186,7 @@ export class Player {
 
     // Ease the stride in and out so starting and stopping is not abrupt.
     this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
-    this.run += ((moving && running ? 1 : 0) - this.run) * ease(5);
+    this.run += ((going && sprinting ? 1 : 0) - this.run) * ease(5);
     // Settle into a neutral stance once stopped.
     if (!moving && this.walk < 0.02) this.phase = 0;
 
