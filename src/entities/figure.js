@@ -1,11 +1,12 @@
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
+import { SWORD_SIDE } from './combat.js';
 import { MATERIALS } from './materials.js';
 import { add, buildRig, cross, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
 
-// The warrior is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
+// The outlaw is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
 // every frame, dressed in simple shapes (capsules, ellipses, cloth panels)
 // that are projected onto the screen, sorted back to front and rasterised
 // into character cells with supersampling. That way every movement can be
@@ -80,178 +81,197 @@ class Dresser {
 // far it has turned towards the camera.
 const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 
-// Dresses the posed skeleton, back to front.
+// Dresses the posed skeleton, back to front: a lean, hooded outlaw in
+// forest green and worn leather, a longbow and quiver on the back and a
+// short sword at the hip.
 function dress(rig, capeSim) {
   const d = new Dresser();
-  if (capeSim?.pts) cape(d, rig, capeSim.pts);
+  if (capeSim?.pts) cloak(d, rig, capeSim.pts);
 
   for (const l of rig.legs) {
-    // Mail thighs, a plate knee cop, a greave down the shin and a sabaton.
-    d.limb(l.hip, l.knee, 0.09, 0.072, 'mail');
-    d.limb(l.knee, l.ankle, 0.075, 0.06, 'plate');
-    d.limb(l.ankle, l.toe, 0.068, 0.055, 'darkPlate', 0.01);
-    d.blob(lerp3(l.knee, l.ankle, 0.04), 0.07, 0.065, 'darkPlate', 0.02);
-    d.limb(lerp3(l.knee, l.ankle, 0.8), lerp3(l.knee, l.ankle, 0.86), 0.072, 0.07, 'trim', 0.015);
+    // Hose, then tall soft boots turned down in a cuff below the knee.
+    d.limb(l.hip, l.knee, 0.074, 0.058, 'hose');
+    d.limb(l.knee, l.ankle, 0.056, 0.048, 'hose');
+    const top = lerp3(l.knee, l.ankle, 0.3);
+    d.limb(top, l.ankle, 0.062, 0.054, 'boot', 0.005);
+    d.limb(top, lerp3(l.knee, l.ankle, 0.42), 0.07, 0.066, 'leather', 0.01);
+    d.limb(l.ankle, l.toe, 0.056, 0.042, 'boot', 0.01);
   }
 
-  cuirass(d, rig);
-  greatsword(d, rig);
+  quiverAndBow(d, rig);
+  tunic(d, rig);
+  sword(d, rig);
 
   for (const a of rig.arms) {
-    // Mail sleeve, an elbow cop, a flared vambrace and a plated gauntlet.
-    d.limb(a.shoulder, a.elbow, 0.074, 0.064, 'mail');
-    d.limb(a.elbow, a.wrist, 0.058, 0.07, 'plate');
-    d.blob(a.elbow, 0.062, 0.06, 'darkPlate', 0.01);
-    d.limb(lerp3(a.elbow, a.wrist, 0.9), a.wrist, 0.074, 0.074, 'trim', 0.012);
-    d.limb(a.wrist, a.hand, 0.06, 0.055, 'darkPlate', 0.015);
-    pauldron(d, rig, a);
+    // Loose sleeves, a leather bracer on each forearm and gloved hands.
+    d.limb(a.shoulder, a.elbow, 0.062, 0.054, 'tunic');
+    d.limb(a.elbow, a.wrist, 0.05, 0.046, 'tunic');
+    d.limb(lerp3(a.elbow, a.wrist, 0.3), a.wrist, 0.054, 0.05, 'bracer', 0.01);
+    d.limb(a.wrist, a.hand, 0.046, 0.042, 'leather', 0.015);
   }
 
-  helm(d, rig);
+  hood(d, rig);
 
   return d.sorted();
 }
 
-// Mail over the belly, a breastplate and gorget above it, a belt with a
-// brass buckle, plate tassets over the hips and a crimson tabard hanging
-// front and back that the knees push aside as they swing.
-function cuirass(d, rig) {
+// A green tunic belted at the waist under a laced leather jerkin, its skirt
+// hanging to mid-thigh front and back where the knees push it aside, and a
+// pouch on the belt.
+function tunic(d, rig) {
   const at = rig.at;
   const w = (a, b) => across(rig, a, b);
-  // Bits on the front vanish when the warrior turns away, and vice versa.
+  // Bits on the front vanish when the outlaw turns away, and vice versa.
   const front = (p) => (project(p)[2] > project(rig.waist)[2] ? 0.15 : -0.15);
 
-  d.limb(rig.pelvis, rig.chest, w(0.16, 0.12), w(0.17, 0.12), 'mail');
-  d.limb(at([0, 0.26, 0.02]), at([0, 0.42, 0.01]), w(0.18, 0.13), w(0.2, 0.135), 'breastplate', 0.02);
-  d.limb(rig.neck, at([0, 0.47, 0]), 0.075, w(0.1, 0.09), 'darkPlate', 0.03);
-  d.limb(at([0, 0.01, 0]), at([0, 0.06, 0]), w(0.175, 0.13), w(0.17, 0.13), 'leather', 0.025);
-  const buckle = at([0, 0.035, 0.15]);
-  d.blob(buckle, 0.035, 0.03, 'trim', front(buckle));
-
-  for (const s of [-1, 1]) {
-    d.limb(at([s * 0.14, -0.01, 0.02]), at([s * 0.19, -0.2, 0.05]), 0.065, 0.075, 'darkPlate', 0.03);
-  }
+  d.limb(rig.pelvis, rig.chest, w(0.14, 0.11), w(0.15, 0.105), 'tunic');
+  d.limb(at([0, 0.12, 0.01]), at([0, 0.4, 0.01]), w(0.15, 0.115), w(0.165, 0.115), 'jerkin', 0.02);
+  d.limb(at([0, 0.01, 0]), at([0, 0.05, 0]), w(0.15, 0.115), w(0.15, 0.115), 'leather', 0.025);
+  const buckle = at([0, 0.03, 0.13]);
+  d.blob(buckle, 0.026, 0.024, 'iron', front(buckle));
+  const pouch = at([0.12, -0.04, 0.09]);
+  d.blob(pouch, 0.05, 0.055, 'leather', front(pouch) * 0.2);
 
   for (const side of [1, -1]) {
-    const z = side * 0.14;
+    const z = side * 0.12;
     const push = side > 0 ? rig.kneeFwd : -rig.kneeBack;
-    d.panel(at([-0.1, 0.0, z]), at([0.1, 0.0, z]), at([0.12, -0.46, z + push * 0.8]),
-      at([-0.12, -0.46, z + push * 0.8]), 'tabard', side * 0.04);
+    d.panel(at([-0.11, 0.0, z]), at([0.11, 0.0, z]), at([0.13, -0.3, z + push * 0.55]),
+      at([-0.13, -0.3, z + push * 0.55]), 'tunic', side * 0.03);
   }
 }
 
-// The crimson cape: one cloth panel per link of the simulated chain,
+// The hood: drawn up over the head, its face opening dark but for the jaw
+// and a glint of eyes, a long pointed tail falling down the back, and a
+// short shoulder cape with a dagged hem.
+function hood(d, rig) {
+  const h = rig.headAt;
+  const at = rig.at;
+  const head = h([0, 0, 0]);
+  const z = project(head)[2];
+  // Anything on the face is hidden once the head turns away.
+  const front = (p) => (project(p)[2] > z ? 0.3 : -0.3);
+  const w = (a, b) => across(rig, a, b);
+
+  // The shoulder cape sits over the upper arms, dagged into points.
+  const chest = project(rig.chest)[2];
+  const arms = Math.max(...rig.arms.map((a) => project(a.shoulder)[2])) + 0.04;
+  const over = arms - chest;
+  d.limb(at([0, 0.38, 0]), at([0, 0.5, 0]), w(0.25, 0.15), w(0.17, 0.12), 'hood', over);
+  for (let k = -2; k <= 2; k++) {
+    const x = k * 0.09;
+    for (const zz of [0.08, -0.08]) {
+      const tip = at([x * 1.05, 0.28, zz * 1.2]);
+      d.limb(at([x, 0.36, zz]), tip, 0.04, 0.006, 'hood', over + (zz > 0 ? 0.01 : -0.2));
+    }
+  }
+
+  // The liripipe: the hood's tail, hanging down between the shoulders.
+  d.limb(h([0, 0.04, -0.12]), at([0.02, 0.32, -0.2]), 0.05, 0.012, 'hood', -0.05);
+
+  d.blob(head, 0.15, 0.17, 'hood');
+  // A peak at the crown, pulled forward over the brow.
+  d.limb(h([0, 0.12, -0.04]), h([0, 0.17, 0.06]), 0.06, 0.02, 'hood', 0.01);
+  const face = h([0, -0.025, 0.12]);
+  d.blob(face, 0.085, 0.105, 'void', front(face));
+  // Only the jaw catches the light under the shadow of the hood.
+  const jaw = h([0, -0.095, 0.125]);
+  d.blob(jaw, 0.055, 0.032, 'skin', front(jaw) * 1.05);
+
+  if (rig.eyes > 0.05) {
+    for (const s of [-1, 1]) {
+      const eye = h([s * 0.038, -0.02, 0.13]);
+      d.blob(eye, 0.018, 0.01 * rig.eyes, 'glint', front(eye) * 1.2);
+    }
+  }
+}
+
+// A quiver of arrows slung across the back, fletching showing over the
+// shoulder, and an unstrung longbow crossed behind it.
+function quiverAndBow(d, rig) {
+  const at = rig.at;
+  // The bow runs from above one shoulder to behind the opposite knee,
+  // bowed gently outward from the back.
+  const top = at([0.2, 0.82, -0.17]);
+  const mid = at([0.0, 0.2, -0.24]);
+  const bottom = at([-0.2, -0.5, -0.19]);
+  d.limb(top, mid, 0.016, 0.026, 'wood', -0.03);
+  d.limb(mid, bottom, 0.026, 0.016, 'wood', -0.03);
+  d.limb(lerp3(mid, top, 0.05), lerp3(mid, bottom, 0.12), 0.032, 0.032, 'leather', -0.029);
+
+  const qTop = at([-0.12, 0.55, -0.16]);
+  const qBottom = at([0.1, -0.05, -0.15]);
+  d.limb(qBottom, qTop, 0.05, 0.062, 'quiver', -0.02);
+  d.limb(lerp3(qBottom, qTop, 0.9), qTop, 0.068, 0.068, 'iron', -0.019);
+  const up = sub(qTop, qBottom);
+  const len = Math.hypot(...up) || 1;
+  // A direction in the torso's frame, turned to face the way the body does.
+  const offset = (p) => sub(at(p), rig.pelvis);
+  for (let k = 0; k < 4; k++) {
+    const base = add(qTop, offset([-0.025 + k * 0.018, 0, 0]));
+    const end = add(base, mul(up, (0.13 + (k % 2) * 0.03) / len));
+    d.limb(base, end, 0.01, 0.01, 'wood', -0.018);
+    d.limb(lerp3(base, end, 0.45), end, 0.022, 0.014, 'feather', -0.017);
+  }
+}
+
+// A short sword hung from the belt on the off-hand hip, ready for a cross
+// draw. Once drawn the scabbard hangs empty and the blade is in hand.
+function sword(d, rig) {
+  const at = rig.at;
+  const side = -SWORD_SIDE;
+  const mouth = at([side * 0.15, 0.0, 0.07]);
+  const tip = at([side * 0.23, -0.55, -0.2]);
+  d.limb(mouth, tip, 0.03, 0.022, 'leather', 0.02);
+  d.limb(lerp3(mouth, tip, 0.9), tip, 0.03, 0.022, 'iron', 0.021);
+
+  const sw = rig.sword;
+  if (!sw) {
+    const grip = sub(mouth, mul(sub(tip, mouth), 0.2));
+    const guardA = at([side * 0.1, 0.02, 0.08]);
+    const guardB = at([side * 0.2, -0.02, 0.06]);
+    d.limb(guardA, guardB, 0.016, 0.016, 'iron', 0.03);
+    d.limb(mouth, grip, 0.018, 0.018, 'leather', 0.03);
+    d.blob(grip, 0.026, 0.026, 'iron', 0.031);
+    return;
+  }
+  // In hand: a bright blade with a dark fuller and a plain iron cross.
+  d.limb(sw.guard, sw.tip, 0.026, 0.005, sw.glow ? 'bladeGlow' : 'blade', 0.03);
+  d.limb(lerp3(sw.guard, sw.tip, 0.05), lerp3(sw.guard, sw.tip, 0.65), 0.007, 0.005, 'iron', 0.031);
+  d.limb(sw.barA, sw.barB, 0.018, 0.018, 'iron', 0.032);
+  d.limb(sw.pommel, sw.guard, 0.018, 0.018, 'leather', 0.02);
+  d.blob(sw.pommel, 0.026, 0.026, 'iron', 0.021);
+}
+
+// The hooded cloak: one cloth panel per link of the simulated chain,
 // widening towards a ragged hem. It is sorted a little further back than it
-// hangs, so it drapes under the pauldrons and sword rather than over them.
-function cape(d, rig, pts) {
+// hangs, so it drapes under the quiver and bow rather than over them.
+function cloak(d, rig, pts) {
   const lat = rotY([1, 0, 0], rig.heading);
   const n = pts.length;
-  const half = (i) => 0.2 + (0.11 * i) / (n - 1);
+  const half = (i) => 0.16 + (0.1 * i) / (n - 1);
   // Seen edge-on the cloth would vanish into a line, so give it the bulk of
   // its folds from the side.
   const back = rotY([0, 0, -1], rig.heading);
-  const bulk = (i) => mul(back, (1 - rig.facing) * (0.04 + (0.08 * i) / (n - 1)));
+  const bulk = (i) => mul(back, (1 - rig.facing) * (0.04 + (0.07 * i) / (n - 1)));
   const edge = (i, s) => add(mul(lat, s * half(i)), mul(bulk(i), s));
   for (let i = 0; i < n - 1; i++) {
     const a = pts[i];
     const b = pts[i + 1];
-    // Which face of the cloth is turned to the camera: the crimson outside,
-    // or the dark lining when it swings round or hangs behind a warrior
+    // Which face of the cloth is turned to the camera: the green outside,
+    // or the darker lining when it swings round or hangs behind an outlaw
     // facing us.
-    const face = cross(sub(b, a), lat)[2] > 0 ? 'lining' : 'crimson';
+    const face = cross(sub(b, a), lat)[2] > 0 ? 'lining' : 'cloak';
     d.panel(add(a, edge(i, -1)), add(a, edge(i, 1)), add(b, edge(i + 1, 1)), add(b, edge(i + 1, -1)), face, -0.1);
   }
-  // A band of brass along the hem.
-  d.limb(add(pts[n - 1], edge(n - 1, -0.97)), add(pts[n - 1], edge(n - 1, 0.97)), 0.024, 0.024, 'trim', -0.099);
   // Tatters: strips of uneven length hanging off the hem.
   const hem = pts[n - 1];
   const dir = sub(hem, pts[n - 2]);
   const len = Math.hypot(...dir) || 1;
-  for (let k = 0; k < 5; k++) {
-    const x = ((k + 0.5) / 5) * 2 - 1;
+  for (let k = 0; k < 6; k++) {
+    const x = ((k + 0.5) / 6) * 2 - 1;
     const top = add(hem, mul(lat, x * half(n - 1) * 0.9));
     const drop = 0.05 + ((k * 37) % 5) * 0.025;
-    d.limb(top, add(top, mul(dir, drop / len)), 0.045, 0.012, 'crimson', -0.1);
-  }
-}
-
-// A greatsword slung across the back in a leather scabbard, the hilt riding
-// above the right shoulder. Once drawn the scabbard hangs empty and the
-// blade is drawn in the sword hand instead.
-function greatsword(d, rig) {
-  const at = rig.at;
-  const pommel = at([-0.21, 0.72, -0.2]);
-  const guard = at([-0.15, 0.56, -0.2]);
-  const tip = at([0.2, -0.46, -0.21]);
-  d.limb(guard, tip, 0.05, 0.035, 'leather', -0.01);
-  d.limb(lerp3(guard, tip, 0.93), tip, 0.054, 0.04, 'trim', -0.005);
-  d.limb(lerp3(guard, tip, 0.02), lerp3(guard, tip, 0.06), 0.056, 0.056, 'trim', -0.005);
-
-  const sw = rig.sword;
-  if (!sw) {
-    d.limb(at([-0.25, 0.52, -0.2]), at([-0.05, 0.6, -0.2]), 0.026, 0.026, 'trim');
-    d.limb(guard, pommel, 0.026, 0.024, 'leather');
-    d.blob(pommel, 0.04, 0.04, 'trim', 0.001);
-    return;
-  }
-  // In hand: a long bright blade with a dark fuller, the crossguard square
-  // across it. Kept just in front of the gauntlet that grips it.
-  d.limb(sw.guard, sw.tip, 0.034, 0.006, sw.glow ? 'bladeGlow' : 'blade', 0.03);
-  d.limb(lerp3(sw.guard, sw.tip, 0.05), lerp3(sw.guard, sw.tip, 0.7), 0.009, 0.006, 'darkPlate', 0.031);
-  d.limb(sw.barA, sw.barB, 0.024, 0.024, 'trim', 0.032);
-  d.limb(sw.pommel, sw.guard, 0.024, 0.024, 'leather', 0.02);
-  d.blob(sw.pommel, 0.036, 0.036, 'trim', 0.021);
-}
-
-// Layered shoulder plates edged in brass, with a short spike on top. They
-// ride on the torso, so they shrug with the breath but ignore the arm swing.
-function pauldron(d, rig, a) {
-  const s = a.s;
-  const top = rig.at([s * 0.24, 0.5, 0]);
-  const lower = rig.at([s * 0.27, 0.44, 0.005]);
-  // Kept just in front of the arm they cover.
-  const z = Math.max(project(a.shoulder)[2], project(a.elbow)[2]) + 0.05;
-  const zOf = (p) => Math.max(z, project(p)[2]);
-  d.blob(lower, 0.125, 0.085, 'trim', zOf(lower) - project(lower)[2] + 0.001);
-  d.blob(lower, 0.115, 0.075, 'darkPlate', zOf(lower) - project(lower)[2] + 0.002);
-  d.blob(top, 0.135, 0.09, 'trim', zOf(top) - project(top)[2] + 0.003);
-  d.blob(top, 0.125, 0.08, 'plate', zOf(top) - project(top)[2] + 0.004);
-  const spike = rig.at([s * 0.25, 0.58, -0.01]);
-  d.limb(top, add(spike, [0, 0.06, 0]), 0.03, 0.004, 'plate', zOf(top) - project(top)[2] + 0.005);
-}
-
-// A closed great helm with a dark visor slit, a brow band and a pair of
-// horns sweeping up and back.
-function helm(d, rig) {
-  const h = rig.headAt;
-  const head = h([0, 0, 0]);
-  const z = project(head)[2];
-  // Anything on the front of the helm is hidden once it turns away.
-  const front = (p) => (project(p)[2] > z ? 0.3 : -0.3);
-
-  for (const s of [-1, 1]) {
-    const root = h([s * 0.11, 0.07, -0.01]);
-    const bend = h([s * 0.24, 0.13, -0.05]);
-    const tip = h([s * 0.27, 0.31, -0.12]);
-    d.limb(root, bend, 0.045, 0.032, 'horn', front(root) * 0.1);
-    d.limb(bend, tip, 0.032, 0.008, 'horn', front(root) * 0.1);
-  }
-
-  d.blob(head, 0.15, 0.17, 'plate');
-  // A ridge running over the crown, front to back.
-  d.limb(h([0, 0.15, 0.08]), h([0, 0.13, -0.1]), 0.022, 0.018, 'darkPlate', 0.05);
-  const brow = h([0, 0.035, 0.11]);
-  d.limb(h([-0.12, 0.03, 0.06]), h([0.12, 0.03, 0.06]), 0.026, 0.026, 'trim', front(brow));
-  const slit = h([0, -0.015, 0.125]);
-  d.blob(slit, 0.1, 0.026, 'void', front(slit) * 1.1);
-
-  // Two cold points of light burn in the dark of the visor, and now and
-  // then they gutter out for a blink.
-  if (rig.eyes > 0.05) {
-    for (const s of [-1, 1]) {
-      const eye = h([s * 0.048, -0.015, 0.118]);
-      d.blob(eye, 0.026, 0.013 * rig.eyes, 'eye', front(eye) * 1.2);
-    }
+    d.limb(top, add(top, mul(dir, drop / len)), 0.04, 0.01, 'cloak', -0.1);
   }
 }
 

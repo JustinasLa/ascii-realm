@@ -2,118 +2,51 @@ import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { glyph } from '../render/glyphs.js';
 
-// What the warrior is made of. Each material has a base colour and a texture
+// What the outlaw is made of. Each material has a base colour and a texture
 // that picks the glyph for a fully covered cell from its lighting and from
 // where on the part the cell lies (u along the part in rows, v across it in
-// -1..1), so seams, rivets, rings and emblems stick to the body as it moves
-// rather than to the grid.
+// -1..1), so folds, lacing, stitching and grain stick to the body as it
+// moves rather than to the grid.
 //
 // A texture is called as tex(l, u, v, s) and returns the glyph. It may also
 // change s.c (the colour) and s.k (the brightness, roughly 0..1.2) to paint
-// details in another colour, such as brass inlay on steel.
+// details in another colour, such as lacing on a jerkin.
 
 const G = (s) => [...s].map(glyph);
 
-const PLATE = G(':;+=#%@');
-const SEAM = G('-=');
-const RIVET = glyph('o');
+const IRON = G(':;+=#%@');
 const SCRATCH = G('/\\');
-const MAIL = G('.o08');
-const CLOTH = G(" .:;i!|");
+const WOOL = G(':;=+*#%');
 const LEATHER = G('-=+#');
 const STITCH = glyph(':');
-const BONE = G('.:o0O@');
-const TRIM = G(':-==#');
-const GLOW = G('*');
-const STAR = glyph('*');
-const BAR = { v: glyph('|'), h: glyph('-'), x: glyph('+'), d: glyph('<'), e: glyph('>') };
+const SKIN = G('.:o0O@');
 
-const BRASS = [196, 164, 100];
-const BRIGHT_BRASS = [232, 200, 128];
+const LACE = [70, 48, 30];
 
 const pick = (ramp, l) => ramp[Math.max(0, Math.min(ramp.length - 1, Math.floor(l * ramp.length)))];
 const frac = (x) => x - Math.floor(x);
 
-// Steel is never quite even: hammer marks and wear brighten and darken it in
-// broad patches, and a few fine scratches catch the light.
-function wear(u, v, s) {
+// Iron fittings: unevenly worn, with the odd fine scratch catching the light.
+function iron(l, u, v, s) {
   s.k *= 0.86 + 0.28 * valueNoise(u * 0.7 + 3.1, v * 2.2 + 7.7, 811);
-}
-
-// Plate armour: shaded steel cut into horizontal lames joined by rows of
-// rivets, with a glint where the moon catches it squarely.
-function plate(l, u, v, s) {
-  wear(u, v, s);
-  if (l > 0.97) return STAR;
-  if (frac(u * 0.55) < 0.14) {
-    // Rivets punctuate each seam.
-    if (frac(v * 2.4 + 0.5) < 0.22) {
-      s.k = 0.6 + l * 0.7;
-      return RIVET;
-    }
-    return SEAM[l > 0.55 ? 1 : 0];
-  }
   const h = hash2(Math.floor(u * 2.5), Math.floor(v * 6), 97);
   if (h > 0.965 && l > 0.45) {
     s.k *= 1.15;
     return SCRATCH[h > 0.982 ? 1 : 0];
   }
-  return pick(PLATE, l);
+  return pick(IRON, l);
 }
 
-// The breastplate: plate with a brass chevron inlaid down the middle and a
-// raised ridge along the centre line.
-function breastplate(l, u, v, s) {
-  const av = Math.abs(v);
-  // Two arms of a chevron, pointing down, repeated twice.
-  const chevron = frac(u * 0.42 - av * 0.9);
-  if (av < 0.75 && chevron < 0.11) {
-    s.c = BRASS;
-    s.k = 0.55 + l * 0.6;
-    return v < 0 ? glyph('\\') : glyph('/');
+// Wool: a dense weave that reads clearly against the grass, with deep folds
+// running down the cloth.
+function wool(l, u, v, s) {
+  const fold = Math.sin(v * 5 + u * 0.15);
+  if (fold > 0.85 && l > 0.3) {
+    s.k *= 0.6;
+    return glyph('|');
   }
-  if (av < 0.07) {
-    s.k = 0.5 + l * 0.75;
-    return BAR.v;
-  }
-  return plate(l, u, v, s);
-}
-
-// Mail: offset rows of rings.
-function mail(l, u, v, s) {
-  wear(u, v, s);
-  const row = Math.floor(u * 1.3);
-  if (l < 0.25) return MAIL[0];
-  return (row + Math.floor(v * 3)) & 1 ? MAIL[l > 0.7 ? 3 : 2] : MAIL[1];
-}
-
-// Cloth: dark, with vertical folds that run down the part.
-function cloth(l, u, v) {
-  const fold = Math.sin(v * 5.5 + u * 0.12);
-  if (fold > 0.82 && l > 0.3) return CLOTH[6];
-  return pick(CLOTH, l * 0.85);
-}
-
-// The tabard bears the warrior's sigil in brass thread: a downward sword
-// inside a diamond, with a hem of brass at the bottom.
-function tabard(l, u, v, s) {
-  const av = Math.abs(v);
-  const thread = (g) => {
-    s.c = BRIGHT_BRASS;
-    s.k = 0.45 + l * 0.55;
-    return g;
-  };
-  // Measured in rows from the belt.
-  const y = u - 1.2;
-  if (y > 0 && y < 4.6) {
-    // The diamond's outline.
-    const d = Math.abs(y - 2.3) / 2.3 + av / 0.62;
-    if (Math.abs(d - 1) < 0.12) return thread(y < 2.3 === v < 0 ? glyph('/') : glyph('\\'));
-    // Crossguard, then blade.
-    if (Math.abs(y - 1.3) < 0.3 && av < 0.36) return thread(av < 0.08 ? BAR.x : BAR.h);
-    if (y > 0.5 && y < 3.9 && av < 0.07) return thread(BAR.v);
-  }
-  return cloth(l, u, v);
+  const weave = ((Math.floor(u * 2) + Math.floor(v * 4)) & 1) * 0.5;
+  return WOOL[Math.min(WOOL.length - 1, Math.floor(l * WOOL.length + weave))];
 }
 
 // Leather with a line of stitching along each edge.
@@ -122,35 +55,59 @@ function leather(l, u, v) {
   return pick(LEATHER, l);
 }
 
-// Horn, ringed with growth bands.
-function horn(l, u, v, s) {
-  if (frac(u * 1.6) < 0.2) {
-    s.k *= 0.7;
-    return glyph('=');
+// A leather jerkin, laced up the front with a criss-cross of thong.
+function jerkin(l, u, v, s) {
+  if (Math.abs(v) < 0.12) {
+    s.c = LACE;
+    s.k = 0.45 + l * 0.6;
+    return frac(u * 1.8) < 0.5 ? glyph('X') : glyph('x');
   }
-  return pick(BONE, l);
+  return leather(l, u, v);
+}
+
+// Boots of soft, creased leather.
+function boot(l, u, v) {
+  if (frac(u * 1.2 + v * 0.3) < 0.18 && l > 0.35) return glyph('~');
+  return pick(LEATHER, l);
+}
+
+// Wood: grain running along the piece, with the odd knot.
+function wood(l, u, v) {
+  if (hash2(Math.floor(u * 3), Math.floor(v * 2), 41) > 0.93) return glyph('o');
+  return l > 0.55 ? glyph('|') : glyph(':');
+}
+
+// Feathers: a fan of barbs either side of the shaft.
+function feather(l, u, v) {
+  if (Math.abs(v) < 0.2) return glyph('|');
+  return v < 0 ? glyph('\\') : glyph('/');
 }
 
 export const MATERIALS = {
-  plate: { color: [104, 112, 132], tex: plate },
-  breastplate: { color: [108, 116, 136], tex: breastplate },
-  darkPlate: { color: [68, 74, 92], tex: plate },
-  mail: { color: [86, 92, 108], tex: mail },
-  cloth: { color: [46, 50, 66], tex: cloth },
-  crimson: { color: [138, 36, 42], tex: cloth },
-  tabard: { color: [138, 36, 42], tex: tabard },
-  // The cape's dark inner face, seen when it swings round towards the camera.
-  lining: { color: [62, 22, 30], tex: cloth },
+  // Forest green wool.
+  tunic: { color: [104, 126, 72], tex: wool },
+  hood: { color: [84, 104, 62], tex: wool },
+  cloak: { color: [74, 94, 58], tex: wool },
+  // The cloak's darker inner face, seen when it swings round to the camera.
+  lining: { color: [48, 58, 40], tex: wool },
+  hose: { color: [104, 94, 70], tex: wool },
+  // Worn leather.
   leather: { color: [98, 68, 46], tex: leather },
-  trim: { color: [184, 154, 96], tex: (l) => pick(TRIM, l) },
-  horn: { color: [196, 186, 156], tex: horn },
-  skin: { color: [150, 118, 96], tex: (l) => pick(BONE, l * 0.8) },
-  // The dark slit of a visor.
+  jerkin: { color: [138, 98, 60], tex: jerkin },
+  bracer: { color: [104, 72, 44], tex: leather },
+  boot: { color: [118, 84, 54], tex: boot },
+  quiver: { color: [96, 64, 40], tex: leather },
+  // Bow staves, arrow shafts and fletching, and iron fittings.
+  wood: { color: [132, 98, 62], tex: wood },
+  feather: { color: [210, 204, 190], tex: feather },
+  iron: { color: [112, 116, 124], tex: iron },
+  skin: { color: [150, 118, 96], tex: (l) => pick(SKIN, l * 0.8) },
+  // The shadow inside the hood.
   void: { color: [10, 10, 16], tex: () => 0 },
-  // Lights that ignore the moon: they are drawn at full brightness.
-  eye: { color: [150, 235, 255], tex: () => GLOW[0], emissive: true, claim: true },
-  // Bare steel is drawn as a line along the blade. Like the eyes it claims
-  // every cell it touches, as it is far thinner than a cell.
+  // A glint of eyes in that shadow. Lights ignore the moon and claim every
+  // cell they touch, as they are far smaller than a cell.
+  glint: { color: [214, 206, 170], tex: () => glyph('.'), emissive: true, claim: true },
+  // Bare steel is drawn as a line along the blade; it too claims its cells.
   blade: { color: [206, 214, 228], tex: null, claim: true },
   // A blade charged for a spin burns a cold blue.
   bladeGlow: { color: [170, 230, 255], tex: null, claim: true, emissive: true },

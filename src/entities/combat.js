@@ -1,4 +1,4 @@
-// The greatsword: drawing it from the back, holding a guard, the swings and
+// The sword: drawing it from the hip, holding a guard, the swings and
 // sheathing it again. This only decides where the sword hand and blade
 // should be; the rig bends the arms to match (see rig.js).
 //
@@ -21,8 +21,10 @@ export const SWORD_SIDE = -1;
 // off: how firmly the other hand joins the grip, 0..1.
 const KEYS = {
   rest: { hand: [0.26, 0.05, 0.05], blade: [0.1, -0.4, 0.9] },
-  hilt: { hand: [0.17, 0.66, -0.16], blade: [-0.32, -0.95, -0.02], twist: 0.2 },
-  free: { hand: [0.36, 0.86, 0.12], blade: [0.3, 0.4, -0.86], twist: 0.1 },
+  // Drawing: a cross draw from the scabbard on the off-hand hip, then the
+  // blade swept clear in front of the body.
+  hilt: { hand: [-0.13, 0.06, 0.16], blade: [-0.25, -0.75, -0.6], twist: -0.35, crouch: 0.08 },
+  free: { hand: [0.3, 0.42, 0.34], blade: [0.55, 0.65, 0.5], twist: 0.25 },
   guard: { hand: [0.12, 0.24, 0.3], blade: [-0.55, 0.5, 0.67], twist: 0.3, crouch: 0.14, off: 1 },
   carry: { hand: [0.27, 0.12, 0.1], blade: [0.15, -0.35, 0.92] },
   // Sprinting with the sword out: held low, the blade streaming behind.

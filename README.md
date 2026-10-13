@@ -3,13 +3,13 @@
 A browser game rendered entirely in ASCII characters. Every frame is a grid of
 coloured glyphs: grass is made of `\ | /` blades that sway in the wind, water is
 streaked with `- ~ ≈` ripples and reflects whatever stands on the shore, and the
-player is an armoured warrior drawn from hundreds of shaded characters.
+player is a hooded outlaw drawn from hundreds of shaded characters.
 
 **Play:** https://justinasla.github.io/ascii-realm/
 
 ![An armoured warrior mid-swing on a moonlit lakeshore, reflected in the water](docs/screenshot.png)
 
-For now it is a single warrior exploring procedurally generated terrain.
+For now it is a single outlaw exploring procedurally generated terrain.
 
 ## Features
 
@@ -26,13 +26,14 @@ For now it is a single warrior exploring procedurally generated terrain.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
-- **The warrior.** A 3D skeleton posed every frame, turned to any heading and
-  dressed in armour: horned great helm with glowing eyes, layered pauldrons,
-  riveted cuirass with a brass chevron, a crimson tabard bearing a sword sigil,
-  greaves and gauntlets, a greatsword on the back and a simulated cape with a
-  dark lining. Every part is rasterised into glyphs with
-  supersampling: outlines follow the silhouette with a moonlit rim, and each
-  material (plate, mail, cloth, leather, brass) has its own glyph texture.
+- **The outlaw.** A lean, hooded archer in the mould of Robin Hood: a 3D
+  skeleton posed every frame, turned to any heading and dressed in a pointed
+  hood with a dagged shoulder cape and a shadowed face, a green wool tunic
+  under a laced leather jerkin, hose, tall cuffed boots, bracers, a quiver of
+  fletched arrows and a longbow across the back, a short sword on the hip and
+  a simulated cloak. Every part is rasterised into glyphs with supersampling:
+  outlines follow the silhouette with a moonlit rim, and each material (wool,
+  leather, wood, feather, iron) has its own glyph texture.
 - **Animation.** Walk and run cycles driven by the ground actually covered, so
   planted feet stay planted, with hip sway, a steady head, leaning into turns
   and into speeding up or stopping. An idle stance that shifts its weight and
@@ -85,5 +86,5 @@ src/
   core/              input, hashing, noise
   render/            glyph atlas, WebGL renderer, cell writers
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
-  entities/          the warrior: skeleton, armour, materials, cape, combat, movement
+  entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
 ```

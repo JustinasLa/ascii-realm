@@ -144,8 +144,8 @@ function plantedLegs(st, phase, run, crouch, twist, sway) {
       const start = Math.asin((0.015 + heelEnd) / 0.15);
       pitch = start + (0.1 - start) * smooth(t) + 0.35 * Math.sin(Math.PI * t) * (1 - t);
     }
-    const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
-    const target = [sway + s * 0.09, y + air, z];
+    const hip = add(pelvis, rotY([s * 0.09, -0.04, 0], -twist * 0.6));
+    const target = [sway + s * 0.08, y + air, z];
     const [knee, ankle] = reach(hip, target, THIGH, SHIN, [s * 0.15, 0.1, 1]);
     const toe = add(ankle, [0, -Math.sin(pitch) * 0.15, Math.cos(pitch) * 0.15]);
     legs.push({ s, hip, knee, ankle, toe });
@@ -224,7 +224,7 @@ export function buildRig(st) {
     // The hip on the swinging side drops a little, as it does in a real
     // stride.
     const drop = 0.022 * walk * Math.max(0, swingT);
-    const hip = add(pelvis, rotY([s * 0.1, -0.04 - drop, 0], -twist * 0.6));
+    const hip = add(pelvis, rotY([s * 0.09, -0.04 - drop, 0], -twist * 0.6));
     // Lean the legs out into a wide stance, and back under the weight.
     const roll = s * (0.02 + 0.07 * still) - shift * 1.5;
     const kneeP = add(hip, mul(limb(thigh, roll), THIGH));
@@ -289,7 +289,7 @@ export function buildRig(st) {
     // swings back, rather than staying locked.
     const fwd = -Math.sin(lp - 0.5);
     const elbow = 0.22 + 0.15 * walk + run * walk * (0.95 + 0.45 * fwd) + 0.3 * Math.max(0, swing) * (1 - run);
-    const shoulder = torso([s * 0.2, 0.46 + breath * 0.008, 0]);
+    const shoulder = torso([s * 0.175, 0.46 + breath * 0.008, 0]);
     // Arms hang a little away from the armour, more so when at rest.
     const elbowP = add(shoulder, mul(turn(limb(swing, s * (0.16 + 0.06 * still))), UPPER_ARM));
     const wrist = add(elbowP, mul(turn(limb(swing + elbow, s * 0.08)), FOREARM));
@@ -331,13 +331,13 @@ export function buildRig(st) {
       // The crossguard lies square to the blade, as flat as it can.
       let bar = cross(blade, [0, 1, 0]);
       if (Math.hypot(...bar) < 0.2) bar = cross(blade, [0, 0, 1]);
-      bar = mul(norm(bar), 0.12);
+      bar = mul(norm(bar), 0.08);
       sword = {
         // A charged blade glows, ready to be unleashed.
         glow: cb.charged,
-        pommel: sub(hilt, mul(blade, 0.2)),
+        pommel: sub(hilt, mul(blade, 0.1)),
         guard,
-        tip: add(guard, mul(blade, 1.02)),
+        tip: add(guard, mul(blade, 0.72)),
         barA: add(guard, bar),
         barB: sub(guard, bar),
       };
