@@ -161,7 +161,7 @@ export class Player {
     // Letting go mid-sprint does not stop the warrior dead: they skid to a
     // halt, braced, throwing up dirt.
     if (!moving && this.wasMoving && this.speed > 3.2 && this.air === 0) {
-      this.skid = 0.42;
+      this.skid = 0.22;
       this.skidSpeed = this.speed;
       this.skidHeading = this.heading;
     }
@@ -169,7 +169,7 @@ export class Player {
     if (moving) this.skid = 0;
     if (this.skid > 0) {
       this.skid -= dt;
-      this.skidSpeed *= Math.exp(-7 * dt);
+      this.skidSpeed *= Math.exp(-14 * dt);
       const v = this.skidSpeed * dt;
       this.tryMove(world, Math.sin(this.skidHeading) * v * toCols, 0);
       this.tryMove(world, 0, Math.cos(this.skidHeading) * v * toRows);
