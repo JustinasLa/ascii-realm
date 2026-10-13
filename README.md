@@ -112,19 +112,3 @@ src/
   inventory/         items, bag, equipment, hotbar and carry weight
   ui/                ASCII HUD, inventory panel, tooltips and notifications
 ```
-
-## Tests and coverage
-
-Use Node.js 24 or newer and install the locked development dependencies with
-`npm ci`. Run `npm test` for the behavioral suite or `npm run test:coverage` to
-run it with a strict per-file 100% statement, branch, function, and line gate.
-Every application module under `src/` is included, including modules a test
-has not imported. Generated reports are written to `coverage/index.html`,
-`coverage/lcov.info`, and `coverage/coverage-summary.json`.
-
-The suite exercises the real game loop, world and figure rendering, player
-resources and combat, inventory transactions, keyboard and pointer controls,
-HUD feedback, and equipment portraits. JSDOM supplies the browser DOM and a
-recording WebGL boundary supplies the GPU calls. Targeted alternate catalog
-and portrait-writer fixtures check optional data and invalid glyph handling;
-the rest of the suite uses the shipped implementations and item catalog.
