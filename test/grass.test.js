@@ -649,7 +649,7 @@ test('flowers bloom on meadow roots, sway with the wind and are pushed aside by 
   assert.ok(found, 'the seeded meadow has flowers');
   const view = { x0: found.x - 20, y0: found.y - 20, cols: 40, rows: 40 };
   const head = (grass, t) => rowCells(grass, world, view, t, found.y)
-    .find((c) => c.cr > 150 && c.cb > 150 && Math.abs(c.x - 20) < 10);
+    .find((c) => c.cr > 100 && c.cb > 100 && Math.abs(c.x - 20) < 10);
   const positions = new Set();
   for (let t = 0; t < 12; t += 0.37) {
     const h = head(new Grass(), t);

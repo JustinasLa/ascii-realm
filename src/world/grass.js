@@ -27,21 +27,21 @@ const MAX_PARTS = 4096;
 const SEED_HEAD = glyph('"');
 const DOT = glyph('.');
 const SEED = glyph(':');
-const MAT = [64, 104, 66];
+const MAT = [51, 77, 53];
 const MATTED = [flatGlyph(2, 2), flatGlyph(1, 2), flatGlyph(2, 1)];
-// Saturated mid greens against the near-black ground: blue-green fine
-// blades, leafy tufts, curved emerald grass, seed heads, dry gold grass,
-// and olive shoreline reeds.
+// Night greens against the near-black ground, kept a step below rocks and
+// trees so the meadow reads as background: blue-green fine blades, leafy
+// tufts, curved emerald grass, seed heads, dry gold grass, and olive reeds.
 const PALETTES = [
-  [48, 118, 88], [58, 126, 72], [46, 130, 80],
-  [70, 124, 80], [96, 116, 70], [82, 116, 72],
+  [38, 79, 61], [45, 84, 53], [38, 86, 57],
+  [52, 83, 57], [67, 78, 52], [58, 78, 52],
 ];
 // Tips catch the moonlight and pale toward this.
-const TIP = [104, 142, 124];
+const TIP = [74, 96, 85];
 const FLOWERS = [
-  [BLOSSOM, 244, 248, 240], [BUD, 214, 236, 240], [BLOSSOM, 248, 242, 214],
-  [BUD, 236, 240, 226], [glyph('°'), 240, 236, 214], [glyph('.'), 230, 244, 236],
-  [BLOSSOM, 236, 242, 250], [BLOSSOM, 248, 248, 244],
+  [BLOSSOM, 171, 174, 168], [BUD, 150, 165, 168], [BLOSSOM, 174, 169, 150],
+  [BUD, 165, 168, 158], [glyph('°'), 168, 165, 150], [glyph('.'), 161, 171, 165],
+  [BLOSSOM, 165, 169, 175], [BLOSSOM, 174, 174, 171],
 ];
 const PETAL = BUD;
 // Where the last drawn blade ended: the cell just beyond its tip.
@@ -496,7 +496,7 @@ export class Grass {
           curve + bend * (1.4 + height * 0.45) + field.part[fi]) * BLADE_LENGTH));
         // Gusts lay blades over to show their lit sides; the parted hollow
         // under a figure stays in shadow.
-        const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.16) *
+        const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.1) *
           (0.82 + variation * 0.36) * (1 - sink * 0.8);
         const tone = PALETTES[style];
         const length = height * BLADE_LENGTH * (0.78 + jitter * 0.3);
