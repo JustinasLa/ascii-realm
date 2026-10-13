@@ -48,6 +48,10 @@ export class Player {
     this.runV = 0;
     this.time = 0;
     this.cape = new Cape();
+    // Ground speeds in metres per second; a 3D character sets these to suit
+    // its animation clips.
+    this.walkSpeed = WALK_SPEED;
+    this.runSpeed = RUN_SPEED;
     this.combat = new Combat();
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
@@ -169,14 +173,14 @@ export class Player {
       this.tryMove(world, Math.sin(this.skidHeading) * v * toCols, 0);
       this.tryMove(world, 0, Math.cos(this.skidHeading) * v * toRows);
       if (Math.random() < dt * 30) {
-        this.events.push({ type: 'skid', x: this.x, y: this.y, strength: this.skidSpeed / RUN_SPEED });
+        this.events.push({ type: 'skid', x: this.x, y: this.y, strength: this.skidSpeed / this.runSpeed });
       }
     }
     this.brace += ((this.skid > 0 ? 1 : 0) - this.brace) * ease(this.skid > 0 ? 18 : 6);
 
     // The warrior has momentum: velocity eases towards where the keys point
     // rather than jumping there, so changes of direction sweep round.
-    const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
+    const speed = this.walkSpeed + (this.runSpeed - this.walkSpeed) * this.run;
     const tx = moving && this.skid <= 0 ? (move.x / len) * speed : 0;
     const tz = moving && this.skid <= 0 ? (move.y / len) * speed : 0;
     const grip = ease(moving ? GRIP + (SPRINT_GRIP - GRIP) * this.run : 16);
@@ -225,7 +229,7 @@ export class Player {
       const stride = Math.floor(this.phase / Math.PI);
       this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
       // A foot comes down every half cycle.
-      if (this.air === 0 && Math.floor(this.phase / Math.PI) !== stride) {
+      if (!this.modelTrail && this.air === 0 && Math.floor(this.phase / Math.PI) !== stride) {
         this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
       }
     }

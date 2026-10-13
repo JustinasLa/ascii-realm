@@ -52,6 +52,50 @@ const CLIPS = {
 // three.js strips characters such as '.' from node names on loading.
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 
+// The jog in the library is an athlete's bounding stride, far too long for
+// someone carrying a sword and pack. Its leg swing and bounce are pulled in
+// towards their average by this much, keeping the timing, which shortens
+// every step.
+const STRIDE_SCALE = { jog: 0.58, sprint: 0.6 };
+const LEG_BONES = ['DEF-thigh.L', 'DEF-shin.L', 'DEF-foot.L', 'DEF-toe.L', 'DEF-thigh.R', 'DEF-shin.R', 'DEF-foot.R',
+  'DEF-toe.R'].map((n) => THREE.PropertyBinding.sanitizeNodeName(n));
+
+// Scales the swing of a clip's leg rotations and the hips' bounce about
+// their averages, in place.
+function shortenStride(clip, k) {
+  for (const track of clip.tracks) {
+    const [node, prop] = track.name.split('.');
+    const v = track.values;
+    if (prop === 'quaternion' && LEG_BONES.includes(node)) {
+      // The average orientation, with every key on the same side as the first.
+      const n = v.length / 4;
+      const mean = new THREE.Quaternion(0, 0, 0, 0);
+      const q = new THREE.Quaternion();
+      const first = new THREE.Quaternion().fromArray(v, 0);
+      for (let i = 0; i < n; i++) {
+        q.fromArray(v, i * 4);
+        const s = q.dot(first) < 0 ? -1 : 1;
+        mean.x += q.x * s;
+        mean.y += q.y * s;
+        mean.z += q.z * s;
+        mean.w += q.w * s;
+      }
+      mean.normalize();
+      for (let i = 0; i < n; i++) {
+        q.fromArray(v, i * 4);
+        if (q.dot(mean) < 0) q.set(-q.x, -q.y, -q.z, -q.w);
+        mean.clone().slerp(q, k).toArray(v, i * 4);
+      }
+    } else if (prop === 'position' && node === THREE.PropertyBinding.sanitizeNodeName('DEF-hips')) {
+      const n = v.length / 3;
+      let my = 0;
+      for (let i = 0; i < n; i++) my += v[i * 3 + 1];
+      my /= n;
+      for (let i = 0; i < n; i++) v[i * 3 + 1] = my + (v[i * 3 + 1] - my) * k;
+    }
+  }
+}
+
 // Picks the outline glyph for a partly covered cell from the direction the
 // covered samples lean, and how squarely that edge faces the moon.
 function outline(mx, my, cover) {
@@ -116,6 +160,7 @@ export class ModelFigure {
     this.actions = {};
     for (const [key, name] of Object.entries(CLIPS)) {
       const clip = gltf.animations.find((c) => c.name === name);
+      if (STRIDE_SCALE[key]) shortenStride(clip, STRIDE_SCALE[key]);
       const a = this.mixer.clipAction(clip);
       a.play();
       a.setEffectiveWeight(0);
@@ -218,7 +263,12 @@ export class ModelFigure {
     // with the ground whichever clips are mixed.
     let perMetre = 0;
     for (const g of this.gaits) perMetre += (loco[g.key] ?? 0) / g.cycle;
+    const before = this.phase;
     this.phase = (this.phase + speed * dt * perMetre) % 1;
+    // A foot comes down as the cycle passes each half.
+    if (moving > 0.5 && p.air === 0 && Math.floor(this.phase * 2) !== Math.floor(before * 2)) {
+      p.events.push({ type: 'step', x: p.x, y: p.y, strength: Math.min(1, speed / 5) });
+    }
     for (const g of this.gaits) {
       const a = this.actions[g.key];
       a.time = (((this.phase + g.strike) % 1) + 1) % 1 * a.getClip().duration;
