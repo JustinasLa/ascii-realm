@@ -126,7 +126,7 @@ export class GrassFootsteps {
       const at = context.currentTime;
       const rate = 0.98 + Math.random() * 0.04;
       const duration = buffer.duration / rate;
-      const level = Math.min(0.12, 0.095 * Math.sqrt(strength) * volume);
+      const level = 0.8 * Math.min(0.12, 0.095 * Math.sqrt(strength) * volume);
       const fadeIn = Math.min(0.003, duration * 0.1);
       const fadeOut = Math.min(0.008, duration * 0.2);
       source.buffer = buffer;
