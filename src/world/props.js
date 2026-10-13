@@ -2,7 +2,9 @@ import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
-import { ASPECT, GRASS } from './world.js';
+import { makeTree } from './trees.js';
+import { treeWind, windGust } from './wind.js';
+import { ASPECT, GRASS, WATER } from './world.js';
 
 // Trees and boulders. Each prop is rasterised once, when its chunk is
 // generated, into a list of cells relative to its base (the point where it
@@ -52,53 +54,6 @@ function bake(w, top, bottom, sample, seed) {
   return cells;
 }
 
-function makeTree(x, y, rand) {
-  const height = 30 + rand() * 12;
-  const radius = 8 + rand() * 3.5;
-  const blobs = [{ x: 0, y: -height, r: radius }];
-  const n = 3 + Math.floor(rand() * 3);
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + rand();
-    blobs.push({
-      x: Math.cos(a) * radius * 0.65,
-      y: -height + Math.sin(a) * radius * 0.5 + 1,
-      r: radius * (0.55 + rand() * 0.25),
-    });
-  }
-  const tint = rand();
-  const leaf = [40 + tint * 20, 100 + tint * 30, 80 - tint * 20];
-  const bark = [70, 56, 44];
-  const trunkTop = -height + radius * 0.5;
-
-  const sample = (px, py) => {
-    // Canopy: the brightest blob wins, lit from the upper left.
-    let best = null;
-    for (const bl of blobs) {
-      const nx = (px - bl.x) / bl.r;
-      const ny = (py - bl.y) / (bl.r * 0.85);
-      const d2 = nx * nx + ny * ny;
-      if (d2 > 1) continue;
-      const l = 0.55 - nx * 0.3 - ny * 0.35 + (1 - d2) * 0.15;
-      if (!best || l > best.l) best = { l, c: leaf };
-    }
-    if (best) return best;
-    if (py > trunkTop && py < 0.2 && Math.abs(px) < 1.4 + (py / -height) * -0.5) {
-      return { l: 0.6 - px * 0.4, c: bark };
-    }
-    return null;
-  };
-
-  const w = Math.ceil((radius * 1.7) / ASPECT);
-  return {
-    kind: 'tree',
-    x,
-    y,
-    footW: 2.4,
-    footH: 1.2,
-    cells: bake(w, -Math.ceil(height + radius), 0, sample, x * 31 + y),
-  };
-}
-
 function makeRock(x, y, rand) {
   const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.65 + rand() * 0.2);
@@ -119,8 +74,46 @@ function makeRock(x, y, rand) {
     y,
     footW: rx / ASPECT,
     footH: 1.4,
+    bounds: { minX: -w, maxX: w, minY: -Math.ceil(ry * 2), maxY: 0 },
     cells: bake(w, -Math.ceil(ry * 2), 0, sample, x * 17 + y),
   };
+}
+
+// Reflected bounds are measured about this prop's own base. Do not cull
+// source cells against the normal viewport when drawing a reflection.
+export function propInView(view, prop, reflected = false, marginX = 3) {
+  const b = prop.bounds;
+  if (!b) return true;
+  const x = Math.floor(prop.x) - view.x0;
+  const y = Math.floor(prop.y) - view.y0;
+  const top = reflected ? y - b.maxY + 1 : y + b.minY;
+  const bottom = reflected ? y - b.minY + 1 : y + b.maxY;
+  return x + b.maxX + marginX >= 0 && x + b.minX - marginX < view.cols && bottom >= 0 && top < view.rows;
+}
+
+// Terrain-only queries are safe while a chunk's props are being generated.
+// Never query props/isWalkable here: that would recurse into this generator.
+export function nearWater(world, x, y) {
+  for (let dy = -7; dy <= 7; dy++) {
+    for (let dx = -11; dx <= 11; dx++) {
+      if ((dx * ASPECT) ** 2 + dy * dy > 49) continue;
+      if (world.typeAt(x + dx, y + dy) === WATER) return true;
+    }
+  }
+  return false;
+}
+
+export function treeSpeciesAt(world, x, y) {
+  const s = world.seed;
+  const local = hash2(x, y, s + 715);
+  if (nearWater(world, x, y) && local < 0.72) return 'willow';
+  const warmth = fbm(x * ASPECT * 0.004, y * 0.004, s + 710, 3);
+  const moisture = fbm(x * ASPECT * 0.004, y * 0.004, s + 711, 3);
+  if (warmth < 0.4) return local < 0.2 ? 'pine' : moisture > 0.5 ? 'spruce' : 'pine';
+  if (warmth > 0.6) return local < 0.15 ? 'oak' : moisture > 0.5 ? 'jungle' : 'acacia';
+  const grove = fbm(x * ASPECT * 0.009, y * 0.009, s + 712, 3);
+  if (grove > 0.6 && local < 0.85) return 'cherry';
+  return (grove < 0.43) !== (local < 0.18) ? 'birch' : 'oak';
 }
 
 // Scatters props over a chunk on a jittered grid. Forest density comes from
@@ -135,26 +128,51 @@ export function generateProps(world, cx, cy, size) {
       const ox = cx * size + gx;
       const oy = cy * size + gy;
       const rand = mulberry32(Math.floor(hash2(ox, oy, seed + 61) * 2 ** 32));
-      const x = ox + Math.floor(rand() * STEP_X);
-      const y = oy + Math.floor(rand() * STEP_Y);
+      // The last grid slot can be smaller than STEP_X. Keep every base in
+      // its owning chunk so collision queries still find it near a seam.
+      const x = ox + Math.floor(rand() * Math.min(STEP_X, size - gx));
+      const y = oy + Math.floor(rand() * Math.min(STEP_Y, size - gy));
       if (world.typeAt(x, y) !== GRASS) continue;
       // Keep the spawn clearing open.
-      if (Math.hypot((x - world.spawn.x) * ASPECT, y - world.spawn.y) < 36) continue;
+      if (Math.hypot((x + 0.5 - world.spawn.x) * ASPECT, y + 0.5 - world.spawn.y) < 36) continue;
 
       const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
       const roll = rand();
-      if (roll < (forest - 0.5) * 1.6) props.push(makeTree(x + 0.5, y + 0.5, rand));
+      if (roll < (forest - 0.5) * 1.6) {
+        const species = treeSpeciesAt(world, x, y);
+        props.push(makeTree(x + 0.5, y + 0.5, rand, { species, season: world.season, seed }));
+      }
       else if (roll > 0.975) props.push(makeRock(x + 0.5, y + 0.5, rand));
     }
   }
   return props;
 }
 
-export function drawProp(r, view, prop, write = putCell) {
+export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1) {
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
+  const tree = prop.kind === 'tree';
+  const sway = tree ? treeWind(prop, t, seed) : 0;
+  const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
+  if (write === putCell && !propInView(view, prop)) return;
+  // The figure has already been drawn when its base is behind this tree.
+  // Stable local dither lets it show through nearby leaves without changing
+  // the renderer's glyph index channel or punching holes in solid wood.
+  const reveal = player && prop.y > player.y ? player.foliageBounds : null;
   for (const c of prop.cells) {
-    write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by);
+    const dx = c.dx + (c.foliage ? Math.round(sway * c.flex) : 0);
+    const sx = bx + dx;
+    const sy = by + c.dy;
+    if (c.foliage && reveal) {
+      const nx = (Math.floor(prop.x) + dx - reveal.x) / reveal.rx;
+      const ny = (Math.floor(prop.y) + c.dy - reveal.y) / reveal.ry;
+      const d2 = nx * nx + ny * ny;
+      if (d2 < 1 && hash2(c.dx, c.dy, prop.textureSeed) < (1 - d2) * 0.93) continue;
+    }
+    const flutter = c.foliage ? Math.sin(t * 1.4 + c.phase) : 0;
+    const light = c.foliage ? 1 + flutter * 0.035 + Math.max(0, gust - 0.55) * 0.18 : 1;
+    const ch = c.foliage && flutter > 0.94 && gust > 0.58 ? c.rustle : c.g;
+    write(r, sx, sy, ch, c.r * light, c.gg * light, c.b * light, by);
   }
 }
 

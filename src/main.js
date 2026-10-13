@@ -8,9 +8,11 @@ import { Dust } from './world/dust.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
-import { drawProp } from './world/props.js';
+import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
+import { drawProp, propInView } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
+import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { ASPECT, GRASS, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
@@ -60,7 +62,7 @@ const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed')) || 1;
 // Shown above the warrior's head; ?name=... picks another.
 const name = (params.get('name') || 'Kael').slice(0, 24);
-const world = new World(seed);
+const world = new World(seed, { season: params.get('season') ?? undefined });
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
@@ -132,16 +134,34 @@ function frame(now) {
   drawShadow(renderer, view, player.x, player.y, player.air);
 
   // Props up to a screen above the view can still be reflected into it.
-  const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
-    view.y0 + view.rows + 50);
+  const marginX = MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT;
+  const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, MAX_TREE_HEIGHT + 1),
+    view.x0 + view.cols + marginX, view.y0 + view.rows + MAX_TREE_HEIGHT);
 
   const mirror = reflector(time, view);
-  for (const p of props) drawProp(renderer, view, p, mirror);
+  for (const p of props) {
+    if (propInView(view, p, true)) drawProp(renderer, view, p, mirror, time, null, seed);
+  }
   const figure = dressFigure(player);
   drawFigure(renderer, view, player, figure, mirror);
 
+  // Match the reveal region to this pose, including a jump or sword swing.
+  let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+  for (const part of figure) {
+    left = Math.min(left, part.x0 / ASPECT);
+    right = Math.max(right, part.x1 / ASPECT);
+    top = Math.min(top, part.y0);
+    bottom = Math.max(bottom, part.y1);
+  }
+  player.foliageBounds = { x: player.x + (left + right) / 2, y: player.y + (top + bottom) / 2,
+    rx: Math.max(6, (right - left) / 2 + 4), ry: Math.max(10, (bottom - top) / 2 + 4) };
+
   // Painter's order: whatever stands further down the screen is in front.
-  const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
+  const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).map((p) => ({ y: p.y,
+    draw: () => {
+      drawProp(renderer, view, p, undefined, time, player, seed);
+      drawLeaves(renderer, view, p, time, seed);
+    } }));
   drawables.push({ y: player.y, draw: () => drawFigure(renderer, view, player, figure) });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();

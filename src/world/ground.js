@@ -2,6 +2,7 @@ import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, WATER_LEVEL } from './world.js';
+import { windGust } from './wind.js';
 
 const G = (s) => [...s].map(glyph);
 
@@ -65,7 +66,7 @@ export function drawGround(r, world, view, t, bend) {
       if (type === GRASS) {
         // Slow gusts roll across the field; each blade also flutters on its
         // own phase so neighbours never move in lockstep.
-        const gust = valueNoise(wx * ASPECT * 0.035 - t * 0.55, wy * 0.035 + t * 0.12, world.seed + 900);
+        const gust = windGust(world.seed, wx, wy, t);
         let lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
         // Blades near the wanderer's feet are pushed aside.
         const pdx = (wx + 0.5 - bend.x) * ASPECT;

@@ -18,8 +18,9 @@ const SHORE_LEVEL = 0.415;
 const STONE_LEVEL = 0.7;
 
 export class World {
-  constructor(seed = 1) {
+  constructor(seed = 1, { season = 'summer' } = {}) {
     this.seed = seed;
+    this.season = ['spring', 'summer', 'autumn', 'winter'].includes(season) ? season : 'summer';
     this.chunks = new Map();
     this.spawn = this.findSpawn();
   }
