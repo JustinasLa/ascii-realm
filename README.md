@@ -50,12 +50,13 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
-- **Procedural audio.** Surface-aware footsteps, sword and movement effects,
-  wind and grass rustle, lakes, birds, bugs, distant wildlife and firefly shimmer,
+- **Procedural audio.** Earthy surface-aware footsteps and movement effects,
+  slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
+  wildlife calls and rare firefly noise glints,
   with six original, mysterious RPG songs in three day/night pairs, using drifting
   choir, bowed tones, low drones, distant bells and a synthesized room reverb.
-  Sword effects use dry scrapes,
-  air rush and damped metal impacts. Sound starts on your first key press or click;
+  Sword effects layer weathered steel, dry leather, low air rush and weighted
+  impacts. Sound starts on your first key press or click;
   the Audio panel shows the current song, lets you skip, and saves mute and
   master, music, effects, sword and ambience levels. See [audio notes](docs/audio.md).
 

@@ -1,13 +1,13 @@
-import { tone, noise } from './voices.js';
+import { noise } from './voices.js';
 
-// Surface colors are deliberately soft: the body of a landing comes from
-// weight, while these short layers describe what is under the boots.
+// Dark, close textures under leather boots. The body of a landing comes from
+// unpitched weight, leaving room for the distant, arcane musical atmosphere.
 const SURFACES = {
-  grass: { cutoff: 1250, filterType: 'lowpass', duration: 0.13, gain: 0.035 },
-  dirt: { cutoff: 1800, filterType: 'lowpass', duration: 0.11, gain: 0.042 },
-  sand: { cutoff: 2600, filterType: 'bandpass', duration: 0.17, gain: 0.04 },
-  rock: { cutoff: 3400, filterType: 'highpass', duration: 0.065, gain: 0.025 },
-  water: { cutoff: 950, filterType: 'lowpass', duration: 0.23, gain: 0.065 },
+  grass: { cutoff: 750, filterType: 'lowpass', Q: 0.45, duration: 0.135, gain: 0.027 },
+  dirt: { cutoff: 1100, filterType: 'lowpass', Q: 0.55, duration: 0.105, gain: 0.034 },
+  sand: { cutoff: 1500, filterType: 'bandpass', Q: 0.45, duration: 0.18, gain: 0.026 },
+  rock: { cutoff: 1700, filterType: 'bandpass', Q: 0.85, duration: 0.065, gain: 0.022 },
+  water: { cutoff: 650, filterType: 'lowpass', Q: 0.7, duration: 0.23, gain: 0.05 },
 };
 
 const skids = new WeakMap();
@@ -19,7 +19,6 @@ export function playMovement(engine, event, surface = 'dirt') {
   if (type !== 'jump' && type !== 'land' && type !== 'skid') return [];
   const voices = [];
   const retain = voice => { if (voice) voices.push(voice); };
-  const playTone = options => retain(tone(engine, options));
   const playNoise = options => retain(noise(engine, options));
   const strength = Number.isFinite(event.strength)
     ? Math.max(0, Math.min(1.2, event.strength))
@@ -28,42 +27,43 @@ export function playMovement(engine, event, surface = 'dirt') {
   const texture = SURFACES[surface] || SURFACES.dirt;
 
   if (type === 'jump') {
-    // Cloth tension followed by a breath of air, without a pitched arcade cue.
+    // A restrained cloth pull and leather flex at takeoff.
     playNoise({
-      ...position, cutoff: 1300, filterType: 'bandpass',
-      duration: 0.075, gain: 0.025 + strength * 0.015, attack: 0.008,
+      ...position, cutoff: 720, filterType: 'bandpass', Q: 0.5,
+      duration: 0.095, gain: 0.022 + strength * 0.011, attack: 0.003,
+      decay: 0.028, sustain: 0.07, release: 0.055,
     });
     playNoise({
-      ...position, cutoff: 2400, filterType: 'lowpass',
-      duration: 0.17, gain: 0.018 + strength * 0.012, attack: 0.025,
+      ...position, cutoff: 360, filterType: 'lowpass', Q: 0.5,
+      duration: 0.075, gain: 0.016 + strength * 0.008, attack: 0.002,
+      decay: 0.022, sustain: 0.04, release: 0.045,
     });
     return voices;
   }
 
   if (type === 'land') {
     const weight = 0.3 + strength * 0.7;
-    playTone({
-      ...position, frequency: 105, endFrequency: 42, type: 'sine',
-      duration: 0.12 + strength * 0.055, gain: 0.085 * weight, attack: 0.004,
+    // A short low impulse with damped material resonance, never a pitch glide.
+    playNoise({
+      ...position, cutoff: 300, filterType: 'lowpass', Q: 0.65,
+      duration: 0.105 + strength * 0.025, gain: 0.09 * weight, attack: 0.002,
+      decay: 0.025, sustain: 0.025, release: 0.075,
     });
     playNoise({
-      ...position, cutoff: 270, filterType: 'lowpass',
-      duration: 0.085, gain: 0.075 * weight, attack: 0.003,
+      ...position, cutoff: 155, filterType: 'bandpass', Q: 1.3,
+      duration: 0.095, gain: 0.065 * weight, attack: 0.002,
+      decay: 0.023, sustain: 0.02, release: 0.06,
     });
     playNoise({
-      ...position, ...texture, gain: texture.gain * weight, attack: 0.004,
+      ...position, ...texture, gain: texture.gain * weight, attack: 0.003,
+      decay: texture.duration * 0.24, sustain: surface === 'water' ? 0.12 : 0.045,
+      release: texture.duration * 0.62,
     });
-    if (surface === 'water') {
-      playTone({
-        ...position, frequency: 260, endFrequency: 115, type: 'sine',
-        duration: 0.08, gain: 0.019 * weight, attack: 0.005,
-      });
-    }
     return voices;
   }
 
-  // Skid particles arrive every simulation frame. Keep the scrape continuous
-  // with at most ten overlapping grains per second, including one at time 0.
+  // Skid particles arrive every simulation frame. A quiet brush releases before
+  // the next grain, at most ten per second, including one at time 0.
   const context = engine.context;
   const now = context.currentTime;
   const previous = skids.get(engine);
@@ -72,14 +72,16 @@ export function playMovement(engine, event, surface = 'dirt') {
   skids.set(engine, { context, time: now });
   playNoise({
     ...position, ...texture,
-    duration: surface === 'water' ? 0.18 : 0.14,
-    gain: texture.gain * strength * 0.65,
-    attack: 0.012,
+    duration: surface === 'water' ? 0.11 : 0.085,
+    gain: texture.gain * strength * 0.4,
+    attack: 0.003, decay: 0.019, sustain: 0.045,
+    release: surface === 'water' ? 0.075 : 0.055,
   });
   if (surface !== 'water') {
     playNoise({
-      ...position, cutoff: 420, filterType: 'lowpass',
-      duration: 0.11, gain: 0.018 * strength, attack: 0.018,
+      ...position, cutoff: 460, filterType: 'lowpass', Q: 0.45,
+      duration: 0.065, gain: 0.009 * strength, attack: 0.002,
+      decay: 0.018, sustain: 0.03, release: 0.04,
     });
   }
   return voices;

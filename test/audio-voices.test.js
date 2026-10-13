@@ -9,15 +9,16 @@ function fakeEngine(state = 'running', currentTime = 8) {
   const automation = [];
   const context = { state, currentTime, sampleRate: 8000 };
   function param(value = 0) {
-    return {
-      value,
-      setValueAtTime: (...args) => record('set', args),
-      linearRampToValueAtTime: (...args) => record('linear', args),
-      exponentialRampToValueAtTime: (...args) => record('exponential', args),
-      setTargetAtTime: (...args) => record('target', args),
-      cancelAndHoldAtTime: (...args) => record('hold', args),
-      cancelScheduledValues: (...args) => record('cancel', args),
-    };
+    const parameter = { value, calls: [] };
+    for (const [api, method] of Object.entries({ setValueAtTime: 'set',
+      linearRampToValueAtTime: 'linear', exponentialRampToValueAtTime: 'exponential',
+      setTargetAtTime: 'target', cancelAndHoldAtTime: 'hold', cancelScheduledValues: 'cancel' })) {
+      parameter[api] = (...args) => {
+        record(method, args);
+        parameter.calls.push({ method, args });
+      };
+    }
+    return parameter;
   }
   function record(method, args) {
     assert.ok(args.every(Number.isFinite), `${method} has finite parameters`);
@@ -27,15 +28,17 @@ function fakeEngine(state = 'running', currentTime = 8) {
   }
   function node(kind) {
     const value = {
-      kind, connections: [], disconnects: 0, starts: [], stops: [],
+      kind, connections: [], disconnects: 0, starts: [], offsets: [], stops: [],
       connect(target) { this.connections.push(target); },
       disconnect() { this.disconnects++; },
-      start(at) {
+      start(at, offset) {
         if (at !== undefined) {
           assert.ok(Number.isFinite(at));
           assert.ok(at >= currentTime);
         }
+        if (offset !== undefined) assert.ok(Number.isFinite(offset) && offset >= 0);
         this.starts.push(at);
+        this.offsets.push(offset);
       },
       stop(at) {
         if (at !== undefined) {
@@ -215,4 +218,123 @@ test('parameter smoothing rejects nonfinite inputs and supports the fallback can
     { method: 'set', args: [0.2, 8] },
   ]);
   assert.equal(nodes.length, 1);
+});
+
+test('explicit decay lowers a transient after attack while the legacy envelope holds its peak', () => {
+  for (const play of [tone, noise]) {
+    const legacy = fakeEngine();
+    const decayed = fakeEngine();
+    const original = play(legacy.engine, { gain: 0.4, duration: 0.5, attack: 0.01 });
+    const transient = play(decayed.engine, { gain: 0.4, duration: 0.5, attack: 0.01,
+      decay: 0.08, sustain: 0.2, release: 0.12 });
+    assert.ok(original && transient);
+    const legacyCalls = legacy.nodes.find(node => node.kind === 'gain').gain.calls;
+    assert.equal(legacyCalls.length, 4);
+    assert.equal(legacyCalls[2].args[0], 0.4, 'old callers sustain the full peak until release');
+    const envelope = decayed.nodes.find(node => node.kind === 'gain').gain.calls;
+    const peak = envelope.find(call => call.method === 'linear' && call.args[0] === 0.4);
+    const decay = envelope.find(call => call.method === 'linear' && call.args[0] > 0 && call.args[0] < 0.4);
+    assert.ok(peak && decay, 'the decay has its own descending ramp');
+    assert.ok(Math.abs(decay.args[0] - 0.08) < 1e-10);
+    assert.ok(Math.abs(decay.args[1] - peak.args[1] - 0.08) < 1e-10);
+    const hold = envelope.find(call => call.method === 'set' && call.args[0] > 0);
+    assert.ok(Math.abs(hold.args[0] - 0.08) < 1e-10);
+    assert.ok(Math.abs(hold.args[1] - 8.38) < 1e-10);
+    assert.deepEqual(envelope.at(-1), { method: 'linear', args: [0, 8.5] });
+    original.stop();
+    transient.stop();
+  }
+});
+
+test('zero decay attacks directly to the sustain level without a jump at release', () => {
+  for (const play of [tone, noise]) {
+    for (const sustain of [0, 0.2, 0.75]) {
+      const audio = fakeEngine();
+      const handle = play(audio.engine, { gain: 0.4, duration: 0.5, attack: 0.01,
+        decay: 0, sustain, release: 0.12 });
+      assert.ok(handle);
+      const envelope = audio.nodes.find(node => node.kind === 'gain').gain.calls;
+      const heldLevel = 0.4 * sustain;
+      assert.ok(envelope.every(call => call.args[0] <= heldLevel), 'zero decay never reaches the unsustained peak');
+      assert.deepEqual(envelope[1], { method: 'linear', args: [heldLevel, 8.01] });
+      assert.equal(envelope[2].method, 'set');
+      assert.equal(envelope[2].args[0], envelope[1].args[0], 'the release begins at the same held level');
+      assert.ok(Math.abs(envelope[2].args[1] - 8.38) < 1e-10);
+      assert.deepEqual(envelope.at(-1), { method: 'linear', args: [0, 8.5] });
+      handle.stop();
+    }
+  }
+});
+
+test('malformed new envelope options preserve the legacy defaults and default filter resonance', () => {
+  for (const play of [tone, noise]) {
+    const baseline = fakeEngine();
+    const handle = play(baseline.engine, { cutoff: 1000 });
+    for (const value of [NaN, Infinity, -Infinity, 'invalid', null]) {
+      const audio = fakeEngine();
+      const malformed = play(audio.engine, { cutoff: 1000, decay: value,
+        sustain: value, release: value, Q: value });
+      assert.ok(malformed);
+      assert.deepEqual(audio.nodes.find(node => node.kind === 'gain').gain.calls,
+        baseline.nodes.find(node => node.kind === 'gain').gain.calls);
+      assert.equal(audio.nodes.find(node => node.kind === 'filter').Q.value, 0.7);
+      malformed.stop();
+    }
+    handle.stop();
+  }
+});
+
+test('extreme attack, decay, sustain and release options remain chronological and inside each voice', () => {
+  const cases = [
+    { duration: 0.005, attack: 1e9, decay: 1e9, release: 1e9, sustain: 1e9 },
+    { duration: 0.2, attack: -1e9, decay: -1e9, release: -1e9, sustain: -1e9 },
+    { duration: 0.2, attack: 0.1, decay: 0.2, release: 0.2, sustain: 0 },
+    { duration: 0.2, attack: 0.001, decay: 0, release: 0, sustain: 0.3 },
+  ];
+  for (const play of [tone, noise]) {
+    for (const options of cases) {
+      const audio = fakeEngine();
+      const handle = play(audio.engine, { gain: 0.5, ...options });
+      assert.ok(handle);
+      const calls = audio.nodes.find(node => node.kind === 'gain').gain.calls;
+      const times = calls.map(call => call.args[1]);
+      assert.ok(times.every((time, index) => time >= 8 && time <= 8 + options.duration + 1e-10
+        && (index === 0 || time >= times[index - 1])));
+      assert.ok(calls.every(call => call.args[0] >= 0 && call.args[0] <= 0.5));
+      assert.equal(calls.at(-1).args[0], 0);
+      assert.ok(Math.abs(calls.at(-1).args[1] - (8 + options.duration)) < 1e-10);
+      handle.stop();
+    }
+  }
+});
+
+test('filter resonance honors authored Q and bounds out-of-range resonance for burst and loop noise', () => {
+  for (const play of [tone, noise, loopNoise]) {
+    for (const value of [-1e9, 0, 0.45, 1.3, 1e9]) {
+      const audio = fakeEngine();
+      const handle = play(audio.engine, { cutoff: 600, Q: value });
+      assert.ok(handle);
+      const q = audio.nodes.find(node => node.kind === 'filter').Q.value;
+      assert.ok(Number.isFinite(q) && q >= 0 && q <= 30);
+      if (value === 0.45 || value === 1.3) assert.equal(q, value);
+      handle.stop();
+    }
+  }
+});
+
+test('noise bursts vary their sample offset while reusing the same cached buffer', t => {
+  const audio = fakeEngine();
+  let random = 0.25;
+  t.mock.method(Math, 'random', () => random);
+  const first = noise(audio.engine);
+  random = 0.75;
+  const second = noise(audio.engine);
+  const sources = audio.nodes.filter(node => node.kind === 'bufferSource');
+  assert.equal(audio.buffers.length, 1);
+  assert.equal(sources[0].buffer, sources[1].buffer);
+  assert.ok(sources[0].offsets[0] < sources[1].offsets[0]);
+  assert.ok(sources.every(source => source.offsets[0] < source.buffer.length / audio.context.sampleRate));
+  assert.deepEqual(sources.map(source => source.starts[0]), [8, 8]);
+  first.stop();
+  second.stop();
 });

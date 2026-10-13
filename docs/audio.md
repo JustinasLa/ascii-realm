@@ -25,26 +25,35 @@ does not prevent controls from working. Saved mute is applied before playback.
   control.
 - `voices.js` provides enveloped oscillator tones, filtered noise bursts,
   sustained noise beds and parameter smoothing. A deterministic, two-second
-  noise buffer is shared by voices in each context.
-- `footsteps.js` layers a sole impact with grass rustle, dirt crunch, sand brush,
-  rock click or shallow-water splash. Footfalls follow animation contact events
-  rather than an independent sound timer.
-- `movement.js` supplies jump, landing and skid textures. Skid particles can
-  arrive every frame, so scrape grains are limited to ten per second.
+  noise buffer is shared by voices in each context; short cues start at varied
+  positions in that buffer to vary the grain without allocating new samples.
+- `footsteps.js` layers close, unpitched material textures: cushioned grass
+  contact and uneven leaf swishes, compressed dirt and grit, dense sand drag,
+  low stone contact and sole scrape, or shallow-water splash and runoff. Broad
+  filters, falling envelopes and small timing/level variations keep them earthy.
+  Footfalls follow animation contact events rather than an independent timer.
+- `movement.js` uses short, close filtered-noise textures for cloth/leather
+  tension on jumping, weight and damped surface resonance on landing, and quiet
+  brushes on skidding. Skid particles can arrive every frame, so scrape grains
+  are limited to ten per second. Fast attacks decay to low sustain levels and
+  soft releases, leaving space for the music.
 - `sword.js` supplies draw, sheathe, swing, slam and spinning-slash sounds. Its
-  dry blade scrapes, leather movement, air rush and damped metal impacts aim for
-  natural material sounds. `ChargeHum` maintains a quiet filtered-noise texture
+  filtered-noise layers combine weathered steel scrapes, leather handling,
+  broad air rush, a low pressure wake and deeply damped impact grit. `ChargeHum`
+  maintains a quiet low air texture, with slow filter and playback-rate drift,
   during a held charge and releases it smoothly when charging ends. All sword
   sounds use the `sword` bus.
 - `environment.js` samples the same gust noise field as rendered grass,
   nearby lake position and an audio day/night cycle. Water searches are bounded
   to a local radius and reused between samples.
-- `ambience.js` layers low wind turbulence, fine grass/leaf rustle and occasional
-  gust textures, alongside positional lake beds. Its sparse outdoor calls include
+- `ambience.js` layers slowly breathing low wind, soft grass/leaf rustle and
+  occasional gust textures, alongside quieter positional lake beds. Its sparse,
+  distant outdoor calls use softened attacks and filtered decays, and include
   daytime birds and insect chirrs, nighttime crickets and owl hoots, frogs near
   lakes, rare distant deer-like calls and nearby insect buzz/clicks. It also adds
-  positional shimmer when a nearby rendered firefly pulse is bright. Wildlife
-  calls are synthesized atmosphere; they do not add visible animal entities.
+  rare nighttime filtered-noise glints when a nearby rendered firefly pulse is
+  bright. Wildlife calls are synthesized atmosphere; they do not add visible
+  animal entities.
 - `songs.js` contains immutable authored note events and instrument recipes;
   `music.js` schedules the selected day/night pair against the audio clock and
   blends its two tracks through dedicated gain nodes and a shared room into the
@@ -117,22 +126,33 @@ along with its notes; pausing or teardown clears both dry and reverberant paths.
 
 Use `tone(engine, options)` for a pitched note or `noise(engine, options)` for a
 short texture. Options include `bus` (`music`, `sfx`, `sword` or `ambience`), `gain`,
-`duration`, `attack`, `cutoff`, `filterType`, and optional world coordinates
-`x`/`y`. Tones also accept `frequency`, `endFrequency`, `detune` and `type`
+`duration`, `attack`, `decay`, `sustain`, `release`, `cutoff`, `filterType`, `Q`,
+and optional world coordinates `x`/`y`. Tones also accept `frequency`,
+`endFrequency`, `detune` and `type`
 (`sine`, `triangle`, `square` or `sawtooth`). Frequencies are in hertz, detune
 is in cents, and envelope durations are in seconds.
+
+For these generic one-shots, `duration` includes the release. Attack reaches
+`gain`; optional decay lowers it to the `sustain` fraction of that peak, then
+release reaches zero at the end. With zero decay, attack goes directly to the
+sustained level. Sustain ranges from 0 to 1. Omitting the new
+envelope options preserves the original peak-and-release behavior. Filter `Q`
+defaults to 0.7 and is bounded from 0 to 30. Low `Q`, short transient decays and
+modest sustain suit close material sounds; higher `Q` can describe damped
+resonance. Music uses its separate release-after-gate helper described above.
 
 **`when` is an absolute audio-context time in seconds**, not a delay or the game
 clock. For a delayed note, add the delay to `engine.context.currentTime`:
 
 ```js
-import { tone } from './voices.js';
+import { noise } from './voices.js';
 
 if (engine.context?.state === 'running') {
-  tone(engine, {
-    bus: 'sfx', type: 'triangle', frequency: 440, endFrequency: 220,
+  noise(engine, {
+    bus: 'sfx', cutoff: 700, filterType: 'lowpass', Q: 0.5,
     when: engine.context.currentTime + 0.05,
-    duration: 0.12, attack: 0.005, gain: 0.03,
+    duration: 0.12, attack: 0.003, decay: 0.025,
+    sustain: 0.08, release: 0.07, gain: 0.03,
   });
 }
 ```
@@ -160,15 +180,18 @@ Serve the game locally and verify:
    charge stop. Set Effects to zero: both sword and movement sounds should stop.
    Reload to check saved settings, including starting muted.
 3. Walk and sprint across grass, dirt, stone and shore. Listen for contact-synced
-   texture changes, including wet steps at lake edges; deep water still blocks
-   movement. Jump, land and stop from a sprint to hear the corresponding cues.
+   earthy texture changes, including low wet splashes at lake edges; deep water
+   still blocks movement. Jump, land and stop from a sprint to hear short cloth,
+   weighted material contact and skid brushes.
 4. Draw and sheathe with `F`, strike with `J` or left click, and hold then release
-   a strike. Listen for blade friction, leather movement, air rush and short dull
-   metal contact; charge should build as a quiet air texture.
+   a strike. Listen for weathered blade friction, leather movement, low air rush
+   and weighted, damped contact; charge should build as a quiet drifting air
+   texture.
 5. Approach a lake from either side and walk away. Its sound should pan toward
-   the source and fade with distance. Wind and grass rustle follow gusts; birds,
-   insect chirrs, crickets, owls and occasional distant calls remain subtle. Near
-   water, listen for frog croaks at night and occasional firefly shimmer.
+   the source and fade with distance. Wind and grass rustle follow gusts slowly;
+   birds, insect chirrs, crickets, owls and occasional distant calls remain soft
+   behind the music. Near water, listen for frog croaks at night. Bright fireflies
+   occasionally produce a faint noise glint from their visible position.
 6. Listen through a complete 240-second audio cycle for gentle song transitions
    and clean repeated phrases. Listen for slow, mysterious motifs, soft choir
    and bowed tones, low drones and distant bells with decaying room reflections.

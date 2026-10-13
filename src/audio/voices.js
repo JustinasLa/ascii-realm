@@ -60,7 +60,7 @@ function filtered(context, options, fallbackCutoff) {
   const filter = context.createBiquadFilter();
   filter.type = FILTERS.has(options.filterType) ? options.filterType : 'lowpass';
   filter.frequency.value = frequency(options.cutoff, fallbackCutoff, context);
-  filter.Q.value = 0.7;
+  filter.Q.value = bounded(options.Q, 0.7, 0, 30);
   return filter;
 }
 
@@ -83,12 +83,23 @@ function oneShot(engine, options, createSource) {
     const duration = bounded(options.duration, 0.2, 0.005, 60);
     const level = bounded(options.gain, 0.1, 0, 1);
     const attack = bounded(options.attack, 0.005, 0.001, duration * 0.5);
-    const release = Math.min(0.08, duration * 0.4);
+    const release = bounded(options.release, Math.min(0.08, duration * 0.4),
+      0.001, duration - attack);
+    const availableDecay = Math.max(0, duration - attack - release);
+    const decay = bounded(options.decay,
+      Number.isFinite(options.sustain) ? Math.min(0.03, availableDecay) : 0,
+      0, availableDecay);
+    const sustain = bounded(options.sustain, 1, 0, 1);
     const gain = context.createGain();
     nodes.push(gain);
     gain.gain.setValueAtTime(0, at);
-    gain.gain.linearRampToValueAtTime(level, at + attack);
-    gain.gain.setValueAtTime(level, at + Math.max(attack, duration - release));
+    // With no decay, attack directly to the held level. This avoids an
+    // abrupt gain change at release when a caller requests sustain < 1.
+    gain.gain.linearRampToValueAtTime(decay > 0 ? level : level * sustain, at + attack);
+    if (decay > 0) {
+      gain.gain.linearRampToValueAtTime(level * sustain, at + attack + decay);
+    }
+    gain.gain.setValueAtTime(level * sustain, at + duration - release);
     gain.gain.linearRampToValueAtTime(0, at + duration);
     source = createSource(context, at, duration);
     nodes.push(source);
@@ -102,7 +113,13 @@ function oneShot(engine, options, createSource) {
     tail.connect(gain);
     gain.connect(route.input);
     source.onended = cleanup;
-    source.start(at);
+    if (options.noise) {
+      // Each contact samples a different patch of the shared noise texture.
+      // This varies the grain itself without allocating a new buffer.
+      source.start(at, Math.random() * source.buffer.length / context.sampleRate);
+    } else {
+      source.start(at);
+    }
     source.stop(at + duration + 0.01);
     return {
       get ended() { return cleaned; },

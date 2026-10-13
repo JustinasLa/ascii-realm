@@ -1,4 +1,4 @@
-import { tone, noise, setParam } from './voices.js';
+import { noise, setParam } from './voices.js';
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 const finite = (value, fallback) => Number.isFinite(value) ? value : fallback;
@@ -21,7 +21,7 @@ function chargeBuffer(context) {
   return buffer;
 }
 
-/** Short material and air textures: one cue per sword action, not per frame. */
+/** Weathered steel, leather and low air pressure; one cue per sword action. */
 export function playSword(engine, event = {}) {
   const context = engine?.context;
   if (!context || context.state !== 'running') return null;
@@ -31,39 +31,36 @@ export function playSword(engine, event = {}) {
   const speed = clamp(finite(event.speed, 1), 0, 2) / 2;
   const voices = [];
   const scheduled = (options) => ({ ...position, ...options, when: context.currentTime + (options.when ?? 0) });
-  const pitched = (options) => voices.push(tone(engine, scheduled(options)));
   const air = (options) => voices.push(noise(engine, scheduled(options)));
 
   switch (event.type) {
     case 'draw':
-      // Dry blade friction over a softer leather/cloth movement.
-      air({ cutoff: 1700, filterType: 'bandpass', duration: 0.16, gain: 0.042, attack: 0.015 });
-      air({ cutoff: 620, duration: 0.19, gain: 0.033, attack: 0.02 });
-      air({ cutoff: 2800, filterType: 'bandpass', duration: 0.055, gain: 0.012, attack: 0.006, when: 0.07 });
+      // Rough steel friction sits close to soft, dry leather handling.
+      air({ cutoff: 1250, filterType: 'bandpass', Q: 0.85, duration: 0.19, gain: 0.046, attack: 0.012, decay: 0.09, sustain: 0.22, release: 0.055 });
+      air({ cutoff: 440, Q: 0.6, duration: 0.21, gain: 0.043, attack: 0.02, decay: 0.11, sustain: 0.2, release: 0.065 });
+      air({ cutoff: 1900, filterType: 'bandpass', Q: 0.7, duration: 0.065, gain: 0.014, attack: 0.004, decay: 0.024, sustain: 0.1, release: 0.025, when: 0.075 });
       break;
     case 'sheathe':
-      air({ cutoff: 1050, filterType: 'bandpass', duration: 0.14, gain: 0.032, attack: 0.013 });
-      air({ cutoff: 480, duration: 0.17, gain: 0.03, attack: 0.016 });
-      air({ cutoff: 270, duration: 0.038, gain: 0.12, attack: 0.001, when: 0.115 });
+      air({ cutoff: 820, filterType: 'bandpass', Q: 0.65, duration: 0.17, gain: 0.037, attack: 0.014, decay: 0.065, sustain: 0.18, release: 0.045 });
+      air({ cutoff: 350, Q: 0.6, duration: 0.19, gain: 0.036, attack: 0.017, decay: 0.085, sustain: 0.14, release: 0.055 });
+      air({ cutoff: 235, Q: 0.8, duration: 0.065, gain: 0.14, attack: 0.001, decay: 0.018, sustain: 0.08, release: 0.035, when: 0.115 });
       break;
     case 'swing':
-      // Air and a low pressure rush carry speed without a pitched laser sweep.
-      air({ cutoff: 800 + speed * 1300, filterType: 'bandpass', duration: 0.2 - speed * 0.09, gain: (0.033 + speed * 0.027) * strength, attack: 0.023 - speed * 0.013 });
-      air({ cutoff: 280 + speed * 160, duration: 0.18 - speed * 0.06, gain: (0.045 + speed * 0.022) * strength, attack: 0.018 });
+      // Broad rush and a darker pressure wake carry the blade's weight.
+      air({ cutoff: 660 + speed * 1000, filterType: 'bandpass', Q: 0.65, duration: 0.23 - speed * 0.1, gain: (0.035 + speed * 0.027) * strength, attack: 0.027 - speed * 0.014, decay: 0.065 - speed * 0.025, sustain: 0.18, release: 0.055 });
+      air({ cutoff: 220 + speed * 140, Q: 0.8, duration: 0.22 - speed * 0.065, gain: (0.065 + speed * 0.026) * strength, attack: 0.019, decay: 0.075, sustain: 0.16, release: 0.065 });
       break;
     case 'slam':
-      // Weight lives in the short dull impact; metal is a damped contact edge.
-      air({ cutoff: 210, duration: 0.105, gain: 0.23 * strength, attack: 0.001 });
-      air({ cutoff: 850, duration: 0.07, gain: 0.075 * strength, attack: 0.001 });
-      air({ cutoff: 2350, filterType: 'bandpass', duration: 0.045, gain: 0.036 * strength, attack: 0.001 });
-      pitched({ frequency: 653, duration: 0.047, gain: 0.0035 * strength, attack: 0.001 });
-      pitched({ frequency: 1091, duration: 0.033, gain: 0.002 * strength, attack: 0.001 });
+      // A deeply damped stone/steel contact: mass, grit, then a small dark tail.
+      air({ cutoff: 185, Q: 0.85, duration: 0.18, gain: 0.26 * strength, attack: 0.001, decay: 0.045, sustain: 0.09, release: 0.09 });
+      air({ cutoff: 650, filterType: 'bandpass', Q: 1.1, duration: 0.12, gain: 0.081 * strength, attack: 0.001, decay: 0.025, sustain: 0.1, release: 0.055 });
+      air({ cutoff: 1650, filterType: 'bandpass', Q: 0.7, duration: 0.055, gain: 0.035 * strength, attack: 0.001, decay: 0.018, sustain: 0.06, release: 0.025 });
       break;
     case 'whirl':
       for (let i = 0; i < 3; i += 1) {
-        air({ cutoff: 1000 + i * 320, filterType: 'bandpass', duration: 0.185 - i * 0.015, gain: (0.044 - i * 0.008) * strength, attack: 0.022, when: i * 0.085 });
+        air({ cutoff: 720 + i * 230, filterType: 'bandpass', Q: 0.7, duration: 0.23 - i * 0.02, gain: (0.042 - i * 0.007) * strength, attack: 0.025, decay: 0.075, sustain: 0.17, release: 0.075, when: i * 0.095 });
       }
-      air({ cutoff: 390, duration: 0.27, gain: 0.065 * strength, attack: 0.026 });
+      air({ cutoff: 275, Q: 0.9, duration: 0.34, gain: 0.076 * strength, attack: 0.03, decay: 0.1, sustain: 0.2, release: 0.115 });
       break;
     default:
       return null;
@@ -82,8 +79,14 @@ export class ChargeHum {
 
   update(charge, x, y) {
     if (this.disposed) return;
-    const context = this.engine.context;
-    if (!context || context.state !== 'running' || !(charge > 0)) {
+    const context = this.engine?.context;
+    if ((this.voice && this.voice.context !== context)
+      || [...this.retiring].some(voice => voice.context !== context)) this.pause();
+    if (!context || context.state !== 'running') {
+      this.pause();
+      return;
+    }
+    if (!(charge > 0)) {
       this.release();
       return;
     }
@@ -91,60 +94,74 @@ export class ChargeHum {
     if (!this.voice) {
       const route = this.engine.route('sword', x, y);
       if (!route?.input) return;
-      const source = context.createBufferSource();
-      const lowpass = context.createBiquadFilter();
-      const highpass = context.createBiquadFilter();
-      const gain = context.createGain();
-      source.buffer = chargeBuffer(context);
-      source.loop = true;
-      lowpass.type = 'lowpass';
-      lowpass.frequency.setValueAtTime(280, context.currentTime);
-      lowpass.Q.value = 0.45;
-      highpass.type = 'highpass';
-      highpass.frequency.value = 70;
-      highpass.Q.value = 0.45;
-      gain.gain.setValueAtTime(0, context.currentTime);
-      source.connect(lowpass);
-      lowpass.connect(highpass);
-      highpass.connect(gain);
-      gain.connect(route.input);
-      const voice = { source, lowpass, highpass, gain, route, cleaned: false };
-      source.onended = () => this.cleanup(voice);
-      this.voice = voice;
-      source.start();
+      const voice = { context, route, nodes: [], cleaned: false };
+      try {
+        voice.source = context.createBufferSource();
+        voice.nodes.push(voice.source);
+        voice.lowpass = context.createBiquadFilter();
+        voice.nodes.push(voice.lowpass);
+        voice.highpass = context.createBiquadFilter();
+        voice.nodes.push(voice.highpass);
+        voice.gain = context.createGain();
+        voice.nodes.push(voice.gain);
+        voice.source.buffer = chargeBuffer(context);
+        voice.source.loop = true;
+        voice.lowpass.type = 'lowpass';
+        voice.lowpass.frequency.setValueAtTime(235, context.currentTime);
+        voice.lowpass.Q.value = 0.7;
+        voice.highpass.type = 'highpass';
+        voice.highpass.frequency.value = 58;
+        voice.highpass.Q.value = 0.5;
+        voice.gain.gain.setValueAtTime(0, context.currentTime);
+        voice.source.connect(voice.lowpass);
+        voice.lowpass.connect(voice.highpass);
+        voice.highpass.connect(voice.gain);
+        voice.gain.connect(route.input);
+        voice.source.onended = () => this.cleanup(voice);
+        voice.source.start();
+        this.voice = voice;
+      } catch {
+        try { voice.source?.stop(); } catch { /* A source may not have started. */ }
+        this.cleanup(voice);
+        return;
+      }
     }
 
     const voice = this.voice;
     const now = context.currentTime;
     const progress = clamp(charge / 0.5, 0, 1);
     voice.route.update?.(x, y);
-    setParam(voice.lowpass.frequency, 280 + progress * 340, now, 0.135);
-    setParam(voice.gain.gain, 0.019 + progress * 0.023, now, 0.09);
+    // Slow movement in the low texture feels uneasy without becoming a note.
+    const drift = Math.sin(now * 0.7) * 15;
+    setParam(voice.lowpass.frequency, 235 + progress * 125 + drift, now, 0.18);
+    setParam(voice.lowpass.Q, 0.7 + progress * 0.12, now, 0.2);
+    setParam(voice.source.playbackRate, 0.8 + Math.sin(now * 0.33) * 0.035, now, 0.3);
+    setParam(voice.gain.gain, 0.021 + progress * 0.024, now, 0.12);
   }
 
   release() {
     const voice = this.voice;
     if (!voice) return;
     this.voice = null;
-    const context = this.engine.context;
+    const context = voice.context;
     this.retiring.add(voice);
-    if (!context || context.state !== 'running') {
+    if (!context || context !== this.engine?.context || context.state !== 'running') {
       try { voice.source.stop(); } catch { /* Already ended. */ }
       this.cleanup(voice);
       return;
     }
-    setParam(voice.gain.gain, 0, context.currentTime, 0.045);
-    voice.source.stop(context.currentTime + 0.09);
+    setParam(voice.gain.gain, 0, context.currentTime, 0.075);
+    try { voice.source.stop(context.currentTime + 0.14); }
+    catch { this.cleanup(voice); }
   }
 
   cleanup(voice) {
     if (voice.cleaned) return;
     voice.cleaned = true;
-    voice.source.onended = null;
-    voice.source.disconnect();
-    voice.lowpass.disconnect();
-    voice.highpass.disconnect();
-    voice.gain.disconnect();
+    if (voice.source) voice.source.onended = null;
+    for (const node of voice.nodes) {
+      try { node.disconnect(); } catch { /* Context teardown may have disconnected it. */ }
+    }
     voice.route.dispose();
     this.retiring.delete(voice);
   }

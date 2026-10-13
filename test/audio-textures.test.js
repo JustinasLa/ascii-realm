@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { playFootstep } from '../src/audio/footsteps.js';
+import { playMovement } from '../src/audio/movement.js';
 import { playSword, ChargeHum } from '../src/audio/sword.js';
 import { Ambience } from '../src/audio/ambience.js';
 
@@ -22,10 +23,15 @@ function fakeAudio() {
     return param;
   };
   const node = kind => {
-    const result = { kind, disconnects: 0, starts: [], stops: [], connections: [],
+    const result = { kind, disconnects: 0, starts: [], offsets: [], stops: [], connections: [],
       connect(target) { this.connections.push(target); },
       disconnect() { this.disconnects++; },
-      start(at = context.currentTime) { this.starts.push(at); },
+      start(at = context.currentTime, offset) {
+        if (!Number.isFinite(at) || at < context.currentTime
+          || (offset !== undefined && (!Number.isFinite(offset) || offset < 0))) invalid.push({ at, offset });
+        this.starts.push(at);
+        this.offsets.push(offset);
+      },
       stop(at = context.currentTime) { this.stops.push(at); },
     };
     nodes.push(result);
@@ -34,10 +40,10 @@ function fakeAudio() {
   context.createGain = () => Object.assign(node('gain'), { gain: parameter() });
   context.createOscillator = () => Object.assign(node('oscillator'), { frequency: parameter(), detune: parameter() });
   context.createBiquadFilter = () => Object.assign(node('filter'), { frequency: parameter(), Q: parameter() });
-  context.createBufferSource = () => node('noise');
+  context.createBufferSource = () => Object.assign(node('noise'), { playbackRate: parameter(1) });
   context.createBuffer = (channels, length) => {
     const data = new Float32Array(length);
-    return { getChannelData: () => data };
+    return { length, getChannelData: () => data };
   };
   const engine = {
     context, listener: { x: 20, y: 40 },
@@ -88,24 +94,124 @@ test('draw, sheath, swing and whirl use material and air noise through the sword
     assert.equal(audio.nodes.filter(node => node.kind === 'oscillator').length, 0, type);
     assert.ok(audio.routes.every(route => route.bus === 'sword' && route.x === 3 && route.y === 4));
     const sources = audio.nodes.filter(node => node.kind === 'noise');
-    assert.ok(sources.every(source => source.stops[0] - source.starts[0] <= 0.35));
+    assert.ok(sources.every(source => source.stops[0] - source.starts[0] <= 0.4));
     assert.ok(sources.every(source => source.starts[0] >= audio.context.currentTime));
     handles.forEach(handle => handle.stop());
     assertDisposed(audio);
   }
 });
 
-test('sword impact is short and has no oscillator pitch sweep', () => {
+test('sword impact is a short unpitched, decaying contact', () => {
   const audio = fakeAudio();
   const handles = playSword(audio.engine, { type: 'slam', strength: 1 });
   const sources = audio.nodes.filter(node => ['noise', 'oscillator'].includes(node.kind));
   assert.ok(sources.some(source => source.kind === 'noise'));
-  assert.ok(sources.every(source => source.stops[0] - source.starts[0] < 0.15));
-  for (const oscillator of sources.filter(source => source.kind === 'oscillator')) {
-    assert.ok(oscillator.frequency.calls.every(call => call.method === 'setValueAtTime'));
+  assert.ok(sources.every(source => source.stops[0] - source.starts[0] < 0.3));
+  assert.equal(sources.filter(source => source.kind === 'oscillator').length, 0);
+  for (const gain of audio.nodes.filter(node => node.kind === 'gain')) {
+    const ramps = gain.gain.calls.filter(call => call.method === 'linearRampToValueAtTime');
+    assert.ok(ramps.length >= 3 && ramps[1].args[0] < ramps[0].args[0]);
   }
   assert.ok(audio.routes.every(route => route.bus === 'sword'));
   handles.forEach(handle => handle.stop());
+  assertDisposed(audio);
+});
+
+test('all five footstep materials use distinct noise colors and envelopes, with strength and position', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  const colors = new Set();
+  const envelopes = new Set();
+  for (const surface of ['grass', 'dirt', 'sand', 'rock', 'water']) {
+    const audio = fakeAudio();
+    const handles = playFootstep(audio.engine, surface, { strength: 1, x: 32, y: 47 });
+    assert.ok(handles.length >= 2 && handles.length <= 10, surface);
+    assert.equal(audio.nodes.filter(node => node.kind === 'oscillator').length, 0, surface);
+    assert.ok(audio.routes.every(route => route.x === 32 && route.y === 47));
+    colors.add(JSON.stringify(audio.nodes.filter(node => node.kind === 'filter')
+      .map(node => [node.type, node.frequency.value, node.Q.value])));
+    envelopes.add(JSON.stringify(audio.nodes.filter(node => node.kind === 'gain')
+      .map(node => node.gain.calls.map(call => [call.method, call.args[1] - audio.context.currentTime]))));
+    const loudness = Math.max(...audio.nodes.filter(node => node.kind === 'gain')
+      .flatMap(node => node.gain.calls.map(call => call.args[0])));
+    const soft = fakeAudio();
+    const softHandles = playFootstep(soft.engine, surface, { strength: 0.1 });
+    const softLoudness = Math.max(...soft.nodes.filter(node => node.kind === 'gain')
+      .flatMap(node => node.gain.calls.map(call => call.args[0])));
+    assert.ok(softLoudness < loudness, surface);
+    for (const gain of audio.nodes.filter(node => node.kind === 'gain')) {
+      const ramps = gain.gain.calls.filter(call => call.method === 'linearRampToValueAtTime');
+      assert.ok(ramps.some((call, index) => index > 0 && call.args[0] < ramps[0].args[0]
+        && call.args[0] > 0), 'contact drops to a damped tail');
+    }
+    handles.forEach(handle => handle.stop());
+    softHandles.forEach(handle => handle.stop());
+    assertDisposed(audio);
+    assertDisposed(soft);
+  }
+  assert.equal(colors.size, 5, 'material filters differ');
+  assert.equal(envelopes.size, 5, 'material contact timing differs');
+  const silent = fakeAudio();
+  assert.deepEqual(playFootstep(silent.engine, 'dirt', { strength: 0 }), []);
+  silent.context.state = 'suspended';
+  assert.deepEqual(playFootstep(silent.engine, 'grass'), []);
+  assert.equal(silent.nodes.length, 0);
+});
+
+test('jump, landing and skid use unpitched material textures and return stoppable positioned handles', () => {
+  const landingColors = new Set();
+  for (const surface of ['grass', 'dirt', 'sand', 'rock', 'water']) {
+    for (const type of ['jump', 'land', 'skid']) {
+      const audio = fakeAudio();
+      const handles = playMovement(audio.engine, { type, strength: 0.8, x: 24, y: 45 }, surface);
+      assert.ok(handles.length >= 1 && handles.length <= 6);
+      assert.equal(audio.nodes.filter(node => node.kind === 'oscillator').length, 0, `${surface} ${type}`);
+      assert.equal(audio.nodes.filter(node => node.kind === 'noise').length, handles.length);
+      assert.ok(audio.routes.every(route => route.bus === 'sfx' && route.x === 24 && route.y === 45));
+      if (type === 'land') landingColors.add(JSON.stringify(audio.nodes.filter(node => node.kind === 'filter')
+        .map(node => [node.type, node.frequency.value])));
+      const gains = audio.nodes.filter(node => node.kind === 'gain');
+      assert.ok(gains.every(node => node.gain.calls.some(call => call.method === 'linearRampToValueAtTime'
+        && call.args[0] > 0 && call.args[0] < node.gain.calls[1].args[0])));
+      handles.forEach(handle => handle.stop());
+      assertDisposed(audio);
+    }
+  }
+  assert.equal(landingColors.size, 5);
+});
+
+test('movement strength changes weight; skid cooldown suppresses per-frame repeats and expires', () => {
+  for (const type of ['jump', 'land', 'skid']) {
+    const quiet = fakeAudio();
+    const heavy = fakeAudio();
+    const soft = playMovement(quiet.engine, { type, strength: 0.1 }, 'dirt');
+    const strong = playMovement(heavy.engine, { type, strength: 1 }, 'dirt');
+    const peak = audio => Math.max(...audio.nodes.filter(node => node.kind === 'gain')
+      .flatMap(node => node.gain.calls.map(call => call.args[0])));
+    assert.ok(peak(heavy) > peak(quiet), type);
+    soft.forEach(handle => handle.stop());
+    strong.forEach(handle => handle.stop());
+    assertDisposed(quiet);
+    assertDisposed(heavy);
+  }
+  const audio = fakeAudio();
+  audio.context.currentTime = 0;
+  const first = playMovement(audio.engine, { type: 'skid', strength: 1 });
+  assert.ok(first.length > 0);
+  const routes = audio.routes.length;
+  for (let frame = 1; frame <= 5; frame++) {
+    audio.context.currentTime = frame / 60;
+    assert.deepEqual(playMovement(audio.engine, { type: 'skid', strength: 1 }), []);
+  }
+  assert.equal(audio.routes.length, routes);
+  audio.context.currentTime = 0.12;
+  const next = playMovement(audio.engine, { type: 'skid', strength: 1 });
+  assert.ok(next.length > 0);
+  audio.context.currentTime = 0.3;
+  assert.deepEqual(playMovement(audio.engine, { type: 'skid', strength: 0 }), []);
+  assert.deepEqual(playMovement(audio.engine, { type: 'unrecognized' }), []);
+  audio.context.state = 'suspended';
+  assert.deepEqual(playMovement(audio.engine, { type: 'land' }), []);
+  [...first, ...next].forEach(handle => handle.stop());
   assertDisposed(audio);
 });
 
@@ -142,6 +248,33 @@ test('charging holds one quiet noise texture, then pauses, restarts and disposes
   assert.equal(audio.nodes.filter(node => node.kind === 'noise').length, 2);
   assert.ok(audio.routes.every(route => route.bus === 'sword'));
   assertDisposed(audio);
+});
+
+test('charge clears retiring tails on suspension and replaces old voices when the audio context changes', () => {
+  const audio = fakeAudio();
+  const charge = new ChargeHum(audio.engine);
+  charge.update(0.3, 1, 2);
+  charge.release();
+  assert.equal(charge.retiring.size, 1);
+  audio.context.state = 'suspended';
+  charge.update(0.3, 1, 2);
+  assert.equal(charge.retiring.size, 0);
+  assert.equal(charge.voice, null);
+  assertDisposed(audio);
+  audio.context.state = 'running';
+  charge.update(0.3, 1, 2);
+  const oldVoice = charge.voice;
+  const replacement = fakeAudio();
+  audio.engine.context = replacement.context;
+  charge.update(0.3, 1, 2);
+  assert.notEqual(charge.voice, oldVoice);
+  assert.equal(oldVoice.cleaned, true);
+  assert.equal(charge.voice.context, replacement.context);
+  assert.equal(charge.retiring.size, 0);
+  charge.dispose();
+  assertDisposed(audio);
+  assert.ok(replacement.nodes.length > 0 && replacement.nodes.every(node => node.disconnects === 1));
+  assert.deepEqual(replacement.invalid, []);
 });
 
 const wildlifeTimers = ['nextCricket', 'nextShimmer', 'nextBird', 'nextOwl', 'nextFrog',
@@ -192,6 +325,36 @@ test('frog calls require a nearby valid lake at night and use the lake position'
   assert.ok(calls.length > 0);
   assert.ok(calls.every(call => call.options.x === lake.x && call.options.y === lake.y));
   assert.ok(calls.some(call => call.kind === 'note') && calls.some(call => call.kind === 'breath'));
+});
+
+test('firefly glints are rare night-gated positioned noise, without musical pings', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  const environment = { time: 0, fireflies: [
+    { x: 120, y: 40, phase: Math.PI / 2 },
+    { x: 8, y: 9, phase: 0 },
+  ] };
+  assert.equal(recordWildlife('nextShimmer', { ...environment, night: 0 }).length, 0);
+  const calls = recordWildlife('nextShimmer', { ...environment, night: 1 });
+  assert.ok(calls.length > 0 && calls.length <= 4);
+  assert.ok(calls.every(call => call.kind === 'breath'));
+  assert.ok(calls.every(call => call.options.x === 120 && call.options.y === 40));
+  const audio = fakeAudio();
+  const ambience = new Ambience(audio.engine);
+  ambience.update();
+  for (const name of wildlifeTimers) ambience[name] = Infinity;
+  ambience.nextShimmer = 0;
+  const initialRoutes = audio.routes.length;
+  ambience.update({ ...environment, night: 1 });
+  assert.equal(audio.nodes.filter(node => node.kind === 'oscillator').length, 0);
+  assert.ok(audio.routes.slice(initialRoutes).every(route => route.bus === 'ambience'
+    && route.x === 120 && route.y === 40));
+  assert.ok(ambience.nextShimmer > audio.context.currentTime + 8, 'glints have a long quiet gap');
+  const routes = audio.routes.length;
+  audio.context.currentTime += 1;
+  ambience.update({ ...environment, night: 1 });
+  assert.equal(audio.routes.length, routes);
+  ambience.dispose();
+  assertDisposed(audio);
 });
 
 test('ambience clock jumps prune expired notes and keep wildlife bounded with complete cleanup', t => {
