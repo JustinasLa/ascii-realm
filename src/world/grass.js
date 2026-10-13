@@ -163,6 +163,7 @@ export class Grass {
     this.tracks = new Map();
     this.previousFeet = new Map();
     this.parts = new Map();
+    this.touched = [];
     this.prepared = null;
     this.field = null;
   }
@@ -369,12 +370,18 @@ export class Grass {
       this.field = { press: new Float64Array(length), lean: new Float64Array(length),
         tracks: new Float64Array(length), part: new Float64Array(length), sink: new Float64Array(length) };
     }
-    const { press, lean, tracks, part, sink } = this.field;
-    press.fill(0, 0, length);
-    lean.fill(0, 0, length);
-    tracks.fill(0, 0, length);
-    part.fill(0, 0, length);
-    sink.fill(0, 0, length);
+    if (!this.field.matted || this.field.matted.length < rows + 1) this.field.matted = new Int32Array(rows + 1);
+    const { press, lean, tracks, part, sink, matted } = this.field;
+    // Contacts only ever touch a few of these cells: clear just those.
+    const touched = this.touched;
+    for (const i of touched) {
+      press[i] = 0;
+      lean[i] = 0;
+      tracks[i] = 0;
+      part[i] = 0;
+      sink[i] = 0;
+    }
+    touched.length = 0;
     for (const entry of this.parts.values()) {
       const x = entry.x - x0;
       const y = entry.y - y0;
@@ -382,6 +389,7 @@ export class Grass {
       if (x < 0 || x >= cols || y < 0 || y >= rows || recovery < 0.02) continue;
       part[y * cols + x] = entry.lean * recovery;
       sink[y * cols + x] = entry.sink * recovery;
+      touched.push(y * cols + x);
     }
     for (const bend of this.bends.values()) {
       const x = bend.x - x0;
@@ -392,7 +400,9 @@ export class Grass {
       const i = y * cols + x;
       press[i] = bend.press * recovery;
       lean[i] = bend.lean * recovery;
+      touched.push(i);
     }
+    matted.fill(0, 0, rows + 1);
     for (const track of this.tracks.values()) {
       const x = track.x - x0;
       const y = track.y - y0;
@@ -400,15 +410,23 @@ export class Grass {
       const i = y * cols + x;
       const recovery = this.trackRecovery(track, t);
       tracks[i] = track.press * recovery;
+      touched.push(i);
+      if (tracks[i] > 0.45) matted[y + 1] = 1;
       if (tracks[i] > press[i]) {
         press[i] = tracks[i];
         lean[i] = track.lean * recovery;
       }
     }
+    // Running count of rows holding a matted footprint, so a row of roots
+    // can tell in O(1) whether any of its strokes might cross one.
+    for (let y = 0; y < rows; y++) matted[y + 1] += matted[y];
     this.prepared = { x0, y0, cols, rows, t };
   }
 
   drawRow(r, world, view, t, y, write = putCell) {
+    // A reflected row with no water anywhere below it can skip every root.
+    if (write.visible && !write.visible(r, -SIDE_PAD, y - view.y0 - MAX_GRASS_HEIGHT,
+      view.cols + SIDE_PAD, y - view.y0, y - view.y0)) return;
     this.prepare(view, t);
     const field = this.field;
     const grid = this.prepared;
@@ -416,7 +434,10 @@ export class Grass {
     // Overhanging ASCII strokes must not paint an upright stalk back across
     // a matted footprint. This uses the existing, world-anchored sole marks
     // and is shared by the normal and reflected views.
-    const paint = this.tracks.size === 0 ? write : (renderer, sx, sy, ch, cr, cg, cb, base) => {
+    const top = Math.max(0, y - grid.y0 - MAX_GRASS_HEIGHT);
+    const bottom = Math.min(grid.rows, y - grid.y0 + 1);
+    const crossed = bottom > top && field.matted[bottom] > field.matted[top];
+    const paint = !crossed ? write : (renderer, sx, sy, ch, cr, cg, cb, base) => {
       const wx = sx + view.x0;
       const wy = sy + view.y0;
       const pressure = field.tracks[(wy - grid.y0) * grid.cols + wx - grid.x0] || 0;
@@ -456,8 +477,9 @@ export class Grass {
         // Blades lying down reach further sideways than upright ones lean
         // (at most seven columns, plus a flower cluster's petal).
         const span = press > 0.3 || sink > 0.3 ? SIDE_PAD : 9;
-        if (write.visible && !write.visible(r, x - view.x0 - span, base - MAX_GRASS_HEIGHT,
-          x - view.x0 + span, base, base)) continue;
+        if (write.visible ? !write.visible(r, x - view.x0 - span, base - MAX_GRASS_HEIGHT,
+          x - view.x0 + span, base, base) : x - view.x0 + span < 0 || x - view.x0 - span >= view.cols ||
+          base - Math.ceil(height * BLADE_LENGTH * 1.08) - 1 >= view.rows) continue;
         const bend = field.lean[fi];
         const wind = grassWind(x, y, t, world.seed, rnd);
         const variation = blades ? blades.variations[root] : hash2(x, y, world.seed + 1217);
