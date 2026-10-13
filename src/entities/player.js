@@ -15,6 +15,7 @@ const TURN_RATE = 12; // how quickly the heading swings round, per second
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
 const WIND_UP = 0.1; // seconds spent crouching before leaving the ground
+const PICKUP_TIME = 0.62;
 
 // Shortest signed angle from a to b.
 function angleTo(a, b) {
@@ -43,6 +44,10 @@ export class Player {
     this.reach = 0;
     this.windUp = -1;
     this.landed = 0;
+    // A brief crouch and off-hand grab, separate from the jump's crouch.
+    this.pickupTime = -1;
+    this.pickupPose = 0;
+    this.moving = false;
     // Things that happened this frame for the world to react to, such as
     // footfalls and landings: { type, x, y, strength }.
     this.events = [];
@@ -64,17 +69,51 @@ export class Player {
   }
 
   attack() {
+    this.cancelPickup();
     this.combat.attack();
   }
 
   toggleSword() {
+    this.cancelPickup();
     this.combat.toggle();
   }
 
   // Starts a jump if standing on the ground.
   jump() {
     if (this.air > 0 || this.windUp >= 0) return;
+    this.cancelPickup();
     this.windUp = 0;
+  }
+
+  // Collection never locks the controls. Repeated pickups finish the
+  // current grab instead of keeping the warrior crouched indefinitely.
+  animatePickup() {
+    if (this.pickupTime >= 0 || this.moving || this.air > 0 || this.windUp >= 0 || this.combat.busy) return false;
+    this.pickupTime = 0;
+    this.idle = 0;
+    return true;
+  }
+
+  cancelPickup() {
+    this.pickupTime = -1;
+    this.pickupPose = 0;
+  }
+
+  updatePickup(dt, moving) {
+    if (moving || this.air > 0 || this.windUp >= 0 || this.combat.busy) {
+      this.cancelPickup();
+      return;
+    }
+    if (this.pickupTime < 0) return;
+    this.pickupTime += dt;
+    if (this.pickupTime >= PICKUP_TIME) {
+      this.cancelPickup();
+      return;
+    }
+    // Bend down, briefly hold the grab, then stand back up. Smoothstep
+    // makes the ends of each movement settle without a visible jolt.
+    const t = Math.max(0, Math.min(1, this.pickupTime / 0.2, (PICKUP_TIME - this.pickupTime) / 0.32));
+    this.pickupPose = t * t * (3 - 2 * t);
   }
 
   // Wind-up crouch, flight under gravity and a squash on landing.
@@ -111,6 +150,7 @@ export class Player {
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
+    this.moving = moving;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
 
     if (moving) {
@@ -161,7 +201,7 @@ export class Player {
 
     // After standing a while the warrior glances around, scanning one side
     // then the other, with the occasional downward look.
-    this.idle = moving || this.air > 0 ? 0 : this.idle + dt;
+    this.idle = moving || this.air > 0 || this.pickupTime >= 0 ? 0 : this.idle + dt;
     // Left alone long enough with the sword away, the warrior kneels to
     // rest, and springs up again the moment there is something to do.
     const rest = this.idle > 12 && !this.combat.inHand && !this.combat.busy;
@@ -189,16 +229,18 @@ export class Player {
 
     this.combat.update(dt, moving);
     for (const e of this.combat.events) {
-      // The overhead chop lands a stride ahead, in the direction faced.
-      const reach = 0.95 * SCALE;
+      // Cuts and the overhead impact land a stride ahead. Preserve their
+      // distinct event types so harvesting does not trigger slam effects.
+      const reach = e.type === 'strike' || e.type === 'slam' ? 0.95 * SCALE : 0;
       this.events.push({
-        type: 'slam',
+        ...e,
         x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
         y: this.y + Math.cos(this.heading) * reach * TILT,
-        strength: 1,
+        strength: e.strength ?? 1,
       });
     }
     this.combat.events.length = 0;
+    this.updatePickup(dt, moving);
 
     const rig = buildRig(this);
     this.recordTrail(rig);

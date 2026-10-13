@@ -2,23 +2,59 @@
 const held = new Set();
 // Keys pressed since the game last asked, so a quick tap is never missed.
 const tapped = new Set();
+const inputWindow = window;
+const inputDocument = inputWindow.document ?? globalThis.document;
+let gameplayBlocked = false;
 
-window.addEventListener('keydown', (e) => {
+// Controls and their descendants keep their normal keyboard behavior. Panel
+// keys must never become actions queued for the scene after a panel closes.
+export function isGameplayTarget(target) {
+  return !target?.isContentEditable
+    && !target?.closest?.('button, select, input, textarea, a[href], summary, [contenteditable], [data-game-ui]');
+}
+
+export function clearInput() {
+  held.clear();
+  tapped.clear();
+}
+
+export function setGameplayBlocked(blocked) {
+  gameplayBlocked = Boolean(blocked);
+  clearInput();
+}
+
+export function isGameplayBlocked() {
+  return gameplayBlocked || !!inputDocument?.hidden
+    || !isGameplayTarget(inputDocument?.activeElement);
+}
+
+inputWindow.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || isGameplayBlocked() || !isGameplayTarget(e.target)) return;
+  // A key held through a menu, blur, or focus change must be released and
+  // pressed again. Auto-repeat cannot restore a key that was cleared.
+  if (e.repeat && !held.has(e.code)) return;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!e.repeat) tapped.add(e.code);
   held.add(e.code);
 });
-window.addEventListener('keyup', (e) => held.delete(e.code));
-window.addEventListener('blur', () => held.clear());
+inputWindow.addEventListener('keyup', (e) => held.delete(e.code));
+inputWindow.addEventListener('blur', clearInput);
+
+inputDocument?.addEventListener('focusin', (e) => {
+  if (!isGameplayTarget(e.target)) clearInput();
+});
+inputDocument?.addEventListener('visibilitychange', clearInput);
 
 // True once for each press of any of the keys.
 export function wasTapped(...codes) {
+  if (isGameplayBlocked()) return false;
   let hit = false;
   for (const c of codes) hit = tapped.delete(c) || hit;
   return hit;
 }
 
 export function isDown(...codes) {
+  if (isGameplayBlocked()) return false;
   return codes.some((c) => held.has(c));
 }
 

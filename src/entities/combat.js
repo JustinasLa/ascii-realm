@@ -79,6 +79,7 @@ export class Combat {
     this.lastSwing = '';
     this.calm = 0;
     this.trailing = false;
+    this.struck = false;
     // The pose actually shown, chasing the current key.
     this.pose = { hand: [...KEYS.rest.hand], blade: [...KEYS.rest.blade], twist: 0, lean: 0, crouch: 0, off: 0 };
     // How much the arms follow the sword rather than swinging freely.
@@ -115,6 +116,7 @@ export class Combat {
     this.move = move;
     this.step = 0;
     this.t = 0;
+    this.struck = false;
     if ('abc'.includes(move)) this.lastSwing = move;
   }
 
@@ -128,6 +130,11 @@ export class Combat {
       target = KEYS[s.key];
       rate = s.rate;
       this.trailing = !!s.trail;
+      // The cutting phase can span several steps, but each swing hits once.
+      if (s.trail && !this.struck) {
+        this.events.push({ type: 'strike', swing: this.move });
+        this.struck = true;
+      }
       this.t += dt;
       // A queued swing cuts the recovery of the last one short.
       if (s.combo && this.queued) this.t = s.time;

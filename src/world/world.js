@@ -1,5 +1,6 @@
 import { fbm } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
+import { rockTypeAt } from './geology.js';
 import { blocks, generateProps } from './props.js';
 
 export const WATER = 0;
@@ -79,6 +80,11 @@ export class World {
   typeAt(x, y) {
     const { c, i } = this.locate(Math.floor(x), Math.floor(y));
     return c.type[i];
+  }
+
+  // The local surface layer determines which loose stones are scattered here.
+  rockTypeAt(x, y) {
+    return rockTypeAt(this, x, y);
   }
 
   // Props are generated on first request rather than with the terrain,

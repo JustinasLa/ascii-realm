@@ -101,9 +101,12 @@ export function buildRig(st) {
   const cb = st.combat;
   const fight = cb ? cb.active : 0;
   const sp = cb?.pose;
-  const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0);
+  const pickup = !st.moving && !(st.air > 0) && !(st.windUp >= 0) && !cb?.busy
+    ? Math.max(0, Math.min(1, st.pickupPose ?? 0)) : 0;
+  const kneel = (st.kneel ?? 0) * (1 - pickup);
+  const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0) + pickup * 1.8;
   const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
-    (st.kneel ?? 0) * 0.18;
+    kneel * 0.18;
   // Shoulders counter-rotate against the hips as the legs swing.
   const twist = Math.sin(phase) * 0.14 * walk * (1 - fight * 0.6) + (sp ? SWORD_SIDE * sp.twist * fight : 0);
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;
@@ -124,7 +127,7 @@ export function buildRig(st) {
     const crouch = crouchAll;
     // Kneeling brings one foot forward and lowers the other knee to the
     // ground behind it.
-    const kn = st.kneel ?? 0;
+    const kn = kneel;
     // The thigh sweeps back at an even pace while the foot is planted, so
     // the foot keeps up with the ground instead of skating, and swings
     // forward again while it is lifted. cos(lp) > 0 is the swing.
@@ -187,7 +190,7 @@ export function buildRig(st) {
   }
 
   // Kneeling, the forearm rests across the raised knee.
-  const kn = st.kneel ?? 0;
+  const kn = kneel;
   if (kn > 0.01) {
     const arm = arms.find((a) => a.s > 0);
     const knee = legs.find((l) => l.s > 0).knee;
@@ -229,6 +232,17 @@ export function buildRig(st) {
         barB: sub(guard, bar),
       };
     }
+  }
+
+  // The free hand leaves an idle guard to gather from the ground. Doing
+  // this after sword posing keeps the blade attached to its own hand.
+  if (pickup > 0) {
+    const arm = arms.find((a) => a.s !== SWORD_SIDE);
+    const target = [arm.s * 0.18, 0.13, 0.38];
+    const [elbow, wrist] = reach(arm.shoulder, target, UPPER_ARM, FOREARM, [arm.s, -0.3, -0.2]);
+    arm.elbow = lerp3(arm.elbow, elbow, pickup);
+    arm.wrist = lerp3(arm.wrist, wrist, pickup);
+    arm.hand = lerp3(arm.hand, add(wrist, [0, -0.04, 0.02]), pickup);
   }
 
   const rig = {

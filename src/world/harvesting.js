@@ -1,0 +1,184 @@
+import { generateResources } from './gatherables.js';
+import { blocks } from './props.js';
+import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
+
+const INTERACT_REACH = 6;
+const STRIKE_RADIUS = 3.5;
+const TREE_HITS = 3;
+const PICKUP_DELAY = 0.25;
+
+const LABELS = {
+  bush: { name: 'Berry bush', action: 'Gather berries' },
+  grass: { name: 'Tall grass', action: 'Gather fibre' },
+  tree: { name: 'Oak tree', action: 'Chop with your sword' },
+};
+
+const distance = (a, b) => Math.hypot((a.x - b.x) * ASPECT, a.y - b.y);
+
+// The blade travels from the warrior towards the emitted strike point. A
+// narrow corridor catches trunks near the hands as well as the blade tip,
+// preserving the strike's original circular footprint at its impact centre.
+function inStrike(player, event, node) {
+  const dx = (event.x - player.x) * ASPECT;
+  const dy = event.y - player.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return node.x === player.x && node.y === player.y;
+  const nx = (node.x - player.x) * ASPECT;
+  const ny = node.y - player.y;
+  const along = (nx * dx + ny * dy) / lengthSquared;
+  if (along < 0) return false;
+  const closest = Math.min(1, along);
+  return Math.hypot(nx - closest * dx, ny - closest * dy) <= STRIKE_RADIUS;
+}
+
+// Resources live on the same cached chunks as terrain and loose items. Their
+// depleted state survives leaving the area and drawing the chunk again.
+export class Harvesting {
+  constructor(world, groundItems) {
+    this.world = world;
+    this.groundItems = groundItems;
+    this.strikes = new WeakSet();
+  }
+
+  resourcesOf(cx, cy) {
+    const chunk = this.world.chunk(cx, cy);
+    if (!chunk.resources) chunk.resources = generateResources(this.world, cx, cy);
+    return chunk.resources;
+  }
+
+  resourcesIn(x0, y0, x1, y1) {
+    const resources = [];
+    for (let cy = Math.floor(y0 / CHUNK_SIZE); cy <= Math.floor(y1 / CHUNK_SIZE); cy++) {
+      for (let cx = Math.floor(x0 / CHUNK_SIZE); cx <= Math.floor(x1 / CHUNK_SIZE); cx++) {
+        for (const node of this.resourcesOf(cx, cy)) {
+          if (node.x >= x0 && node.x <= x1 && node.y >= y0 && node.y <= y1) resources.push(node);
+        }
+      }
+    }
+    return resources;
+  }
+
+  // A resource across water or behind a boulder should not be gathered from
+  // the other side. Ignore only the target tree's own blocking trunk.
+  reachable(player, node) {
+    const props = this.world.propsIn(
+      Math.min(player.x, node.x) - 4,
+      Math.min(player.y, node.y) - 2,
+      Math.max(player.x, node.x) + 4,
+      Math.max(player.y, node.y) + 2,
+    );
+    const steps = Math.max(1, Math.ceil(distance(player, node) * 2));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const x = player.x + (node.x - player.x) * t;
+      const y = player.y + (node.y - player.y) * t;
+      if (this.world.typeAt(x, y) === WATER) return false;
+      if (props.some((prop) => prop !== node && blocks(prop, x, y))) return false;
+    }
+    return true;
+  }
+
+  nearby(player) {
+    const xReach = INTERACT_REACH / ASPECT;
+    const resources = this.resourcesIn(player.x - xReach, player.y - INTERACT_REACH,
+      player.x + xReach, player.y + INTERACT_REACH);
+    const trees = this.world.propsIn(player.x - xReach, player.y - INTERACT_REACH,
+      player.x + xReach, player.y + INTERACT_REACH).filter((prop) => prop.kind === 'tree');
+    let nearest = null;
+    let nearestDistance = INTERACT_REACH;
+    for (const node of [...resources, ...trees]) {
+      if (node.harvested || node.chopped || !LABELS[node.kind]) continue;
+      const d = distance(player, node);
+      if (d > nearestDistance || !this.reachable(player, node)) continue;
+      nearestDistance = d;
+      nearest = { kind: node.kind, node, x: node.x, y: node.y, ...LABELS[node.kind] };
+    }
+    return nearest;
+  }
+
+  drop(node, rewards) {
+    const pickupAfter = this.groundItems.time + PICKUP_DELAY;
+    for (let i = 0; i < rewards.length; i++) {
+      const reward = rewards[i];
+      const offset = (i - (rewards.length - 1) / 2) * 0.8;
+      this.groundItems.add(reward.id, reward.count, node.x + offset, node.y, { pickupAfter });
+    }
+  }
+
+  harvest(node) {
+    if (node.harvested) return null;
+    const rewards = node.kind === 'bush'
+      ? [{ id: 'berries', count: 2 }]
+      : [{ id: 'straw', count: 1 }, { id: 'fibre', count: 1 }];
+    node.harvested = true;
+    this.drop(node, rewards);
+    return {
+      ok: true,
+      status: 'harvested',
+      name: LABELS[node.kind].name,
+      x: node.x,
+      y: node.y,
+      node,
+      rewards,
+      id: rewards.length === 1 ? rewards[0].id : undefined,
+      count: rewards.reduce((total, reward) => total + reward.count, 0),
+      message: node.kind === 'bush' ? 'Gathered berries.' : 'Gathered straw and fibre.',
+    };
+  }
+
+  interact(player) {
+    const target = this.nearby(player);
+    if (!target) return { ok: false, status: 'empty', message: 'Nothing nearby to gather.' };
+    if (target.kind === 'tree') {
+      return { ...target, ok: false, status: 'tree', message: 'Chop this tree with your sword.' };
+    }
+    return this.harvest(target.node);
+  }
+
+  react(event, player) {
+    // The overhead strike also produces a slam for dust and camera shake;
+    // that visual effect must not deal another hit to the same tree.
+    if (event.type !== 'strike' || this.strikes.has(event)) return [];
+    this.strikes.add(event);
+    if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) return [];
+    const xReach = STRIKE_RADIUS / ASPECT;
+    const x0 = Math.min(player.x, event.x) - xReach;
+    const x1 = Math.max(player.x, event.x) + xReach;
+    const y0 = Math.min(player.y, event.y) - STRIKE_RADIUS;
+    const y1 = Math.max(player.y, event.y) + STRIKE_RADIUS;
+    const results = [];
+    for (const node of this.resourcesIn(x0, y0, x1, y1)) {
+      if (node.kind !== 'grass' || node.harvested || !inStrike(player, event, node)) continue;
+      if (!this.reachable(player, node)) continue;
+      results.push(this.harvest(node));
+    }
+
+    let tree = null;
+    let nearestDistance = Infinity;
+    for (const node of this.world.propsIn(x0, y0, x1, y1)) {
+      if (node.kind !== 'tree' || node.chopped || !inStrike(player, event, node)) continue;
+      const d = distance(player, node);
+      if (d > nearestDistance || !this.reachable(player, node)) continue;
+      tree = node;
+      nearestDistance = d;
+    }
+    if (tree) {
+      tree.hits = (tree.hits ?? 0) + 1;
+      tree.chopped = tree.hits >= TREE_HITS;
+      const rewards = tree.chopped ? [{ id: 'oakLog', count: 3 }] : [];
+      if (tree.chopped) this.drop(tree, rewards);
+      results.push({
+        ok: true,
+        status: tree.chopped ? 'harvested' : 'hit',
+        name: LABELS.tree.name,
+        x: tree.x,
+        y: tree.y,
+        node: tree,
+        hits: tree.hits,
+        rewards,
+        message: tree.chopped ? 'Chopped an oak tree.' : `Chopping oak: ${tree.hits}/${TREE_HITS}.`,
+      });
+    }
+    return results;
+  }
+}

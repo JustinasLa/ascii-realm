@@ -15,6 +15,16 @@ const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
 // and a member by hash, which gives foliage its busy, leafy texture.
 const FAMILIES = ['.\'`', ':;-', '+=~ox', 'aedbqpu', 'Q0O8&$', '@#%WM'].map((f) => [...f].map(glyph));
 
+const STUMP = [
+  { dx: -1, dy: -2, g: glyph('_'), r: 139, gg: 103, b: 62 },
+  { dx: 0, dy: -2, g: glyph('='), r: 166, gg: 124, b: 76 },
+  { dx: 1, dy: -2, g: glyph('_'), r: 122, gg: 85, b: 50 },
+  { dx: -1, dy: -1, g: glyph('|'), r: 112, gg: 77, b: 47 },
+  { dx: 0, dy: -1, g: glyph('#'), r: 99, gg: 69, b: 44 },
+  { dx: 1, dy: -1, g: glyph('|'), r: 78, gg: 54, b: 35 },
+  { dx: 0, dy: 0, g: glyph('w'), r: 88, gg: 62, b: 40 },
+];
+
 function bake(w, top, bottom, sample, seed) {
   const cells = [];
   for (let dy = top; dy <= bottom; dy++) {
@@ -95,6 +105,8 @@ function makeTree(x, y, rand) {
     y,
     footW: 2.4,
     footH: 1.2,
+    hits: 0,
+    chopped: false,
     cells: bake(w, -Math.ceil(height + radius), 0, sample, x * 31 + y),
   };
 }
@@ -135,8 +147,10 @@ export function generateProps(world, cx, cy, size) {
       const ox = cx * size + gx;
       const oy = cy * size + gy;
       const rand = mulberry32(Math.floor(hash2(ox, oy, seed + 61) * 2 ** 32));
-      const x = ox + Math.floor(rand() * STEP_X);
-      const y = oy + Math.floor(rand() * STEP_Y);
+      // Keep the last partial grid square inside its owning chunk. Cached
+      // drops and resource queries rely on props not spilling into a neighbour.
+      const x = ox + Math.floor(rand() * Math.min(STEP_X, size - gx));
+      const y = oy + Math.floor(rand() * Math.min(STEP_Y, size - gy));
       if (world.typeAt(x, y) !== GRASS) continue;
       // Keep the spawn clearing open.
       if (Math.hypot((x - world.spawn.x) * ASPECT, y - world.spawn.y) < 36) continue;
@@ -153,12 +167,14 @@ export function generateProps(world, cx, cy, size) {
 export function drawProp(r, view, prop, write = putCell) {
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
-  for (const c of prop.cells) {
+  const cells = prop.kind === 'tree' && prop.chopped ? STUMP : prop.cells;
+  for (const c of cells) {
     write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by);
   }
 }
 
 export function blocks(prop, x, y) {
+  if (prop.kind === 'tree' && prop.chopped) return false;
   const dx = (x - prop.x) / prop.footW;
   const dy = (y - prop.y) / prop.footH;
   return dx * dx + dy * dy < 1;
