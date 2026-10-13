@@ -472,7 +472,7 @@ function bake(sample, seed, species, shape) {
   return { cells, bounds };
 }
 
-export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed = 1, growth = 'mature' } = {}) {
+export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed = 1, growth = 'mature', girth } = {}) {
   if (!TREE_SPECIES.includes(species)) species = 'oak';
   if (!SEASONS.has(season)) season = 'summer';
   const spriteSeed = Math.floor(hash2(Math.floor(x * 32), Math.floor(y * 32), seed + TREE_SPECIES.indexOf(species) * 197) * 0x100000000);
@@ -481,12 +481,29 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
   const random = typeof rand === 'function' ? rand : () => hash2(draw++, spriteSeed, seed + 17);
   if (!['mature', 'sapling', 'bush'].includes(growth)) growth = 'mature';
   const shape = grow(growth === 'bush' ? bushGeometry(random) : geometry(species, random), growth, random);
+  // Trunk age varies independently of crown size: slender trees and broad,
+  // old trunks can share the same height and species.
+  const thickness = Number.isFinite(girth) ? clamp(girth, 0.6, 2) :
+    growth === 'mature' ? 0.6 + hash2(Math.floor(x), Math.floor(y), seed + 741) * 1.4 : 1;
+  for (const wood of shape.wood) {
+    const factor = wood.trunk ? thickness : 0.6 + thickness * 0.4;
+    wood.r0 *= factor;
+    wood.r1 *= factor;
+    const pad = Math.max(1.5, wood.r0, wood.r1);
+    wood.minX = Math.min(wood.x0, wood.x1) - pad;
+    wood.maxX = Math.max(wood.x0, wood.x1) + pad;
+    wood.minY = Math.min(wood.y0, wood.y1) - pad;
+    wood.maxY = Math.max(wood.y0, wood.y1) + pad;
+  }
+  shape.footW *= thickness;
+  shape.footH *= Math.sqrt(thickness);
   const palette = leafPalette(species, season, random() - 0.5);
   const sample = makeSampler(shape, species, season, palette, spriteSeed);
   const { cells, bounds } = bake(sample, spriteSeed, species, shape);
   const top = bounds.minY;
   return {
     kind: growth === 'bush' ? 'bush' : 'tree', growth, species, season, x, y,
+    girth: thickness,
     footW: shape.footW, footH: shape.footH,
     height: bounds.maxY - top + 1,
     top,

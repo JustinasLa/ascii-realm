@@ -26,9 +26,13 @@ For now it is a single warrior exploring procedurally generated terrain.
   jungle trees, pink cherry groves and drooping willows near lakes. Mature
   trees tower over the warrior, with varied heights, irregular leaf clusters,
   branching trunks and shaded canopy pockets. Smaller saplings and walkable
-  shrubs grow between the widely spaced mature trees. Layered
-  foliage has shaded depth and moonlit edges; crowns rustle and gently sway
-  with the grass, while trunks and roots stay planted. Leaves and blossoms
+  shrubs grow between the widely spaced mature trees. Trunks vary
+  independently from slender stems to thick old trees. Mossy
+  fallen logs, snapped bare trunks, exposed stumps, and beaver-gnawed wood
+  with scattered chips add history to the forest; beaver damage stays near
+  water. Fallen trunks block their full length, including across chunks.
+  Layered foliage has shaded depth and moonlit edges; crowns rustle and gently
+  sway with the grass, while trunks and roots stay planted. Leaves and blossoms
   drift down, and foliage thins around the warrior when it would hide them.
   Add `?season=spring`, `?season=autumn` or `?season=winter` for seasonal
   palettes and snow-tipped evergreens. Summer is the default; the season

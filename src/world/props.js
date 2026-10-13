@@ -2,6 +2,7 @@ import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
+import { deadwoodBlocks, deadwoodInClearing, makeDeadwood } from './deadwood.js';
 import { makeBush, makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
@@ -116,6 +117,15 @@ export function treeSpeciesAt(world, x, y) {
   return (grove < 0.43) !== (local < 0.18) ? 'birch' : 'oak';
 }
 
+export function deadwoodConditionAt(world, x, y) {
+  if (hash2(x, y, world.seed + 728) < 0.3 && nearWater(world, x, y)) return 'beaver';
+  const history = hash2(x, y, world.seed + 727);
+  if (history < 0.09) return 'fallen';
+  if (history < 0.16) return 'snag';
+  if (history < 0.24) return 'stump';
+  return null;
+}
+
 // Two layers: widely spaced mature trees, with a smaller understorey grid.
 // Their independent random streams keep groves repeatable across seasons.
 export function generateProps(world, cx, cy, size) {
@@ -141,11 +151,20 @@ export function generateProps(world, cx, cy, size) {
         const roll = rand();
         if (layer === 0 && roll < Math.max(0, forest - 0.38) * 1.6) {
           const species = treeSpeciesAt(world, x, y);
-          props.push(makeTree(x + 0.5, y + 0.5, rand, { species, season: world.season, seed }));
+          const condition = deadwoodConditionAt(world, x, y);
+          if (condition) {
+            const remains = makeDeadwood(x + 0.5, y + 0.5, rand, { condition, species, seed });
+            // A log's far end must also stay outside the spawn clearing.
+            if (!deadwoodInClearing(remains, world.spawn)) props.push(remains);
+          } else {
+            props.push(makeTree(x + 0.5, y + 0.5, rand, { species, season: world.season, seed }));
+          }
         } else if (layer === 1 && roll < 0.04 + Math.max(0, forest - 0.38) * 0.7) {
           // Keep seedlings out of the mature trunks without recursively
           // generating neighboring props. Bushes stay soft and walkable.
-          if (props.some((p) => p.kind === 'tree' && Math.hypot((p.x - x) * ASPECT, p.y - y) < 7)) continue;
+          if (props.some((p) => (p.kind === 'tree' &&
+            Math.hypot((p.x - x) * ASPECT, p.y - y) < p.footW * ASPECT + 4) ||
+            (p.kind === 'deadwood' && deadwoodBlocks(p, x, y)))) continue;
           const species = treeSpeciesAt(world, x, y);
           const options = { species, season: world.season, seed };
           props.push(rand() < 0.35 ? makeTree(x + 0.5, y + 0.5, rand, { ...options, growth: 'sapling' }) :
@@ -198,6 +217,7 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
 
 export function blocks(prop, x, y) {
   if (prop.kind === 'bush') return false;
+  if (prop.kind === 'deadwood') return deadwoodBlocks(prop, x, y);
   const dx = (x - prop.x) / prop.footW;
   const dy = (y - prop.y) / prop.footH;
   return dx * dx + dy * dy < 1;

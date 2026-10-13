@@ -1,6 +1,7 @@
 import { fbm } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { blocks, generateProps } from './props.js';
+import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 
 export const WATER = 0;
 export const SHORE = 1;
@@ -103,7 +104,8 @@ export class World {
 
   isWalkable(x, y) {
     if (this.typeAt(x, y) === WATER) return false;
-    for (const p of this.propsIn(x - 10, y - 3, x + 10, y + 3)) {
+    for (const p of this.propsIn(x - DEADWOOD_REACH_X, y - DEADWOOD_REACH_Y,
+      x + DEADWOOD_REACH_X, y + DEADWOOD_REACH_Y)) {
       if (blocks(p, x, y)) return false;
     }
     return true;
