@@ -30,6 +30,7 @@ export class WeatherAudio {
     this._time = 0;
     this._water = null;
     this._disposed = false;
+    this.onLightning = null;
     try {
       this._storage = storage === undefined ? globalThis.localStorage : storage;
       const saved = JSON.parse(this._storage?.getItem(STORAGE_KEY) || 'null');
@@ -39,6 +40,10 @@ export class WeatherAudio {
   }
 
   get presets() { return WEATHER_PRESETS; }
+
+  get drivesLightning() {
+    return this.engine.context?.state === 'running' && this._active?.ready === true;
+  }
 
   get hasRain() {
     const rainfall = presets.get(this.preset)?.rainfall;
@@ -87,6 +92,7 @@ export class WeatherAudio {
     if (!definition) return;
     const group = new WeatherGroup(this.engine, definition, {
       intensity: this.intensity, random: this._random, budget: this._budget,
+      onLightning: event => this.onLightning?.(event),
     });
     if (!group.ready) { group.dispose(); return; }
     this._active = group;

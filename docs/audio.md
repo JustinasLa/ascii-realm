@@ -134,11 +134,21 @@ the helper does not queue it or substitute a procedural grass sound.
 
 ## Weather soundscapes
 
-Use **Weather sound** in the Audio panel to choose a preset and **Intensity**
+Use **Weather** in the Audio panel to choose a preset and **Intensity**
 to adjust its strength from 0 to 100%. A fresh profile starts on **Clear** at
 60% intensity; saved choices are restored on reload. Clear leaves the meadow's
-ordinary wind, lakes and wildlife audible. The selector changes audio only;
-terrain, movement and rendering keep their existing behavior.
+ordinary wind, lakes and wildlife audible. The same selection and intensity
+also drive ASCII weather effects, including precipitation, fog, blowing leaves
+and sand, storm light, grass gusts and water splashes. Visual effects work before
+audio unlock and while muted; volume sliders control sound. Clear and intensity
+zero remove the visual effects.
+
+Storm thunder events also trigger branching lightning bolts, keeping natural
+strikes and their rumble on the same schedule. Before sound is enabled, the
+visual weather clock produces the bolts. Press `L` or use **Summon lightning**
+to trigger a nearby strike and its thunder for testing, even with Clear or
+intensity zero. Manual thunder uses the Weather, Ambience and Master volume
+controls, and pauses with the other effects.
 
 The separate **Weather** volume slider adjusts this category. Its routing is
 Weather → Ambience → Master, so setting any of those levels to zero silences

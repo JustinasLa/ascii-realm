@@ -4,6 +4,7 @@ import { EnvironmentSampler, nightAmount, surfaceAt } from './environment.js';
 import { FireAudio } from './fire.js';
 import { playFootstep } from './footsteps.js';
 import { prepareGrassFootsteps } from './grass-steps.js';
+import { playLightning } from './lightning.js';
 import { playMovement } from './movement.js';
 import { Music } from './music.js';
 import { ChargeHum, playSword } from './sword.js';
@@ -33,6 +34,9 @@ export class GameAudio {
     switch (event.type) {
       case 'fire-stir':
         handles = this.fires.react(event);
+        break;
+      case 'lightning':
+        handles = playLightning(this.engine, event);
         break;
       case 'step': case 'jump': case 'land': case 'skid': {
         const surface = surfaceAt(this.world, event.x, event.y);

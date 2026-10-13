@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { AudioEngine } from '../src/audio/engine.js';
 import { WeatherAudio } from '../src/audio/weather.js';
 import { WeatherGroup } from '../src/audio/weather/runtime.js';
+import { playLightning } from '../src/audio/lightning.js';
 import { WEATHER_PRESETS } from '../src/audio/weather/presets.js';
 import { rainSplashes } from '../src/audio/weather/rain-splashes.js';
 import { ASPECT } from '../src/world/world.js';
@@ -782,4 +783,74 @@ test('surface rain clears stale water across pause and context changes and skips
   assert.equal(weather._budget.voices.size, 0);
   assertDisposed(audio);
   assertDisposed(replacement);
+});
+
+test('audible thunder triggers one matching bolt, while zero intensity and clock gaps trigger none', () => {
+  for (const id of ['thunderstorm', 'distant-thunder']) {
+    const audio = fakeAudio();
+    const weather = new WeatherAudio(audio.engine, { storage: null, random: () => 0.5 });
+    const strikes = [];
+    weather.onLightning = event => strikes.push(event);
+    weather.setPreset(id);
+    weather.setIntensity(0.4);
+    weather.update();
+    assert.equal(weather.drivesLightning, true);
+    weather._active.events[0].next = audio.context.currentTime;
+    weather.update();
+    assert.equal(strikes.length, 1);
+    assert.equal(strikes[0].strength, 0.4);
+    assert.equal(strikes[0].distant, id === 'distant-thunder');
+    assert.ok(Number.isFinite(strikes[0].bearing));
+    assert.ok(weather._active.voices.length > 0, 'the bolt and rumble share this event');
+    weather.setIntensity(0);
+    weather._active.events[0].next = audio.context.currentTime;
+    weather.update();
+    assert.equal(strikes.length, 1);
+    weather.setIntensity(0.4);
+    weather._active.events[0].next = audio.context.currentTime;
+    audio.context.currentTime += 10;
+    weather.update();
+    assert.equal(strikes.length, 1, 'missed thunder never replays a stale bolt');
+    weather.pause();
+    assert.equal(weather.drivesLightning, false);
+    weather.dispose();
+    assertDisposed(audio);
+  }
+});
+
+test('manual lightning respects weather volume, stays lazy and uses positioned filtered-noise thunder', () => {
+  const audio = fakeAudio();
+  const context = audio.context;
+  audio.engine.context = null;
+  assert.deepEqual(playLightning(audio.engine, { strength: 1 }), []);
+  audio.engine.context = context;
+  context.state = 'suspended';
+  assert.deepEqual(playLightning(audio.engine), []);
+  context.state = 'running';
+  audio.engine.muted = true;
+  assert.deepEqual(playLightning(audio.engine), []);
+  audio.engine.muted = false;
+  for (const bus of ['weather', 'ambience', 'master']) {
+    audio.engine.volumes = { [bus]: 0 };
+    assert.deepEqual(playLightning(audio.engine), []);
+  }
+  audio.engine.volumes = {};
+  assert.deepEqual(playLightning(audio.engine, { strength: 0 }), []);
+  assert.equal(audio.nodes.length, 0, 'silent tests allocate no sound graph');
+  const handles = playLightning(audio.engine, { x: -4.5, y: 12.5, strength: 0.8 });
+  assert.equal(handles.length, 6);
+  assert.ok(audio.routes.every(route => route.bus === 'weather' && route.x === -4.5 && route.y === 12.5));
+  assert.ok(audio.nodes.every(node => node.kind !== 'oscillator'));
+  assert.ok(sources(audio).some(source => source.starts[0] > context.currentTime));
+  for (const handle of handles) { handle.stop(); handle.stop(); }
+  assertDisposed(audio);
+});
+
+test('rapid manual lightning bounds overlapping thunder and releases every sound graph', () => {
+  const audio = fakeAudio();
+  const handles = [];
+  for (let i = 0; i < 20; i++) handles.push(...playLightning(audio.engine, { strength: 1 }));
+  assert.equal(handles.filter(handle => !handle.ended).length, 24, 'at most four six-layer rolls overlap');
+  for (const handle of handles) handle.stop();
+  assertDisposed(audio);
 });
