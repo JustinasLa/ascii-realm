@@ -3,12 +3,13 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../src/entities/player.js';
+import { buildRig } from '../src/entities/rig.js';
 import { ASPECT, GRASS } from '../src/world/world.js';
 
 const noop = () => {};
 
 // Run the real frame loop and player state with browser, rendering and audio I/O stubbed.
-async function loadGame() {
+async function loadGame(move = { x: 0, y: 0 }) {
   const taps = new Set();
   const canvas = new EventTarget();
   const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
@@ -16,10 +17,11 @@ async function loadGame() {
   let nextFrame;
   let now = 0;
   let bladeSamples = 0;
+  let modelUpdates = 0;
   let cellHeight;
   const model = {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
-    update: noop,
+    update: () => { modelUpdates++; },
     rasterise: noop,
     draw: noop,
     swordLine: () => {
@@ -35,7 +37,7 @@ async function loadGame() {
     performance: { now: () => 0 },
     requestAnimationFrame: callback => { nextFrame = callback; },
     isDown: () => false,
-    moveAxis: () => ({ x: 0, y: 0 }),
+    moveAxis: () => move,
     wasTapped: code => taps.delete(code),
     Player, ASPECT, GRASS,
     World: class {
@@ -74,6 +76,7 @@ async function loadGame() {
     game: window.game,
     frame: (dt = 1 / 60) => nextFrame(now += dt * 1000),
     bladeSamples: () => bladeSamples,
+    modelUpdates: () => modelUpdates,
     cellHeight: () => cellHeight,
     keydown(key, modifiers = {}) {
       const event = Object.assign(new Event('keydown', { cancelable: true }), { key, ...modifiers });
@@ -90,6 +93,34 @@ async function loadGame() {
     },
   };
 }
+
+test('an early first animation timestamp does not move time backwards', async () => {
+  const { game, frame, tap } = await loadGame();
+  tap('Space');
+  frame(-0.02);
+  assert.equal(game.player.time, 0);
+  assert.equal(game.player.windUp, 0);
+  frame();
+  assert.ok(Math.abs(game.player.time - 1 / 60) < 1e-12);
+  assert.ok(game.player.windUp > 0, 'the captured jump advances with the next frame');
+});
+
+test('held movement keeps a finite pose through stale and zero-time frames', async () => {
+  const { game, frame } = await loadGame({ x: 1, y: 0 });
+  const player = game.player;
+  for (const dt of [-0.02, 0]) {
+    frame(dt);
+    assert.equal(player.time, 0);
+    assert.equal(player.x, 0);
+    assert.ok(Number.isFinite(player.bank));
+    assert.ok(buildRig(player).head.every(Number.isFinite));
+  }
+  frame();
+  assert.ok(Math.abs(player.time - 1 / 60) < 1e-12);
+  assert.ok(player.x > 0);
+  assert.ok(Number.isFinite(player.bank));
+  assert.ok(buildRig(player).head.every(Number.isFinite));
+});
 
 test('browser zoom shortcuts do not also change game zoom', async () => {
   const { game, frame, keydown, cellHeight } = await loadGame();
@@ -142,13 +173,16 @@ for (const action of ['Space', 'KeyJ', 'KeyF', 'mouse']) {
 }
 
 test('a frozen sword swing keeps its trail bounded and resumes sampling when unfrozen', async () => {
-  const { game, frame, bladeSamples } = await loadGame();
+  const { game, frame, bladeSamples, modelUpdates } = await loadGame();
   const player = game.player;
   assert.ok(game.model);
   player.combat.inHand = true;
   player.combat.trailing = true;
   const sample = { t: player.time, hx: 0, hy: 0, tx: 1, ty: 1 };
   player.trail.push(sample);
+  frame(0);
+  assert.equal(bladeSamples(), 0);
+  assert.equal(modelUpdates(), 0);
   game.freeze = true;
   for (let i = 0; i < 600; i++) frame();
   assert.equal(player.time, 0);
@@ -159,5 +193,6 @@ test('a frozen sword swing keeps its trail bounded and resumes sampling when unf
   player.combat.start('a');
   for (let i = 0; i < 10; i++) frame();
   assert.ok(bladeSamples() > 0);
+  assert.ok(modelUpdates() > 0);
   assert.ok(player.trail.some(point => point.t > sample.t));
 });
