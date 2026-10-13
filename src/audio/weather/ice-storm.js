@@ -1,5 +1,6 @@
 export default {
   id: 'ice-storm',
+  rainfall: 0.35,
   label: 'Ice storm',
   description: 'Fine freezing rain over low storm air, with brittle ice and strained frozen branches.',
   layers: [

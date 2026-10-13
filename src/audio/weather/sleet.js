@@ -1,5 +1,6 @@
 export default {
   id: 'sleet',
+  rainfall: 0.25,
   label: 'Sleet',
   description: 'Fine wind-slanted ice grains mingle with a damp wash and small uneven taps.',
   layers: [

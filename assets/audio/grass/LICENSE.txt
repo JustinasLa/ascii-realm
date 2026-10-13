@@ -1,18 +1,42 @@
-Grass/sand footsteps by Fantozzi, sliced by qubodup.
+Dry grass footfalls for ASCII Realm
 
-License: Creative Commons CC0 1.0 Universal
+Both source packs use Creative Commons CC0 1.0 Universal:
 https://creativecommons.org/publicdomain/zero/1.0/
 
-Source and license declaration:
-https://opengameart.org/content/fantozzis-footsteps-grasssand-stone
-Original recordings:
-https://www.freesound.org/people/Fantozzi/packs/10338/
+1. "20 Rustles of dry leaves" by qubodup
+Source and CC0 declaration:
+https://opengameart.org/content/20-rustles-dry-leaves
+Original archive:
+https://opengameart.org/sites/default/files/qubodup-rustle.7z
+The author describes these as dry leaf/vegetation rustles recorded in a kitchen.
 
-grass-L1.wav through grass-L3.wav derive from Fantozzi-SandL1.flac
-through Fantozzi-SandL3.flac; grass-R1.wav through grass-R3.wav derive
-from the corresponding Fantozzi-SandR recordings.
+2. "Impact Sounds" (1.0, 2019) by Kenney
+Source and CC0 declaration:
+https://kenney.nl/assets/impact-sounds
+The archive's License.txt grants personal, educational and commercial use
+under Creative Commons Zero. Kenney attribution is optional.
 
-The source pack describes these as suitable for grass and sand.
-Adaptation for ASCII Realm: mono 16-bit PCM at 22050 Hz, 80 Hz highpass
-to remove low recording rumble. No synthetic squeeze, splash or noise
-layers are mixed into grass footfalls.
+Exact source mapping (times in seconds):
+Output         Dry-leaf file     Start   Duration   Soft-sole file
+grass-L1.wav   rustle01.flac     0.938   0.165      footstep_carpet_000.ogg
+grass-R1.wav   rustle04.flac     0.379   0.175      footstep_carpet_001.ogg
+grass-L2.wav   rustle05.flac     0.249   0.155      footstep_carpet_003.ogg
+grass-R2.wav   rustle06.flac     0.140   0.170      footstep_carpet_000.ogg
+grass-L3.wav   rustle10.flac     0.110   0.150      footstep_carpet_001.ogg
+grass-R3.wav   rustle12.flac     0.329   0.180      footstep_carpet_003.ogg
+
+Adaptation:
+- Decode/downmix both recordings to mono at 22050 Hz.
+- Apply Butterworth bandpass designs using scipy.signal.butter(4, [...],
+  btype='bandpass'): leaf 900-7000 Hz; sole 220-1700 Hz. Filter the full source
+  before taking the excerpt. Sole excerpts begin at 0 seconds.
+- Leaf grains: 4ms fade in, 25ms initial contact, exponential decay with
+  45ms time constant, and 12ms end fade. Normalize the grain peak to 0.62.
+- Sole contacts: 5ms fade in, 23ms exponential decay, and 12ms fade to
+  silence by 85ms. Peak at most 0.09; energy at most 8% of the leaf grain.
+- Mix those two recorded components, normalize final peak to 0.62, and
+  export mono 16-bit PCM WAV. Playback adds only short boundary fades.
+
+All six samples replace the earlier Fantozzi SandL/SandR excerpts entirely.
+No Fantozzi samples, synthetic noise, liquid sounds, or long scuff tails remain
+in these grass footfalls. Other terrain materials are separate.

@@ -1,7 +1,7 @@
 import { valueNoise } from '../core/noise.js';
 import { ASPECT, WATER, SHORE, GRASS, DIRT, STONE } from '../world/world.js';
 
-const WATER_RADIUS = 40;
+export const WATER_RADIUS = 40;
 const WATER_SAMPLE_INTERVAL = 0.4;
 const WATER_RESAMPLE_DISTANCE = 4;
 const WATER_GRID_Y = 4;

@@ -1,5 +1,6 @@
 export default {
   id: 'thunderstorm',
+  rainfall: 0.9,
   label: 'Thunderstorm',
   description: 'Wind-driven rain beneath nearby rolling thunder and heavy, spreading rumbles.',
   layers: [

@@ -1,4 +1,5 @@
-// Recorded dry foley stays unfiltered. Samples load only after unlock;
+// Recorded dry leaf grains and faint sole contacts stay unfiltered at runtime.
+// Samples load only after unlock;
 // contacts missed while loading are deliberately discarded.
 export const GRASS_SAMPLE_URLS = Object.freeze([
   'grass-L1.wav', 'grass-R1.wav', 'grass-L2.wav',

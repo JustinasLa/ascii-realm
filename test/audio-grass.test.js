@@ -56,7 +56,7 @@ function assertClean(audio) {
   assert.ok(audio.routes.every(route => route.disposals === 1));
 }
 
-test('six distinct local grass recordings are short mono PCM WAVs with CC0 provenance', async () => {
+test('six distinct dry grass recordings have compact tails, mono PCM headers and CC0 provenance', async () => {
   const hashes = new Set();
   let totalBytes = 0;
   for (const url of GRASS_SAMPLE_URLS) {
@@ -80,12 +80,18 @@ test('six distinct local grass recordings are short mono PCM WAVs with CC0 prove
     assert.equal(format.readUInt32LE(4), 22050);
     assert.equal(format.readUInt16LE(14), 16);
     const duration = data.length / format.readUInt32LE(8);
-    assert.ok(duration >= 0.2 && duration <= 0.6, `${url.pathname}: ${duration}`);
+    assert.ok(duration >= 0.14 && duration <= 0.2, `${url.pathname}: ${duration}`);
     let peak = 0;
+    let energy = 0;
+    let tailEnergy = 0;
     for (let offset = 0; offset + 2 <= data.length; offset += 2) {
-      peak = Math.max(peak, Math.abs(data.readInt16LE(offset)) / 32768);
+      const value = data.readInt16LE(offset) / 32768;
+      peak = Math.max(peak, Math.abs(value));
+      energy += value * value;
+      if (offset / 2 / 22050 >= 0.12) tailEnergy += value * value;
     }
     assert.ok(peak > 0.02 && peak < 1, 'audible recording without digital clipping');
+    assert.ok(tailEnergy / energy < 0.03, 'weight ends before a prolonged brushing or squeezing tail');
     hashes.add(createHash('sha256').update(data).digest('hex'));
     totalBytes += bytes.length;
   }
@@ -93,8 +99,11 @@ test('six distinct local grass recordings are short mono PCM WAVs with CC0 prove
   assert.ok(totalBytes < 125000, 'small assets suitable for static hosting');
   const license = await readFile(new URL('../assets/audio/grass/LICENSE.txt', import.meta.url), 'utf8');
   assert.match(license, /CC0 1\.0 Universal/);
-  assert.match(license, /Fantozzi/);
-  assert.match(license, /https:\/\/opengameart\.org\/content\/fantozzis-footsteps-grasssand-stone/);
+  assert.match(license, /qubodup/);
+  assert.match(license, /https:\/\/opengameart\.org\/content\/20-rustles-dry-leaves/);
+  assert.match(license, /https:\/\/kenney\.nl\/assets\/impact-sounds/);
+  assert.match(license, /footstep_carpet_000\.ogg/);
+  assert.match(license, /rustle12\.flac/);
 });
 
 test('locked grass allocates no voices and performs no fetch or decode', async () => {

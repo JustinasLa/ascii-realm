@@ -1,5 +1,6 @@
 import { ASPECT } from '../../world/world.js';
 import { loopNoise, noise, setParam, tone } from '../voices.js';
+import { rainSplashes } from './rain-splashes.js';
 
 const FILTERS = new Set(['lowpass', 'highpass', 'bandpass']);
 const bounded = (value, fallback, minimum, maximum) =>
@@ -30,13 +31,15 @@ export class WeatherGroup {
     this.disposed = false;
     this.ready = false;
     this._intensity = bounded(intensity, 0.6, 0, 1);
+    this.rainfall = bounded(definition.rainfall, 0, 0, 1);
+    this._water = null;
     this._lastNow = this.context?.currentTime ?? 0;
     this._fade = { from: 0, to: 0, start: this._lastNow, end: this._lastNow };
     this.facade = {
       context: this.context,
       get listener() { return engine.listener; },
       spatial: (x, y) => this._spatial(x, y),
-      route: (_bus, x, y) => this._route(x, y),
+      route: (bus, x, y) => this._route(x, y, bus === 'rain-splashes'),
     };
     if (this.context?.state !== 'running') return;
     try {
@@ -48,6 +51,11 @@ export class WeatherGroup {
       this.gate.gain.value = this._intensity > 0 ? 1 : 0;
       this.mix.connect(this.gate);
       this.gate.connect(this.rootRoute.input);
+      if (this.rainfall > 0) {
+        this.splashGate = this.context.createGain();
+        this.splashGate.gain.value = 0;
+        this.splashGate.connect(this.mix);
+      }
       const names = new Set();
       for (const layer of (Array.isArray(definition.layers) ? definition.layers : []).slice(0, 3)) {
         if (!layer || typeof layer.name !== 'string' || names.has(layer.name)) continue;
@@ -62,7 +70,9 @@ export class WeatherGroup {
         const handle = loopNoise(this.facade, { ...base, gain: base.gain * this._intensity });
         if (handle) this.layers.push({ name: base.name, base, handle });
       }
-      for (const event of (Array.isArray(definition.events) ? definition.events : []).slice(0, 2)) {
+      const eventDefinitions = (Array.isArray(definition.events) ? definition.events : []).slice(0, 2);
+      if (this.rainfall > 0) eventDefinitions.push(rainSplashes);
+      for (const event of eventDefinitions) {
         if (!event || typeof event.create !== 'function') continue;
         const interval = range(event.interval, [2, 5]);
         const firstDelay = range(event.firstDelay, interval, 0);
@@ -97,8 +107,10 @@ export class WeatherGroup {
     };
   }
 
-  _route(x, y) {
+  _route(x, y, splash = false) {
     if (this.disposed || !this.mix || this.engine.context !== this.context || this.context.state !== 'running') return null;
+    const destination = splash ? this.splashGate : this.mix;
+    if (!destination) return null;
     let input;
     let panner;
     try {
@@ -109,11 +121,12 @@ export class WeatherGroup {
       if (panner) {
         panner.pan.value = position.pan;
         input.connect(panner);
-        panner.connect(this.mix);
-      } else input.connect(this.mix);
+        panner.connect(destination);
+      } else input.connect(destination);
       const listener = this._listener();
-      let offset = Number.isFinite(x) && Number.isFinite(y)
-        ? { x: x - listener.x, y: y - listener.y } : null;
+      // Rain hits stay at the lake; other weather cues travel with the listener.
+      let anchor = Number.isFinite(x) && Number.isFinite(y)
+        ? { x: splash ? x : x - listener.x, y: splash ? y : y - listener.y } : null;
       let disposed = false;
       const route = {
         input,
@@ -121,16 +134,17 @@ export class WeatherGroup {
         update: (nextX, nextY) => {
           if (disposed || this.disposed) return;
           const current = this._listener();
-          offset = Number.isFinite(nextX) && Number.isFinite(nextY)
-            ? { x: nextX - current.x, y: nextY - current.y } : null;
+          anchor = Number.isFinite(nextX) && Number.isFinite(nextY)
+            ? { x: splash ? nextX : nextX - current.x, y: splash ? nextY : nextY - current.y } : null;
           const next = this._spatial(nextX, nextY);
           setParam(input.gain, next.gain, this.context.currentTime, 0.08);
           setParam(panner?.pan, next.pan, this.context.currentTime, 0.08);
         },
         follow: now => {
-          if (disposed || this.disposed || !offset) return;
+          if (disposed || this.disposed || !anchor) return;
           const current = this._listener();
-          const next = this._spatial(current.x + offset.x, current.y + offset.y);
+          const next = this._spatial(splash ? anchor.x : current.x + anchor.x,
+            splash ? anchor.y : current.y + anchor.y);
           setParam(input.gain, next.gain, now, 0.08);
           setParam(panner?.pan, next.pan, now, 0.08);
         },
@@ -195,11 +209,14 @@ export class WeatherGroup {
     }
   }
 
-  update({ now = this.context.currentTime, time = now, intensity = this._intensity, events = true } = {}) {
+  update({ now = this.context.currentTime, time = now, intensity = this._intensity, water = null, events = true } = {}) {
     if (this.disposed || !this.ready || this.context.state !== 'running') return;
     now = bounded(now, this.context.currentTime, 0, 1e12);
     time = bounded(time, now, -1e12, 1e12);
     this.setIntensity(intensity);
+    this._water = this.rainfall > 0 && water && [water.x, water.y, water.strength].every(Number.isFinite)
+      && water.strength > 0 ? { x: water.x, y: water.y, strength: bounded(water.strength, 0, 0, 1) } : null;
+    setParam(this.splashGate?.gain, this._water?.strength ?? 0, now, 0.2);
     this.prune(now);
     for (const route of this.routes) route.follow(now);
     let updates = null;
@@ -222,7 +239,10 @@ export class WeatherGroup {
       // impacts or thunder that should already have happened.
       if (!events || gap || late || this._intensity === 0) continue;
       let cues;
-      try { cues = event.definition.create({ now, time, intensity: this._intensity, random: this.random }); } catch { continue; }
+      try {
+        cues = event.definition.create({ now, time, intensity: this._intensity, random: this.random,
+          water: this._water, rainfall: this.rainfall });
+      } catch { continue; }
       if (!Array.isArray(cues)) continue;
       for (const cue of cues.slice(0, 16)) this._play(cue, now);
     }
@@ -232,6 +252,8 @@ export class WeatherGroup {
   _play(cue, now) {
     if (!cue || !['noise', 'tone'].includes(cue.kind) || this._intensity === 0
         || this.budget.voices.size >= Math.min(64, this.budget.limit ?? 64)) return;
+    const splash = cue.surface === 'water';
+    if (splash && !this._water) return;
     const duration = bounded(cue.duration, 0.2, 0.01, 8);
     const delay = bounded(cue.delay, 0, 0, 4);
     const pan = bounded(cue.pan, 0, -1, 1);
@@ -244,6 +266,7 @@ export class WeatherGroup {
     const attack = bounded(cue.attack, 0.005, 0.001, duration * 0.5);
     const release = bounded(cue.release, Math.min(0.08, duration * 0.4), 0.001, duration - attack);
     const options = {
+      bus: splash ? 'rain-splashes' : 'weather',
       when: now + delay,
       duration,
       gain,
@@ -254,8 +277,8 @@ export class WeatherGroup {
       decay: bounded(cue.decay, 0, 0, Math.max(0, duration - attack - release)),
       sustain: bounded(cue.sustain, 1, 0, 1),
       release,
-      x: listener.x + pan * 24 / ASPECT,
-      y: listener.y,
+      x: bounded(cue.x, listener.x + pan * 24 / ASPECT, -1e9, 1e9),
+      y: bounded(cue.y, listener.y, -1e9, 1e9),
       frequency: bounded(cue.frequency, 440, 20, 10000),
       endFrequency: bounded(cue.endFrequency, cue.frequency ?? 440, 20, 10000),
       type: ['sine', 'square', 'triangle', 'sawtooth'].includes(cue.type) ? cue.type : 'sine',
@@ -283,6 +306,7 @@ export class WeatherGroup {
     this.routes.clear();
     disconnect(this.mix);
     disconnect(this.gate);
+    disconnect(this.splashGate);
     try { this.rootRoute?.dispose(); } catch { /* Engine may already have disposed its routes. */ }
     this.ready = false;
   }

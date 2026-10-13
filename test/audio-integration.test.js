@@ -45,7 +45,39 @@ test('audio signals follow the camera and source charge follows the player', () 
     assert.equal(signals.fireflies, fireflies);
   };
   audio.music.update = signals => assert.equal(signals.night, 0.8);
-  audio.weather.update = signals => assert.deepEqual(signals, { time: 42, dt: 0.016 });
+  audio.weather.update = signals => assert.deepEqual(signals, { time: 42, dt: 0.016, water: null });
   audio.update(0.016, 42, { x: 9, y: 10, combat: { charge: 0.5 } }, { x: 2, y: 3 }, fireflies);
   assert.deepEqual(listener, [2, 3]);
+});
+
+test('rain splashes sample the player shoreline independently of the camera and skip dry weather', () => {
+  const audio = new GameAudio({}, { context: { state: 'running' }, setListener() {} });
+  const shoreline = { x: 10.5, y: 10.5, strength: 0.95 };
+  audio.environment.update = () => ({ night: 1, gust: 0.4, water: null });
+  let waterSamples = 0;
+  audio.weatherEnvironment.update = (...args) => {
+    assert.deepEqual(args, [0.016, 9, 10, 42]);
+    waterSamples++;
+    return { water: shoreline };
+  };
+  for (const key of ['charge', 'ambience', 'music']) audio[key].update = () => {};
+  let received;
+  audio.weather.update = signals => { received = signals; };
+  const player = { x: 9, y: 10, combat: { charge: 0 } };
+  const camera = { x: -100, y: 100 };
+  audio.weather.preset = 'rain';
+  audio.update(0.016, 42, player, camera, []);
+  assert.equal(waterSamples, 1);
+  assert.deepEqual(received, { time: 42, dt: 0.016, water: shoreline });
+
+  audio.weather.preset = 'blizzard';
+  audio.update(0.016, 42, player, camera, []);
+  assert.equal(waterSamples, 1, 'dry weather adds no player-water terrain sampling');
+  assert.equal(received.water, null);
+
+  audio.weather.preset = 'rain';
+  audio.weather.setIntensity(0);
+  audio.update(0.016, 42, player, camera, []);
+  assert.equal(waterSamples, 1, 'silent rain adds no player-water terrain sampling');
+  assert.equal(received.water, null);
 });

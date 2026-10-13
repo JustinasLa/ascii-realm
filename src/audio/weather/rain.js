@@ -1,5 +1,6 @@
 export default {
   id: 'rain',
+  rainfall: 0.55,
   label: 'Gentle rain',
   description: 'A soft airy shower, scattered fine patter, and faint drips from nearby leaves.',
   layers: [

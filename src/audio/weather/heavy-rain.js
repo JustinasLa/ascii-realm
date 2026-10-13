@@ -1,5 +1,6 @@
 export default {
   id: 'heavy-rain',
+  rainfall: 1,
   label: 'Heavy rain',
   description: 'Dense downpour with a low rushing roar and scattered ground impacts.',
   layers: [

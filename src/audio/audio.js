@@ -15,6 +15,7 @@ export class GameAudio {
     this.engine = engine;
     this.world = world;
     this.environment = new EnvironmentSampler(world);
+    this.weatherEnvironment = new EnvironmentSampler(world);
     this.ambience = new Ambience(engine);
     this.music = new Music(engine);
     this.charge = new ChargeHum(engine);
@@ -51,7 +52,9 @@ export class GameAudio {
     this.charge.update(player.combat.charge, player.x, player.y);
     this.ambience.update({ ...signals, time, fireflies });
     this.music.update({ night: signals.night, time, dt });
-    this.weather.update({ time, dt });
+    const water = this.weather.hasRain && this.weather.intensity > 0
+      ? this.weatherEnvironment.update(dt, player.x, player.y, time).water : null;
+    this.weather.update({ time, dt, water });
   }
 
   pause() {

@@ -1,5 +1,6 @@
 export default {
   id: 'drizzle',
+  rainfall: 0.2,
   label: 'Drizzle',
   description: 'Fine rain on foliage, with a thin misty hush and scattered dry ticks.',
   layers: [

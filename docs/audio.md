@@ -2,8 +2,9 @@
 
 ASCII Realm creates its original soundtrack, weather and most effects with
 Web Audio oscillators and filtered noise. Grass footfalls use six local CC0
-recordings of human footsteps. Audio adds no runtime library dependencies;
-the recordings are served with the game, without requests to third-party sites.
+dry foliage recordings mixed with faint sole contacts. Audio adds no runtime
+library dependencies; the recordings are served with the game, without
+requests to third-party sites.
 
 Sound starts after the first keyboard or pointer gesture. `M` toggles mute, and
 the Audio panel offers master, music, effects, sword, ambience and weather
@@ -88,13 +89,15 @@ changes. The existing visual scene remains moonlit.
 
 ## Grass recordings
 
-The six files in `assets/audio/grass` come from Fantozzi's grass/sand footsteps,
-sliced by qubodup and published as
-[Fantozzi's Footsteps (Grass/Sand & Stone)](https://opengameart.org/content/fantozzis-footsteps-grasssand-stone)
-under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+The six files in `assets/audio/grass` combine short grains from qubodup's
+[20 Rustles of dry leaves](https://opengameart.org/content/20-rustles-dry-leaves)
+with faint sole contacts from [Kenney's Impact Sounds](https://kenney.nl/assets/impact-sounds),
+both under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
 `grass-L1.wav` through `grass-L3.wav` and `grass-R1.wav` through `grass-R3.wav`
-are mono 16-bit PCM at 22,050 Hz, about 0.30–0.44 seconds each and 95 KB total.
-An 80 Hz highpass removes recording rumble. Detailed provenance is in
+are mono 16-bit PCM at 22,050 Hz, 0.15–0.18 seconds each and 44 KB total.
+The dry-leaf grains carry the texture; sole contacts are quiet and end within
+85 ms. Filtering removes low wash, and short envelopes cut off trailing scuffs.
+Detailed source offsets and processing are in
 [LICENSE.txt](../assets/audio/grass/LICENSE.txt).
 
 Grass contacts cycle through these recordings directly, with level based on
@@ -117,6 +120,14 @@ weather. Intensity zero silences the selected preset's beds and event tails.
 Selecting a preset while sound is locked saves the choice without allocating
 an audio context. Events follow the audio clock; missed rain impacts or thunder
 are skipped after pauses rather than replayed in a burst.
+
+Gentle rain, drizzle, heavy rain, thunderstorms, sleet and freezing rain add
+small liquid impacts when the player is close to water. These splashes come
+from the nearby lake's position and fade with the player's distance, becoming
+silent about 12 aspect-correct world units away. The player lookup is separate
+from the camera's ambience lookup, so moving the view does not trigger shoreline
+splashes. Rain intensity and the Weather, Ambience and Master levels also control
+them. Dry weather does not produce this layer.
 
 | Preset | Sound texture |
 | --- | --- |
@@ -144,6 +155,9 @@ event gains include intensity; callbacks receive audio time, simulation time
 and a supplied random function. The shared runtime smooths parameters, bounds
 cue values and caps short voices across active and fading selections. Definitions
 do not create audio contexts or timers.
+Rainy definitions also provide a rainfall strength; the runtime adds a shared
+water-splash event with its own smoothly controlled proximity gain and fixed
+world positions, within the same short-voice budget.
 
 ## Songs
 
@@ -256,8 +270,8 @@ Serve the game locally and verify:
    charge stop. Set Effects to zero: both sword and movement sounds should stop.
    Reload to check saved settings, including starting muted.
 3. Walk and sprint across grass, dirt, stone and shore. Listen for contact-synced
-   earthy texture changes, including low wet splashes at lake edges; deep water
-   still blocks movement. Jump, land and stop from a sprint to hear short cloth,
+   dry foliage on grass and distinct material changes, including low wet splashes
+   at lake edges; deep water still blocks movement. Jump, land and stop from a sprint to hear short cloth,
    weighted material contact and skid brushes.
 4. Draw and sheathe with `F`, strike with `J` or left click, and hold then release
    a strike. Listen for weathered blade friction, leather movement, low air rush
