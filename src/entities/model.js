@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/three/loaders/GLTFLoader.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
+import { JUMPS as CAPTURES } from './jumps.js';
+import { JUMPS as KINDS } from './player.js';
+import { captureClip } from './retarget.js';
 import { SCALE, TILT } from './rig.js';
 
 // The player as a real rigged 3D character playing professionally animated
@@ -17,10 +20,11 @@ const SY = 6;
 const N = SX * SY;
 // How high the foot bone sits above the ground when the foot is flat.
 const FOOT_FLOOR = 0.1;
-// The region drawn around the feet, in cells.
+// The region drawn around the feet, in cells, tall enough for a somersault
+// at the top of a second jump.
 const COLS = 36;
-const ROWS = 32;
-const FEET_ROW = 27;
+const ROWS = 52;
+const FEET_ROW = 47;
 
 // The camera looks down at the scene; TILT is how much a step towards the
 // camera moves a point down the screen, so it is the sine of that angle.
@@ -50,6 +54,22 @@ const CLIPS = {
   jumpLand: 'Jump_Land',
   rest: 'Fixing_Kneeling',
 };
+
+// Jumps played from motion capture (see jumps.js). Those off one foot can be
+// mirrored, to take off from whichever foot is down.
+const MIRRORED = ['leap', 'stride'];
+// How much of each capture before take-off is played while gathering for
+// the jump, in seconds.
+const PRE = { leap: 0.12, stride: 0.12, hop: 0.3, spin: 0.2 };
+// Where in its capture each trick starts, in seconds before take-off.
+const TRICK_FROM = { backflip: 0.08, spin: 0.04, barrel: 0.1 };
+// A trick is stretched over the time left in the air, but never slowed
+// below this fraction of its real speed: a long fall finishes the turn early
+// and reaches for the ground.
+const SLOWEST = 0.65;
+// How long each landing plays on over the stride, in seconds, where a jump
+// that keeps moving should hand straight back to it.
+const LAND_FOR = { leap: 0.06, stride: 0.16, barrel: 0.22 };
 
 // three.js strips characters such as '.' from node names on loading.
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
@@ -191,21 +211,36 @@ export class ModelFigure {
     this.camera.position.set(0, TILT * 20, COS * 20);
     this.camera.lookAt(0, 0, 0);
 
+    // The captured jumps are put onto the skeleton while it still stands in
+    // its rest pose, with the hands held as in the library's jump.
+    const clips = Object.fromEntries(Object.entries(CLIPS).map(([key, name]) => [key,
+      gltf.animations.find((c) => c.name === name)]));
+    const captured = [];
+    for (const [key, data] of Object.entries(CAPTURES)) {
+      clips[key] = captureClip(key, data, this.model, this.bones, { hold: clips.jumpLoop });
+      captured.push(key);
+      if (MIRRORED.includes(key)) {
+        clips[`${key}M`] = captureClip(`${key}M`, data, this.model, this.bones, { mirror: true, hold: clips.jumpLoop });
+        captured.push(`${key}M`);
+      }
+    }
     this.mixer = new THREE.AnimationMixer(this.model);
     this.actions = {};
-    for (const [key, name] of Object.entries(CLIPS)) {
-      const clip = gltf.animations.find((c) => c.name === name);
+    for (const [key, clip] of Object.entries(clips)) {
       if (STRIDE_SCALE[key]) shortenStride(clip, STRIDE_SCALE[key]);
       const a = this.mixer.clipAction(clip);
       a.play();
       a.setEffectiveWeight(0);
       this.actions[key] = a;
     }
-    for (const k of ['attack', 'jumpStart', 'jumpLand']) {
+    for (const k of ['attack', 'jumpStart', 'jumpLand', ...captured]) {
       this.actions[k].setLoop(THREE.LoopOnce, 1);
       this.actions[k].clampWhenFinished = true;
     }
-    this.weights = Object.fromEntries(Object.keys(CLIPS).map((k) => [k, k === 'idle' ? 1 : 0]));
+    // Every clip that belongs to jumping, for keeping the stride's footing
+    // out of the way while they play.
+    this.jumpKeys = ['jumpStart', 'jumpLoop', 'jumpLand', ...captured];
+    this.weights = Object.fromEntries(Object.keys(clips).map((k) => [k, k === 'idle' ? 1 : 0]));
 
     // How fast each locomotion clip moves over the ground, and when in it
     // the left foot touches down, measured from the feet themselves.
@@ -213,7 +248,14 @@ export class ModelFigure {
     this.phase = 0;
     this.oneShot = null;
     this.lastMove = null;
-    this.landed = false;
+    // The jump under way: its kind, which clip and any trick.
+    this.jump = null;
+    // Clips whose moment is set by hand this frame, and the turn about the
+    // upright a spinning jump adds.
+    this.held = {};
+    this.turnFrom = null;
+    this.turned = 0;
+    this.turnLeft = 0;
     this.cells = [];
   }
 
@@ -283,7 +325,7 @@ export class ModelFigure {
     // body stops, so do they, rather than running on in place while a
     // smoothed speed dies away.
     const speed = p.groundSpeed ?? p.speed;
-    const w = { idle: 0, walk: 0, jog: 0, sprint: 0, guard: 0, attack: 0, jumpStart: 0, jumpLoop: 0, jumpLand: 0, rest: 0 };
+    const w = Object.fromEntries(Object.keys(this.actions).map((k) => [k, 0]));
 
     // Locomotion: pure walk at the player's walking speed, pure jog at
     // their running speed, blended in between while speeding up or slowing.
@@ -320,16 +362,8 @@ export class ModelFigure {
       for (const k in w) w[k] *= 1 - p.kneel;
       w.rest = p.kneel;
     }
-    // Jumping.
-    if (p.windUp >= 0 || p.air > 0) {
-      for (const k in w) w[k] = 0;
-      if (p.windUp >= 0) w.jumpStart = 1;
-      else w.jumpLoop = 1;
-      this.landed = false;
-    } else if (!this.landed && p.landed > 0) {
-      this.landed = true;
-      this.start('jumpLand', 1.4);
-    }
+    this.held = {};
+    this.jumping(p, w);
 
     // Sword swings play the attack clip over everything else.
     const swing = cb.move && cb.move !== 'draw' && cb.move !== 'sheathe' ? cb.move : null;
@@ -339,9 +373,8 @@ export class ModelFigure {
     }
     this.lastMove = cb.move;
     if (this.oneShot) {
-      const a = this.actions[this.oneShot.key];
       this.oneShot.t += dt;
-      const left = a.getClip().duration / this.oneShot.rate - this.oneShot.t;
+      const left = (this.oneShot.until - this.oneShot.from) / this.oneShot.rate - this.oneShot.t;
       const k = Math.min(1, this.oneShot.t / 0.06, Math.max(0, left / 0.12));
       for (const key in w) w[key] *= 1 - k;
       w[this.oneShot.key] = k;
@@ -359,10 +392,12 @@ export class ModelFigure {
       const a = this.actions[g.key];
       a.time = (((this.phase + g.strike) % 1) + 1) % 1 * a.getClip().duration;
     }
+    for (const k in this.held) this.actions[k].time = this.held[k];
     this.mixer.update(0);
 
     this.sword.visible = cb.inHand;
-    this.model.rotation.y = p.heading + (cb.spin ?? 0);
+    this.turned = this.spinTurn(p);
+    this.model.rotation.y = p.heading + (cb.spin ?? 0) + this.turned;
     // Keep the stride on the ground. The run clip throws the body well clear
     // of it between steps and drives it down into each landing, which a
     // shorter, laden stride would not; with its legs shortened, the planted
@@ -375,10 +410,112 @@ export class ModelFigure {
     let lowest = Infinity;
     for (const f of this.feet) lowest = Math.min(lowest, f.getWorldPosition(v).y);
     const off = lowest - FOOT_FLOOR;
-    const lift = (off > 0 ? off * 0.85 : off) * moving;
+    // A jump's own clips put the body where it should be.
+    let jumping = 0;
+    for (const k of this.jumpKeys) jumping += this.weights[k];
+    const grounded = moving * Math.max(0, 1 - jumping);
+    const lift = (off > 0 ? off * 0.85 : off) * grounded;
     this.model.position.y = p.air - lift;
     this.model.updateMatrixWorld(true);
-    this.steady(dt, moving);
+    this.steady(dt, grounded);
+  }
+
+  // Jumping: picks the clip for the kind of jump at take-off and plays it in
+  // step with the gathering, the flight and any trick, then lets its
+  // landing run on over whatever comes next.
+  jumping(p, w) {
+    const up = p.windUp >= 0 || p.air > 0;
+    if (up && !this.jump) {
+      let key = p.jumpKind;
+      if (MIRRORED.includes(key)) {
+        // Off whichever foot is down now.
+        const [l, r] = this.feet.map((f) => f.getWorldPosition(new THREE.Vector3()).y);
+        if ((l < r ? 'L' : 'R') !== CAPTURES[key].off) key += 'M';
+      }
+      this.jump = { kind: p.jumpKind, key, trick: null };
+      this.turnFrom = null;
+      // Springing straight off again cuts the last landing short.
+      if (this.oneShot && this.jumpKeys.includes(this.oneShot.key)) this.oneShot = null;
+    }
+    if (!up) {
+      if (this.jump) this.land(this.jump, p);
+      this.jump = null;
+      this.turnLeft = 0;
+      return;
+    }
+    const j = this.jump;
+    for (const k in w) w[k] = 0;
+    if (p.trick && !j.trick) {
+      j.trick = p.trick;
+      // A turn already under way is finished off during the trick.
+      this.turnLeft = this.turned;
+      this.turnFrom = null;
+    }
+    if (j.trick) {
+      // The trick runs from where it starts in its capture to the landing,
+      // over the time left in the air.
+      const c = CAPTURES[j.trick];
+      const from = c.takeoff - TRICK_FROM[j.trick];
+      const span = c.land - from;
+      const u = Math.min(1, Math.max(p.trickT / p.trickFlight, (p.trickT * SLOWEST) / span));
+      this.hold(j.trick, from + u * span, w);
+      if (j.trick === 'spin') this.turnFrom ??= from;
+      return;
+    }
+    if (j.kind === 'stand') {
+      if (p.windUp >= 0) w.jumpStart = 1;
+      else w.jumpLoop = 1;
+      return;
+    }
+    const c = CAPTURES[j.kind];
+    let t;
+    if (p.windUp >= 0) t = c.takeoff - PRE[j.kind] * (1 - p.windUp / KINDS[j.kind].windUp);
+    else t = c.takeoff + Math.min(1, p.jumpT / p.flight) * (c.land - c.takeoff);
+    this.hold(j.key, Math.max(0, t), w);
+    if (j.kind === 'spin') this.turnFrom ??= Math.max(0, c.takeoff - PRE.spin);
+  }
+
+  // Plays clip `key` alone this frame, at moment `t`.
+  hold(key, t, w) {
+    w[key] = 1;
+    this.held[key] = t;
+  }
+
+  // Touching down: the rest of the clip plays out from the moment of
+  // landing, and a stride picks up again on the foot that landed.
+  land(j, p) {
+    if (!j.trick && j.kind === 'stand') {
+      this.start('jumpLand', 1.4);
+      return;
+    }
+    const key = j.trick ?? j.key;
+    const base = j.trick ?? j.kind;
+    const c = CAPTURES[base];
+    const stay = LAND_FOR[base];
+    this.start(key, 1, c.land, stay === undefined ? Infinity : c.land + stay);
+    if (p.speed > 0.6) {
+      const onto = key.endsWith('M') ? (c.onto === 'L' ? 'R' : 'L') : c.onto;
+      this.phase = onto === 'L' ? 0 : 0.5;
+    }
+  }
+
+  // How far round a spinning jump has turned, by the capture's own timing,
+  // scaled so the turn ends exactly where it began.
+  spinTurn(p) {
+    if (this.turnLeft > 0 && p.trick) {
+      // Finishing a turn cut short by a trick, quickly at first.
+      const k = 1 - (1 - Math.min(1, p.trickT / 0.35)) ** 2;
+      return this.turnLeft + (Math.PI * 2 - this.turnLeft) * k;
+    }
+    if (this.turnFrom === null || this.weights.spin < 0.01) return 0;
+    const c = CAPTURES.spin;
+    const at = (t) => {
+      const f = Math.max(0, Math.min(c.turn.length - 1, t * c.fps));
+      const i = Math.min(c.turn.length - 2, Math.floor(f));
+      return c.turn[i] + (c.turn[i + 1] - c.turn[i]) * (f - i);
+    };
+    const from = at(this.turnFrom);
+    return Math.max(0, Math.min(1, (at(this.actions.spin.time) - from) / (1 - from))) * Math.PI * 2;
   }
 
   // Evens out the hips' rise and fall while striding. The body is moved
@@ -402,13 +539,15 @@ export class ModelFigure {
     });
   }
 
-  // Starts a one-shot clip from the beginning at a given playback rate.
-  start(key, rate) {
+  // Starts a one-shot clip at a given playback rate, from the beginning or
+  // from `from` seconds in, to its end or to `until`.
+  start(key, rate, from = 0, until = Infinity) {
     const a = this.actions[key];
     a.reset();
     a.timeScale = rate;
+    a.time = from;
     a.play();
-    this.oneShot = { key, rate, t: 0 };
+    this.oneShot = { key, rate, t: 0, from, until: Math.min(until, a.getClip().duration) };
   }
 
   // Where a point on the model ends up on screen, in cells from the feet.

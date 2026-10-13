@@ -40,8 +40,12 @@ For now it is a single outlaw exploring procedurally generated terrain.
   and sprint clips are blended by speed and kept in step with the ground, so
   the feet keep pace with the body.
   An idle stance that shifts its weight and looks around, then kneels to
-  rest; blinking eyes and breath fogging in the cold air; jumping with a
-  wind-up and landing squash; a skid to a halt from a sprint; and sword play:
+  rest; blinking eyes and breath fogging in the cold air; jumps from motion
+  capture that suit the pace (a hop on the spot, a leap off one foot from a
+  walk, a long split leap from a run), with jumps on the spot in a row
+  turning into a forward spring and then a full turn, and a second press in
+  the air for a trick: a back somersault on the spot, a spin from a walk and
+  a barrel roll from a run; a skid to a halt from a sprint; and sword play:
   draw, guard, a combo (forehand, then backhand or uppercut, then an overhead
   chop that strikes sparks, shakes the camera and freezes for a beat on
   impact), a lunging thrust from a sprint, a plunging strike from the air and
@@ -74,7 +78,7 @@ npm test
 | --- | --- |
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
-| `Space` | Jump |
+| `Space` | Jump; again in the air for a trick (a barrel roll when running) |
 | `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
@@ -94,7 +98,8 @@ src/
 ## Credits
 
 Walk and run motion from the [CMU Graphics Lab Motion Capture
-Database](http://mocap.cs.cmu.edu/) (subjects 8 and 9), via the BVH
+Database](http://mocap.cs.cmu.edu/) (subjects 8 and 9; jumps and tricks
+from subjects 13, 56, 75, 88, 90 and 127), via the BVH
 conversion by Bruce Hahne ([cgspeed](https://sites.google.com/a/cgspeed.com/cgspeed/motion-capture/the-daz-friendly-bvh-release-of-cmus-motion-capture-database)).
 The database was created with funding from NSF EIA-0196217.
 

@@ -18,7 +18,30 @@ const GRIP = 11;
 const SPRINT_GRIP = 5;
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
-const WIND_UP = 0.1; // seconds spent crouching before leaving the ground
+// The kinds of jump: seconds spent gathering before leaving the ground, how
+// fast the body leaves it (metres per second up), and any push forwards.
+//   stand  - a jump on the spot
+//   hop    - a second jump on the spot straight after landing: a two-footed
+//            spring forwards with a big swing of the arms
+//   spin   - a third: a whole turn in the air
+//   stride - off one foot from a walk, onto the other
+//   leap   - off one foot from a run, a long split stride
+export const JUMPS = {
+  stand: { windUp: 0.1, rise: JUMP_SPEED },
+  hop: { windUp: 0.18, rise: 4.0, surge: 2.4 },
+  spin: { windUp: 0.14, rise: 4.3 },
+  stride: { windUp: 0.08, rise: 3.2 },
+  leap: { windUp: 0.08, rise: 3.5 },
+};
+// The trick done by jumping again in the air, after each kind of jump: a
+// back somersault on the spot, a turn from a walk, and from a run a barrel
+// roll, somersaulting sideways about the line of travel.
+export const TRICKS = { stand: 'backflip', hop: 'backflip', spin: 'backflip', stride: 'spin', leap: 'barrel' };
+const TRICK_RISE = 4.0;
+// A jump on the spot within this many seconds of landing counts as the
+// next in a row.
+const CHAIN = 0.3;
+const IN_A_ROW = ['stand', 'hop', 'spin'];
 
 // Moves `x` (with velocity `v`) towards `target` like a critically damped
 // spring with natural frequency `w`, exactly for any time step.
@@ -63,6 +86,18 @@ export class Player {
     this.reach = 0;
     this.windUp = -1;
     this.landed = 0;
+    // The jump under way (see JUMPS), seconds since leaving the ground and
+    // how long the flight will last; the trick done in the air, if any, with
+    // its own clock and flight; and what was last landed, how long ago.
+    this.jumpKind = null;
+    this.jumpT = 0;
+    this.flight = 0;
+    this.trick = null;
+    this.trickT = 0;
+    this.trickFlight = 0;
+    this.trickQueued = false;
+    this.lastJump = null;
+    this.sinceLand = Infinity;
     // Things that happened this frame for the world to react to, such as
     // footfalls and landings: { type, x, y, strength }.
     this.events = [];
@@ -115,29 +150,70 @@ export class Player {
     this.combat.toggle();
   }
 
-  // Starts a jump if standing on the ground.
+  // Jumps from the ground, or does a trick if already in the air. What kind
+  // of jump depends on the pace: on the spot, walking or running, and on
+  // the spot, how many have been made in a row.
   jump() {
-    if (this.air > 0 || this.windUp >= 0) return;
+    if (this.windUp >= 0) {
+      // Pressed twice in quick succession: the trick follows as soon as the
+      // feet are off the ground.
+      this.trickQueued = true;
+      return;
+    }
+    if (this.air > 0) {
+      if (!this.trick) this.startTrick();
+      return;
+    }
+    let kind;
+    if (this.speed > (this.walkSpeed + this.runSpeed) / 2) kind = 'leap';
+    else if (this.speed > 0.6) kind = 'stride';
+    else if (this.sinceLand < CHAIN && IN_A_ROW.includes(this.lastJump)) {
+      kind = IN_A_ROW[(IN_A_ROW.indexOf(this.lastJump) + 1) % IN_A_ROW.length];
+    } else kind = 'stand';
+    this.jumpKind = kind;
     this.windUp = 0;
+    this.trickQueued = false;
+  }
+
+  // A second spring off the air itself, with a trick to show for it.
+  startTrick() {
+    this.trick = TRICKS[this.jumpKind];
+    this.trickQueued = false;
+    this.vy = TRICK_RISE;
+    this.trickT = 0;
+    // Time until the ground comes back up from this height.
+    this.trickFlight = (this.vy + Math.sqrt(this.vy * this.vy + 2 * FALL * this.air)) / FALL;
   }
 
   // Wind-up crouch, flight under gravity and a squash on landing.
   updateJump(dt) {
+    this.sinceLand += dt;
     if (this.windUp >= 0) {
       this.windUp += dt;
-      if (this.windUp >= WIND_UP) {
+      const kind = JUMPS[this.jumpKind];
+      if (this.windUp >= kind.windUp) {
         this.windUp = -1;
-        this.vy = JUMP_SPEED;
+        this.vy = kind.rise;
         this.air = 0.001;
+        this.jumpT = 0;
+        this.flight = (2 * kind.rise) / FALL;
+        if (kind.surge) this.surge = kind.surge;
       }
     }
     if (this.air > 0) {
+      this.jumpT += dt;
+      if (this.trick) this.trickT += dt;
+      else if (this.trickQueued && this.jumpT > 0.1) this.startTrick();
       this.vy -= FALL * dt;
       this.air += this.vy * dt;
       if (this.air <= 0) {
         this.air = 0;
         this.landed = Math.min(1, -this.vy / JUMP_SPEED);
         this.events.push({ type: 'land', x: this.x, y: this.y, strength: this.landed });
+        this.lastJump = this.trick ? null : this.jumpKind;
+        this.sinceLand = 0;
+        this.trick = null;
+        this.trickQueued = false;
       }
     }
     this.landed = Math.max(0, this.landed - dt * 4);
