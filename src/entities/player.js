@@ -100,24 +100,34 @@ export class Player {
 
   // Wind-up crouch, flight under gravity and a squash on landing.
   updateJump(dt) {
+    let flightDt = dt;
+    this.landed = Math.max(0, this.landed - dt * 4);
     if (this.windUp >= 0) {
       this.windUp += dt;
-      if (this.windUp >= WIND_UP) {
+      // Only the part of the frame after takeoff belongs to the flight.
+      if (this.windUp + 1e-12 >= WIND_UP) {
+        flightDt = Math.max(0, this.windUp - WIND_UP);
         this.windUp = -1;
         this.vy = JUMP_SPEED;
         this.air = 0.001;
+      } else {
+        flightDt = 0;
       }
     }
     if (this.air > 0) {
-      this.vy -= FALL * dt;
-      this.air += this.vy * dt;
-      if (this.air <= 0) {
+      // Integrate to the exact impact time so neither flight nor landing
+      // recovery depends on how the elapsed time was split into frames.
+      const untilLand = (this.vy + Math.sqrt(this.vy ** 2 + 2 * FALL * this.air)) / FALL;
+      const airborneDt = Math.min(flightDt, untilLand);
+      this.air += this.vy * airborneDt - 0.5 * FALL * airborneDt ** 2;
+      this.vy -= FALL * airborneDt;
+      if (flightDt + 1e-12 >= untilLand) {
         this.air = 0;
-        this.landed = Math.min(1, -this.vy / JUMP_SPEED);
-        this.events.push({ type: 'land', x: this.x, y: this.y, strength: this.landed });
+        const strength = Math.min(1, -this.vy / JUMP_SPEED);
+        this.events.push({ type: 'land', x: this.x, y: this.y, strength });
+        this.landed = Math.max(0, strength - Math.max(0, flightDt - untilLand) * 4);
       }
     }
-    this.landed = Math.max(0, this.landed - dt * 4);
     // Tuck the legs on the way up, reach for the ground on the way down.
     const flying = this.air > 0 ? 0.35 * Math.max(0, this.vy / JUMP_SPEED) : 0;
     const crouchTo = this.windUp >= 0 ? 0.55 : flying + this.landed * 0.6;
@@ -204,10 +214,10 @@ export class Player {
     const leanTo = Math.max(-0.22, Math.min(0.22, accel * 0.025));
     this.lean += (leanTo - this.lean) * ease(6);
     if (going) {
-      const stride = Math.floor(this.phase / Math.PI);
+      const stride = Math.floor((this.phase - Math.PI / 2) / Math.PI);
       this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
-      // A foot comes down every half cycle.
-      if (this.air === 0 && Math.floor(this.phase / Math.PI) !== stride) {
+      // The first foot lands at pi/2, then the feet alternate each half cycle.
+      if (this.air === 0 && Math.floor((this.phase - Math.PI / 2) / Math.PI) !== stride) {
         this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
       }
     }
@@ -322,7 +332,7 @@ export class Player {
 
   // Where the cape hangs from, and which way is out of the warrior's back.
   capeMount(rig = buildRig(this)) {
-    return [rig.at([0, 0.47, -0.12]), [-Math.sin(this.heading), -Math.cos(this.heading)]];
+    return [rig.at([0, 0.47, -0.12]), [-Math.sin(rig.heading), -Math.cos(rig.heading)]];
   }
 
   // Lets the cape fall still, e.g. after the pose was changed by hand.
@@ -332,9 +342,14 @@ export class Player {
 
   // Moves along one axis at a time so the player slides along shorelines.
   tryMove(world, dx, dy) {
-    const nx = this.x + dx;
-    const ny = this.y + dy;
-    if (world.isWalkable(nx, ny) && world.isWalkable(nx - 1.2, ny) && world.isWalkable(nx + 1.2, ny)) {
+    // Check the path as well as its endpoint, including thin obstacles.
+    const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 0.25);
+    const fromX = this.x;
+    const fromY = this.y;
+    for (let i = 1; i <= steps; i++) {
+      const nx = fromX + dx * i / steps;
+      const ny = fromY + dy * i / steps;
+      if (!world.isWalkable(nx, ny) || !world.isWalkable(nx - 1.2, ny) || !world.isWalkable(nx + 1.2, ny)) break;
       this.x = nx;
       this.y = ny;
     }
