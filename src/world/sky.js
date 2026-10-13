@@ -31,6 +31,10 @@ export function drawSkyReflection(r, view, t) {
     // The ripple belongs to the water, so it follows world rows.
     const wobble = Math.round(Math.sin((sy + view.y0) * 0.9 + t * 1.5) * 0.8);
     const py = (sy + 0.5) * cellH - view.offY;
+    const top = sy * cellH - view.offY;
+    const bottom = top + cellH;
+    const gy0 = Math.floor(top / grid);
+    const gy1 = Math.ceil(bottom / grid) - 1;
     for (let sx = 0; sx < cols; sx++) {
       const m = sy * cols + sx;
       if (mask[m] !== WATER) continue;
@@ -38,20 +42,30 @@ export function drawSkyReflection(r, view, t) {
       const px = (sx + wobble + 0.5) * cellW - view.offX;
       if (moon(fg, o, (px - moonX) / moonR, (py - moonY) / moonR, px / r.dpr, py / r.dpr, t)) continue;
 
-      // The star of the grid square this cell's centre lies in, drawn only by
-      // the one cell that contains it.
-      const gx = Math.floor(px / grid);
-      const gy = Math.floor(py / grid);
-      const h = hash2(gx, gy, 4242);
-      if (h < 0.92) continue;
-      const starX = (gx + hash2(gx, gy, 4243)) * grid;
-      const starY = (gy + hash2(gx, gy, 4244)) * grid;
-      if (Math.abs(starX - px) > cellW / 2 || Math.abs(starY - py) > cellH / 2) continue;
-      const tw = 0.45 + 0.35 * Math.sin(t * (1.5 + h * 3) + h * 500);
-      fg[o] = 170 * tw;
-      fg[o + 1] = 180 * tw;
-      fg[o + 2] = 215 * tw;
-      fg[o + 3] = STAR_CH[Math.floor(h * 1e5) % STAR_CH.length];
+      // A cell can straddle star-grid squares. Check every square it touches
+      // so stars near their edges do not disappear as the view scrolls.
+      const left = (sx + wobble) * cellW - view.offX;
+      const right = left + cellW;
+      const gx0 = Math.floor(left / grid);
+      const gx1 = Math.ceil(right / grid) - 1;
+      let found = false;
+      for (let gy = gy0; gy <= gy1 && !found; gy++) {
+        for (let gx = gx0; gx <= gx1; gx++) {
+          const h = hash2(gx, gy, 4242);
+          if (h < 0.92) continue;
+          const starX = (gx + hash2(gx, gy, 4243)) * grid;
+          const starY = (gy + hash2(gx, gy, 4244)) * grid;
+          // Half-open bounds assign a star on an edge to exactly one cell.
+          if (starX < left || starX >= right || starY < top || starY >= bottom) continue;
+          const tw = 0.45 + 0.35 * Math.sin(t * (1.5 + h * 3) + h * 500);
+          fg[o] = 170 * tw;
+          fg[o + 1] = 180 * tw;
+          fg[o + 2] = 215 * tw;
+          fg[o + 3] = STAR_CH[Math.floor(h * 1e5) % STAR_CH.length];
+          found = true;
+          break;
+        }
+      }
     }
   }
 }

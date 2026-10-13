@@ -36,8 +36,8 @@ For now it is a single outlaw exploring procedurally generated terrain.
   leather, wood, feather, iron) has its own glyph texture.
 - **Animation.** The player is a rigged 3D character playing professionally
   animated clips, drawn each frame into a small offscreen image from the
-  game's camera angle and converted into shaded, outlined glyphs. Walk, jog
-  and sprint clips are blended by speed and kept in step with the ground, so
+  game's camera angle and converted into shaded, outlined glyphs. Walk and
+  jog clips are blended by speed and kept in step with the ground, so
   the feet keep pace with the body.
   An idle stance that shifts its weight and looks around, then kneels to
   rest; blinking eyes and breath fogging in the cold air; jumps from motion

@@ -46,7 +46,6 @@ const CLIPS = {
   idle: 'Idle_Loop',
   walk: 'Walk_Loop',
   jog: 'Jog_Fwd_Loop',
-  sprint: 'Sprint_Loop',
   guard: 'Sword_Idle',
   attack: 'Sword_Attack',
   jumpStart: 'Jump_Start',
@@ -77,7 +76,7 @@ const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 // The jog in the library is an athlete's bounding stride, far too long for
 // someone carrying a sword and pack. Its leg swing is pulled in towards its
 // average by this much, keeping the timing, which shortens every step.
-const STRIDE_SCALE = { jog: 0.58, sprint: 0.6 };
+const STRIDE_SCALE = { jog: 0.58 };
 const LEG_BONES = ['DEF-thigh.L', 'DEF-shin.L', 'DEF-foot.L', 'DEF-toe.L', 'DEF-thigh.R', 'DEF-shin.R', 'DEF-foot.R',
   'DEF-toe.R'].map((n) => THREE.PropertyBinding.sanitizeNodeName(n));
 // How much of the hips' rise and fall in a stride is kept; the rest is taken
@@ -244,7 +243,7 @@ export class ModelFigure {
 
     // How fast each locomotion clip moves over the ground, and when in it
     // the left foot touches down, measured from the feet themselves.
-    this.gaits = ['walk', 'jog', 'sprint'].map((k) => this.measure(k));
+    this.gaits = ['walk', 'jog'].map((k) => this.measure(k));
     this.phase = 0;
     this.oneShot = null;
     this.lastMove = null;
@@ -433,6 +432,9 @@ export class ModelFigure {
         if ((l < r ? 'L' : 'R') !== CAPTURES[key].off) key += 'M';
       }
       this.jump = { kind: p.jumpKind, key, trick: null };
+      // Unused one-shot clips still advance with the mixer; replay anticipation
+      // for each standing jump instead of blending in its clamped final pose.
+      if (p.jumpKind === 'stand') this.actions.jumpStart.reset().play();
       this.turnFrom = null;
       // Springing straight off again cuts the last landing short.
       if (this.oneShot && this.jumpKeys.includes(this.oneShot.key)) this.oneShot = null;
