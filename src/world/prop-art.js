@@ -27,13 +27,13 @@ function glyphs() {
   if (tables) return tables;
   const fam = (prefix, a, b) => Array.from({ length: a }, (_, i) => Array.from({ length: b }, (_, j) => dg(`${prefix}.${i}.${j}`)));
   tables = {
-    stone: fam('props.stone', 5, 4),
+    stone: fam('props.stone', 5, 6),
     bark: fam('props.bark', 4, 4),
     barkh: fam('props.barkh', 4, 4),
     birch: [Array.from({ length: 4 }, (_, i) => dg(`props.birch.${i}`))],
     plank: fam('props.grainv', 4, 4),
     plankh: fam('props.grainh', 4, 4),
-    canvas: fam('props.canvas', 4, 3),
+    canvas: fam('props.canvas', 4, 4),
     leaf: fam('props.leaves', 4, 4),
     needle: fam('props.needles', 4, 3),
     char: [Array.from({ length: 3 }, (_, i) => dg(`props.char.${i}`))],
@@ -53,8 +53,8 @@ function glyphs() {
 
 // How bright a material's background is relative to its colour: enough to
 // close the gaps of the texture without flattening it.
-const BACK = { stone: 0.2, bark: 0.26, barkh: 0.26, birch: 0.34, plank: 0.34, plankh: 0.34, cut: 0.42,
-  canvas: 0.36, leaf: 0.18, needle: 0.16, char: 0.2, flame: 0.45, iron: 0.3, plain: 0.3 };
+const BACK = { stone: 0.3, bark: 0.26, barkh: 0.26, birch: 0.34, plank: 0.34, plankh: 0.34, cut: 0.42,
+  canvas: 0.3, leaf: 0.18, needle: 0.16, char: 0.2, flame: 0.45, iron: 0.3, plain: 0.3 };
 // Materials whose outline is broken and rocky rather than clean.
 const ROUGH = new Set(['stone', 'bark', 'barkh', 'char', 'leaf', 'needle']);
 
