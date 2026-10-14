@@ -6,6 +6,7 @@ import {
   WATER_DEEP, WATER_SHALLOW,
 } from '../render/palette.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, WATER_LEVEL } from './world.js';
+import { PALETTES } from './grass.js';
 
 const G = (s) => [...s].map(glyph);
 
@@ -60,7 +61,33 @@ function groundOf(chunk, seed) {
   return cached;
 }
 
-export function drawGround(r, world, view, t, bend, wind = 0) {
+// Fully zoomed out a cell is a dot of colour and blades are far too small
+// to draw, so meadows bake their blades' colour into a second still image.
+const MEADOW = glyph('#');
+function farOf(chunk, cached) {
+  if (cached.far) return cached.far;
+  const fg = cached.fg.slice();
+  const bg = cached.bg.slice();
+  for (let i = 0; i < CHUNK_SIZE * CHUNK_SIZE; i++) {
+    if (chunk.type[i] !== GRASS || chunk.burnt?.[i] || chunk.grassHeight[i] < 2) continue;
+    const tone = PALETTES[chunk.grassStyle[i]] ?? PALETTES[0];
+    const cover = Math.min(1, chunk.grassDensity[i] * 2.5) * (0.6 + chunk.grassHeight[i] * 0.1);
+    const o = i * 4;
+    fg[o] = tone[0] * cover;
+    fg[o + 1] = tone[1] * cover;
+    fg[o + 2] = tone[2] * cover;
+    fg[o + 3] = MEADOW;
+    bg[o] = tone[0] * cover * 0.3;
+    bg[o + 1] = tone[1] * cover * 0.3;
+    bg[o + 2] = tone[2] * cover * 0.3;
+  }
+  cached.far = { fg, bg };
+  return cached.far;
+}
+
+// `far` draws the still, blade-coloured image without animating water;
+// `loadedOnly` leaves chunks that are not generated yet as night ground.
+export function drawGround(r, world, view, t, bend, wind = 0, far = false, loadedOnly = far) {
   for (let sy = 0; sy < view.rows; sy++) {
     const wy = view.y0 + sy;
     const cy = Math.floor(wy / CHUNK_SIZE);
@@ -70,13 +97,31 @@ export function drawGround(r, world, view, t, bend, wind = 0) {
       const cx = Math.floor(wx / CHUNK_SIZE);
       const lx = wx - cx * CHUNK_SIZE;
       const count = Math.min(CHUNK_SIZE - lx, view.cols - sx);
-      const chunk = world.chunk(cx, cy);
+      const chunk = loadedOnly ? world.loaded(cx, cy) : world.chunk(cx, cy);
+      if (!chunk) {
+        // Not generated yet: plain night ground until it loads.
+        for (let i = 0; i < count; i++) {
+          const o = (sy * r.cols + sx + i) * 4;
+          r.fg[o + 3] = 0;
+          r.bg[o] = NIGHT[0];
+          r.bg[o + 1] = NIGHT[1];
+          r.bg[o + 2] = NIGHT[2];
+          r.mask[sy * r.cols + sx + i] = GRASS;
+        }
+        sx += count;
+        continue;
+      }
       const cached = groundOf(chunk, world.seed);
+      const image = far ? farOf(chunk, cached) : cached;
       const src = ly * CHUNK_SIZE + lx;
       const dest = sy * r.cols + sx;
-      r.fg.set(cached.fg.subarray(src * 4, (src + count) * 4), dest * 4);
-      r.bg.set(cached.bg.subarray(src * 4, (src + count) * 4), dest * 4);
+      r.fg.set(image.fg.subarray(src * 4, (src + count) * 4), dest * 4);
+      r.bg.set(image.bg.subarray(src * 4, (src + count) * 4), dest * 4);
       r.mask.set(chunk.type.subarray(src, src + count), dest);
+      if (far) {
+        sx += count;
+        continue;
+      }
       for (const x of cached.animated[ly]) {
         if (x < lx || x >= lx + count) continue;
         shadeCell(r.fg, r.bg, (dest + x - lx) * 4, chunk, ly * CHUNK_SIZE + x,

@@ -25,14 +25,20 @@ import { Splashes } from './world/splashes.js';
 import { Torches } from './world/torch.js';
 import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
-import { ASPECT, GRASS, WATER, World } from './world/world.js';
+import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
 // Zooming sets a target and the cell size glides toward it every frame.
 let cellH = 8;
 let zoomTarget = cellH;
-const MIN_CELL = 6;
+const MIN_CELL = 1.2;
+// Below this cell height (CSS px) glyphs are dots: grass and reflections
+// switch to a cheaper far view.
+const FAR_CELL = 4.5;
+// Views with more cells than this generate missing chunks over several
+// frames rather than all at once.
+const WIDE_VIEW = 150_000;
 const MAX_CELL = 24;
 
 const canvas = document.getElementById('screen');
@@ -48,11 +54,16 @@ try {
 const mobile = matchMedia('(any-pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
 const quality = new FrameQuality();
 
+const baseChunks = mobile ? 64 : 128;
+
 function resize() {
   const { dpr, cell } = renderSize(window.innerWidth, window.innerHeight,
     window.devicePixelRatio, cellH, mobile, quality.scale);
   renderer.resize(window.innerWidth, window.innerHeight, dpr, cell * ASPECT, cell);
+  fitChunks?.();
 }
+// Set once the world exists: sizes its chunk cache to the view.
+let fitChunks = null;
 window.addEventListener('resize', resize);
 resize();
 
@@ -96,7 +107,16 @@ const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 const name = (params.get('name') || 'Kael').slice(0, 24);
-const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: mobile ? 64 : 128 });
+const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks });
+// Keep every chunk a zoomed-out view touches, including the tallest trees
+// above and below it, or chunks would be rebuilt every frame.
+fitChunks = () => {
+  const across = Math.ceil(renderer.cols / CHUNK_SIZE) + 3;
+  const down = Math.ceil((renderer.rows + 2 * MAX_TREE_HEIGHT) / CHUNK_SIZE) + 3;
+  world.maxChunks = Math.max(baseChunks, Math.ceil(across * down * 1.5));
+  world.trim();
+};
+fitChunks();
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
@@ -381,9 +401,16 @@ function frame(now) {
   if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
     fireNotice('Strong wind put out the fire.');
   }
-  drawGround(renderer, world, view, time, player, weather.wind);
-  grass.drawTracks(renderer, view, time);
-  drawSkyReflection(renderer, view, time);
+  // Far out, cells are dots: skip what is too small to see.
+  const far = renderer.cellH / renderer.dpr < FAR_CELL;
+  const wide = far || view.cols * view.rows > WIDE_VIEW;
+  // A wide view generates its missing chunks a little each frame.
+  if (wide) world.load(view.x0, view.y0, view.x0 + view.cols, view.y0 + view.rows, 6);
+  drawGround(renderer, world, view, time, player, weather.wind, far, wide);
+  if (!far) {
+    grass.drawTracks(renderer, view, time);
+    drawSkyReflection(renderer, view, time);
+  }
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
@@ -392,7 +419,7 @@ function frame(now) {
   const marginX = Math.max(world.propRenderW, MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT) + 2;
   const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
-    view.x0 + view.cols + marginX, view.y0 + view.rows + tall);
+    view.x0 + view.cols + marginX, view.y0 + view.rows + tall, wide);
   const mirror = reflector(time, view);
   const visibleFires = fires.prepare(view, time);
   const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
@@ -428,8 +455,8 @@ function frame(now) {
     draw: () => drawProp(renderer, view, p, mirror, time, null, seed, true) }));
   const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).map((p) => ({ y: p.y,
     draw: () => {
-      drawProp(renderer, view, p, undefined, time, player, seed);
-      drawLeaves(renderer, view, p, time, seed);
+      drawProp(renderer, view, p, undefined, far ? null : time, player, seed);
+      if (!far) drawLeaves(renderer, view, p, time, seed);
     } }));
   for (const fire of visibleFires) {
     reflections.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time, mirror) });
@@ -453,12 +480,13 @@ function frame(now) {
   } });
   reflections.sort((a, b) => a.y - b.y);
   drawables.sort((a, b) => a.y - b.y);
-  grass.drawReflections(renderer, world, view, time, mirror, reflections);
+  if (!far) grass.drawReflections(renderer, world, view, time, mirror, reflections);
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
   splashes.drawSurface(renderer, view, time);
   weather.drawSurface(renderer, view, time);
-  grass.drawLayered(renderer, world, view, time, drawables);
+  if (far) for (const d of drawables) d.draw();
+  else grass.drawLayered(renderer, world, view, time, drawables);
   splashes.drawContacts(renderer, view, time, contacts);
   fires.light(renderer, view, time, visibleFires);
   torches.light(renderer, view, time, visibleTorches);
@@ -470,8 +498,10 @@ function frame(now) {
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
-  fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
-  fireflies.draw(renderer, view, time);
+  if (!far) {
+    fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
+    fireflies.draw(renderer, view, time);
+  }
   weather.draw(renderer, view);
   builder.drawPreview(view);
   if (debug.freeze) sound.pause();

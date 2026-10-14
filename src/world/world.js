@@ -76,6 +76,14 @@ export class World {
     return c;
   }
 
+  // Drops the least recently used chunks beyond the cache size, e.g. after
+  // zooming back in from a wide view.
+  trim() {
+    if (this.chunks.size <= this.maxChunks) return;
+    const byUse = [...this.chunks].sort((a, b) => a[1].used - b[1].used);
+    for (let i = 0; i < byUse.length - this.maxChunks; i++) this.chunks.delete(byUse[i][0]);
+  }
+
   generate(cx, cy) {
     const n = CHUNK * CHUNK;
     const type = new Uint8Array(n);
@@ -317,16 +325,49 @@ export class World {
   }
 
   // Every prop whose base lies in the chunks touching the given cell range.
-  propsIn(x0, y0, x1, y1) {
+  // `loadedOnly` skips chunks whose scenery has not been generated yet.
+  propsIn(x0, y0, x1, y1, loadedOnly = false) {
     const out = [];
     for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
       // The jittered final procedural grid column can put bases up to 11
       // cells into the next chunk; its props still belong to the source chunk.
       for (let cx = Math.floor((x0 - 11) / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+        if (loadedOnly && !this.loaded(cx, cy)?.props) continue;
         for (const p of this.propsOf(cx, cy)) out.push(p);
       }
     }
     return out;
+  }
+
+  // The chunk if it has been generated, without generating it.
+  loaded(cx, cy) {
+    const c = this.chunks.get(chunkKey(cx, cy));
+    if (!c) return null;
+    c.used = ++this.clock;
+    return c;
+  }
+
+  // Generates the chunks and scenery of a cell range nearest its centre
+  // first, until about `budgetMs` has passed, so a wide view fills in over a
+  // few frames instead of stalling. Returns how many chunks are still missing.
+  load(x0, y0, x1, y1, budgetMs, now = () => performance.now()) {
+    const missing = [];
+    const mx = (x0 + x1) / 2 / CHUNK;
+    const my = (y0 + y1) / 2 / CHUNK;
+    for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
+      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+        if (!this.loaded(cx, cy)?.props) missing.push([cx, cy, ((cx + 0.5 - mx) * ASPECT) ** 2 + (cy + 0.5 - my) ** 2]);
+      }
+    }
+    missing.sort((a, b) => a[2] - b[2]);
+    const until = now() + budgetMs;
+    let done = 0;
+    for (const [cx, cy] of missing) {
+      if (done > 0 && now() >= until) break;
+      this.propsOf(cx, cy);
+      done++;
+    }
+    return missing.length - done;
   }
 
   // A tall prop can reach the viewport directly from below, or reflect into

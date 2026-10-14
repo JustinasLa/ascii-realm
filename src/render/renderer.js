@@ -42,7 +42,8 @@ void main() {
   vec2 gcell = vec2(mod(g, uAtlasCols.x), floor(g / uAtlasCols.x));
   vec2 inner = uAtlasCell - 2.0 * uAtlasPad;
   vec2 apx = gcell * uAtlasCell + uAtlasPad + local * inner;
-  float lod = clamp(log2(inner.y / uCell.y), 0.0, 2.5);
+  // Small cells sample coarser mip levels, down to a glyph's average ink.
+  float lod = clamp(log2(inner.y / uCell.y), 0.0, 8.0);
   float a = textureLod(uAtlas, apx / uAtlasSize, lod).r;
 
   vec3 color = mix(bg, fg.rgb, a);
@@ -151,9 +152,10 @@ export class AsciiRenderer {
     this.dpr = dpr;
     const deviceW = cellW * dpr;
     const deviceH = cellH * dpr;
-    // Browser zoom can lower DPR below one. Enlarge both dimensions together
-    // when enforcing the minimum so the world keeps its aspect ratio.
-    const scale = Math.max(1, 2 / deviceW, 3 / deviceH);
+    // Fully zoomed out a cell is smaller than a pixel or two: it shows as a
+    // dot of its glyph's average ink. Below that, enlarge both dimensions
+    // together so the world keeps its aspect ratio.
+    const scale = Math.max(1, 0.6 / deviceW, 1 / deviceH);
     this.cellW = deviceW * scale;
     this.cellH = deviceH * scale;
     // One spare row and column so sub-cell scrolling never exposes a gap.

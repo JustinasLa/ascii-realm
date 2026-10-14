@@ -396,17 +396,18 @@ export function generateProps(world, cx, cy, size) {
   return props;
 }
 
+// A `t` of null draws the prop still, for views too far out to see it sway.
 export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
+  const direct = write === putCell;
+  if (direct && !propInView(view, prop)) return;
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
-  const tree = prop.kind === 'tree' || prop.kind === 'bush';
+  const tree = t !== null && (prop.kind === 'tree' || prop.kind === 'bush');
   const sway = tree ? treeWind(prop, t, seed) : 0;
   const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
   const sin = tree ? Math.sin(t * 1.4) : 0;
   const cos = tree ? Math.cos(t * 1.4) : 0;
   const sheen = Math.max(0, gust - 0.55) * 0.18;
-  const direct = write === putCell;
-  if (write === putCell && !propInView(view, prop)) return;
   // The figure has already been drawn when its base is behind this tree.
   // Stable local dither lets it show through nearby leaves without changing
   // the renderer's glyph index channel or punching holes in solid wood.

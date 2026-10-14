@@ -28,13 +28,24 @@ test('lowered resolution never shrinks glyphs below what the renderer can draw',
   }
 });
 
+test('the furthest zoom keeps one device pixel per cell under load', () => {
+  const size = renderSize(1600, 900, 1, 1.2, false, 0.3);
+  assert.equal(size.cell, 1.2);
+  assert.ok(size.cell * size.dpr >= 1 - 1e-9);
+});
+
 test('huge screens respect the hard cell ceiling and the pixel budget', () => {
   for (const [w, h] of [[3840, 2160], [7680, 4320], [800, 1280], [12000, 200]]) {
     for (const mobile of [true, false]) {
       const size = renderSize(w, h, 3, 6, mobile, 0.5);
       const cells = (Math.ceil(w / (size.cell * 0.6)) + 1) * (Math.ceil(h / size.cell) + 1);
       assert.ok(cells <= (mobile ? CELL_CEILING.mobile : CELL_CEILING.desktop), `${cells} cells`);
-      assert.ok(w * h * size.dpr ** 2 <= (mobile ? 1_200_000 : 2_500_000) * 0.5 + 1);
+      // Within the pixel budget, unless that would make readable glyphs
+      // smaller than the renderer can draw them.
+      const budget = Math.sqrt((mobile ? 1_200_000 : 2_500_000) * 0.5 / (w * h));
+      const legible = size.cell >= 3 ? Math.max(2 / (size.cell * 0.6), 3 / size.cell)
+        : Math.max(1 / size.cell, 0.6 / (size.cell * 0.6));
+      assert.ok(size.dpr <= Math.max(budget, legible) + 1e-9);
     }
   }
 });

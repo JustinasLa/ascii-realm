@@ -59,7 +59,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     isControlTarget: () => false,
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
-    Player, ASPECT, GRASS,
+    Player, ASPECT, GRASS, CHUNK_SIZE: 64,
     World: class {
       constructor() { this.spawn = { x: 0, y: 0 }; }
       isWalkable() { return true; }
@@ -67,6 +67,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
       propsIn() { return []; }
       propsInView() { return []; }
       waterDepthAt() { return 0; }
+      trim() {}
     },
     Camera: class {
       constructor(x, y) { this.x = x; this.y = y; }
