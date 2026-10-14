@@ -36,7 +36,11 @@ test('fireflies signal in flashes with dark gaps on their own rhythm', () => {
   assert.equal(fireflyFlash(fly, 0.5), fireflyFlash(fly, 3.5), 'the rhythm repeats every period');
 });
 
-test('boot prints turn with the walker, layer over dirt only and stay bounded', () => {
+// The glyph a cell shows: its layer when it has one, else its base.
+const shown = (r, i) => (r.hasLayer(i) ? r.ov[i * 4 + 3] | ((r.bg[i * 4 + 3] >> 4) << 8) : r.glyphAt(i));
+const shownGlyphs = (r) => Array.from({ length: r.cols * r.rows }, (_, i) => shown(r, i));
+
+test('boot prints turn with the walker, mark dirt only and stay bounded', () => {
   assert.equal(bootStamp(0), 0);
   assert.equal(bootStamp(Math.PI / 2), 2);
   assert.equal(bootStamp(-Math.PI / 2), 6);
@@ -54,13 +58,11 @@ test('boot prints turn with the walker, layer over dirt only and stay bounded', 
   assert.equal(walker.list[1].stamp, 2);
 
   const r = buffer(DIRT);
-  const before = baseGlyphs(r);
+  const before = shownGlyphs(r);
   const one = new Footprints();
   one.add(dirt, 40.5, 25.5, 0, Math.PI / 2);
   one.draw(r, view, 1);
-  const marked = [...Array(r.cols * r.rows).keys()].filter((i) => r.hasLayer(i));
-  const changed = before.filter((g, i) => r.glyphAt(i) !== g).length;
-  assert.ok(changed < marked.length, 'outside the pressed rim the ground glyph stays under the print');
+  const marked = [...Array(r.cols * r.rows).keys()].filter((i) => shown(r, i) !== before[i]);
   assert.ok(marked.length >= 3, 'a sideways boot spans several cells');
   assert.ok(marked.every((i) => Math.abs((i % r.cols) - 40) <= 4 && Math.abs(Math.floor(i / r.cols) - 25) <= 2));
 });
@@ -88,13 +90,12 @@ test('dust stays bounded and grit settles on bare ground', () => {
   for (let i = 0; i < 30; i++) dust.update(1 / 30);
   assert.ok(dust.list.every((p) => p.h >= 0));
   const r = buffer(DIRT);
-  const before = baseGlyphs(r);
+  const before = shownGlyphs(r);
   const puff = new Dust();
   puff.breath(40, 25, 3, 1, 0);
   puff.list.length = 1;
   puff.draw(r, view);
-  assert.deepEqual(baseGlyphs(r), before, 'a lone mote layers over the ground');
-  assert.equal([...Array(r.cols * r.rows).keys()].filter((i) => r.hasLayer(i)).length, 1);
+  assert.equal(shownGlyphs(r).filter((g, i) => g !== before[i]).length, 1, 'a lone mote marks one cell');
 });
 
 test('ambient life stays bounded, gathers at flames and never wipes layered detail', () => {
@@ -123,7 +124,7 @@ test('ambient life stays bounded, gathers at flames and never wipes layered deta
   ambience.wisps = [{ x: 10, y: 5, len: 8, rows: 3, seed: 3, age: 10, life: 40, vx: 0 }];
   ambience.drawMist(r, view, 1);
   assert.deepEqual(baseGlyphs(r), before, 'mist veils the scene without replacing it');
-  assert.equal(r.ov[5 * 4 + 3], 9, 'a layered glyph keeps its place under mist');
+  assert.equal(shown(r, 5), 9, 'a mark keeps its place under mist');
   assert.ok(r.bg[(5 * r.cols + 10) * 4] > 20, 'the mist lightens the ground');
 });
 
@@ -134,11 +135,10 @@ test('rain bursts on dry ground, snow settles, and both clear with the weather',
   for (let i = 0; i < 120; i++) weather.update(1 / 30, i / 30, meadow, view, settings);
   assert.ok(weather.crowns.length > 0 && weather.crowns.length <= 160);
   const r = buffer();
-  const before = baseGlyphs(r);
+  const before = shownGlyphs(r);
   weather.draw(r, view);
-  const layered = [...Array(r.cols * r.rows).keys()].filter((i) => r.hasLayer(i)).length;
-  const replaced = before.filter((g, i) => r.glyphAt(i) !== g).length;
-  assert.ok(layered > 50 && replaced < layered / 2, 'rain streaks layer over the scene');
+  const streaked = shownGlyphs(r).filter((g, i) => g !== before[i]).length;
+  assert.ok(streaked > 50 && streaked < r.cols * r.rows / 4, 'rain streaks cross the scene');
   for (let i = 0; i < 300; i++) weather.update(1 / 30, 4 + i / 30, meadow, view, { preset: 'blizzard', intensity: 1 });
   assert.equal(weather.crowns.length, 0);
   assert.ok(weather.settled.length > 0 && weather.settled.length <= 420);

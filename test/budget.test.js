@@ -49,18 +49,24 @@ test('huge screens respect the hard cell ceiling and the pixel budget', () => {
   }
 });
 
-test('sustained overload lowers resolution, isolated spikes do not, recovery is slow', () => {
+test('only a sustained GPU bottleneck lowers resolution; spikes and CPU-heavy frames do not', () => {
   const quality = new FrameQuality();
-  for (let i = 0; i < 60; i++) quality.sample(i === 20 ? 100 : 4, 1 / 60);
+  // Quick frames with one hitch.
+  for (let i = 0; i < 60; i++) quality.sample(i === 20 ? 100 : 4, i === 20 ? 0.1 : 1 / 60);
   assert.equal(quality.scale, 1);
-  for (let i = 0; i < 240; i++) quality.sample(25, 1 / 60);
+  // Many cells: frames are late because their own work is slow. Fewer
+  // pixels would not help, so every character stays sharp.
+  for (let i = 0; i < 600; i++) quality.sample(30, 1 / 30);
+  assert.equal(quality.scale, 1);
+  // Late frames whose work was quick are waiting on the GPU.
+  for (let i = 0; i < 240; i++) quality.sample(5, 1 / 30);
   const reduced = quality.scale;
   assert.ok(reduced < 1);
-  for (let i = 0; i < 30; i++) quality.sample(2, 1 / 60);
-  assert.equal(quality.scale, reduced);
-  for (let i = 0; i < 600; i++) quality.sample(2, 1 / 60);
+  for (let i = 0; i < 30; i++) quality.sample(5, 1 / 60);
+  assert.equal(quality.scale, reduced, 'recovery waits for frames to keep pace for a while');
+  for (let i = 0; i < 600; i++) quality.sample(5, 1 / 60);
   assert.ok(quality.scale > reduced);
-  for (let i = 0; i < 6000; i++) quality.sample(50, 1 / 60);
+  for (let i = 0; i < 6000; i++) quality.sample(5, 1 / 20);
   assert.equal(quality.scale, 0.3);
 });
 

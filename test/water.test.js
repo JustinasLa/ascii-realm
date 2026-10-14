@@ -52,7 +52,7 @@ test('every water cell is shaded with a surface mark or lake-bed detail, and fis
     for (let i = 0; i < 4096; i++) {
       if (chunk.type[i] !== WATER) continue;
       if (t === 0) { cells++; if (glyphOf(out, i)) marked++; }
-      if (rings.has(layerOf(out, i))) risen++;
+      if (rings.has(layerOf(out, i)) || rings.has(glyphOf(out, i))) risen++;
     }
   }
   assert.ok(marked / cells > 0.85, `most of the lake carries detail (${marked}/${cells})`);

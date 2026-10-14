@@ -28,8 +28,9 @@ function star(gx, gy, dpr) {
   };
 }
 
-// Stars are layered over the water's own surface marks.
-const layered = (r, i) => r.ov[i * 4 + 3] | ((r.bg[i * 4 + 3] >> 4) << 8);
+// Stars take the place of the water's own surface marks: the glyph the
+// cell shows, layered or not.
+const layered = (r, i) => (r.hasLayer(i) ? r.ov[i * 4 + 3] | ((r.bg[i * 4 + 3] >> 4) << 8) : r.glyphAt(i));
 
 function starCell(r, view, s) {
   const y = Math.floor((s.y + view.offY) / r.cellH);
@@ -72,7 +73,7 @@ test('a star exactly on a cell boundary is drawn only in the cell containing it'
   drawSkyReflection(r, view, 0);
   assert.equal(layered(r, index), s.glyph);
   let drawn = 0;
-  for (let i = 0; i < r.cols * r.rows; i++) if (r.glyphAt(i) || layered(r, i)) drawn++;
+  for (let i = 0; i < r.cols * r.rows; i++) if (layered(r, i)) drawn++;
   assert.equal(drawn, 1);
 });
 

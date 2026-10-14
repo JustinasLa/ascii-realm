@@ -1,6 +1,7 @@
 // Every character the game can draw, rasterised once into a single texture.
 // Glyphs are addressed by index; a cell stores its glyph in twelve bits.
 
+import { ruleFor } from './ascii-rules.js';
 import { PACKS } from './glyph-packs/index.js';
 
 const ASCII = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('');
@@ -58,6 +59,8 @@ for (const pack of PACKS) {
   }
 }
 export const GLYPH_COUNT = PACK_BASE + packed.length;
+export const BLANK_GLYPH = 1;
+export const GRASS_GLYPH = 2;
 
 // A cell holds a base glyph and may hold a second one layered over it, like
 // a flower over grass. Adding LAYER to a glyph asks any writer to stack it
@@ -184,30 +187,142 @@ function drawStrokes(ctx, at) {
   }
 }
 
-function drawBlossoms(ctx, at) {
-  ctx.lineCap = 'round';
-  inCell(ctx, at, BLOSSOM, (ox, oy) => {
-    const cx = ox + INNER_W / 2;
-    const cy = oy + INNER_H / 2;
-    ctx.lineWidth = 6;
-    for (let k = 0; k < 3; k++) {
-      const a = k * Math.PI / 3 + Math.PI / 2;
-      ctx.moveTo(cx - Math.cos(a) * 11, cy - Math.sin(a) * 11);
-      ctx.lineTo(cx + Math.cos(a) * 11, cy + Math.sin(a) * 11);
+// Blossoms in the grass are a bold `*` and `o`: the regular weight is too
+// faint to read at small cells.
+function drawBlossoms(ctx, at, fontPx, fontFamily) {
+  ctx.save();
+  ctx.font = `bold ${fontPx}px ${fontFamily}`;
+  for (const [g, ch] of [[BLOSSOM, '*'], [BUD, 'o']]) {
+    const [ox, oy] = at(g);
+    ctx.fillText(ch, ox + INNER_W / 2, oy + INNER_H / 2);
+  }
+  ctx.restore();
+}
+
+// Everything in the world except grass is drawn with real characters. Pack
+// glyphs keep their names (and the code that picks them), but each one is
+// shown as a character: the one an entry names with `ascii`, the one a rule
+// below gives its family, or else the character whose shape matches the
+// drawing best. A character drawn at partial strength keeps the drawing's
+// brightness, so shading carried by grey glyphs survives.
+const GRID_X = 6;
+const GRID_Y = 10;
+// Flower stems are drawn like the grass they grow in.
+const DRAWN = /^flora\.stem\./;
+
+// What a glyph is when cells are written: a cell shows one character, so a
+// glyph layered over another replaces it, except where grass grows over
+// grass; a blank glyph layered over a cell leaves it as it was.
+export const GLYPH_KIND = (() => {
+  const kind = new Uint8Array(GLYPH_COUNT);
+  kind[0] = BLANK_GLYPH;
+  for (let g = STROKE_BASE; g < BLOSSOM; g++) kind[g] = GRASS_GLYPH;
+  packed.forEach((entry, k) => {
+    if (DRAWN.test(entry.name)) kind[PACK_BASE + k] = GRASS_GLYPH;
+    else if ((entry.ascii ?? ruleFor(entry.name)) === '') kind[PACK_BASE + k] = BLANK_GLYPH;
+  });
+  return kind;
+})();
+
+function cellFeatures(data, width, ox, oy) {
+  const out = new Float32Array(GRID_X * GRID_Y);
+  const bw = INNER_W / GRID_X;
+  const bh = INNER_H / GRID_Y;
+  for (let gy = 0; gy < GRID_Y; gy++) {
+    for (let gx = 0; gx < GRID_X; gx++) {
+      let sum = 0;
+      let n = 0;
+      for (let y = Math.floor(gy * bh); y < Math.floor((gy + 1) * bh); y++) {
+        for (let x = Math.floor(gx * bw); x < Math.floor((gx + 1) * bw); x++) {
+          sum += data[((oy + y) * width + ox + x) * 4];
+          n++;
+        }
+      }
+      out[gy * GRID_X + gx] = sum / n / 255;
     }
-    ctx.stroke();
+  }
+  return out;
+}
+
+const FLIP_CHAR = { '/': '\\', '\\': '/', ',': "'", "'": ',', '.': "'", v: '^', '^': 'v', u: 'n', n: 'u', m: 'w', w: 'm' };
+
+function asciify(ctx, at, canvas, fontPx, fontFamily) {
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+  const features = (g) => cellFeatures(data, canvas.width, ...at(g));
+  const chars = [];
+  for (let i = 1; i < ASCII.length; i++) {
+    const f = features(i);
+    let peak = 0;
+    for (const v of f) peak = Math.max(peak, v);
+    if (peak > 0) chars.push({ ch: ASCII[i], f: f.map((v) => v / peak) });
+  }
+  const chosen = new Map();
+  const choose = (k) => {
+    const entry = packed[k];
+    if (chosen.has(entry.name)) return chosen.get(entry.name);
+    if (DRAWN.test(entry.name)) {
+      chosen.set(entry.name, null);
+      return null;
+    }
+    const f = features(PACK_BASE + k);
+    let peak = 0;
+    for (const v of f) peak = Math.max(peak, v);
+    let ch = entry.ascii;
+    if (ch === undefined) ch = ruleFor(entry.name);
+    // A highlight layered over a glyph is its own character, recoloured.
+    if (ch === undefined && entry.name.endsWith('.hi') && byName.has(entry.name.slice(0, -3))) {
+      ch = choose(byName.get(entry.name.slice(0, -3)) - PACK_BASE).ch;
+    }
+    if (ch !== undefined && entry.name.endsWith('~') && entry.ascii === undefined) ch = FLIP_CHAR[ch] ?? ch;
+    if (ch === undefined) {
+      ch = '';
+      if (peak > 0.03) {
+        let best = Infinity;
+        for (const c of chars) {
+          let err = 0;
+          for (let i = 0; i < f.length; i++) {
+            const d = f[i] / peak - c.f[i];
+            err += d * d;
+          }
+          if (err < best) {
+            best = err;
+            ch = c.ch;
+          }
+        }
+      }
+    }
+    const result = { ch, strength: Math.min(1, Math.max(0.35, peak * 1.15)) };
+    chosen.set(entry.name, result);
+    return result;
+  };
+  const picks = packed.map((_, k) => choose(k));
+  ctx.save();
+  ctx.font = `${fontPx}px ${fontFamily}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  picks.forEach((pick, k) => {
+    if (!pick) return;
+    const { ch, strength } = pick;
+    const [ox, oy] = at(PACK_BASE + k);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(ox - PAD, oy - PAD, INNER_W + PAD * 2, INNER_H + PAD * 2);
+    if (!ch) return;
+    const v = Math.round(strength * 255);
+    ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.fillText(ch, ox + INNER_W / 2, oy + INNER_H / 2);
   });
-  inCell(ctx, at, BUD, (ox, oy) => {
-    ctx.lineWidth = 5;
-    ctx.arc(ox + INNER_W / 2, oy + INNER_H / 2, 8, 0, Math.PI * 2);
-    ctx.stroke();
-  });
+  ctx.restore();
+  return new Map(packed.map((entry, k) => [entry.name, picks[k]?.ch ?? null]));
 }
 
 // Pack glyphs draw in their own inner-cell coordinates, 0..INNER_W across
 // and 0..INNER_H down, in white; grey fills draw a glyph at partial strength.
+// Only glyphs shown as drawn, or matched to a character by their drawing,
+// need drawing: the rest already know their character.
 function drawPacks(ctx, at) {
   packed.forEach((entry, k) => {
+    const hi = entry.name.endsWith('.hi') && byName.has(entry.name.slice(0, -3));
+    if (!DRAWN.test(entry.name) && (entry.ascii !== undefined || ruleFor(entry.name) !== undefined || hi)) return;
     inCell(ctx, at, PACK_BASE + k, (ox, oy) => {
       ctx.translate(ox, oy);
       ctx.fillStyle = '#fff';
@@ -249,8 +364,9 @@ export function buildAtlas(fontFamily) {
   });
   const at = (g) => [(g % ATLAS_COLS) * cellW + PAD, Math.floor(g / ATLAS_COLS) * cellH + PAD];
   drawStrokes(ctx, at);
-  drawBlossoms(ctx, at);
+  drawBlossoms(ctx, at, fontPx, fontFamily);
   drawPacks(ctx, at);
+  const ascii = asciify(ctx, at, canvas, fontPx, fontFamily);
 
-  return { canvas, cols: ATLAS_COLS, rows, cellW, cellH, pad: PAD };
+  return { canvas, cols: ATLAS_COLS, rows, cellW, cellH, pad: PAD, ascii };
 }

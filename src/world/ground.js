@@ -1,5 +1,6 @@
 import { NIGHT } from '../render/palette.js';
 import { CHUNK_SIZE, GRASS } from './world.js';
+import { atCell } from './terrain/cell.js';
 import { TERRAIN_SHADERS } from './terrain/index.js';
 
 // Static terrain is shaded once per chunk, including the expensive stone
@@ -23,6 +24,7 @@ function groundOf(chunk, seed) {
       const wx = chunk.cx * CHUNK_SIZE + x;
       const wy = chunk.cy * CHUNK_SIZE + y;
       const shader = TERRAIN_SHADERS[chunk.type[i]];
+      atCell(wx, wy);
       shader.shade(out, i * 4, chunk, i, wx, wy, seed, 0);
       if (shader.animated(chunk, i, wx, wy, seed)) row.push(x);
     }
@@ -70,6 +72,7 @@ export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false
       for (const x of cached.animated[ly]) {
         if (x < lx || x >= lx + count) continue;
         const i = ly * CHUNK_SIZE + x;
+        atCell(cx * CHUNK_SIZE + x, wy);
         TERRAIN_SHADERS[chunk.type[i]].shade(r, (dest + x - lx) * 4, chunk, i,
           cx * CHUNK_SIZE + x, wy, world.seed, t, wind);
       }

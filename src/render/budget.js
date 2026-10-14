@@ -22,28 +22,35 @@ export function renderSize(width, height, dpr, requestedCell, mobile, pixelScale
   return { dpr: legible, cell };
 }
 
-// Under sustained load the backing resolution drops, never the zoom; it
-// climbs back slowly once frames are cheap again.
+// Under sustained load on the graphics card the backing resolution drops,
+// never the zoom; it climbs back once frames keep pace again. Only a frame
+// that arrives late although its own work was quick is waiting on the GPU:
+// slow work on the CPU (many cells when zoomed out) is not helped by fewer
+// pixels, and dropping them for it only blurs every character. Each change
+// redraws every character at a new size, so changes are rare.
 export class FrameQuality {
   constructor() {
     this.maximum = 1;
     this.minimum = 0.3;
     this.scale = this.maximum;
+    // How much of the recent time the GPU held frames back, 0..1.
     this.average = 0;
     this.slow = 0;
     this.fast = 0;
   }
 
   sample(workMs, dt) {
-    this.average += (workMs - this.average) * (1 - Math.exp(-dt * 3));
-    this.slow = this.average > 12 ? this.slow + dt : Math.max(0, this.slow - dt * 2);
-    this.fast = this.average < 6 ? this.fast + dt : 0;
+    const interval = dt * 1000;
+    const gpuBound = interval > 24 && workMs < interval * 0.6;
+    this.average += ((gpuBound ? 1 : 0) - this.average) * (1 - Math.exp(-dt * 2));
+    this.slow = this.average > 0.7 ? this.slow + dt : Math.max(0, this.slow - dt * 2);
+    this.fast = this.average < 0.1 ? this.fast + dt : 0;
     const before = this.scale;
-    if (this.slow > 1.5) {
+    if (this.slow > 2) {
       this.scale = Math.max(this.minimum, this.scale * 0.8);
       this.slow = 0;
-    } else if (this.fast > 8) {
-      this.scale = Math.min(this.maximum, this.scale * 1.1);
+    } else if (this.fast > 6 && this.scale < this.maximum) {
+      this.scale = Math.min(this.maximum, this.scale * 1.25);
       this.fast = 0;
     }
     return this.scale !== before;

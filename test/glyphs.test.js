@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BLOSSOM, BUD, FLAT_GLYPHS, GLYPH_COUNT, GLYPHS, LAYER, MIRRORED, STROKE_STEPS, buildAtlas, dg, flatGlyph,
+import { BLANK_GLYPH, BLOSSOM, BUD, FLAT_GLYPHS, GLYPH_KIND, GRASS_GLYPH, GLYPH_COUNT, GLYPHS, LAYER, MIRRORED, STROKE_STEPS, buildAtlas, dg, flatGlyph,
   glyph, over, strokeGlyph } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
 import { WATER } from '../src/world/world.js';
@@ -23,27 +23,34 @@ test('stroke glyphs are distinct, follow the font glyphs and flip upside down in
   assert.equal(MIRRORED[flatGlyph(0, 2)], flatGlyph(0, 2));
 });
 
-test('every drawn glyph is clipped to its own padded atlas cell', (t) => {
+test('every drawn glyph is clipped to its own padded atlas cell and detail glyphs show as characters', (t) => {
   const clips = [];
-  const ctx = new Proxy({ measureText: () => ({ width: 60 }), rect: (...args) => clips.push(args) }, {
-    get: (target, name) => target[name] ?? (() => {}),
-  });
-  const canvas = { getContext: () => ctx };
+  const canvas = {};
+  const ctx = new Proxy({
+    measureText: () => ({ width: 60 }),
+    rect: (...args) => clips.push(args),
+    getImageData: () => ({ data: new Uint8ClampedArray(canvas.width * canvas.height * 4) }),
+  }, { get: (target, name) => target[name] ?? (() => {}) });
+  canvas.getContext = () => ctx;
   const original = globalThis.document;
   globalThis.document = { createElement: () => canvas };
   t.after(() => { globalThis.document = original; });
   const atlas = buildAtlas('monospace');
-  const packs = Array.from({ length: GLYPH_COUNT - BUD - 1 }, (_, i) => BUD + 1 + i);
-  const drawn = [...strokes, ...FLAT_GLYPHS, BLOSSOM, BUD, ...packs];
-  assert.equal(clips.length, drawn.length);
-  assert.ok(atlas.rows * atlas.cols >= Math.max(...drawn) + 1);
   const cells = new Set(clips.map(([x, y, w, h]) => {
     assert.equal(w, atlas.cellW);
     assert.equal(h, atlas.cellH);
     assert.ok(x >= 0 && y >= 0 && x + w <= canvas.width && y + h <= canvas.height);
     return (y / atlas.cellH) * atlas.cols + x / atlas.cellW;
   }));
-  assert.deepEqual([...cells].sort((a, b) => a - b), drawn.sort((a, b) => a - b));
+  assert.equal(cells.size, clips.length, 'no glyph is drawn twice');
+  for (const g of [...strokes, ...FLAT_GLYPHS]) assert.ok(cells.has(g), 'grass strokes are drawn');
+  assert.equal(atlas.ascii.size, GLYPH_COUNT - BUD - 1);
+  for (const [name, ch] of atlas.ascii) {
+    if (name.startsWith('flora.stem.')) assert.equal(ch, null, 'flower stems are drawn like grass');
+    else assert.ok(ch === '' || (ch.length === 1 && GLYPHS.includes(ch)), `${name} shows as a character`);
+  }
+  assert.equal(atlas.ascii.get('pebble.0'), 'o');
+  assert.equal(atlas.ascii.get('props.cut.s.0.0'), '(');
 });
 
 test('reflected blade strokes lean the other way in the water', () => {
@@ -70,20 +77,21 @@ test('detail glyphs are named, flipped twins mirror each other, and layered glyp
   assert.ok(GLYPH_COUNT <= LAYER);
 });
 
-test('a layered glyph stacks over the base and the two most recent layers stay visible', () => {
+test('a cell shows one character: a layered glyph replaces it, except grass over grass', () => {
   const r = withLayers({ cols: 2, rows: 1, fg: new Uint8ClampedArray(8) });
   const grass = strokeGlyph(1, 2);
+  const blade = strokeGlyph(3, 4);
   const petals = dg('flower.ring5');
-  const eye = dg('flower.eye');
   r.put(0, 0, grass, 10, 20, 30);
-  r.put(0, 0, over(petals), 200, 200, 200);
+  r.put(0, 0, over(blade), 40, 50, 60);
   assert.equal(r.glyphAt(0), grass);
-  assert.equal(r.ov[3] | ((r.bg[3] >> 4) << 8), petals);
-  r.layer(0, 0, eye, 250, 200, 0);
-  assert.equal(r.glyphAt(0), petals, 'the earlier layer sinks to the base');
+  assert.equal(r.ov[3] | ((r.bg[3] >> 4) << 8), blade, 'grass grows over grass');
+  r.layer(0, 0, petals, 200, 200, 200);
+  assert.equal(r.glyphAt(0), petals, 'a flower takes the cell');
+  assert.equal(r.hasLayer(0), false);
   assert.deepEqual([...r.fg.slice(0, 3)], [200, 200, 200]);
-  assert.equal(r.ov[3] | ((r.bg[3] >> 4) << 8), eye);
-  r.put(0, 0, glyph('#'), 1, 2, 3);
-  assert.equal(r.glyphAt(0), glyph('#'));
-  assert.equal(r.hasLayer(0), false, 'a plain glyph covers the layers beneath it');
+  r.layer(0, 0, dg('veil.0'), 1, 2, 3);
+  assert.equal(r.glyphAt(0), petals, 'a blank glyph leaves the cell as it was');
+  assert.equal(GLYPH_KIND[dg('veil.0')], BLANK_GLYPH);
+  assert.equal(GLYPH_KIND[grass], GRASS_GLYPH);
 });

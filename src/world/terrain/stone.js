@@ -11,7 +11,7 @@ import { hash2 } from '../../core/rng.js';
 import { dg, glyph, over } from '../../render/glyphs.js';
 import { NIGHT } from '../../render/palette.js';
 import { ASPECT } from '../world.js';
-import { emit } from './cell.js';
+import { emit, surface } from './cell.js';
 import { clamp01, fam, lineCell, LX, LY, pick, smooth } from './surface.js';
 
 const SLAB = 5.2;
@@ -277,5 +277,5 @@ export function shade(out, o, chunk, i, wx, wy, seed) {
     // A glint of mica.
     layer(MICA, 170 + l * 40, 180 + l * 40, 215 + l * 30);
   }
-  emit(out, o, g, cr, cg, cb, br, bgG, bb, og, or, og2, ob);
+  surface(out, o, cr, cg, cb, br, bgG, bb, og, or, og2, ob);
 }

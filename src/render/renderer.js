@@ -7,10 +7,12 @@
 // atlas for every pixel, so cost is independent of how many characters are
 // on screen.
 
-import { GLYPH_MASK, LAYER } from './glyphs.js';
+import { BLANK_GLYPH, GLYPH_KIND, GLYPH_MASK, GRASS_GLYPH, LAYER } from './glyphs.js';
 import { NIGHT, VIGNETTE } from './palette.js';
 
 // An rgb triple as a GLSL vec3 literal.
+// How much of a cell's ground colour shows behind its glyph.
+const BG_KEEP = 0.12;
 const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
 
 const VERT = `#version 300 es
@@ -56,7 +58,10 @@ void main() {
   float g = floor(fg.a * 255.0 + 0.5) + mod(hi, 16.0) * 256.0;
   float og = floor(ov.a * 255.0 + 0.5) + floor(hi / 16.0) * 256.0;
 
-  vec3 color = mix(bg.rgb, fg.rgb, coverage(g, local));
+  // Cells are not painted in: the ground colour only faintly tints the night
+  // between characters, so every shape is drawn by its glyphs alone.
+  vec3 ground = mix(${vec3(NIGHT)}, bg.rgb, ${BG_KEEP.toFixed(3)});
+  vec3 color = mix(ground, fg.rgb, coverage(g, local));
   if (og > 0.5) color = mix(color, ov.rgb, coverage(og, local));
 
   // Fade toward a deep navy at the corners so the eye settles on the middle
@@ -233,6 +238,12 @@ export class AsciiRenderer {
     const { fg, bg, ov } = this;
     const i = cell * 4;
     const glyphIndexOnly = glyphIndex & GLYPH_MASK;
+    const kind = GLYPH_KIND[glyphIndexOnly];
+    if (kind === BLANK_GLYPH) return;
+    if (kind !== GRASS_GLYPH || GLYPH_KIND[this.glyphAt(cell)] !== GRASS_GLYPH) {
+      this.putAt(cell, glyphIndexOnly, r, g, b);
+      return;
+    }
     const hi = bg[i + 3];
     if (ov[i + 3] || hi >> 4) {
       fg[i] = ov[i];
