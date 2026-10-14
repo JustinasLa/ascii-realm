@@ -37,6 +37,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     performance: { now: () => 0 },
     requestAnimationFrame: callback => { nextFrame = callback; },
     isDown: () => false,
+    isControlTarget: () => false,
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
     Player, ASPECT, GRASS,
@@ -45,6 +46,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
       isWalkable() { return true; }
       typeAt() { return GRASS; }
       propsIn() { return []; }
+      propsInView() { return []; }
     },
     Camera: class {
       constructor(x, y) { this.x = x; this.y = y; }
@@ -63,6 +65,10 @@ async function loadGame(move = { x: 0, y: 0 }) {
     drawShadow: noop, drawProp: noop, reflector: noop, dressFigure: noop,
     drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop,
     ModelFigure: { load: () => Promise.resolve(model) },
+    SceneryBuilder: class {
+      constructor() { this.enabled = false; }
+      drawPreview() {}
+    },
     GameAudio: class {
       constructor() { this.music = { update: noop }; this.engine = { setListener: noop }; }
       play() {}

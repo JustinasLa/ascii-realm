@@ -1,4 +1,5 @@
-import { isDown, moveAxis, wasTapped } from './core/input.js';
+import { isControlTarget, isDown, moveAxis, wasTapped } from './core/input.js';
+import { SceneryBuilder } from './editor/builder.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { Player } from './entities/player.js';
@@ -49,18 +50,20 @@ function updateZoom(dt) {
 // Mouse wheel or +/- to zoom in and out. Trackpads send many tiny deltas and
 // mice a few large ones, so scale by the distance scrolled.
 window.addEventListener('wheel', (e) => {
+  if (e.target !== canvas) return;
   e.preventDefault();
   const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
   zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (isControlTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === '+' || e.key === '=') zoomBy(1.15);
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
 
 const params = new URLSearchParams(location.search);
-const seed = Number(params.get('seed')) || 1;
+const requestedSeed = Number(params.get('seed'));
+const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 const name = (params.get('name') || 'Kael').slice(0, 24);
 const world = new World(seed);
@@ -85,7 +88,7 @@ let walked = 0;
 let clicked = false;
 let mouseHeld = false;
 canvas.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
+  if (e.button !== 0 || builder.enabled) return;
   clicked = true;
   mouseHeld = true;
 });
@@ -97,6 +100,28 @@ window.addEventListener('blur', () => {
 });
 
 let hitStop = 0;
+
+const builder = new SceneryBuilder({ world, player, camera, renderer,
+  onModeChange: () => {
+    clicked = false;
+    mouseHeld = false;
+    hitStop = 0;
+    player.combat.charge = 0;
+    player.combat.queued = null;
+    player.vx = 0;
+    player.vz = 0;
+    player.surge = 0;
+    player.skid = 0;
+    player.wasMoving = false;
+  },
+  onReset: () => {
+    dust.list.length = 0;
+    footprints.list.length = 0;
+    fireflies.list.length = 0;
+  },
+});
+debug.builder = builder;
+if (params.has('builder')) builder.setEnabled(true);
 
 // The player's 3D character; until it has loaded the shape-built figure
 // stands in.
@@ -136,11 +161,11 @@ function frame(now) {
   time += dt;
   updateZoom(dt);
 
-  const move = moveAxis();
+  const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
   const jump = wasTapped('Space');
   const attack = wasTapped('KeyJ') || clicked;
   const sword = wasTapped('KeyF');
-  if (!debug.freeze) {
+  if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
     if (attack) player.attack();
     if (sword) player.toggleSword();
@@ -150,12 +175,13 @@ function frame(now) {
   hitStop -= stoppedDt;
   const playerDt = dt - stoppedDt + stoppedDt * 0.05;
   const held = isDown('KeyJ') || mouseHeld;
-  if (!debug.freeze && playerDt > 0) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
+  const paused = debug.freeze || builder.enabled || playerDt === 0;
+  if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {
-    if (!debug.freeze && playerDt > 0) model.update(playerDt, player);
+    if (!paused) model.update(playerDt, player);
     // The sword's trail follows the blade of the 3D character.
     player.trail = player.trail.filter((t) => player.time - t.t < 0.16);
-    const blade = !debug.freeze && playerDt > 0 && player.combat.trailing ? model.swordLine() : null;
+    const blade = !paused && player.combat.trailing ? model.swordLine() : null;
     if (blade) {
       player.trail.push({ t: player.time, hx: player.x + blade.base[0], hy: player.y + blade.base[1],
         tx: player.x + blade.tip[0], ty: player.y + blade.tip[1] });
@@ -184,7 +210,8 @@ function frame(now) {
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
-  camera.follow(player.x, player.y - 11, dt);
+  if (builder.enabled) builder.updateCamera(dt, move, isDown('ShiftLeft', 'ShiftRight'));
+  else camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
   drawGround(renderer, world, view, time, player);
@@ -192,9 +219,7 @@ function frame(now) {
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
-  // Props up to a screen above the view can still be reflected into it.
-  const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
-    view.y0 + view.rows + 50);
+  const props = world.propsInView(view);
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
@@ -223,6 +248,7 @@ function frame(now) {
   dust.draw(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
+  builder.drawPreview(view);
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }
