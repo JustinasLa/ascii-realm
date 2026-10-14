@@ -6,26 +6,27 @@ import { createScene, scenarios } from '../bench/scene.js';
 // Cell-buffer snapshots of the stroke-blade meadow, captured before its
 // culling and contact-field optimizations, re-captured once the meadow was
 // merged with the outlaw, wading, fires and weather, and again after the
-// layered detail pass (terrain, water, flora, trees, props and effects).
+// layered detail pass (terrain, water, flora, trees, props and effects), and
+// again once everything but the grass became plain characters.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
-  ['c81aace52b25dc88bf32de4d24c456e9583a2ef3cb9cedfc4bc573d6294615a8',
-    'e6aed4b005bbbde4ee31100b706fb880fd5518c555a044eaf5335557416afeb2',
-    '8272194cf63c413db706a8c596a37690c9b46bc8e1749ce2b547de9da3816a33',
-    '9d7554e1ef824d949bdc4ab819ed6a90ef6721d7193efa59c1137818b6b0dd97'],
-  ['8a7130c0cc81c25804a800070bf8223fa0dc857ad23d3a213a62149cf5d78df6',
-    '0e03d9f14d1cb9f115d0bfb307a6a95c1875d9d59378c9aa051d850474562f1d',
-    'c3561a1788f10f66ae3c189a65830ca6ba90760f02de4dc48c3696f9c4aadf6e',
-    '9a0511754ec869b17ac016dff1a7ed17e6907bdb2e67595ca02d5e731cef972e'],
-  ['a4f192517a12daabffd8fe6137b524e0cc0962f7fcf1a6b1b36248b1624c2602',
-    '34d1b0058d30ab43ffd09720c7fcfd898ebe35811659b31c1771581ad32754ea',
-    '706821e40bd5ecee3cce665eb4524127427223e5ec182323b1eee4f32b8018a5',
-    '4d9d335546f6194de792f99064be2666fb14211c371eb75a84a8535e240db1f0'],
-  ['275372f4882376ba0d312a83a859bdb2ec9f64c14817c805aa0def18931ce191',
-    '01f03cab872dbdc372f0d6b11e1398e5dfd2236a8c5973af97dd939a0e2bdcd2',
-    '0bdd49cc4287f0bbf2ca5c2a0cdbf8d3cc480a8e8f17ef709fdcd7414e0d128e',
-    '9905271b5afdf1f1a581f93e19754bcc281650e8fa8a94ee8bbc0f63d31b5ed1'],
+  ['4d58b015d435419679036a5bbeb631b08f895e993cf93c3d67846a6eb5d2d6b7',
+    '6ba86821fda4927d7db29a1592c485fd0d680a4c76fb473dcda6a1b01cdfd44a',
+    'd524246b0e61dea318d94b912402c81051e798ef257f589fdc5dfa676c09a0f4',
+    'bccb9b2a8ed80770c663ca40ba8fb818f1bbf3d57b707927fbcbeadb3bdf31b5'],
+  ['7ae731eb1ce7fcfc05c9779251ddb3116133be10e309594cb9f50492c2395d73',
+    '231b4860ec829866e3e88f2dc4f12d2f4ac9b69cc283c38229e27dd5d701d48c',
+    '48bbcf66405b45561cc09ea52373816de7e3db67af34171a38016aa987347967',
+    '06cf3b6319dbb36501b8f72c29f02483e1ddae49106f9bd95bc843f9bfe8f7ff'],
+  ['6a3db581db7ef0f5a4b59ac8ca9ee56b6f04804d8275d3ae33766e64c5f70f36',
+    'c3d4fee2327bb1ea25eb40146328edd1193cafaf229d01981d57115995894c35',
+    'a46654507ecc2c64ea970ae0ae75255588817cc808632e3dfe8c71a4926f4b2e',
+    '77cc9452eaccc57583b8a3db6a817636f0f9b0c1de9438d07d6f7987831a92bd'],
+  ['106b33c77a06b01399cea67236447c06e700dbdacc49aa443c8c0b985b3a3abd',
+    'c76caef1600ed5add424a3e12c854a6c5940cc2231c1b96937d3c07ba33b3d91',
+    'f15dff70b81093fe5826f15537236cc01dc44c9c33232563886ffeba7d7de5dc',
+    '059eceb53ee0c618d802465edf4644f8ef3bd218fbcc62599d35fd6f6a48e2b2'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.

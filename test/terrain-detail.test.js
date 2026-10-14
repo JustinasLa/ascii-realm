@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { LINE_ANGLES, LINE_OFFSETS } from '../src/render/glyph-packs/terrain.js';
+import { GLYPHS } from '../src/render/glyphs.js';
 import { lineCell } from '../src/world/terrain/surface.js';
 import { TERRAIN_SHADERS } from '../src/world/terrain/index.js';
 import { wetness } from '../src/world/terrain/shore.js';
@@ -61,7 +62,7 @@ test('bare ground is shaded deterministically, independent of time and the order
   assert.ok(seen.has(STONE) && seen.has(SHORE) && seen.has(DIRT), 'the sample covers rock, shore and path');
 });
 
-test('stone slabs are textured surfaces with dark joints rather than letters', () => {
+test('stone slabs are drawn as characters weighted by their light, with joints left dark', () => {
   const world = new World(1);
   const c = world.chunk(-1, 0);
   const n = CHUNK_SIZE * CHUNK_SIZE;
@@ -69,21 +70,24 @@ test('stone slabs are textured surfaces with dark joints rather than letters', (
   let stone = 0;
   let letters = 0;
   let joints = 0;
+  let heavy = 0;
   let layered = 0;
   for (let i = 0; i < n; i++) {
     if (c.type[i] !== STONE) continue;
     stone++;
     TERRAIN_SHADERS[STONE].shade(out, i * 4, c, i, -CHUNK_SIZE + (i % CHUNK_SIZE), Math.floor(i / CHUNK_SIZE), 1, 0);
     const g = out.fg[i * 4 + 3] | ((out.bg[i * 4 + 3] & 15) << 8);
-    if (g > 32 && g < 127) letters++;
-    // Joints are drawn darker than the slab surface they cross.
-    if (out.fg[i * 4] < out.bg[i * 4]) joints++;
+    if (g > 0) letters++;
+    if ('#@M&8$0OQ'.includes(GLYPHS[g])) heavy++;
+    // Joints are gaps: no character where slabs meet.
+    if (g === 0) joints++;
     if (out.ov[i * 4 + 3] || out.bg[i * 4 + 3] >> 4) layered++;
   }
   assert.ok(stone > 100, 'the chunk holds rock');
-  assert.equal(letters, 0);
+  assert.ok(letters > stone * 0.5, `rock is drawn with characters (${letters}/${stone}, ${joints} gaps)`);
+  assert.ok(heavy > stone * 0.05, 'moonlit faces carry heavy characters');
   assert.ok(joints > stone * 0.05, 'joints run between the slabs');
-  assert.ok(layered > stone * 0.1, 'lips, grit, moss and lichen are layered over the rock');
+  assert.equal(layered, 0, 'one character per cell');
 });
 
 test('ground not generated yet is drawn as bare night, clearing any glyph layered there', async () => {

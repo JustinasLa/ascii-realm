@@ -8,7 +8,7 @@ import { hash2 } from '../../core/rng.js';
 import { dg, glyph, over } from '../../render/glyphs.js';
 import { NIGHT } from '../../render/palette.js';
 import { ASPECT } from '../world.js';
-import { emit } from './cell.js';
+import { emit, surface } from './cell.js';
 import { clamp01, fam, headingIndex, lineCell, LX, LY, pick } from './surface.js';
 
 // The path noise in world.js: cells within PATH_HALF of the middle of the
@@ -174,5 +174,5 @@ export function shade(out, o, chunk, i, wx, wy, seed) {
       layer(pick(LEAF, r1), [110, 80, 52], 0.55);
     }
   }
-  emit(out, o, g, cr, cg, cb, br, bgG, bb, og, or, og2, ob);
+  surface(out, o, cr, cg, cb, br, bgG, bb, og, or, og2, ob);
 }

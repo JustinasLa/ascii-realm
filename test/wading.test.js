@@ -143,7 +143,7 @@ test('surface rings and knee waterlines stay clipped to water across a shore and
   splashes.drawSurface(r, view, 0.45);
   splashes.drawContacts(r, view, 0.45,
     [{ x: 11.5, y: 8.5 }, { x: -0.5, y: 0.5 }]);
-  assert.ok(r.ov.some((v) => v > 0), 'water shows visible crests, layered over the surface');
+  assert.ok(r.fg.some((v, i) => i % 4 === 3 && v > 0), 'water shows visible crests');
   for (let i = 0; i < r.mask.length; i++) {
     if (r.mask[i] !== WATER) {
       assert.deepEqual([...r.fg.slice(i * 4, i * 4 + 4)], [0, 0, 0, 0]);

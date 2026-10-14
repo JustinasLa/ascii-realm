@@ -26,7 +26,8 @@ function tree(species = 'oak', season = 'summer', x = 100.5, y = 300.5) {
 // and the ground in front of a tree carries layered litter.
 const isLayer = (cell) => (cell.g & LAYER) !== 0;
 const baseCells = (prop) => prop.cells.filter((cell) => !isLayer(cell));
-const realGlyph = (g) => Number.isInteger(g) && (g & GLYPH_MASK) > 0 && (g & GLYPH_MASK) < GLYPH_COUNT;
+// Space is a real choice: the dark gaps between leaves in a crown.
+const realGlyph = (g) => Number.isInteger(g) && (g & GLYPH_MASK) >= 0 && (g & GLYPH_MASK) < GLYPH_COUNT;
 
 function shape(prop) {
   return baseCells(prop).map(({ dx, dy, foliage }) => [dx, dy, foliage]);
@@ -122,17 +123,17 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
 
 test('row culling preserves complete seeded sprites across seasons and growth stages', () => {
   // Fingerprints matching a full-rectangle bake (no row culling) of the
-  // detailed glyph trees. Cover negative coordinates, thin/thick trunks, and
+  // character trees. Cover negative coordinates, thin/thick trunks, and
   // both caller-supplied and fallback random streams.
   const fixtures = [
     { seed: 1, x: -100.5, y: 300.5, randomSeed: 123456,
-      expected: 'a92cc4e2848b43e6dc072c91255136a836268aed80204c1758750d9deb85b232' },
+      expected: 'd49719599b824b9373b92870f2faef12dcccb7b8297d97d9f048f0042dd44ab0' },
     { seed: 42, x: 100.5, y: -300.5, girth: 0.6, randomSeed: 42,
-      expected: '008dd290c0ecc615ea11f9689e32c19d9dc556d735dd9de532aadb88e7340da8' },
+      expected: '28d306db06cce1ee49934d9169330220fd26a29de74d08d130a9da33efc0fbac' },
     { seed: 9281, x: 63.5, y: 24.5, girth: 2, randomSeed: 9281,
-      expected: '394d07425dab3e4ef76184ae5ca6b08593cb05d3e7ebd98689b55671b178bbc8' },
+      expected: '711b9658da1ee1233e71ef97caee516baec519996cc3e7b4014d6cc688920645' },
     { seed: 4294967295, x: -63.5, y: -24.5,
-      expected: '48e0a0229f57326d088ce1f98c92a9a42f4f3bde53405cd0e8bafee4a0badfa2' },
+      expected: 'd7fc60020f20f35cec9d5bf61e376841a885dbf85d76047b54eb0d5f0c9923b9' },
   ];
   for (const { expected, randomSeed, ...options } of fixtures) {
     const digest = createHash('sha256');
@@ -376,7 +377,7 @@ test('saplings and walkable bushes form a varied layer below mature trees', () =
   assert.ok(heights.size >= 4, 'sapling species have different proportions');
 });
 
-test('moonlit crowns are paler on top and trunks stay warm in every growth stage', () => {
+test('moonlit crowns are paler on top and trunks are pale grey in every growth stage', () => {
   const brightness = (c) => c.r + c.gg + c.b;
   const mean = (cells) => cells.reduce((sum, c) => sum + brightness(c), 0) / cells.length;
   for (const species of TREE_SPECIES) {
@@ -388,7 +389,9 @@ test('moonlit crowns are paler on top and trunks stay warm in every growth stage
     assert.ok(mean(leaves.filter((c) => c.dy < top + third)) > mean(leaves.filter((c) => c.dy > bottom - third)) * 1.2,
       `${species} crown top is lit`);
     const trunk = baseCells(prop).filter((c) => !c.foliage && !c.litter && c.dy > -6);
-    if (species !== 'birch') assert.ok(trunk.every((c) => c.r >= c.b), `${species} warm bark`);
+    // Moonlit bark is a pale cool grey, its letters heaviest toward the moon.
+    const sum = (k) => trunk.reduce((total, c) => total + c[k], 0);
+    if (species !== 'birch') assert.ok(sum('b') >= sum('r'), `${species} cool moonlit bark`);
     // Deeply shaded bark under a leafy cell must still choose a real glyph.
     for (let i = 0; i < 24; i++) {
       for (const growth of ['sapling', 'bush']) {
