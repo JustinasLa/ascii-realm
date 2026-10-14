@@ -33,33 +33,60 @@ function list(prefix, n, draw, extra = {}) {
 
 // ---------------------------------------------------------------- stone
 
-// Granular stone: a face of fine grit, darker pits and the odd hairline,
-// with no straight lines that would show the cell grid. Lit faces are
-// dense and bright; faces turned away thin out into scattered grains.
+// Stone as engraved marks over the dark underpaint of the cell: crystal
+// chips with a lit upper-left lip, grit, pits and bedding strokes. Lit
+// faces crowd the cell with broad bright chips; faces turned from the moon
+// thin out into a few dim grains and strata, so the dark shows through.
 const GRIT = [
-  { base: 0.1, n: 22, level: 0.42 },
-  { base: 0.24, n: 30, level: 0.55 },
-  { base: 0.42, n: 36, level: 0.7 },
-  { base: 0.6, n: 40, level: 0.85 },
-  { base: 0.76, n: 40, level: 1 },
+  { chips: 1, size: 2.6, level: 0.42, grit: 4, strata: 2 },
+  { chips: 3, size: 3, level: 0.55, grit: 6, strata: 2 },
+  { chips: 6, size: 3.6, level: 0.7, grit: 7, strata: 1 },
+  { chips: 9, size: 4.2, level: 0.84, grit: 8, strata: 1 },
+  { chips: 12, size: 4.8, level: 1, grit: 8, strata: 0 },
 ];
+
+function chip(ctx, rand, x, y, r, level) {
+  const pts = [];
+  const n = 5 + Math.floor(rand() * 2);
+  const turn = rand() * TAU;
+  for (let k = 0; k < n; k++) {
+    const a = turn + k / n * TAU;
+    const d = r * (0.65 + rand() * 0.5);
+    pts.push(x + Math.cos(a) * d, y + Math.sin(a) * d * 1.15);
+  }
+  poly(ctx, pts, level * 0.78);
+  // The lip facing the moon catches the light.
+  let best = 0;
+  for (let k = 1; k < n; k++) if (pts[k * 2] + pts[k * 2 + 1] < pts[best * 2] + pts[best * 2 + 1]) best = k;
+  const prev = (best + n - 1) % n;
+  const next = (best + 1) % n;
+  line(ctx, [pts[prev * 2], pts[prev * 2 + 1], pts[best * 2], pts[best * 2 + 1], pts[next * 2], pts[next * 2 + 1]],
+    1.6, Math.min(1, level * 1.05));
+}
 
 function stone(ctx, t, v) {
   const rand = rng(5000 + t * 17 + v * 131);
-  const { base, n, level } = GRIT[t];
-  fill(ctx, base);
-  for (let k = 0; k < n; k++) {
-    dot(ctx, rand() * (W + 4) - 2, rand() * (H + 4) - 2, 1.2 + rand() * 2.2, level * (0.55 + rand() * 0.45));
+  const { chips, size, level, grit, strata } = GRIT[t];
+  for (let k = 0; k < strata; k++) {
+    const y = 8 + rand() * 36;
+    const x = rand() * 14 - 4;
+    const len = 12 + rand() * 16;
+    line(ctx, [x, y, x + len * 0.5, y + (rand() - 0.5) * 3, x + len, y + (rand() - 0.5) * 4], 1.8 + rand(), level * 0.85);
   }
-  const pits = 1 + Math.floor(rand() * 3);
-  for (let k = 0; k < pits; k++) {
-    const x = 4 + rand() * 22;
-    const y = 5 + rand() * 40;
-    const r = 1.6 + rand() * 1.8;
-    dot(ctx, x + 0.7, y + 1, r, Math.min(1, level));
-    dot(ctx, x, y, r, base * 0.2);
+  // Chips sit on a jittered lattice so they cover the cell evenly.
+  const cols = 3;
+  const rows = Math.max(1, Math.ceil(chips / cols));
+  let placed = 0;
+  for (let j = 0; j < rows && placed < chips; j++) {
+    for (let i = 0; i < cols && placed < chips; i++, placed++) {
+      const x = (i + 0.2 + rand() * 0.6) * W / cols;
+      const y = (j + 0.2 + rand() * 0.6) * H / rows;
+      chip(ctx, rand, x, y, size * (0.75 + rand() * 0.5), level * (0.8 + rand() * 0.25));
+    }
   }
-  if (v === 3) curve(ctx, rand() * 10, rand() * H, 15, rand() * H, 20 + rand() * 10, rand() * H, 1.3, base * 0.3);
+  for (let k = 0; k < grit; k++) dot(ctx, rand() * W, rand() * H, 1.1 + rand() * 1.1, level * (0.5 + rand() * 0.5));
+  // A pit: a ring around a dark hollow.
+  if (v % 2 === 0 && t >= 2) arc(ctx, 6 + rand() * 18, 8 + rand() * 34, 3, 3.2, 0, TAU, 1.4, level * 0.8);
 }
 
 // A facet ridge: where two planes of a boulder meet, a fine line that
@@ -124,7 +151,7 @@ function cut(ctx, d, c, rough) {
     shape.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.closePath();
     ctx.clip();
-    stone(ctx, 3, (d + c) % 3);
+    stone(ctx, 4, (d + c) % 6);
     ctx.restore();
   } else {
     poly(ctx, shape.flat(), body);
@@ -189,7 +216,8 @@ function barkRidges(ctx, t, v, horizontal) {
 // Silver birch: chalky bark with dark horizontal lenticels.
 function birch(ctx, v) {
   const rand = rng(7400 + v);
-  fill(ctx, 0.86);
+  fill(ctx, 0.55);
+  for (let y = rand() * 5; y < H; y += 4 + rand() * 3) line(ctx, [-4, y, W + 4, y + (rand() - 0.5) * 2], 2.2, 0.85 + rand() * 0.15);
   for (let k = 0; k < 4; k++) {
     const y = 5 + rand() * 40;
     const x = rand() * 22;
@@ -201,46 +229,52 @@ function birch(ctx, v) {
 // Sawn planks: smooth wood with fine grain lines and the odd knot.
 function grain(ctx, t, v, horizontal) {
   const rand = rng(7600 + t * 11 + v * 37 + (horizontal ? 300 : 0));
-  const base = 0.4 + t * 0.15;
-  fill(ctx, base);
-  const n = 4;
+  const level = 0.5 + t * 0.16;
+  // Bands of grain with dark seams between them; the dark is the
+  // underpaint, so a plank reads as strokes rather than a flat fill.
+  const span = horizontal ? H : W;
+  const n = horizontal ? 6 : 4;
   for (let k = 0; k < n; k++) {
-    let c = (k + 0.5) * (horizontal ? H : W) / n + (rand() - 0.5) * 4;
+    let c = (k + 0.5) * span / n + (rand() - 0.5) * 3;
     const pts = [];
     for (let s = -6; s <= (horizontal ? W : H) + 6; s += 6) {
       pts.push(horizontal ? [s, c] : [c, s]);
-      c += (rand() - 0.5) * 2.2;
+      c += (rand() - 0.5) * 1.8;
     }
-    line(ctx, pts.flat(), 1.4 + rand() * 0.8, base * 0.55);
+    const width = span / n * (0.5 + rand() * 0.25);
+    line(ctx, pts.flat(), width, level * (0.8 + rand() * 0.25));
+    // A paler streak along each band.
+    line(ctx, pts.map(([x, y]) => horizontal ? [x, y - width * 0.2] : [x - width * 0.2, y]).flat(), 1.2,
+      Math.min(1, level * 1.15));
   }
   if (v === 3) {
     const x = 9 + rand() * 12;
     const y = 15 + rand() * 20;
-    ellipse(ctx, x, y, horizontal ? 6 : 3.5, horizontal ? 3.5 : 6, 0, base * 0.5);
-    ellipse(ctx, x, y, horizontal ? 3 : 1.8, horizontal ? 1.8 : 3, 0, base * 0.25);
+    ellipse(ctx, x, y, horizontal ? 6 : 3.5, horizontal ? 3.5 : 6, 0, level * 0.35);
+    arc(ctx, x, y, horizontal ? 6 : 3.5, horizontal ? 3.5 : 6, 0, TAU, 1.3, level);
   }
 }
 
 // End grain: arcs of growth rings around a pith in direction D.
 function rings(ctx, d, v) {
   const rand = rng(7800 + d * 5 + v * 29);
-  fill(ctx, 0.82);
+  fill(ctx, 0.5);
   const [ux, uy] = DIRS[d];
   const r0 = 30 + v * 9;
   const cx = W / 2 + ux * r0;
   const cy = H / 2 + uy * r0;
   for (let r = r0 - 30 + rand() * 4; r < r0 + 34; r += 6 + rand() * 3) {
-    if (r > 2) arc(ctx, cx, cy, r, r, 0, TAU, 1.6 + rand() * 0.6, 0.38);
+    if (r > 2) arc(ctx, cx, cy, r, r, 0, TAU, 2.2 + rand() * 1.2, rand() < 0.3 ? 0.15 : 0.95);
   }
 }
 
 function ringCore(ctx, v) {
   const rand = rng(7900 + v);
-  fill(ctx, 0.85);
+  fill(ctx, 0.5);
   const x = 13 + rand() * 4;
   const y = 22 + rand() * 6;
-  for (let r = 6; r < 40; r += 6.5 + rand() * 2) arc(ctx, x, y, r, r, 0, TAU, 1.7, 0.38);
-  dot(ctx, x, y, 2.6, 0.3);
+  for (let r = 6; r < 40; r += 6.5 + rand() * 2) arc(ctx, x, y, r, r, 0, TAU, 2.4, 0.95);
+  dot(ctx, x, y, 2.6, 0.15);
 }
 
 // ---------------------------------------------------------------- accents
@@ -264,7 +298,7 @@ function fissure(ctx, a, v) {
 function moss(ctx, v) {
   const rand = rng(8300 + v);
   const edge = 22 + rand() * 18;
-  for (let k = 0; k < 40; k++) {
+  for (let k = 0; k < 24; k++) {
     const x = rand() * (W + 4) - 2;
     const y = rand() * (edge + 6) - 4 + Math.sin(x * 0.4 + v) * 4;
     const fade = y > edge - 6 ? 0.5 : 1;
@@ -367,18 +401,26 @@ function seam(ctx, a) {
   }
 }
 
-// Woven canvas with soft creases; T is the light on the cloth.
+// Woven canvas: warp and weft threads over the dark underpaint, with the
+// light catching the weave and a crease or two across the cloth. T is the
+// light on the cloth: lit panels show a tight bright weave, shaded panels
+// a sparse dim one.
 function canvasCloth(ctx, t, v) {
   const rand = rng(8800 + t * 7 + v * 19);
-  const base = 0.42 + t * 0.15;
-  fill(ctx, base);
-  for (let y = 2; y < H; y += 5) line(ctx, [-2, y, W + 2, y + (rand() - 0.5)], 0.9, base * 0.82);
-  const n = 1 + (v % 2);
-  for (let k = 0; k < n; k++) {
-    const x = 4 + rand() * 22;
-    const lean = (rand() - 0.5) * 18;
-    line(ctx, [x, -4, x + lean, H + 4], 3.2, Math.min(1, base + 0.2));
-    line(ctx, [x + 3, -4, x + lean + 3, H + 4], 2.2, base * 0.55);
+  const level = 0.4 + t * 0.2;
+  // Twill: fine diagonal ribs crossing faint horizontal threads.
+  const gap = [8, 6.5, 5.5, 4.6][t];
+  const shift = rand() * gap;
+  for (let x = -H + shift; x < W + gap; x += gap) {
+    line(ctx, [x, H + 4, x + H * 0.45, -4], 1.5 + rand() * 0.5, level * (0.7 + rand() * 0.3));
+  }
+  for (let y = rand() * 9; y < H; y += 9) line(ctx, [-4, y, W + 4, y + (rand() - 0.5) * 2], 1, level * 0.45);
+  // Some panels carry a soft crease: a lit fold beside a dark trough.
+  if (v >= 2) {
+    const x = 6 + rand() * 18;
+    const lean = (rand() - 0.5) * 14;
+    line(ctx, [x + 2.6, -4, x + lean + 2.6, H + 4], 2.6, 0);
+    line(ctx, [x, -4, x + lean, H + 4], 1.8, Math.min(1, level + 0.18));
   }
 }
 
@@ -692,7 +734,7 @@ const ITEM = {
 };
 
 export const PROPS = [
-  ...grid('props.stone', 5, 4, stone),
+  ...grid('props.stone', 5, 6, stone),
   ...grid('props.cut.s', 8, 3, (ctx, d, c) => cut(ctx, d, c, false)).map((e) => {
     const [, , , d, c] = e.name.split('.');
     return { ...e, mirror: `props.cut.s.${cutMirror(+d)}.${c}` };
@@ -727,7 +769,7 @@ export const PROPS = [
   ...list('props.chips', 4, chips, { flip: true }),
   ...list('props.rope', 8, rope).map((e, i) => ({ ...e, mirror: `props.rope.${(8 - i) % 8}` })),
   ...list('props.seam', 4, seam).map((e, i) => ({ ...e, mirror: `props.seam.${[0, 3, 2, 1][i]}` })),
-  ...grid('props.canvas', 4, 3, canvasCloth),
+  ...grid('props.canvas', 4, 4, canvasCloth),
   ...list('props.flame', 4, flame, { flip: true }),
   ...list('props.char', 3, charcoal),
   ...list('props.embers', 3, embers),
