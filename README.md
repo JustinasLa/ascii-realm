@@ -28,17 +28,21 @@ For now it is a single warrior exploring procedurally generated terrain.
   then sways and breaks into slivers with the swell.
 - **The warrior.** A 3D skeleton posed every frame, turned to any heading and
   dressed in armour: horned great helm with glowing eyes, layered pauldrons,
-  cuirass and crimson tabard, greaves and gauntlets, a greatsword on the back
-  and a simulated cape. Every part is rasterised into glyphs with
+  riveted cuirass with a brass chevron, a crimson tabard bearing a sword sigil,
+  greaves and gauntlets, a greatsword on the back and a simulated cape with a
+  dark lining. Every part is rasterised into glyphs with
   supersampling: outlines follow the silhouette with a moonlit rim, and each
   material (plate, mail, cloth, leather, brass) has its own glyph texture.
 - **Animation.** Walk and run cycles driven by the ground actually covered, so
   planted feet stay planted, with hip sway, a steady head, leaning into turns
   and into speeding up or stopping. An idle stance that shifts its weight and
   looks around, then kneels to rest; blinking eyes and breath fogging in the
-  cold air; jumping with a wind-up and landing squash; and sword play: draw,
-  guard, a three-hit combo with glowing swing trails and an overhead chop that
-  strikes sparks, shakes the camera and freezes for a beat on impact.
+  cold air; jumping with a wind-up and landing squash; a sprint with high
+  knees, pumping arms and a skid to a halt; and sword play: draw, guard, a
+  combo (forehand, then backhand or uppercut, then an overhead chop that
+  strikes sparks, shakes the camera and freezes for a beat on impact), a
+  lunging thrust from a sprint, a plunging strike from the air and a charged
+  spinning slash, all with glowing swing trails.
   Footsteps kick up dust and grass and leave prints in dirt and sand.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
@@ -68,7 +72,8 @@ npm test
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
 | `Space` | Jump |
-| `J` / left click | Strike (repeat for a combo) |
+| `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
+| Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | Mouse wheel / `+` `-` | Zoom |
 

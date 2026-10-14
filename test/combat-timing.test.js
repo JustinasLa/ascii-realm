@@ -77,3 +77,32 @@ test('sheathe completion carries the remaining frame into the idle timer', () =>
   assert.equal(cb.move, null);
   close(cb.calm, 0.03);
 });
+
+test('plunge holds in the air even with time left in a frame, then impacts only once', () => {
+  const cb = new Combat();
+  cb.attack({ air: true });
+  cb.update(0.8, { air: true });
+  assert.equal(cb.move, 'plunge');
+  assert.equal(cb.step, 1);
+  assert.equal(cb.t, 0);
+  assert.deepEqual(cb.events, []);
+  cb.update(0.09);
+  assert.deepEqual(cb.events, []);
+  cb.update(0.02);
+  assert.deepEqual(cb.events, [{ type: 'slam', strength: 1.3 }]);
+  cb.update(0.5);
+  assert.equal(cb.move, null);
+  assert.equal(cb.events.length, 1);
+});
+
+test('releasing a charged spin consumes the frame and emits one whirl', () => {
+  const cb = new Combat();
+  cb.inHand = true;
+  cb.update(0.6, { held: true });
+  cb.update(0.7);
+  assert.equal(cb.move, null);
+  assert.equal(cb.spin, 0);
+  assert.deepEqual(cb.events, [{ type: 'whirl' }]);
+  cb.update(0.1);
+  assert.equal(cb.events.length, 1);
+});

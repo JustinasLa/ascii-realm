@@ -12,7 +12,7 @@
 export const SCALE = 13;
 // How far a step towards the camera moves a point down the screen, relative
 // to a step upwards moving it up. Gives the scene its three-quarter view.
-export const TILT = 0.35;
+export const TILT = 0.5;
 
 export const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 export const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -85,8 +85,72 @@ const SWEEP = (a) => Math.asin(SOFT * Math.sin(a)) / Math.asin(SOFT);
 // for a given amount of running. A planted foot sweeps back through the
 // whole stride angle, so this is what keeps the feet from sliding.
 export function strideCycle(run) {
-  const swing = 0.42 + 0.3 * run;
-  return 1.25 * 4 * (THIGH + SHIN) * Math.sin(swing);
+  return 1.4 + 0.9 * run;
+}
+
+// The fraction of the walk cycle each foot spends on the ground: half when
+// walking, so one foot is always down, less when running, which leaves a
+// moment between steps with both feet in the air.
+const dutyFactor = (run) => 0.5 - 0.15 * run;
+
+const smooth = (t) => t * t * (3 - 2 * t);
+const frac = (x) => x - Math.floor(x);
+
+// Legs for walking and running, placed by where the feet should be rather
+// than by joint angles. A planted foot stays exactly where it landed while
+// the body travels over it; a lifted foot swings forward along an arc to its
+// next footprint. The hips ride a little lower than the legs' full length,
+// so the knees, solved to join hip and foot, are always softly bent.
+//
+// Returns the pelvis and legs in the body's frame.
+function plantedLegs(st, phase, run, crouch, twist, sway) {
+  const beta = dutyFactor(run);
+  const half = (strideCycle(run) * beta) / 2;
+
+  // Where we are in the pair of steps, and whether both feet are up.
+  const q = frac((phase - Math.PI / 2) / (Math.PI * 2)) % 0.5;
+  const flight = beta < 0.5 && q >= beta ? run * 0.06 * Math.sin((Math.PI * (q - beta)) / (0.5 - beta)) : 0;
+  // A planted leg is a spring: walking vaults up over it, running sinks
+  // into it.
+  const load = q < beta ? Math.sin((Math.PI * q) / beta) : 0;
+  const bob = load * (0.045 * (1 - run) - 0.02 * run);
+  const air = (st.air ?? 0) + flight;
+  const pelvis = [sway, 0.915 - 0.015 * run - crouch * 0.35 + bob + air, 0];
+
+  const legs = [];
+  for (const s of [-1, 1]) {
+    const lp = phase + (s > 0 ? 0 : Math.PI);
+    const u = frac((lp - Math.PI / 2) / (Math.PI * 2));
+    // How far the heel has peeled up off the ground at the end of a step.
+    const heelEnd = 0.05 + 0.05 * run;
+    let z;
+    let y;
+    let pitch;
+    if (u < beta) {
+      // Planted: sliding back under the body at exactly the body's speed.
+      const t = u / beta;
+      z = half - 2 * half * t;
+      const heel = t > 0.65 ? ((t - 0.65) / 0.35) ** 2 * heelEnd : 0;
+      y = 0.065 + heel;
+      pitch = Math.asin((0.015 + heel) / 0.15);
+    } else {
+      // Lifted: the heel kicks up behind, then the foot swings through and
+      // reaches out flat for the next step. Running, the foot rises higher
+      // and sooner, folding the leg up tight.
+      const t = (u - beta) / (1 - beta);
+      z = -half + 2 * half * smooth(t);
+      const lift = (0.1 + 0.24 * run) * Math.sin(Math.PI * t ** (0.85 - 0.3 * run));
+      y = 0.065 + heelEnd * (1 - t) ** 2 + lift;
+      const start = Math.asin((0.015 + heelEnd) / 0.15);
+      pitch = start + (0.1 - start) * smooth(t) + 0.35 * Math.sin(Math.PI * t) * (1 - t);
+    }
+    const hip = add(pelvis, rotY([s * 0.1, -0.04, 0], -twist * 0.6));
+    const target = [sway + s * 0.09, y + air, z];
+    const [knee, ankle] = reach(hip, target, THIGH, SHIN, [s * 0.15, 0.1, 1]);
+    const toe = add(ankle, [0, -Math.sin(pitch) * 0.15, Math.cos(pitch) * 0.15]);
+    legs.push({ s, hip, knee, ankle, toe });
+  }
+  return { pelvis, legs };
 }
 
 // Builds the posed skeleton. `st` holds:
@@ -96,16 +160,26 @@ export function strideCycle(run) {
 //   run      0..1, how much of that stride is a run
 //   time     seconds, drives breathing
 export function buildRig(st) {
-  const { heading, phase, walk, run, time } = st;
+  const { phase, walk, run, time } = st;
+  // A spinning slash turns the whole body round on top of the heading.
+  const heading = st.heading + (st.combat?.spin ?? 0);
   // The sword's pose, when it is out, leans and turns the whole body.
   const cb = st.combat;
   const fight = cb ? cb.active : 0;
   const sp = cb?.pose;
   const crouchAll = (st.crouch ?? 0) + (sp ? sp.crouch * fight : 0);
-  const lean = 0.06 * walk + 0.22 * run + (st.lean ?? 0) + crouchAll * 0.45 + (sp ? sp.lean * fight : 0) +
-    (st.kneel ?? 0) * 0.18;
+  // The upper body does not move in lockstep with the legs: it follows a
+  // beat behind, which is what makes a stride look loose rather than
+  // mechanical.
+  const upper = phase - (0.3 + 0.15 * run) * walk;
+  // Running, the chest also pitches with each stride: forward as a foot
+  // pushes off, back up as the next one lands.
+  const pitch = walk * run * 0.07 * Math.cos(2 * upper - 0.8);
+  const lean = 0.06 * walk + 0.3 * run + pitch - (st.brace ?? 0) * 0.45 + (st.lean ?? 0) + crouchAll * 0.45 +
+    (sp ? sp.lean * fight : 0) + (st.kneel ?? 0) * 0.18;
   // Shoulders counter-rotate against the hips as the legs swing.
-  const twist = Math.sin(phase) * 0.14 * walk * (1 - fight * 0.6) + (sp ? SWORD_SIDE * sp.twist * fight : 0);
+  const twist = Math.sin(upper) * (0.14 + 0.08 * run) * walk * (1 - fight * 0.6) +
+    (sp ? SWORD_SIDE * sp.twist * fight : 0);
   const breath = Math.sin(time * 2.2) * 0.5 + 0.5;
 
   // Standing still the warrior plants their feet apart and shifts their
@@ -129,12 +203,23 @@ export function buildRig(st) {
     // the foot keeps up with the ground instead of skating, and swings
     // forward again while it is lifted. cos(lp) > 0 is the swing.
     const swingT = Math.cos(lp);
-    const thigh = SWEEP(lp) * (0.42 + 0.3 * run) * walk + crouch * 0.85 + kn * (s > 0 ? 1.45 : -0.05);
-    // The knee folds through the swing and gives a little under the weight
-    // mid-stance, but is straight as the foot lands and pushes off, so both
-    // feet meet the ground level when the weight changes over.
-    const knee = walk * ((0.55 + 0.6 * run) * Math.max(0, swingT) + (0.12 + 0.25 * run) * Math.max(0, -swingT)) +
-      crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65);
+    // Sprinting drives the knee up high on the way through.
+    const drive = run * walk * 0.3 * Math.max(0, swingT);
+    // Skidding to a halt, one foot is thrust out ahead and the other leg
+    // folds beneath.
+    const br = st.brace ?? 0;
+    // The knee is never locked straight. While the foot is planted it gives
+    // under the weight, most at mid-stance, and the thigh tips forward to
+    // match so the foot stays put while the knee bends over it.
+    const stance = walk * (0.25 + 0.35 * run) * Math.max(0, -swingT) ** 1.5;
+    // It starts to fold before the back foot even leaves the ground, peaks
+    // early in the swing (heel kicked up behind when running) and opens out
+    // again to reach for the next step, landing only slightly bent.
+    const fold = walk * (0.8 + 1.0 * run) * Math.max(0, Math.cos(lp + 0.1)) ** 1.2;
+    const ease = walk * (0.16 + 0.14 * run);
+    const thigh = SWEEP(lp) * (0.42 + 0.36 * run) * walk + drive + stance * 0.5 + crouch * 0.85 +
+      kn * (s > 0 ? 1.45 : -0.05) + br * (s > 0 ? 0.75 : -0.15);
+    const knee = ease + stance + fold + crouch * 1.6 + kn * (s > 0 ? 1.45 : 1.65) + br * (s > 0 ? 0.15 : 1.0);
     const shin = thigh - knee;
     // The hip on the swinging side drops a little, as it does in a real
     // stride.
@@ -144,7 +229,10 @@ export function buildRig(st) {
     const roll = s * (0.02 + 0.07 * still) - shift * 1.5;
     const kneeP = add(hip, mul(limb(thigh, roll), THIGH));
     const ankle = add(kneeP, mul(limb(shin, roll), SHIN));
-    const toe = add(ankle, mul(limb(Math.PI / 2 + Math.min(0, shin) * 0.8), 0.15));
+    // The foot rolls onto its toes as it pushes off and hangs toe-down
+    // through the swing, then flattens to land.
+    const point = walk * (0.35 + 0.25 * run) * Math.max(0, Math.cos(lp + 0.6));
+    const toe = add(ankle, mul(limb(Math.PI / 2 + Math.min(0, shin) * 0.8 - point), 0.15));
     // Pick the swinging foot up clear of the ground so it never touches
     // down before its time.
     const clear = walk * (0.09 + 0.08 * run) * Math.sqrt(Math.max(0, swingT));
@@ -158,26 +246,49 @@ export function buildRig(st) {
   // passing through upright lifts it, which is the bob of a real walk.
   let lowest = Infinity;
   for (const l of legs) lowest = Math.min(lowest, l.ankle[1] - 0.065, l.toe[1] - 0.05, l.knee[1] - 0.07);
-  const lift = -lowest + (st.air ?? 0);
+  // A sprint is a run of bounds: between footfalls both feet leave the
+  // ground for a moment.
+  const flight = run * walk * 0.07 * Math.max(0, -Math.cos(2 * phase));
+  // The player smooths the bob with a spring (see Player.update), which
+  // softens the corners where the weight changes from foot to foot. The
+  // body may lag above the planted foot, but never sinks below it.
+  const gait = -lowest + flight;
+  const lift = Math.max(-lowest, st.bob ?? gait) + (st.air ?? 0);
   pelvis[1] += lift;
   for (const l of legs) {
     for (const k of ['hip', 'knee', 'ankle', 'toe']) l[k][1] += lift;
   }
 
+  // While striding, the legs are placed by their footprints instead, blended
+  // in as the warrior gets going so starting and stopping stay smooth.
+  if (walk > 0.001) {
+    const p = plantedLegs(st, phase, run, crouchAll, twist, sway + shift);
+    for (let i = 0; i < 3; i++) pelvis[i] += (p.pelvis[i] - pelvis[i]) * walk;
+    legs.forEach((l, j) => {
+      for (const k of ['hip', 'knee', 'ankle', 'toe']) l[k] = lerp3(l[k], p.legs[j][k], walk);
+    });
+  }
+
   // Everything above the hips hangs off the torso frame.
   // Banking tilts everything above the hips into a turn.
   // The chest leans a touch the other way to the hip sway, to balance.
-  const bank = (st.bank ?? 0) + sway * 1.2;
+  // The shoulders also roll from side to side with the stride, a beat
+  // after the hips.
+  const bank = (st.bank ?? 0) + sway * 1.2 + walk * (0.025 + 0.045 * run) * Math.sin(upper - 0.4);
   const torso = (p) => add(pelvis, rotY(rotZ(rotX(p, lean), bank), twist));
   const turn = (d) => rotY(rotZ(rotX(d, lean * 0.5), bank), twist);
 
   const arms = [];
   for (const s of [-1, 1]) {
-    const lp = phase + (s > 0 ? 0 : Math.PI);
-    // Each arm swings with the opposite leg.
+    const lp = upper + (s > 0 ? 0 : Math.PI);
+    // Each arm swings with the opposite leg, a beat behind it, and the
+    // forearm trails the upper arm a little further still.
     // `reach` raises both arms forward, e.g. to balance in the air.
-    const swing = -Math.sin(lp) * (0.45 + 0.35 * run) * walk + (st.reach ?? 0);
-    const elbow = 0.22 + 0.15 * walk + 1.1 * run + 0.3 * Math.max(0, swing);
+    const swing = -Math.sin(lp) * (0.45 + 0.5 * run) * walk + (st.reach ?? 0);
+    // Running, the elbow folds as the arm drives forward and opens out as it
+    // swings back, rather than staying locked.
+    const fwd = -Math.sin(lp - 0.5);
+    const elbow = 0.22 + 0.15 * walk + run * walk * (0.95 + 0.45 * fwd) + 0.3 * Math.max(0, swing) * (1 - run);
     const shoulder = torso([s * 0.2, 0.46 + breath * 0.008, 0]);
     // Arms hang a little away from the armour, more so when at rest.
     const elbowP = add(shoulder, mul(turn(limb(swing, s * (0.16 + 0.06 * still))), UPPER_ARM));
@@ -222,6 +333,8 @@ export function buildRig(st) {
       if (Math.hypot(...bar) < 0.2) bar = cross(blade, [0, 0, 1]);
       bar = mul(norm(bar), 0.12);
       sword = {
+        // A charged blade glows, ready to be unleashed.
+        glow: cb.charged,
         pommel: sub(hilt, mul(blade, 0.2)),
         guard,
         tip: add(guard, mul(blade, 1.02)),
@@ -246,6 +359,9 @@ export function buildRig(st) {
     eyes: st.blink === undefined ? 1 : 1 - st.blink,
     // How far the knees reach ahead of and behind the hips, so cloth hanging
     // from the waist can be pushed out of their way.
+    // How high the legs alone would hold the body this frame, before the
+    // player's spring smooths it.
+    gait,
     kneeFwd: Math.max(0, ...legs.map((l) => l.knee[2])),
     kneeBack: Math.max(0, ...legs.map((l) => -l.knee[2])),
     // Points on the head, which can turn and nod on its own.
@@ -274,7 +390,9 @@ function toWorld(rig, heading) {
     at: (p) => w(rig.torso(p)),
     headAt: (p) => w(rig.headAt(p)),
     eyes: rig.eyes,
-    sword: rig.sword && Object.fromEntries(Object.entries(rig.sword).map(([k, v]) => [k, w(v)])),
+    sword: rig.sword &&
+      Object.fromEntries(Object.entries(rig.sword).map(([k, v]) => [k, Array.isArray(v) ? w(v) : v])),
+    gait: rig.gait,
     kneeFwd: rig.kneeFwd,
     kneeBack: rig.kneeBack,
     // How much of the body's width faces the camera (1 front or back, 0 side).
