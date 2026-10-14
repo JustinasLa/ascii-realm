@@ -533,6 +533,8 @@ function stumpCells(prop) {
 }
 
 export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
+  const direct = write === putCell;
+  if (direct && !propInView(view, prop)) return;
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
   if (prop.chopped) {
@@ -545,8 +547,6 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   const sin = tree ? Math.sin(t * 1.4) : 0;
   const cos = tree ? Math.cos(t * 1.4) : 0;
   const sheen = Math.max(0, gust - 0.55) * 0.18;
-  const direct = write === putCell;
-  if (write === putCell && !propInView(view, prop)) return;
   // The figure has already been drawn when its base is behind this tree.
   // Stable local dither lets it show through nearby leaves without changing
   // the renderer's glyph index channel or punching holes in solid wood.

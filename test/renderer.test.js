@@ -24,3 +24,15 @@ for (const dpr of [0.25, 0.5, 1]) {
     });
   }
 }
+
+test('fully zoomed out, the furthest zoom keeps its cell size', () => {
+  const renderer = {
+    canvas: { width: 0, height: 0 },
+    gl: { viewport() {}, activeTexture() {}, bindTexture() {}, texImage2D() {} },
+    cols: 0,
+    rows: 0,
+  };
+  AsciiRenderer.prototype.resize.call(renderer, 1600, 900, 1, 4.5 * ASPECT, 4.5);
+  assert.equal(renderer.cellH, 4.5);
+  assert.ok(renderer.cols > 590 && renderer.rows > 200);
+});

@@ -39,11 +39,13 @@ export class GroundItems {
     return chunk.items;
   }
 
-  in(x0, y0, x1, y1) {
+  // `loadedOnly` skips chunks not generated yet, for wide views.
+  in(x0, y0, x1, y1, loadedOnly = false) {
     const out = [];
     if (!validPosition(x0, y0) || !validPosition(x1, y1) || x0 > x1 || y0 > y1) return out;
     for (let cy = Math.floor(y0 / CHUNK_SIZE); cy <= Math.floor(y1 / CHUNK_SIZE); cy++) {
       for (let cx = Math.floor(x0 / CHUNK_SIZE); cx <= Math.floor(x1 / CHUNK_SIZE); cx++) {
+        if (loadedOnly && !this.world.loaded?.(cx, cy)?.props) continue;
         for (const item of this.of(cx, cy)) {
           if (item.x >= x0 && item.x <= x1 && item.y >= y0 && item.y <= y1) out.push(item);
         }

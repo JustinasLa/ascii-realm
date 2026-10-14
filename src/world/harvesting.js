@@ -63,10 +63,13 @@ export class Harvesting {
     return chunk.resources;
   }
 
-  resourcesIn(x0, y0, x1, y1) {
+  // `loadedOnly` skips chunks not generated yet, for wide views that load
+  // them a few at a time.
+  resourcesIn(x0, y0, x1, y1, loadedOnly = false) {
     const resources = [];
     for (let cy = Math.floor(y0 / CHUNK_SIZE); cy <= Math.floor(y1 / CHUNK_SIZE); cy++) {
       for (let cx = Math.floor(x0 / CHUNK_SIZE); cx <= Math.floor(x1 / CHUNK_SIZE); cx++) {
+        if (loadedOnly && !this.world.loaded?.(cx, cy)?.props) continue;
         for (const node of this.resourcesOf(cx, cy)) {
           if (node.x >= x0 && node.x <= x1 && node.y >= y0 && node.y <= y1) resources.push(node);
         }

@@ -32,7 +32,8 @@ function groundOf(chunk, seed) {
   return cached;
 }
 
-export function drawGround(r, world, view, t, bend, wind = 0) {
+// `loadedOnly` leaves chunks that are not generated yet as night ground.
+export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false) {
   for (let sy = 0; sy < view.rows; sy++) {
     const wy = view.y0 + sy;
     const cy = Math.floor(wy / CHUNK_SIZE);
@@ -42,7 +43,20 @@ export function drawGround(r, world, view, t, bend, wind = 0) {
       const cx = Math.floor(wx / CHUNK_SIZE);
       const lx = wx - cx * CHUNK_SIZE;
       const count = Math.min(CHUNK_SIZE - lx, view.cols - sx);
-      const chunk = world.chunk(cx, cy);
+      const chunk = loadedOnly ? world.loaded(cx, cy) : world.chunk(cx, cy);
+      if (!chunk) {
+        // Not generated yet: plain night ground until it loads.
+        for (let i = 0; i < count; i++) {
+          const o = (sy * r.cols + sx + i) * 4;
+          r.fg[o + 3] = 0;
+          r.bg[o] = NIGHT[0];
+          r.bg[o + 1] = NIGHT[1];
+          r.bg[o + 2] = NIGHT[2];
+          r.mask[sy * r.cols + sx + i] = GRASS;
+        }
+        sx += count;
+        continue;
+      }
       const cached = groundOf(chunk, world.seed);
       const src = ly * CHUNK_SIZE + lx;
       const dest = sy * r.cols + sx;

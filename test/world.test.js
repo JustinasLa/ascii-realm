@@ -14,3 +14,13 @@ test('distant chunks retain distinct terrain and coordinates', () => {
     });
   }
 });
+
+test('trimming keeps the most recently used chunks within the cache size', () => {
+  const world = new World(3, { maxChunks: 64 });
+  for (let i = 0; i < 40; i++) world.chunk(i, 0);
+  const recent = world.chunk(0, 0);
+  world.maxChunks = 16;
+  world.trim();
+  assert.equal(world.chunks.size, 16);
+  assert.equal(world.chunk(0, 0), recent, 'the chunk just used survives');
+});

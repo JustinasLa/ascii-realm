@@ -66,7 +66,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Projectiles: inert(), screenToWorld: () => null, isBow: () => false, isThrown: () => false, SCALE: 13, TILT: 0.5,
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
-    Player, ASPECT, GRASS,
+    Player, ASPECT, GRASS, CHUNK_SIZE: 64,
     World: class {
       constructor() { this.spawn = { x: 0, y: 0 }; }
       isWalkable() { return true; }
@@ -74,6 +74,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
       propsIn() { return []; }
       propsInView() { return []; }
       waterDepthAt() { return 0; }
+      trim() {}
     },
     Camera: class {
       constructor(x, y) { this.x = x; this.y = y; }
@@ -189,6 +190,20 @@ test('browser zoom shortcuts do not also change game zoom', async () => {
   keydown('+');
   frame();
   assert.ok(cellHeight() > 8, 'unmodified zoom keys still zoom the game');
+});
+
+test('zooming out stops at the last scale that still draws full detail', async () => {
+  const { game, frame, keydown, cellHeight } = await loadGame();
+  game.freeze = true;
+  for (let i = 0; i < 40; i++) keydown('-');
+  for (let i = 0; i < 120; i++) frame();
+  // 4.5px, or a hair more where this small, phone-sized window meets its
+  // cell ceiling.
+  const furthest = cellHeight();
+  assert.ok(furthest >= 4.5 && furthest < 4.6, `${furthest}px`);
+  keydown('-');
+  for (let i = 0; i < 30; i++) frame();
+  assert.equal(cellHeight(), furthest);
 });
 
 test('a coarse frame applies the remaining hit stop before returning to normal speed', async () => {

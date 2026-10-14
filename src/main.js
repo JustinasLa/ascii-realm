@@ -42,14 +42,19 @@ import { Splashes } from './world/splashes.js';
 import { Torches } from './world/torch.js';
 import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
-import { ASPECT, GRASS, WATER, World } from './world/world.js';
+import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
 // Zooming sets a target and the cell size glides toward it every frame.
 let cellH = 8;
 let zoomTarget = cellH;
-const MIN_CELL = 6;
+// The furthest zoom: below this cell height (CSS px) grass blades, swaying
+// trees and reflections would be too small to draw, so the view stops here.
+const MIN_CELL = 4.5;
+// Views with more cells than this generate missing chunks over several
+// frames rather than all at once.
+const WIDE_VIEW = 150_000;
 const MAX_CELL = 24;
 
 const canvas = document.getElementById('screen');
@@ -63,19 +68,24 @@ try {
   throw error;
 }
 const mobile = matchMedia('(any-pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
-const quality = new FrameQuality(mobile);
+const quality = new FrameQuality();
+
+const baseChunks = mobile ? 64 : 128;
 
 function resize() {
   const { dpr, cell } = renderSize(window.innerWidth, window.innerHeight,
-    window.devicePixelRatio, cellH, mobile, quality.limit);
+    window.devicePixelRatio, cellH, mobile, quality.scale);
   renderer.resize(window.innerWidth, window.innerHeight, dpr, cell * ASPECT, cell);
+  fitChunks?.();
 }
+// Set once the world exists: sizes its chunk cache to the view.
+let fitChunks = null;
 window.addEventListener('resize', resize);
 resize();
 
 // Zoom is multiplicative so each notch feels the same at any scale.
 function zoomBy(factor) {
-  // Start from the displayed scale when an automatic budget has enlarged
+  // Start from the displayed scale when a very large screen has enlarged
   // the cells; otherwise several taps would be swallowed below that floor.
   const displayed = renderer.cellH / renderer.dpr;
   if (displayed > cellH + 0.001) {
@@ -113,7 +123,16 @@ const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 let name = cleanName(params.get('name') || 'Kael');
-const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: mobile ? 64 : 128 });
+const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks });
+// Keep every chunk a zoomed-out view touches, including the tallest trees
+// above and below it, or chunks would be rebuilt every frame.
+fitChunks = () => {
+  const across = Math.ceil(renderer.cols / CHUNK_SIZE) + 3;
+  const down = Math.ceil((renderer.rows + 2 * MAX_TREE_HEIGHT) / CHUNK_SIZE) + 3;
+  world.maxChunks = Math.max(baseChunks, Math.ceil(across * down * 1.5));
+  world.trim();
+};
+fitChunks();
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const inventory = new Inventory();
@@ -328,6 +347,7 @@ const torchMessages = {
   fed: 'The torch landed in a fire that was already burning.',
   water: 'The water put out the torch.',
   blocked: 'The torch went out. Find open ground or put out a fire with C.',
+  hands: 'Both hands are on your weapon. Unequip it to carry a torch.',
 };
 let fireNoticeUntil = 0;
 let walked = 0;
@@ -490,7 +510,8 @@ function frame(now) {
       if (result?.message && result.status !== 'picked') hud.notify(result.message, result.ok ? 'pickup' : 'info');
     }
   }
-  const itemHint = player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
+  const itemHint = player.handsFull ? 'Two-handed · torch tucked away'
+    : player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
   if (carriedItem.textContent !== itemHint) carriedItem.textContent = itemHint;
   if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
   clicked = false;
@@ -615,7 +636,10 @@ function frame(now) {
   if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
     fireNotice('Strong wind put out the fire.');
   }
-  drawGround(renderer, world, view, time, player, weather.wind);
+  const wide = view.cols * view.rows > WIDE_VIEW;
+  // A wide view generates its missing chunks a little each frame.
+  if (wide) world.load(view.x0, view.y0, view.x0 + view.cols, view.y0 + view.rows, 6);
+  drawGround(renderer, world, view, time, player, weather.wind, wide);
   grass.drawTracks(renderer, view, time);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
@@ -631,7 +655,7 @@ function frame(now) {
   const marginX = Math.max(world.propRenderW, MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT) + 2;
   const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
-    view.x0 + view.cols + marginX, view.y0 + view.rows + tall);
+    view.x0 + view.cols + marginX, view.y0 + view.rows + tall, wide);
   const mirror = reflector(time, view);
   const visibleFires = fires.prepare(view, time);
   const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
@@ -682,8 +706,10 @@ function frame(now) {
   }
   // Loose items bob on the ground; bushes can reach in from below the view
   // or reflect from above it.
-  const visibleItems = groundItems.in(view.x0 - 3, view.y0 - 4, view.x0 + view.cols + 3, view.y0 + view.rows + 3);
-  const plants = harvesting.resourcesIn(view.x0 - 9, view.y0 - 12, view.x0 + view.cols + 9, view.y0 + view.rows + 12);
+  const visibleItems = groundItems.in(view.x0 - 3, view.y0 - 4, view.x0 + view.cols + 3,
+    view.y0 + view.rows + 3, wide);
+  const plants = harvesting.resourcesIn(view.x0 - 9, view.y0 - 12, view.x0 + view.cols + 9,
+    view.y0 + view.rows + 12, wide);
   for (const item of visibleItems) {
     reflections.push({ y: item.y, draw: () => drawItem(renderer, view, item, time, mirror) });
     drawables.push({ y: item.y, draw: () => drawItem(renderer, view, item, time) });
