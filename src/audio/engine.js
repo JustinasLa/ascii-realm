@@ -18,7 +18,6 @@ export class AudioEngine {
       return Context ? new Context() : null;
     });
     this._routes = new Set();
-    this._unlockPromise = null;
     this._disposed = false;
     try {
       this._storage = storage === undefined ? globalThis.localStorage : storage;
@@ -36,7 +35,6 @@ export class AudioEngine {
 
   async unlock() {
     if (this._disposed) return false;
-    if (this._unlockPromise) return this._unlockPromise;
     try {
       if (!this.context) {
         const context = this._contextFactory();
@@ -63,15 +61,12 @@ export class AudioEngine {
         }
       }
       // Invoke resume before yielding so the browser sees the user activation.
-      const resume = this.context.state === 'running' ? undefined : this.context.resume();
-      this._unlockPromise = Promise.resolve(resume)
-        .then(() => !this._disposed && this.context?.state === 'running')
-        .catch(() => false);
-      return await this._unlockPromise;
+      // An autoplay-blocked resume may stay pending until a later gesture
+      // retries it, so pending attempts must not suppress another resume.
+      if (this.context.state !== 'running') await this.context.resume();
+      return !this._disposed && this.context?.state === 'running';
     } catch {
       return false;
-    } finally {
-      this._unlockPromise = null;
     }
   }
 

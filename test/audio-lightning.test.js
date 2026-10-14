@@ -142,3 +142,14 @@ test('dry automatic thunder works without a visual callback; sky flashes do not 
   sound.pause();
   assertDisposed(audio);
 });
+
+test('a clap placed only by bearing still pans from the listener row', async () => {
+  const audio = fakeAudio();
+  await ready(audio);
+  audio.engine.listener = { x: 10, y: 20 };
+  const handles = playLightning(audio.engine, { bearing: -0.5, strength: 1, distant: true });
+  assert.equal(handles.length, 1);
+  assert.ok(audio.routes.every(route => route.x < 10 && route.y === 20));
+  sources(audio)[0].onended();
+  handles[0].stop();
+});

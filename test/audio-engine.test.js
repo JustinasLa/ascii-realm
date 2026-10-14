@@ -97,19 +97,66 @@ test('a rejected resume is recoverable on a later gesture', async () => {
   await engine.dispose();
 });
 
-test('overlapping unlock gestures share a pending resume', async () => {
-  const { engine, context } = fixture();
-  let resume;
+test('a later gesture retries a pending autoplay resume without rebuilding the graph', async () => {
+  const context = new FakeContext();
+  let constructions = 0;
+  const engine = new AudioEngine({
+    contextFactory: () => { constructions++; return context; }, storage: null,
+  });
+  let activated = false;
+  const pending = [];
   context.resume = () => {
     context.resumeCalls++;
-    return new Promise((resolve) => { resume = () => { context.state = 'running'; resolve(); }; });
+    return new Promise((resolve) => {
+      pending.push(resolve);
+      if (activated) {
+        context.state = 'running';
+        for (const complete of pending.splice(0)) complete();
+      }
+    });
   };
   const first = engine.unlock();
+  const buses = { ...engine.buses };
+  assert.equal(context.state, 'suspended');
+  activated = true;
   const second = engine.unlock();
-  assert.equal(context.resumeCalls, 1);
-  resume();
+  assert.equal(context.resumeCalls, 2, 'a pending promise must not suppress a fresh gesture');
   assert.deepEqual(await Promise.all([first, second]), [true, true]);
+  assert.equal(constructions, 1);
+  for (const [bus, node] of Object.entries(buses)) assert.equal(engine.buses[bus], node);
+  assert.equal(await engine.unlock(), true);
+  assert.equal(context.resumeCalls, 2, 'an already running context needs no resume');
   await engine.dispose();
+});
+
+test('an older failed unlock does not interfere with a later pending attempt', async () => {
+  const { engine, context } = fixture();
+  const attempts = [];
+  context.resume = () => new Promise((resolve, reject) => attempts.push({ resolve, reject }));
+  const first = engine.unlock();
+  const second = engine.unlock();
+  assert.equal(attempts.length, 2);
+  attempts[0].reject(new Error('Gesture required'));
+  assert.equal(await first, false);
+  const third = engine.unlock();
+  assert.equal(attempts.length, 3);
+  context.state = 'running';
+  attempts[2].resolve();
+  attempts[1].resolve();
+  assert.deepEqual(await Promise.all([second, third]), [true, true]);
+  await engine.dispose();
+});
+
+test('a resume completing after disposal cannot report unlocked audio', async () => {
+  const { engine, context } = fixture();
+  let complete;
+  context.resume = () => new Promise((resolve) => { complete = resolve; });
+  const unlocking = engine.unlock();
+  await engine.dispose();
+  complete();
+  assert.equal(await unlocking, false);
+  assert.equal(await engine.unlock(), false);
+  assert.equal(engine.context, null);
 });
 
 test('mute silences the master bus while preserving editable individual volumes', async () => {

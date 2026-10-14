@@ -60,7 +60,7 @@ function fakeAudio(currentTime = 20) {
     sources: () => nodes.filter(item => ['oscillator', 'bufferSource'].includes(item.kind)) };
 }
 
-const choir = { voice: 'choir', type: 'sine', note: 57, gain: 0.03, attack: 0.6,
+const choir = { voice: 'choir', note: 57, gain: 0.03, attack: 0.6,
   decay: 0.4, sustain: 0.65, release: 1.4, cutoff: 1600, spread: 8, detune: 0 };
 
 test('music instruments allocate nothing before audio is running', () => {
@@ -109,7 +109,7 @@ test('sustained music notes attack and decay gently and keep their authored rele
 
 test('bell notes decay to silence and clean up only when their final partial ends', () => {
   const fake = fakeAudio();
-  const event = { voice: 'bell', type: 'sine', note: 74, gain: 0.025,
+  const event = { voice: 'bell', note: 74, gain: 0.025,
     attack: 0.012, decay: 1.1, sustain: 0, release: 0.7, cutoff: 2600, ratio: 2.76 };
   const handle = playMusicNote(fake.engine, event, 20.25, 2);
   assert.ok(handle);
