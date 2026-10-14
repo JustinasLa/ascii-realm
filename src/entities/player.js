@@ -176,8 +176,11 @@ export class Player {
       return;
     }
     let kind;
-    if (this.speed > (this.walkSpeed + this.runSpeed) / 2) kind = 'leap';
-    else if (this.speed > 0.6) kind = 'stride';
+    // The pace actually being covered: the smoothed speed lags a stop, and
+    // would launch a running leap on the spot.
+    const pace = this.groundSpeed ?? this.speed;
+    if (pace > (this.walkSpeed + this.runSpeed) / 2) kind = 'leap';
+    else if (pace > 0.6) kind = 'stride';
     else if (this.sinceLand < CHAIN && IN_A_ROW.includes(this.lastJump)) {
       kind = IN_A_ROW[(IN_A_ROW.indexOf(this.lastJump) + 1) % IN_A_ROW.length];
     } else kind = 'stand';
@@ -265,7 +268,9 @@ export class Player {
 
     // Letting go mid-sprint does not stop the warrior dead: they skid to a
     // halt, braced, throwing up dirt.
-    if (!moving && this.wasMoving && this.speed > 3.2 && this.air === 0) {
+    // Judged on the ground covered, so tapping a key mid-skid cannot restart
+    // it at the speed the skid began with.
+    if (!moving && this.wasMoving && (this.groundSpeed ?? this.speed) > 3.2 && this.air === 0) {
       this.skid = 0.22;
       this.skidSpeed = this.speed;
       this.skidHeading = this.heading;
@@ -326,7 +331,7 @@ export class Player {
 
     // Pitch forward a little when setting off or speeding up. Slowing down
     // does not rock the body back: it just settles upright.
-    const speedNow = this.skid > 0 ? this.speed : metres / Math.max(dt, 1e-3);
+    const speedNow = this.skid > 0 ? this.skidSpeed : metres / Math.max(dt, 1e-3);
     const accel = (speedNow - this.speed) / Math.max(dt, 1e-3);
     this.speed += (speedNow - this.speed) * ease(8);
     // How fast the body really moved this frame, unsmoothed, for anything

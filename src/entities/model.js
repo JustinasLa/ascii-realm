@@ -568,7 +568,7 @@ export class ModelFigure {
     const c = CAPTURES[base];
     const stay = LAND_FOR[base];
     this.start(key, 1, c.land, stay === undefined ? Infinity : c.land + stay);
-    if (p.speed > 0.6) {
+    if ((p.groundSpeed ?? p.speed) > 0.6) {
       const onto = key.endsWith('M') ? (c.onto === 'L' ? 'R' : 'L') : c.onto;
       this.phase = onto === 'L' ? 0 : 0.5;
     }

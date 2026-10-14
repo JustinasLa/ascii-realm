@@ -156,8 +156,8 @@ test('a model supplies its own footsteps without procedural duplicates', () => {
 
 function styledJump(kind) {
   const p = new Player(0, 0);
-  if (kind === 'stride') p.speed = 1;
-  if (kind === 'leap') p.speed = p.runSpeed;
+  if (kind === 'stride') p.speed = p.groundSpeed = 1;
+  if (kind === 'leap') p.speed = p.groundSpeed = p.runSpeed;
   if (kind === 'hop' || kind === 'spin') {
     p.sinceLand = 0;
     p.lastJump = kind === 'hop' ? 'stand' : 'hop';
@@ -239,4 +239,26 @@ test('jump audio events fire once at takeoff and once at landing', () => {
   assert.deepEqual(p.events.map((e) => e.type), ['jump']);
   for (let i = 0; i < 10; i++) p.updateJump(0.1);
   assert.deepEqual(p.events.map((e) => e.type), ['jump', 'land']);
+});
+
+test('a jump just after stopping a sprint springs on the spot, not as a running leap', () => {
+  const p = new Player(0, 0);
+  for (let i = 0; i < 120; i++) p.update(1 / 60, meadow, { x: 1, y: 0 }, true);
+  // A third of a second later the skid is over and the body is still.
+  for (let i = 0; i < 20; i++) p.update(1 / 60, meadow, { x: 0, y: 0 }, false);
+  assert.equal(p.skid <= 0, true);
+  p.jump();
+  assert.equal(p.jumpKind, 'stand');
+});
+
+test('tapping a key during a skid does not restart it at sprint speed', () => {
+  const p = new Player(0, 0);
+  for (let i = 0; i < 120; i++) p.update(1 / 60, meadow, { x: 1, y: 0 }, true);
+  p.update(1 / 60, meadow, { x: 0, y: 0 }, false);
+  assert.ok(p.skid > 0, 'letting go of a sprint skids');
+  for (let i = 0; i < 12; i++) p.update(1 / 60, meadow, { x: 0, y: 0 }, false);
+  const slowed = p.skidSpeed;
+  p.update(1 / 60, meadow, { x: 1, y: 0 }, false);
+  p.update(1 / 60, meadow, { x: 0, y: 0 }, false);
+  assert.ok(p.skid <= 0 || p.skidSpeed <= slowed, `skid restarted at ${p.skidSpeed}`);
 });

@@ -111,13 +111,22 @@ export class Scenery {
     checkPoint(x + radius / ASPECT, y + radius);
     return this._change(() => {
       const cells = [];
-      const nextTerrain = new Map(this.world.terrainEdits);
+      // Track only what this stamp adds, so long strokes over a large
+      // scene stay cheap instead of copying every earlier edit.
+      const edits = this.world.terrainEdits;
+      let added = 0;
+      const newChunks = new Set();
       const consider = (cx, cy) => {
         if (this.world.typeAt(cx, cy) === type) return;
         cells.push({ x: cx, y: cy });
         const key = `${cx},${cy}`;
-        if (this.world.originalTypeAt(cx, cy) === type) nextTerrain.delete(key);
-        else nextTerrain.set(key, type);
+        if (this.world.originalTypeAt(cx, cy) === type) {
+          if (edits.has(key)) added--;
+        } else if (!edits.has(key)) {
+          added++;
+          const chunk = `${Math.floor(cx / 64)},${Math.floor(cy / 64)}`;
+          if (!this.world.editChunks.has(chunk)) newChunks.add(chunk);
+        }
       };
       if (radius === 0) {
         consider(Math.floor(x), Math.floor(y));
@@ -133,7 +142,12 @@ export class Scenery {
           }
         }
       }
-      checkTerrainBudget(nextTerrain);
+      if (edits.size + added > TERRAIN_LIMIT) {
+        throw new Error(`Scenery supports up to ${TERRAIN_LIMIT} edited terrain cells.`);
+      }
+      if (this.world.editChunks.size + newChunks.size > CHUNK_LIMIT) {
+        throw new Error(`Scenery supports up to ${CHUNK_LIMIT} edited terrain chunks.`);
+      }
       for (const cell of cells) this.world.setTerrain(cell.x, cell.y, type);
       return cells.length;
     });

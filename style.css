@@ -59,6 +59,11 @@ body {
   pointer-events: auto;
 }
 
+/* Closed panels shrink to their titles so they do not cover the scene. */
+#scenery-builder:not([open]) {
+  width: auto;
+}
+
 #scenery-builder {
   box-sizing: border-box;
   width: min(304px, calc(100vw - 32px));
@@ -421,6 +426,8 @@ body {
 
 @media (any-pointer: coarse), (max-width: 900px) {
   #hint { display: none; }
+  /* Leave the top-right corner to the touch zoom buttons. */
+  #panel-dock { top: calc(max(12px, env(safe-area-inset-top)) + 58px); max-height: calc(100dvh - 140px); }
   #touch-controls {
     display: block;
     position: fixed;
