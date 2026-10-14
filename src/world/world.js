@@ -1,6 +1,7 @@
-import { fbm } from '../core/noise.js';
+import { fbm, valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { blocks, generateProps } from './props.js';
+import { grassRoots } from './grass-roots.js';
 
 export const WATER = 0;
 export const SHORE = 1;
@@ -21,12 +22,20 @@ const STONE_LEVEL = 0.7;
 const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78];
 const cellKey = (x, y) => `${x},${y}`;
 const chunkKey = (cx, cy) => `${cx},${cy}`;
+const smoothRange = (a, b, x) => {
+  const u = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
 
 export class World {
-  constructor(seed = 1) {
+  constructor(seed = 1, maxChunks = 128) {
     this.seed = seed;
+    this.maxChunks = Math.max(16, Math.floor(maxChunks));
+    this.clock = 0;
     this.chunks = new Map();
     this.terrainEdits = new Map();
+    // Scorch maps by chunk, kept here so they outlive chunk eviction.
+    this.burns = new Map();
     this.addedProps = new Map();
     this.removedProps = new Set();
     this.addedPropChunks = new Map();
@@ -41,8 +50,22 @@ export class World {
     const key = chunkKey(cx, cy);
     let c = this.chunks.get(key);
     if (!c) {
+      if (this.chunks.size >= this.maxChunks) {
+        let oldestKey;
+        let oldest = Infinity;
+        for (const [k, chunk] of this.chunks) {
+          if (chunk.used < oldest) { oldest = chunk.used; oldestKey = k; }
+        }
+        this.chunks.delete(oldestKey);
+      }
       c = this.generate(cx, cy);
       this.chunks.set(key, c);
+    }
+    c.used = ++this.clock;
+    // Edits and burns mark the grass for regrowing once, not per cell.
+    if (c.stale) {
+      c.blades = grassRoots(c, this.seed, CHUNK);
+      c.stale = false;
     }
     return c;
   }
@@ -53,6 +76,9 @@ export class World {
     const elev = new Float32Array(n);
     const shade = new Float32Array(n);
     const rnd = new Float32Array(n);
+    const grassHeight = new Float32Array(n);
+    const grassDensity = new Float32Array(n);
+    const grassStyle = new Uint8Array(n);
     const s = this.seed;
 
     for (let ly = 0; ly < CHUNK; ly++) {
@@ -75,22 +101,47 @@ export class World {
         elev[i] = e;
         shade[i] = fbm(nx * 0.05, y * 0.05, s + 31, 3);
         rnd[i] = hash2(x, y, s + 5);
+        if (t === GRASS || t === SHORE) {
+          // Blend the verge into the meadow instead of cutting out a lawn
+          // at one noise threshold. Fractional heights are dithered per root
+          // when drawn, so even the cell grid has no hard height bands.
+          const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
+          const wet = 1 - smoothRange(0.41, 0.45, e);
+          const lush = smoothRange(0.35, 0.68, meadow);
+          let reed = false;
+          if (t === GRASS) {
+            const verge = smoothRange(0.009, 0.035, path);
+            const fieldHeight = 2.6 + lush * 1.3;
+            const bank = wet * smoothRange(0.35, 0.6, meadow);
+            const target = fieldHeight + (4.7 - fieldHeight) * bank;
+            grassHeight[i] = 2 + (target - 2) * verge;
+            grassDensity[i] = 0.22 + verge * (0.035 + lush * 0.025);
+            reed = wet > 0.5 && meadow > 0.48 && verge > 0.3;
+          } else if (meadow > 0.43) {
+            grassHeight[i] = 3.3 + lush * 1.3;
+            grassDensity[i] = 0.15 + lush * 0.06;
+            reed = true;
+          }
+          const species = valueNoise(nx * 0.012, y * 0.012, s + 1801);
+          const edge = (hash2(x, y, s + 1802) - 0.5) * 0.7;
+          grassStyle[i] = reed ? 5 : Math.max(0, Math.min(4, Math.floor(species * 5 + edge)));
+        }
       }
     }
     const baseType = type.slice();
     const baseElev = elev.slice();
+    const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
+      baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0 };
     // Ground rendering reads these arrays directly, so overrides must live in
     // the chunk as well as in the editor's portable scene description.
     for (let ly = 0; ly < CHUNK; ly++) {
       for (let lx = 0; lx < CHUNK; lx++) {
         const edit = this.terrainEdits.get(cellKey(cx * CHUNK + lx, cy * CHUNK + ly));
-        if (edit === undefined) continue;
-        const i = ly * CHUNK + lx;
-        type[i] = edit;
-        elev[i] = EDIT_ELEVATION[edit];
+        if (edit !== undefined) this.applyTerrain(chunk, ly * CHUNK + lx, edit);
       }
     }
-    return { cx, cy, type, elev, baseType, baseElev, shade, rnd, props: null, burnt: null };
+    chunk.blades = grassRoots(chunk, s, CHUNK);
+    return chunk;
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays
@@ -115,15 +166,38 @@ export class World {
   setTerrain(x, y, type) {
     const { c, i } = this.locate(x, y);
     const key = cellKey(x, y);
-    if (type === c.baseType[i]) {
-      this.terrainEdits.delete(key);
-      c.type[i] = c.baseType[i];
-      c.elev[i] = c.baseElev[i];
+    if (type === c.baseType[i]) this.terrainEdits.delete(key);
+    else this.terrainEdits.set(key, type);
+    this.applyTerrain(c, i, type);
+    this.touched(c);
+  }
+
+  // Sets one cell's terrain and the grass growing on it. Painted meadow
+  // gets a plain verge-height lawn; restoring a cell restores its own grass.
+  applyTerrain(c, i, type) {
+    const base = type === c.baseType[i];
+    c.type[i] = type;
+    c.elev[i] = base ? c.baseElev[i] : EDIT_ELEVATION[type];
+    c.baseGrass ??= { height: c.grassHeight.slice(), density: c.grassDensity.slice(),
+      style: c.grassStyle.slice() };
+    const g = c.baseGrass;
+    if (base) {
+      c.grassHeight[i] = g.height[i];
+      c.grassDensity[i] = g.density[i];
+      c.grassStyle[i] = g.style[i];
+    } else if (type === GRASS) {
+      c.grassHeight[i] = 2.6;
+      c.grassDensity[i] = 0.22;
+      c.grassStyle[i] = 0;
     } else {
-      this.terrainEdits.set(key, type);
-      c.type[i] = type;
-      c.elev[i] = EDIT_ELEVATION[type];
+      c.grassHeight[i] = 0;
     }
+  }
+
+  // Reshades a chunk's ground and regrows its grass after a change.
+  touched(c) {
+    c.version = (c.version ?? 0) + 1;
+    c.stale = true;
   }
 
   addProp(prop) {
@@ -155,8 +229,8 @@ export class World {
     for (const key of this.terrainEdits.keys()) {
       const [x, y] = key.split(',').map(Number);
       const { c, i } = this.locate(x, y);
-      c.type[i] = c.baseType[i];
-      c.elev[i] = c.baseElev[i];
+      this.applyTerrain(c, i, c.baseType[i]);
+      this.touched(c);
     }
     this.terrainEdits.clear();
     this.addedProps.clear();
@@ -190,9 +264,13 @@ export class World {
         if (distance >= edge) continue;
         const { c, i } = this.locate(wx, wy);
         if (c.type[i] !== GRASS) continue;
-        if (!c.burnt) c.burnt = new Uint8Array(CHUNK * CHUNK);
+        if (!c.burnt) {
+          c.burnt = new Uint8Array(CHUNK * CHUNK);
+          this.burns.set(chunkKey(c.cx, c.cy), c.burnt);
+        }
         const strength = Math.round(Math.min(1, (edge - distance) * 2.3) * 255);
         c.burnt[i] = Math.max(c.burnt[i], strength);
+        this.touched(c);
       }
     }
   }

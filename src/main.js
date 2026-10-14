@@ -2,18 +2,21 @@ import { isControlTarget, isDown, moveAxis, wasTapped } from './core/input.js';
 import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
 import { bindAudioControls } from './audio/controls.js';
+import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { Player } from './entities/player.js';
 import { putCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
 import { Fires } from './world/fire.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
+import { Grass } from './world/grass.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
@@ -31,19 +34,38 @@ const MIN_CELL = 6;
 const MAX_CELL = 24;
 
 const canvas = document.getElementById('screen');
-const renderer = new AsciiRenderer(canvas, buildAtlas(FONT));
+const status = document.getElementById('status');
+let renderer;
+try {
+  renderer = new AsciiRenderer(canvas, buildAtlas(FONT));
+} catch (error) {
+  status.textContent = 'ASCII Realm needs WebGL2. Please open it in a browser with hardware acceleration enabled.';
+  status.hidden = false;
+  throw error;
+}
+const mobile = matchMedia('(any-pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
+const quality = new FrameQuality(mobile);
 
 function resize() {
-  renderer.resize(window.innerWidth, window.innerHeight, window.devicePixelRatio || 1, cellH * ASPECT,
-    cellH);
+  const { dpr, cell } = renderSize(window.innerWidth, window.innerHeight,
+    window.devicePixelRatio, cellH, mobile, quality.limit);
+  renderer.resize(window.innerWidth, window.innerHeight, dpr, cell * ASPECT, cell);
 }
 window.addEventListener('resize', resize);
 resize();
 
 // Zoom is multiplicative so each notch feels the same at any scale.
 function zoomBy(factor) {
+  // Start from the displayed scale when an automatic budget has enlarged
+  // the cells; otherwise several taps would be swallowed below that floor.
+  const displayed = renderer.cellH / renderer.dpr;
+  if (displayed > cellH + 0.001) {
+    cellH = displayed;
+    zoomTarget = Math.max(zoomTarget, displayed);
+  }
   zoomTarget = Math.max(MIN_CELL, Math.min(MAX_CELL, zoomTarget * factor));
 }
+installTouchControls(zoomBy);
 
 function updateZoom(dt) {
   if (cellH === zoomTarget) return;
@@ -72,13 +94,14 @@ const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 const name = (params.get('name') || 'Kael').slice(0, 24);
-const world = new World(seed);
+const world = new World(seed, mobile ? 64 : 128);
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
+const grass = new Grass();
 const splashes = new Splashes();
 const fires = new Fires();
 fires.addStarter(world);
@@ -109,7 +132,8 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, splashes, weather, fires, torches, renderer, audio: sound.engine, sound, freeze: false };
+const debug = { player, camera, world, grass, splashes, weather, fires, torches, renderer, quality,
+  audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -148,12 +172,13 @@ function fireNotice(message) {
 // Holding it down charges a spin.
 let clicked = false;
 let mouseHeld = false;
-canvas.addEventListener('mousedown', (e) => {
-  if (e.button !== 0 || builder.enabled) return;
+// Touches use the on-screen buttons instead.
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button !== 0 || e.pointerType === 'touch' || builder.enabled) return;
   clicked = true;
   mouseHeld = true;
 });
-window.addEventListener('mouseup', (e) => {
+window.addEventListener('pointerup', (e) => {
   if (e.button === 0) mouseHeld = false;
 });
 window.addEventListener('blur', () => {
@@ -212,13 +237,47 @@ function drawName(top) {
     renderer.putBg(sx + i, sy, 8, 10, 14);
   }
 }
-let last = performance.now();
 let time = 0;
+const clock = new FrameClock();
+let animation = null;
+let contextLost = false;
+
+function schedule() {
+  if (animation === null && !document.hidden && !contextLost) animation = requestAnimationFrame(frame);
+}
+
+function suspend() {
+  if (animation !== null) cancelAnimationFrame(animation);
+  animation = null;
+  clock.reset();
+  clicked = false;
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) suspend();
+  else schedule();
+});
+canvas.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  contextLost = true;
+  suspend();
+  status.textContent = 'Restoring the scene…';
+  status.hidden = false;
+});
+canvas.addEventListener('webglcontextrestored', () => {
+  renderer.restore();
+  resize();
+  contextLost = false;
+  status.hidden = true;
+  schedule();
+});
 
 function frame(now) {
-  // Clamp dt for early first-frame timestamps and long pauses in background tabs.
-  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1));
-  last = now;
+  animation = null;
+  if (document.hidden || contextLost) return;
+  const dt = clock.step(now);
+  if (dt === null) { schedule(); return; }
+  const started = performance.now();
   time += dt;
   updateZoom(dt);
 
@@ -254,10 +313,14 @@ function frame(now) {
     player.trail = player.trail.filter((t) => player.time - t.t < 0.16);
     const blade = !paused && player.combat.trailing ? model.swordLine() : null;
     if (blade) {
-      player.trail.push({ t: player.time, hx: player.x + blade.base[0], hy: player.y + blade.base[1],
-        tx: player.x + blade.tip[0], ty: player.y + blade.tip[1] });
+      const cut = { t: player.time, hx: player.x + blade.base[0], hy: player.y + blade.base[1],
+        tx: player.x + blade.tip[0], ty: player.y + blade.tip[1] };
+      player.trail.push(cut);
+      // The real blade, not the stand-in skeleton's, parts the grass.
+      player.swordSweep = cut;
     }
   }
+  if (!paused) grass.update(world, player, time);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
     if (!debug.freeze) fires.react(world, e, player);
@@ -317,50 +380,58 @@ function frame(now) {
     fireNotice('Strong wind put out the fire.');
   }
   drawGround(renderer, world, view, time, player, weather.wind);
+  grass.drawTracks(renderer, view, time);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
   const props = world.propsInView(view);
-
   const mirror = reflector(time, view);
-  for (const p of props) drawProp(renderer, view, p, mirror);
   const visibleFires = fires.prepare(view, time);
-  for (const fire of visibleFires) fires.draw(renderer, view, fire, time, mirror);
   const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
-  for (const torch of visibleTorches) torches.draw(renderer, view, torch, mirror);
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
-  if (model) {
-    model.rasterise(view, player.x, player.y);
-    model.draw(renderer, mirror);
-  } else {
-    figure = dressFigure(player);
-    drawFigure(renderer, view, player, figure, mirror);
-  }
-
-  const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
-  splashes.drawSurface(renderer, view, time);
-  weather.drawSurface(renderer, view, time);
+  if (model) model.rasterise(view, player.x, player.y);
+  else figure = dressFigure(player);
 
   // Painter's order: whatever stands further down the screen is in front.
-  const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
+  // Grass blades are interleaved by row, both above and in the water.
+  const drawables = props.map((p) => ({ y: p.y,
+    draw: () => drawProp(renderer, view, p),
+    reflect: () => drawProp(renderer, view, p, mirror) }));
   for (const fire of visibleFires) {
-    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
+    drawables.push({ y: fire.y,
+      draw: () => fires.draw(renderer, view, fire, time),
+      reflect: () => fires.draw(renderer, view, fire, time, mirror) });
   }
   for (const torch of visibleTorches) {
-    if (!torch.carried) drawables.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch) });
+    if (torch.carried) continue;
+    drawables.push({ y: torch.y,
+      draw: () => torches.draw(renderer, view, torch),
+      reflect: () => torches.draw(renderer, view, torch, mirror) });
   }
+  const carried = visibleTorches.filter((torch) => torch.carried);
   drawables.push({
     y: player.y,
     draw: () => {
       if (model) model.draw(renderer, putCell);
       else drawFigure(renderer, view, player, figure);
-      for (const torch of visibleTorches) if (torch.carried) torches.draw(renderer, view, torch);
+      for (const torch of carried) torches.draw(renderer, view, torch);
+    },
+    reflect: () => {
+      if (model) model.draw(renderer, mirror);
+      else drawFigure(renderer, view, player, figure, mirror);
+      for (const torch of carried) torches.draw(renderer, view, torch, mirror);
     },
   });
   drawables.sort((a, b) => a.y - b.y);
-  for (const d of drawables) d.draw();
+  grass.drawReflections(renderer, world, view, time, mirror,
+    drawables.map((d) => ({ y: d.y, draw: d.reflect })));
+
+  const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
+  splashes.drawSurface(renderer, view, time);
+  weather.drawSurface(renderer, view, time);
+  grass.drawLayered(renderer, world, view, time, drawables);
   splashes.drawContacts(renderer, view, time, contacts);
   fires.light(renderer, view, time, visibleFires);
   torches.light(renderer, view, time, visibleTorches);
@@ -380,7 +451,12 @@ function frame(now) {
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
-  requestAnimationFrame(frame);
+  const workMs = performance.now() - started;
+  if (quality.sample(workMs, dt)) resize();
+  debug.metrics.frames++;
+  debug.metrics.workMs = workMs;
+  debug.metrics.intervalMs = dt * 1000;
+  schedule();
 }
 
-requestAnimationFrame(frame);
+schedule();

@@ -19,8 +19,15 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Infinite seeded world.** Lakes, shoreline, meadows, dirt paths and rocky
   outcrops from layered noise, generated in 64×64 chunks as you walk. Add
   `?seed=42` to the URL for a different world.
-- **Living grass.** Blades lean with rolling gusts, flash lighter where the wind
-  catches them, part around your feet, and hide twinkling dew drops.
+- **Living grass.** Two- and three-row path verges blend into fuller meadows
+  and lakeshore reeds, with blades up to five cells high.
+  Fine blades, leafy tufts, curved grass, seed heads and dry gold patches give
+  each meadow a different texture and palette.
+  Rolling gusts move the tips more than the roots and catch them with a pale
+  sheen. Planted boot soles press exact footprints into the grass for several
+  seconds; repeated footfalls keep a worn route flattened longer. Sword swings
+  push blades aside too. Shoreline stems sway in their reflections
+  too. Dew twinkles in the undergrowth.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
   the moon) mirrored in every lake. Walk or run through any lake: the water
   rises from your ankles to at most your knees, slows your stride, and hides
@@ -105,6 +112,10 @@ For now it is a single outlaw exploring procedurally generated terrain.
   Gusts bend grass and roughen the water. Clear is the default; selection and
   intensity are saved. Effects also work with sound muted or before audio is
   enabled.
+- **Phone controls and performance.** A touch stick for walking/running, separate
+  jump and sword buttons, and zoom controls in portrait or landscape. Rendering
+  targets 60 fps, caps backing resolution, and adjusts the visible cell count
+  under sustained load. Hidden tabs stop drawing and distant chunks are evicted.
 
 ## Running
 
@@ -117,11 +128,18 @@ python -m http.server 8000
 
 A browser with WebGL2 is required.
 
-The rig and gait have unit tests (Node 18+, no dependencies):
+To play this checkout on a phone on the same Wi-Fi, open
+`http://<computer-LAN-IP>:8000` on the phone after starting the server.
+
+Gameplay, input, rendering equivalence, memory bounds and frame budgets have
+tests (Node 18+, no dependencies):
 
 ```sh
 npm test
 ```
+
+Run `npm run bench` for the repeatable CPU benchmark. Measurements, browser
+checks and reproduction instructions are in [docs/performance.md](docs/performance.md).
 
 ## Controls
 
@@ -170,6 +188,11 @@ generated world and can be undone.
 
 Add `?builder` to the URL to open the panel automatically. With `?debug`, the
 current scene is available as `window.game.builder.scene` for inspection.
+
+On a phone, drag the left pad to walk and push it to the outer edge to run.
+Use **JUMP**, **STRIKE**, and **DRAW** with your other thumb; repeated strikes
+chain a combo. The upper **− / +** buttons zoom. Controls support multiple
+fingers and reset when a touch is cancelled or the page is backgrounded.
 
 ## Layout
 

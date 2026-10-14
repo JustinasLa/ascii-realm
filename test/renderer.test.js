@@ -8,7 +8,7 @@ for (const dpr of [0.25, 0.5, 1]) {
     test(`resize preserves the world aspect at DPR ${dpr} and cell height ${cellH}`, () => {
       const renderer = {
         canvas: { width: 0, height: 0 },
-        gl: { viewport() {}, bindTexture() {}, texImage2D() {} },
+        gl: { viewport() {}, activeTexture() {}, bindTexture() {}, texImage2D() {} },
         cols: 0,
         rows: 0,
       };

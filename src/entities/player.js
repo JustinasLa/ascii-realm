@@ -80,6 +80,11 @@ export class Player {
     this.torch = true;
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
+    // The active blade on the ground plane, for its wake through the grass.
+    this.swordSweep = null;
+    this.feet = [];
+    this.footPlants = new Map();
+    this.nextPlant = 0;
     // Height above the ground in metres, rising speed, and the crouch used
     // to wind up a jump and soak up the landing.
     this.air = 0;
@@ -432,6 +437,7 @@ export class Player {
     this.bob += this.bobV * sdt;
 
     const rig = buildRig(this);
+    this.recordFeet(rig);
     this.recordTrail(rig);
     // Breath leaves through the visor, wherever the head happens to be.
     for (const e of this.events) {
@@ -487,12 +493,37 @@ export class Player {
     });
   }
 
+  // Boot soles on the ground plane, with one identifier for each planting.
+  // A raised foot casts no contact, and standing still is not another step.
+  recordFeet(rig) {
+    this.feet = rig.legs.map((leg) => {
+      const grounded = this.air === 0 && Math.min(leg.ankle[1] - 0.065, leg.toe[1] - 0.05) < 0.025;
+      const old = this.footPlants.get(leg.s);
+      const plant = grounded && !old?.grounded ? ++this.nextPlant : old?.plant ?? 0;
+      this.footPlants.set(leg.s, { grounded, plant });
+      return { id: leg.s, plant, grounded,
+        hx: this.x + leg.ankle[0] * SCALE / ASPECT,
+        hy: this.y + leg.ankle[2] * SCALE * TILT,
+        tx: this.x + leg.toe[0] * SCALE / ASPECT,
+        ty: this.y + leg.toe[2] * SCALE * TILT };
+    });
+  }
+
   // Remembers where the blade is while it cuts, in world cells.
   recordTrail(rig) {
+    this.swordSweep = null;
     const keep = this.time - 0.16;
     this.trail = this.trail.filter((p) => p.t > keep);
+    if (!this.combat.trailing || !rig.sword) return;
+    this.swordSweep = {
+      hx: this.x + rig.sword.guard[0] * SCALE / ASPECT,
+      hy: this.y + rig.sword.guard[2] * SCALE * TILT,
+      tx: this.x + rig.sword.tip[0] * SCALE / ASPECT,
+      ty: this.y + rig.sword.tip[2] * SCALE * TILT,
+      t: this.time,
+    };
     // A 3D character records its own trail (see main.js).
-    if (this.modelTrail || !this.combat.trailing || !rig.sword) return;
+    if (this.modelTrail) return;
     const h = project(rig.sword.guard);
     const tip = project(rig.sword.tip);
     const sink = this.waterDepth * SCALE;

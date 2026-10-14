@@ -4,6 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../src/entities/player.js';
 import { buildRig } from '../src/entities/rig.js';
+import { FrameClock, FrameQuality, renderSize } from '../src/render/budget.js';
 import { ASPECT, GRASS, WATER } from '../src/world/world.js';
 
 const noop = () => {};
@@ -44,7 +45,10 @@ async function loadGame(move = { x: 0, y: 0 }) {
   const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), {
     console, URLSearchParams, window,
-    document: { getElementById: id => id === 'screen' ? canvas : hint },
+    document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop },
+    matchMedia: () => ({ matches: false }), innerWidth: 800, innerHeight: 600,
+    cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: noop,
+    Grass: inert(),
     location: { search: '?debug' },
     performance: { now: () => 0 },
     requestAnimationFrame: callback => { nextFrame = callback; },
@@ -116,8 +120,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
         taps.add(action);
         return;
       }
-      canvas.dispatchEvent(Object.assign(new Event('mousedown'), { button: 0 }));
-      window.dispatchEvent(Object.assign(new Event('mouseup'), { button: 0 }));
+      canvas.dispatchEvent(Object.assign(new Event('pointerdown'), { button: 0, pointerType: 'mouse' }));
+      window.dispatchEvent(Object.assign(new Event('pointerup'), { button: 0, pointerType: 'mouse' }));
     },
   };
 }
@@ -125,27 +129,33 @@ async function loadGame(move = { x: 0, y: 0 }) {
 test('an early first animation timestamp does not move time backwards', async () => {
   const { game, frame, tap } = await loadGame();
   tap('Space');
+  // The frame clock gives the first frame one nominal step, whatever its stamp.
   frame(-0.02);
-  assert.equal(game.player.time, 0);
-  assert.equal(game.player.windUp, 0);
-  frame();
   assert.ok(Math.abs(game.player.time - 1 / 60) < 1e-12);
-  assert.ok(game.player.windUp > 0, 'the captured jump advances with the next frame');
+  assert.ok(game.player.windUp > 0, 'the captured jump advances with the first frame');
+  const windUp = game.player.windUp;
+  frame();
+  assert.ok(Math.abs(game.player.time - 2 / 60) < 1e-12);
+  assert.ok(game.player.windUp > windUp);
 });
 
 test('held movement keeps a finite pose through stale and zero-time frames', async () => {
   const { game, frame } = await loadGame({ x: 1, y: 0 });
   const player = game.player;
-  for (const dt of [-0.02, 0]) {
+  frame(-0.02);
+  const first = player.x;
+  assert.ok(Math.abs(player.time - 1 / 60) < 1e-12);
+  // A repeated or stale timestamp is skipped rather than replayed.
+  for (const dt of [0, -0.005]) {
     frame(dt);
-    assert.equal(player.time, 0);
-    assert.equal(player.x, 0);
+    assert.ok(Math.abs(player.time - 1 / 60) < 1e-12);
+    assert.equal(player.x, first);
     assert.ok(Number.isFinite(player.bank));
     assert.ok(buildRig(player).head.every(Number.isFinite));
   }
-  frame();
-  assert.ok(Math.abs(player.time - 1 / 60) < 1e-12);
-  assert.ok(player.x > 0);
+  frame(0.04);
+  assert.ok(player.time > 1 / 60);
+  assert.ok(player.x > first);
   assert.ok(Number.isFinite(player.bank));
   assert.ok(buildRig(player).head.every(Number.isFinite));
 });
@@ -172,7 +182,9 @@ test('a coarse frame applies the remaining hit stop before returning to normal s
   game.player.events.push({ type: 'slam', x: 0, y: 0, strength: 1 });
   frame();
   game.freeze = false;
-  frame(0.1);
+  // 0.08 s of hit stop at 5% speed, then 0.02 s at full speed.
+  frame(0.05);
+  frame(0.05);
   assert.ok(Math.abs(game.player.time - 0.024) < 1e-12, `player time: ${game.player.time}`);
 });
 
@@ -208,10 +220,10 @@ test('a frozen sword swing keeps its trail bounded and resumes sampling when unf
   player.combat.trailing = true;
   const sample = { t: player.time, hx: 0, hy: 0, tx: 1, ty: 1 };
   player.trail.push(sample);
+  game.freeze = true;
   frame(0);
   assert.equal(bladeSamples(), 0);
   assert.equal(modelUpdates(), 0);
-  game.freeze = true;
   for (let i = 0; i < 600; i++) frame();
   assert.equal(player.time, 0);
   assert.equal(bladeSamples(), 0);

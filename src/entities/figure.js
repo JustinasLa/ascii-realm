@@ -355,9 +355,56 @@ export function dressFigure(state) {
   return dress(buildRig({ ...state, air: state.air - depth }), cape);
 }
 
+// One reusable raster for the current pose. Both painter passes replay the
+// same shaded cells, retaining all twelve coverage samples and exact colours.
+let rasterParts = null;
+let rasterX = 0;
+let rasterY = 0;
+let rasterBounds;
+let rasterCount = 0;
+let rasterCells = new Float64Array(1024 * 9);
+let candidates = new Int32Array(128);
+function collectCell(_r, x, y, g, cr, cg, cb, _base, br, bg, bb) {
+  const i = rasterCount * 9;
+  if (i + 9 > rasterCells.length) {
+    const next = new Float64Array(rasterCells.length * 2);
+    next.set(rasterCells);
+    rasterCells = next;
+  }
+  rasterCells[i] = x;
+  rasterCells[i + 1] = y;
+  rasterCells[i + 2] = g;
+  rasterCells[i + 3] = cr;
+  rasterCells[i + 4] = cg;
+  rasterCells[i + 5] = cb;
+  rasterCells[i + 6] = br === undefined ? NaN : br;
+  rasterCells[i + 7] = bg;
+  rasterCells[i + 8] = bb;
+  rasterCount++;
+}
+
 // Rasterises the dressed figure with its feet at world position
 // (state.x, state.y).
 export function drawFigure(r, view, state, parts, write = putCell) {
+  if (rasterParts !== parts || rasterX !== state.x || rasterY !== state.y) {
+    rasterize(state, parts);
+  }
+  const base = Math.floor(state.y) - view.y0;
+  const b = rasterBounds;
+  if (write.visible && !write.visible(r, b.x0 - view.x0, b.y0 - view.y0,
+    b.x1 - view.x0, b.y1 - view.y0, base)) return;
+  for (let n = 0; n < rasterCount; n++) {
+    const i = n * 9;
+    const x = rasterCells[i] - view.x0;
+    const y = rasterCells[i + 1] - view.y0;
+    if (write === putCell && (x < 0 || y < 0 || x >= r.cols || y >= r.rows)) continue;
+    write(r, x, y, rasterCells[i + 2], rasterCells[i + 3], rasterCells[i + 4], rasterCells[i + 5],
+      base, Number.isNaN(rasterCells[i + 6]) ? undefined : rasterCells[i + 6],
+      rasterCells[i + 7], rasterCells[i + 8]);
+  }
+}
+
+function rasterize(state, parts) {
   let x0 = Infinity;
   let x1 = -Infinity;
   let y0 = Infinity;
@@ -368,17 +415,33 @@ export function drawFigure(r, view, state, parts, write = putCell) {
     y0 = Math.min(y0, p.y0);
     y1 = Math.max(y1, p.y1);
   }
-  const base = Math.floor(state.y) - view.y0;
-
-  for (let cy = Math.floor(state.y + y0); cy <= Math.floor(state.y + y1); cy++) {
-    const sy = cy - view.y0;
-    for (let cx = Math.floor(state.x + x0 / ASPECT); cx <= Math.floor(state.x + x1 / ASPECT); cx++) {
-      shadeCell(r, cx - view.x0, sy, cx, cy, state, parts, base, write);
+  rasterBounds = { x0: Math.floor(state.x + x0 / ASPECT), x1: Math.floor(state.x + x1 / ASPECT),
+    y0: Math.floor(state.y + y0), y1: Math.floor(state.y + y1) };
+  rasterCount = 0;
+  if (candidates.length < parts.length) candidates = new Int32Array(parts.length * 2);
+  for (let cy = rasterBounds.y0; cy <= rasterBounds.y1; cy++) {
+    for (let cx = rasterBounds.x0; cx <= rasterBounds.x1; cx++) {
+      // Broad phase once per cell, instead of scanning every armour piece
+      // for each of its twelve sub-samples.
+      let count = 0;
+      const px0 = (cx + SUB_X[0] - state.x) * ASPECT;
+      const px1 = (cx + SUB_X[2] - state.x) * ASPECT;
+      const py0 = cy + SUB_Y[0] - state.y;
+      const py1 = cy + SUB_Y[3] - state.y;
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const p = parts[i];
+        if (p.x1 < px0 || p.x0 > px1 || p.y1 < py0 || p.y0 > py1) continue;
+        candidates[count++] = i;
+      }
+      if (count) shadeCell(null, cx, cy, cx, cy, state, parts, 0, collectCell, count);
     }
   }
+  rasterParts = parts;
+  rasterX = state.x;
+  rasterY = state.y;
 }
 
-function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
+function shadeCell(r, sx, sy, cx, cy, state, parts, base, write, count) {
   let hits = 0;
   let mx = 0;
   let my = 0;
@@ -391,7 +454,8 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
       const px = (cx + ox - state.x) * ASPECT;
       const py = cy + oy - state.y;
       hitPart[k] = -1;
-      for (let i = parts.length - 1; i >= 0; i--) {
+      for (let candidate = 0; candidate < count; candidate++) {
+        const i = candidates[candidate];
         const p = parts[i];
         if (px < p.x0 || px > p.x1 || py < p.y0 || py > p.y1) continue;
         if (!p.test(px, py, SAMPLE)) continue;
