@@ -143,8 +143,13 @@ export class AsciiRenderer {
       gl.viewport(0, 0, w, h);
     }
     this.dpr = dpr;
-    this.cellW = Math.max(2, cellW * dpr);
-    this.cellH = Math.max(3, cellH * dpr);
+    const deviceW = cellW * dpr;
+    const deviceH = cellH * dpr;
+    // Browser zoom can lower DPR below one. Enlarge both dimensions together
+    // when enforcing the minimum so the world keeps its aspect ratio.
+    const scale = Math.max(1, 2 / deviceW, 3 / deviceH);
+    this.cellW = deviceW * scale;
+    this.cellH = deviceH * scale;
     // One spare row and column so sub-cell scrolling never exposes a gap.
     const cols = Math.ceil(w / this.cellW) + 1;
     const rows = Math.ceil(h / this.cellH) + 1;

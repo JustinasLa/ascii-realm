@@ -6,6 +6,7 @@ import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, WATER_LEVEL } fro
 const G = (s) => [...s].map(glyph);
 
 const STUBBLE = G(`',"\``);
+const ASH = G(".,:`'");
 const DEW = glyph('.');
 const STAR = glyph('*');
 const GREENS = [
@@ -33,8 +34,10 @@ const WAVE_DOT = glyph('·');
 const terrain = new WeakMap();
 
 function groundOf(chunk, seed) {
+  // Burns and scenery edits bump the chunk's version to reshade it.
+  const version = chunk.version ?? 0;
   let cached = terrain.get(chunk);
-  if (cached) return cached;
+  if (cached?.version === version) return cached;
   const fg = new Uint8ClampedArray(CHUNK_SIZE * CHUNK_SIZE * 4);
   const bg = new Uint8ClampedArray(fg.length);
   const animated = [];
@@ -48,12 +51,12 @@ function groundOf(chunk, seed) {
     }
     animated.push(Uint8Array.from(row));
   }
-  cached = { fg, bg, animated };
+  cached = { fg, bg, animated, version };
   terrain.set(chunk, cached);
   return cached;
 }
 
-export function drawGround(r, world, view, t) {
+export function drawGround(r, world, view, t, bend, wind = 0) {
   for (let sy = 0; sy < view.rows; sy++) {
     const wy = view.y0 + sy;
     const cy = Math.floor(wy / CHUNK_SIZE);
@@ -73,14 +76,14 @@ export function drawGround(r, world, view, t) {
       for (const x of cached.animated[ly]) {
         if (x < lx || x >= lx + count) continue;
         shadeCell(r.fg, r.bg, (dest + x - lx) * 4, chunk, ly * CHUNK_SIZE + x,
-          cx * CHUNK_SIZE + x, wy, world.seed, t);
+          cx * CHUNK_SIZE + x, wy, world.seed, t, wind);
       }
       sx += count;
     }
   }
 }
 
-function shadeCell(fg, bg, o, chunk, i, wx, wy, seed, t) {
+function shadeCell(fg, bg, o, chunk, i, wx, wy, seed, t, wind = 0) {
   const type = chunk.type[i];
   const shade = chunk.shade[i];
   const rnd = chunk.rnd[i];
@@ -114,12 +117,27 @@ function shadeCell(fg, bg, o, chunk, i, wx, wy, seed, t) {
     br = 9;
     bgG = 9;
     bb = 19;
+    const burnt = (chunk.burnt?.[i] ?? 0) / 255;
+    if (burnt > 0) {
+      // A charcoal and ash centre fades into short, browned grass at
+      // the ragged edge. Dew and flowers disappear with the blades.
+      const family = burnt > 0.6 ? ASH : STUBBLE;
+      ch = family[Math.floor(rnd * family.length)];
+      const ash = 0.7 + rnd * 0.3;
+      cr += (78 * ash - cr) * burnt;
+      cg += (64 * ash - cg) * burnt;
+      cb += (52 * ash - cb) * burnt;
+      br += (8 - br) * burnt;
+      bgG += (6 - bgG) * burnt;
+      bb += (4 - bb) * burnt;
+    }
   } else if (type === WATER) {
     // Long horizontal streaks that drift slowly, like moonlight broken up
     // by a gentle swell.
     const depth = Math.min(1, (WATER_LEVEL - chunk.elev[i]) * 12);
     const v = valueNoise(wx * ASPECT * 0.09 + t * 0.25, wy * 0.7 - t * 0.05, seed + 300) +
-      Math.sin(wx * ASPECT * 0.4 + wy * 1.3 + t * 1.2) * 0.12;
+      Math.sin(wx * ASPECT * 0.4 + wy * 1.3 + t * 1.2) * 0.12 +
+      wind * Math.sin(wx * ASPECT * 0.7 + wy * 0.9 + t * 2.7) * 0.14;
     if (v > 0.74) ch = WAVE_HI;
     else if (v > 0.63) ch = WAVE_MID;
     else if (v > 0.53) ch = WAVE_LO;

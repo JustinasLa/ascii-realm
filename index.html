@@ -9,7 +9,8 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <canvas id="screen"></canvas>
+    <canvas id="screen" tabindex="0" aria-label="Game scene. Press B to build scenery."></canvas>
+    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump (twice for a trick) &middot; J / click — strike (hold to spin) &middot; F — draw or sheathe &middot; C — campfire &middot; L — lightning &middot; M — mute &middot; scroll — zoom &middot; B — scenery builder</div>
     <div id="touch-controls" aria-label="Game controls">
       <div id="move-pad" aria-label="Drag to walk. Push to the edge to run." role="group">
         <span id="move-stick"></span>
@@ -26,7 +27,89 @@
       </div>
     </div>
     <p id="status" role="status" hidden></p>
-    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump &middot; J / click — strike &middot; F — draw or sheathe &middot; scroll — zoom</div>
+    <div id="builder-banner" hidden>SCENERY BUILDER <span>Press B to play</span></div>
+    <div id="builder-cursor" aria-hidden="true" hidden></div>
+    <div id="panel-dock">
+    <details id="scenery-builder">
+      <summary>Scenery builder <kbd>(B)</kbd></summary>
+      <div class="builder-panel">
+        <p class="builder-intro">Shape a test scene, then jump back in.</p>
+        <button id="builder-mode" class="builder-mode" type="button" aria-pressed="false">Start building</button>
+        <fieldset class="builder-tools">
+          <legend>Terrain</legend>
+          <div class="builder-tool-grid">
+            <button type="button" data-tool="grass" aria-pressed="true"><span aria-hidden="true">.</span> Grass</button>
+            <button type="button" data-tool="dirt" aria-pressed="false"><span aria-hidden="true">:</span> Dirt</button>
+            <button type="button" data-tool="shore" aria-pressed="false"><span aria-hidden="true">,</span> Shore</button>
+            <button type="button" data-tool="water" aria-pressed="false"><span aria-hidden="true">~</span> Water</button>
+            <button type="button" data-tool="stone" aria-pressed="false"><span aria-hidden="true">#</span> Stone</button>
+          </div>
+        </fieldset>
+        <fieldset class="builder-tools">
+          <legend>Props</legend>
+          <div id="builder-props"></div>
+        </fieldset>
+        <fieldset class="builder-tools">
+          <legend>Edit</legend>
+          <div class="builder-tool-grid">
+            <button type="button" data-tool="erase" aria-pressed="false"><span aria-hidden="true">&times;</span> Erase props</button>
+          </div>
+        </fieldset>
+        <div class="builder-settings">
+          <label for="builder-radius">Brush radius <output id="builder-radius-value" for="builder-radius">6</output></label>
+          <input id="builder-radius" type="range" min="1" max="24" value="6" />
+          <label for="builder-scale">Prop scale <output id="builder-scale-value" for="builder-scale">1&times;</output></label>
+          <input id="builder-scale" type="range" min="0.5" max="2" step="0.1" value="1" />
+        </div>
+        <div class="builder-history" aria-label="Scene history">
+          <button id="builder-undo" type="button" disabled title="Undo (Ctrl+Z)">Undo</button>
+          <button id="builder-redo" type="button" disabled title="Redo (Ctrl+Y)">Redo</button>
+          <button id="builder-reset" type="button">Reset scene</button>
+        </div>
+        <fieldset class="builder-files">
+          <legend>Keep your scene</legend>
+          <div class="builder-file-grid">
+            <button id="builder-save" type="button">Save locally</button>
+            <button id="builder-load" type="button">Load local</button>
+            <button id="builder-export" type="button">Export JSON</button>
+            <button id="builder-import" type="button">Import JSON</button>
+          </div>
+          <input id="builder-file" type="file" accept=".json,application/json" hidden />
+        </fieldset>
+        <p class="builder-controls">Click or drag to paint. Click to place props. WASD pans; Shift pans faster. Enter applies the tool at the view centre. B returns to play. Ctrl+Z / Ctrl+Y undo/redo.</p>
+        <output id="builder-status" role="status" aria-live="polite">Ready to build.</output>
+      </div>
+    </details>
+    <details id="audio-controls">
+      <summary>Audio</summary>
+      <button id="audio-mute" type="button" aria-pressed="false">Mute (M)</button>
+      <label>Master <input type="range" min="0" max="100" data-volume="master" aria-label="Master volume" /><output></output></label>
+      <label>Music <input type="range" min="0" max="100" data-volume="music" aria-label="Music volume" /><output></output></label>
+      <label>Effects <input type="range" min="0" max="100" data-volume="sfx" aria-label="Effects volume" /><output></output></label>
+      <label>Sword <input type="range" min="0" max="100" data-volume="sword" aria-label="Sword volume" /><output></output></label>
+      <label>Ambience <input type="range" min="0" max="100" data-volume="ambience" aria-label="Ambience volume" /><output></output></label>
+      <label>Weather <input type="range" min="0" max="100" data-volume="weather" aria-label="Weather volume" /><output></output></label>
+      <p id="audio-status" role="status">Press a key or click to enable sound</p>
+      <p>Now playing: <span id="audio-song"></span></p>
+      <div class="weather-controls">
+        <label for="audio-season">Season</label>
+        <select id="audio-season" aria-label="Sound season"></select>
+        <p id="audio-climate"></p>
+      </div>
+      <button id="audio-skip" type="button">Skip song (N)</button>
+      <button id="grass-preview" type="button">Preview grass footsteps</button>
+      <div class="weather-controls">
+        <label for="audio-weather">Weather</label>
+        <select id="audio-weather" aria-label="Weather"><option value="clear">Clear</option></select>
+        <label>Intensity <input id="weather-intensity" type="range" min="0" max="100" aria-label="Weather intensity" /><output></output></label>
+        <p id="weather-description"></p>
+        <button id="lightning-test" type="button">Summon lightning (L)</button>
+      </div>
+    </details>
+    </div>
+    <div id="fire-status" role="status" aria-live="polite"></div>
+    <div id="carried-item" role="status" aria-live="polite">Fire torch · G throw · T stow</div>
+    <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
     <script type="module" src="src/main.js"></script>
   </body>
 </html>

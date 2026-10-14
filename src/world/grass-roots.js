@@ -34,6 +34,8 @@ export function grassRoots(chunk, seed, size) {
       const flower = chunk.grassHeight[i] >= 2.4 && style < 4 && hash2(wx, wy, seed + 1401) < 0.04;
       const density = chunk.grassDensity[i] * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1) *
         clumpAt(wx, wy, seed);
+      // Burnt ground keeps only its stubble and ash.
+      if (chunk.burnt?.[i]) continue;
       if (chunk.grassHeight[i] < 2 || (!flower && chunk.rnd[i] < 1 - density)) continue;
       roots.push(i);
       heights.push(Math.min(5, Math.floor(chunk.grassHeight[i] + hash2(wx, wy, seed + 1101))));

@@ -8,7 +8,7 @@ const POINTS = 7;
 const LENGTH = 1.12;
 const SEG = LENGTH / (POINTS - 1);
 const GRAVITY = 9.8;
-const DRAG = 0.98;
+const DRAG = 0.97;
 const STEP = 1 / 120;
 
 export class Cape {
@@ -94,6 +94,10 @@ export class Cape {
           p[2] += back[1] * (min - behind);
         }
         if (p[1] < 0.04) p[1] = 0.04;
+        // Heavy cloth streams out behind but never flips up over the
+        // shoulders, however suddenly the warrior stops.
+        const ceiling = anchor[1] - 0.02 * i;
+        if (p[1] > ceiling) p[1] = ceiling;
       }
     }
   }

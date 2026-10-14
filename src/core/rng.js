@@ -18,3 +18,12 @@ export function mulberry32(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
+
+// Authored props start with fresh randomness, then retain this seed so their
+// appearance remains identical through previews, undo and saved scenes.
+export function randomSeed() {
+  if (globalThis.crypto?.getRandomValues) {
+    return globalThis.crypto.getRandomValues(new Uint32Array(1))[0];
+  }
+  return Math.floor(Math.random() * 4294967296);
+}
