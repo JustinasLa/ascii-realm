@@ -2,7 +2,7 @@ import { ASPECT, MAX_WATER_DEPTH } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
-import { ATTACK_STAMINA_COST, SPRINT_RECOVERY_STAMINA, Vitals } from './vitals.js';
+import { Vitals } from './vitals.js';
 import { heldWeapon, needsBothHands, weaponFeel } from './loadout.js';
 import { Ranged } from './ranged.js';
 
@@ -85,8 +85,6 @@ export class Player {
     // Drawing a bow or readying a throw, and the ground point aimed at.
     this.ranged = new Ranged();
     this.aimTarget = null;
-    // Out of breath: no sprinting until a useful reserve has come back.
-    this.sprintExhausted = false;
     // A lit torch occupies the free hand; T stows it or draws a fresh one.
     this.torchOut = true;
     // Recent blade positions in world cells, for the swing trail.
@@ -225,8 +223,7 @@ export class Player {
 
   attack() {
     this.cancelPickup();
-    const cost = this.equipment === undefined ? ATTACK_STAMINA_COST : this.feel.stamina;
-    if (!this.combat.canAcceptAttack || !this.vitals.spendStamina(cost)) return false;
+    if (!this.combat.canAcceptAttack) return false;
     return this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
   }
 
@@ -238,10 +235,6 @@ export class Player {
 
   heal(amount) {
     return this.vitals.heal(amount);
-  }
-
-  restoreStamina(amount) {
-    return this.vitals.restoreStamina(amount);
   }
 
   // Unequipping the weapon puts it away at once, mid-swing or not.
@@ -349,16 +342,8 @@ export class Player {
   }
 
   // `held`: whether the attack button is still down, to charge a spin.
-  // `resourceDt` is real time for stamina, unaffected by hit stop.
-  update(dt, world, move, running, held = false, resourceDt = dt) {
+  update(dt, world, move, running, held = false) {
     this.time += dt;
-    // Wait for a useful reserve after exhaustion rather than alternating
-    // between a frame of sprinting and a frame of recovery.
-    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
-    else if (this.vitals.stamina >= Math.min(SPRINT_RECOVERY_STAMINA, this.vitals.maxStamina)) {
-      this.sprintExhausted = false;
-    }
-    running = running && !this.sprintExhausted;
     const fromX = this.x;
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
@@ -424,8 +409,6 @@ export class Player {
     // always matches the speed and stops when the way is blocked.
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
     const going = moving && metres > 0.15 * dt;
-    this.vitals.update(resourceDt, moving && running && metres > 0);
-    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
 
     // A lunge carries the warrior on along their heading, fading fast.
     if (this.surge > 0.05) {

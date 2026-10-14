@@ -3,15 +3,17 @@
 const art = (...rows) => rows.join('\n');
 
 const ITEM_ART = Object.freeze({
+  // Held at a slant, so the blade and crossguard read as a sword at hotbar size.
   shortSword: art(
-    '     ^',
-    '    /|\\',
-    '    |:|',
-    '    |:|',
-    '    |:|',
-    '  ==+=+==',
-    '    |#|',
-    '     O',
+    '          /',
+    '         //',
+    '        //',
+    '  \\    //',
+    '   \\  //',
+    '    \\//',
+    '    / \\',
+    '   /   \\',
+    '  *',
   ),
   arrow: art(
     '        ^',

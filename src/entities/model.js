@@ -47,7 +47,7 @@ const EDGE = {
   rise: glyph('/'),
   fall: glyph('\\'),
 };
-const RIM = [150, 178, 220];
+const RIM = [196, 218, 250];
 
 const CLIPS = {
   idle: 'Idle_Loop',
@@ -213,11 +213,12 @@ export class ModelFigure {
     this.scene = new THREE.Scene();
     // Moonlight from the upper left and in front, a cold rim from behind,
     // and a little sky light so the shadowed side is not black.
-    const moon = new THREE.DirectionalLight(0xd0dcff, 2.6);
+    // Lit brighter than the world around it, so the player always stands out.
+    const moon = new THREE.DirectionalLight(0xd0dcff, 3.6);
     moon.position.set(-3, 5, 4);
-    const rim = new THREE.DirectionalLight(0x9fb8ff, 1.4);
+    const rim = new THREE.DirectionalLight(0x9fb8ff, 2);
     rim.position.set(2, 3, -5);
-    this.scene.add(moon, rim, new THREE.HemisphereLight(0x8090b0, 0x202418, 0.9));
+    this.scene.add(moon, rim, new THREE.HemisphereLight(0x8090b0, 0x202418, 1.6));
 
     this.model = gltf.scene;
     this.model.traverse((o) => {
@@ -226,7 +227,7 @@ export class ModelFigure {
       // Dark, undyed cloth and leather; the mannequin's joint rings a shade
       // darker still.
       const joint = o.material?.name === 'M_Joints';
-      o.material = new THREE.MeshLambertMaterial({ color: joint ? 0x2a2622 : 0x5d5048 });
+      o.material = new THREE.MeshLambertMaterial({ color: joint ? 0x4a443e : 0x8c7a6c });
       o.material.userData.joint = joint;
     });
     this.scene.add(this.model);
@@ -749,9 +750,11 @@ export class ModelFigure {
             b: b * k + (RIM[2] - b * k) * t, br: 4, bgG: 5, bb: 8 });
           continue;
         }
-        const ch = RAMP[Math.min(RAMP.length - 1, 2 + Math.floor(lum * 1.6 * (RAMP.length - 2)))];
-        const k = 1.25;
-        cells.push({ sx, sy, g: ch, r: Math.min(255, r * k), gg: Math.min(255, g * k), b: Math.min(255, b * k),
+        // Heavier characters and a lifted colour than anything around it, so
+        // the player stands out from the ground and props.
+        const ch = RAMP[Math.min(RAMP.length - 1, 4 + Math.floor(lum * 2.4 * (RAMP.length - 4)))];
+        const k = 1.45;
+        cells.push({ sx, sy, g: ch, r: Math.min(255, 40 + r * k), gg: Math.min(255, 36 + g * k), b: Math.min(255, 30 + b * k),
           br: 3 + r * 0.05, bgG: 3 + g * 0.05, bb: 5 + b * 0.06 });
       }
     }

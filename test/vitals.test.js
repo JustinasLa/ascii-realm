@@ -3,8 +3,6 @@ import { test } from 'node:test';
 import { Combat } from '../src/entities/combat.js';
 import { Player } from '../src/entities/player.js';
 import {
-  ATTACK_STAMINA_COST,
-  SPRINT_RECOVERY_STAMINA,
   SPRINT_STAMINA_PER_SECOND,
   STAMINA_REGEN_DELAY,
   STAMINA_REGEN_PER_SECOND,
@@ -129,79 +127,13 @@ test('combat accepts one queued swing and rejects duplicate inputs or attacks wh
   assert.equal(combat.attack(), false);
 });
 
-test('starting and queuing attacks each pay once; duplicate inputs and sheathing pay nothing', () => {
+test('swings and sprinting cost nothing while stamina is switched off', () => {
   const player = new Player(0, 0);
-  const full = player.vitals.stamina;
+  player.vitals.stamina = 0;
   assert.equal(player.attack(), true);
-  assert.equal(player.vitals.stamina, full - ATTACK_STAMINA_COST);
-  assert.equal(player.attack(), false);
-  assert.equal(player.vitals.stamina, full - ATTACK_STAMINA_COST);
-  for (let i = 0; i < 100 && player.combat.move !== 'a'; i++) player.update(1 / 60, meadow, still, false);
-  assert.equal(player.combat.move, 'a');
-  assert.equal(player.vitals.stamina, full - ATTACK_STAMINA_COST);
-  assert.equal(player.attack(), true);
-  assert.equal(player.vitals.stamina, full - ATTACK_STAMINA_COST * 2);
-  assert.equal(player.attack(), false);
-  assert.equal(player.vitals.stamina, full - ATTACK_STAMINA_COST * 2);
-  for (let i = 0; i < 120 && player.combat.busy; i++) player.update(1 / 60, meadow, still, false);
-  assert.equal(player.combat.busy, false);
-  player.toggleSword();
-  const beforeSheathing = player.vitals.stamina;
-  assert.equal(player.attack(), false);
-  assert.equal(player.vitals.stamina, beforeSheathing);
-});
-
-test('an unaffordable attack never starts drawing the sword or occupies the combo queue', () => {
-  const player = new Player(0, 0);
-  player.vitals.spendStamina(player.vitals.maxStamina - ATTACK_STAMINA_COST + 1);
-  const remaining = player.vitals.stamina;
-  assert.equal(player.attack(), false);
-  assert.equal(player.vitals.stamina, remaining);
-  assert.equal(player.combat.move, null);
-  assert.equal(player.combat.queued, null);
-  player.restoreStamina(1);
-  assert.equal(player.attack(), true);
-  assert.equal(player.vitals.stamina, 0);
-  for (let i = 0; i < 100 && player.combat.move !== 'a'; i++) player.update(1 / 60, meadow, still, false);
-  assert.equal(player.combat.move, 'a');
-  assert.equal(player.combat.canAcceptAttack, true);
-  assert.equal(player.attack(), false);
-  assert.equal(player.vitals.stamina, 0);
-  assert.equal(player.combat.queued, null);
-});
-
-test('holding sprint while idle or blocked allows stamina to recover', () => {
-  for (const [move, world] of [[still, meadow], [forward, wall]]) {
-    const player = new Player(2, 3);
-    player.vitals.spendStamina(50);
-    advance(player, STAMINA_REGEN_DELAY + 0.5, move, true, world);
-    close(player.vitals.stamina, 50 + STAMINA_REGEN_PER_SECOND * 0.5);
-    assert.equal(player.x, 2);
-    assert.equal(player.y, 3);
-    assert.ok(player.run < 0.01);
-  }
-});
-
-test('exhaustion returns a held sprint to walking until the recovery threshold is reached', () => {
-  const player = new Player(0, 0);
-  advance(player, 0.75, forward, true);
-  assert.ok(player.run > 0.9);
-  player.vitals.spendStamina(player.vitals.stamina);
-  const startX = player.x;
-  advance(player, STAMINA_REGEN_DELAY, forward, true);
-  close(player.vitals.stamina, 0);
-  assert.ok(player.run < 0.01, `exhausted run amount ${player.run}`);
-  assert.ok(player.x > startX, 'the exhausted player should continue walking');
-  advance(player, (SPRINT_RECOVERY_STAMINA - 5) / STAMINA_REGEN_PER_SECOND, forward, true);
-  assert.ok(player.vitals.stamina > 0 && player.vitals.stamina < SPRINT_RECOVERY_STAMINA);
-  assert.ok(player.run < 0.01, 'recovery below the threshold must not restart sprinting');
-  let staminaBeforeSprint = player.vitals.stamina;
-  for (let i = 0; i < 100 && player.run < 0.01; i++) {
-    staminaBeforeSprint = player.vitals.stamina;
-    player.update(0.01, meadow, forward, true);
-  }
-  assert.ok(player.run > 0.01, 'held sprint should resume after enough stamina recovers');
-  assert.ok(staminaBeforeSprint >= SPRINT_RECOVERY_STAMINA - STAMINA_REGEN_PER_SECOND * 0.01);
+  advance(player, 2, forward, true);
+  assert.ok(player.run > 0.9, 'an exhausted reserve no longer stops a sprint');
+  assert.equal(player.vitals.stamina, 0, 'nothing drains or refills stamina');
 });
 
 test('player damage events carry the actual loss at the player position and omit zero damage', () => {
@@ -218,27 +150,7 @@ test('player damage events carry the actual loss at the player position and omit
   assert.equal(player.vitals.health, 20);
 });
 
-test('slowing the animation clock leaves stamina costs and recovery on elapsed real time', () => {
-  const normal = new Player(0, 0);
-  const slowed = new Player(0, 0);
-  const dt = 1 / 60;
-  for (let i = 0; i < 60; i++) {
-    normal.update(dt, meadow, forward, true);
-    slowed.update(dt / 4, meadow, forward, true, false, dt);
-  }
-  close(normal.vitals.stamina, normal.vitals.maxStamina - SPRINT_STAMINA_PER_SECOND);
-  close(slowed.vitals.stamina, normal.vitals.stamina);
-  assert.ok(slowed.x < normal.x / 2, 'movement should still follow the slower animation clock');
-  const restingFrames = Math.round((STAMINA_REGEN_DELAY + 0.5) / dt);
-  for (let i = 0; i < restingFrames; i++) {
-    normal.update(dt, meadow, still, false);
-    slowed.update(dt / 4, meadow, still, false, false, dt);
-  }
-  close(normal.vitals.stamina, normal.vitals.maxStamina - SPRINT_STAMINA_PER_SECOND + STAMINA_REGEN_PER_SECOND * 0.5);
-  close(slowed.vitals.stamina, normal.vitals.stamina);
-});
-
-test('unequipping cancels the swing, queued combo and blade trail without refunding stamina', (t) => {
+test('unequipping cancels the swing, queued combo and blade trail', (t) => {
   t.mock.method(Math, 'random', () => 0);
   const player = new Player(0, 0);
   assert.equal(player.attack(), true);

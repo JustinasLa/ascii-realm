@@ -36,14 +36,11 @@ function meter(root, name) {
 test('HUD segmented bars and accessible values follow rounded, bounded player vitals', (t) => {
   const { document, player, hud } = mount(t);
   player.vitals.health = 50;
-  player.vitals.stamina = 24.96;
   hud.update(0, view);
   const health = meter(document.body, 'hud-health');
-  const stamina = meter(document.body, 'hud-stamina');
   assert.equal(health.current, 50);
   assert.equal(health.maximum, 100);
-  assert.equal(stamina.current, 25);
-  assert.equal(stamina.maximum, 100);
+  assert.equal(byClass(document.body, 'hud-stamina').length, 0, 'stamina is switched off for now');
   assert.match(health.element.textContent, /50\s*\/\s*100/);
 
   player.vitals.health = 50.43;
@@ -53,21 +50,15 @@ test('HUD segmented bars and accessible values follow rounded, bounded player vi
   assert.match(health.element.textContent, /HP50\/100/);
 
   player.vitals.health = 200;
-  player.vitals.stamina = -10;
   hud.update(0, view);
   assert.equal(meter(document.body, 'hud-health').current, 100);
-  assert.equal(meter(document.body, 'hud-stamina').current, 0);
 
   player.vitals.health = NaN;
-  player.vitals.stamina = Infinity;
   hud.update(0, view);
   meter(document.body, 'hud-health');
-  meter(document.body, 'hud-stamina');
   player.vitals.maxHealth = NaN;
-  player.vitals.maxStamina = 0;
   hud.update(0, view);
   meter(document.body, 'hud-health');
-  meter(document.body, 'hud-stamina');
 });
 
 test('HUD hotbar reflects equipment, selection, and consumed quick-item counts', (t) => {
@@ -100,15 +91,10 @@ test('HUD hotbar reflects equipment, selection, and consumed quick-item counts',
   assert.equal(inventoryOpened, 1);
 });
 
-test('HUD compass follows heading and coordinates are available only in debug mode', (t) => {
+test('HUD has no compass and coordinates are available only in debug mode', (t) => {
   const { document, player, hud } = mount(t);
   assert.equal(byClass(document.body, 'hud-coordinates').length, 0);
-  const compass = byClass(document.body, 'hud-compass-direction')[0];
-  for (const [heading, direction] of [[0, 'S'], [Math.PI / 2, 'E'], [Math.PI, 'N'], [-Math.PI / 2, 'W']]) {
-    player.heading = heading;
-    hud.update(0, view);
-    assert.match(compass.textContent, new RegExp(`\\b${direction}\\b`));
-  }
+  assert.equal(byClass(document.body, 'hud-compass').length, 0);
   hud.destroy();
   const debugHud = new Hud({ player, inventory: new Inventory(), name: 'Kael', debug: true });
   t.after(() => debugHud.destroy());

@@ -73,7 +73,7 @@ test('standing jump anticipation restarts after idle and on a later jump', async
   }
 });
 
-test('worn gear shows on the 3D character and coming off reveals what is underneath', async () => {
+test('the 3D character keeps its clothes on and shows an equipped buckler', async () => {
   const model = await figure();
   const player = new Player(0, 0);
   const equipment = { helm: { id: 'outlawHood', count: 1 }, chest: { id: 'leatherJerkin', count: 1 },
@@ -92,11 +92,11 @@ test('worn gear shows on the 3D character and coming off reveals what is underne
 
   player.equipment = { ...equipment, helm: null, cape: null, chest: null, offHand: { id: 'woodenBuckler', count: 1 } };
   step();
-  assert.equal(model.gear.hood.visible, false);
-  assert.equal(model.gear.hair.visible, true);
-  assert.equal(model.gear.cloak.visible, false);
+  assert.equal(model.gear.hood.visible, true);
+  assert.equal(model.gear.hair.visible, false);
+  assert.equal(model.gear.cloak.visible, true);
   assert.equal(model.gear.buckler.visible, true);
-  assert.notDeepEqual(colors(), dressed, 'the linen shirt shows without the jerkin');
+  assert.deepEqual(colors(), dressed, 'the clothes are part of the character for now');
 
   player.equipment = equipment;
   step();

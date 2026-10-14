@@ -62,7 +62,7 @@ test('bare ground is shaded deterministically, independent of time and the order
   assert.ok(seen.has(STONE) && seen.has(SHORE) && seen.has(DIRT), 'the sample covers rock, shore and path');
 });
 
-test('stone slabs are drawn as characters weighted by their light, with joints left dark', () => {
+test('stone slabs are drawn as light characters weighted by their light, with joints left dark', () => {
   const world = new World(1);
   const c = world.chunk(-1, 0);
   const n = CHUNK_SIZE * CHUNK_SIZE;
@@ -85,7 +85,7 @@ test('stone slabs are drawn as characters weighted by their light, with joints l
   }
   assert.ok(stone > 100, 'the chunk holds rock');
   assert.ok(letters > stone * 0.5, `rock is drawn with characters (${letters}/${stone}, ${joints} gaps)`);
-  assert.ok(heavy > stone * 0.05, 'moonlit faces carry heavy characters');
+  assert.equal(heavy, 0, 'heavy characters are left to rocks, trees and people');
   assert.ok(joints > stone * 0.05, 'joints run between the slabs');
   assert.equal(layered, 0, 'one character per cell');
 });

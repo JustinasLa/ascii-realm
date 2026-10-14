@@ -31,11 +31,19 @@ function bake(w, top, bottom, sample, seed, options) {
   return bakeSurface(w, top, bottom, sample, seed, options);
 }
 
+// Rocks catch more moonlight than the ground around them, so they stand
+// out from it as solid shapes.
+const ROCK_LIFT = 1.8;
+
 // A boulder seen from above and in front: an irregular outline over a dome
 // cut into flat facets, each lit by the moon at its own angle. Cracks,
 // moss on the upturned faces, lichen rosettes and a scatter of pebbles at
 // the foot are decided once, so the rock never shimmers.
-function boulder(rand, seed, { rx, ry, sides, roundness, stone, mossCoverage, grit = 0.5 }) {
+function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCoverage: moss, grit = 0.5 }) {
+  const stone = base.map((v) => Math.min(255, v * ROCK_LIFT));
+  // Moss takes over the characters it grows on, so a little goes a long way.
+  const mossCoverage = moss * 0.5;
+  const lift = (c) => c.map((v) => Math.min(255, v * ROCK_LIFT));
   const offset = rand() * Math.PI * 2;
   const corners = Array.from({ length: sides }, (_, i) => {
     const angle = offset + i * Math.PI * 2 / sides + (rand() - 0.5) * 0.4;
@@ -86,7 +94,7 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone, mossCoverage, gr
   const mossGlyphs = [0, 1, 2, 3, 4, 5].map((i) => dg(`props.moss.${i}`));
   const ridges = [0, 1, 2, 3].map((a) => dg(`props.ridge.${a}`));
   const lichenGlyphs = [0, 1, 2, 3].map((i) => dg(`props.lichen.${i}`));
-  const lichen = rand() < 0.5 ? [168, 170, 122] : [176, 128, 82];
+  const lichen = lift(rand() < 0.5 ? [168, 170, 122] : [176, 128, 82]);
   const sample = (px, py) => {
     if (py > 0 || !inside(px, py)) return null;
     const u = px / rx;
@@ -128,7 +136,7 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone, mossCoverage, gr
     if (best.up < -0.2 && v < 0.35 && patch < mossCoverage) {
       const deep = 0.7 + patch * 0.5;
       s.acc = { g: mossGlyphs[Math.floor(hash2(Math.floor(px * 3), Math.floor(py), seed) * 6)],
-        c: [MOSS[0] * deep * (0.7 + l * 0.6), MOSS[1] * deep * (0.7 + l * 0.6), MOSS[2] * deep * (0.6 + l * 0.5)] };
+        c: lift([MOSS[0] * deep * (0.7 + l * 0.6), MOSS[1] * deep * (0.7 + l * 0.6), MOSS[2] * deep * (0.6 + l * 0.5)]) };
     } else if (ridgeEdge) {
       const a = (Math.round(-Math.atan2(gx, -gy) / (Math.PI / 4)) + 8) % 4;
       s.acc = { g: ridges[a], c: stone.map((x) => x * (0.85 + l * 0.55)) };

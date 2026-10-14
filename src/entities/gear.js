@@ -1,10 +1,11 @@
 import * as THREE from 'three';
+import { wears } from './loadout.js';
 
 // What the outlaw wears on the 3D character. The mannequin is one plain
 // mesh, so clothing is painted onto it by body region, each vertex taking
 // the region of the bone that moves it most, and the hood, cloak, buckler
-// and hair are simple shapes riding on the bones. Everything follows the
-// inventory's equipment slots.
+// and hair are simple shapes riding on the bones. The hands' gear follows
+// the inventory's equipment slots; the clothes are always worn for now.
 
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 
@@ -38,7 +39,7 @@ const REGION_OF = [
 
 // The colour of each body region for the gear being worn.
 export function regionColors(equipment) {
-  const wearing = (slot) => equipment === undefined || Boolean(equipment?.[slot]);
+  const wearing = (slot) => wears(equipment, slot);
   const sleeve = wearing('chest') ? 'tunic' : 'linen';
   return {
     head: wearing('helm') ? 'hood' : 'skin',
@@ -141,7 +142,7 @@ export class Gear {
       : ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand'].map((s) => equipment?.[s]?.id ?? '').join();
     if (signature === this.signature) return;
     this.signature = signature;
-    const wearing = (slot) => equipment === undefined || Boolean(equipment?.[slot]);
+    const wearing = (slot) => wears(equipment, slot);
     this.hood.visible = wearing('helm');
     this.capelet.visible = wearing('helm');
     this.hair.visible = !wearing('helm');

@@ -46,10 +46,13 @@ function inStrike(player, event, node) {
 
 // Resources live on the same cached chunks as terrain and loose items. Their
 // depleted state survives leaving the area and drawing the chunk again.
+// Without a store for loose items nothing is gathered: the sword still mows
+// grass and fells trees, but they drop nothing.
 export class Harvesting {
   constructor(world, groundItems) {
     this.world = world;
     this.groundItems = groundItems;
+    this.gathering = Boolean(groundItems);
     this.strikes = new WeakSet();
   }
 
@@ -124,6 +127,7 @@ export class Harvesting {
   }
 
   drop(node, rewards) {
+    if (!this.gathering) return;
     const pickupAfter = this.groundItems.time + PICKUP_DELAY;
     for (let i = 0; i < rewards.length; i++) {
       const reward = rewards[i];
@@ -134,6 +138,11 @@ export class Harvesting {
 
   harvest(node) {
     if (node.harvested) return null;
+    if (!this.gathering) {
+      node.harvested = true;
+      this.world.gathered?.add(plantKey(node));
+      return { ok: true, status: 'cut', name: LABELS[node.kind].name, x: node.x, y: node.y, node, rewards: [], count: 0 };
+    }
     const rewards = node.kind === 'bush'
       ? [{ id: 'berries', count: berryYield(node) }]
       : [{ id: 'straw', count: 1 }, { id: 'fibre', count: 1 }];
@@ -155,6 +164,7 @@ export class Harvesting {
   }
 
   interact(player) {
+    if (!this.gathering) return { ok: false, status: 'empty', message: 'Nothing nearby to gather.' };
     const target = this.nearby(player);
     if (!target) return { ok: false, status: 'empty', message: 'Nothing nearby to gather.' };
     if (target.kind === 'tree') {
@@ -199,7 +209,7 @@ export class Harvesting {
       }
       // Saplings give a single length of timber.
       const logs = tree.growth === 'sapling' ? 1 : 3;
-      const rewards = tree.chopped ? [{ id: 'oakLog', count: logs }] : [];
+      const rewards = tree.chopped && this.gathering ? [{ id: 'oakLog', count: logs }] : [];
       if (tree.chopped) this.drop(tree, rewards);
       const name = treeName(tree);
       results.push({

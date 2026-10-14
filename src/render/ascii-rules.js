@@ -6,7 +6,8 @@
 
 // Materials drawn by tone, dark to lit: `${family}.${tone}.${variant}`.
 const TONES = {
-  stone: ['.:', '-=+', 'oce', 'O0Q8', '#@M&'],
+  // Even rock in shadow is solid characters, so a boulder reads as one mass.
+  stone: ['=+', 'oce', 'O0Q', '8&$', '#@M'],
   bark: [':.', 'il|', 'oxa', 'hbdQ', '&$@'],
   barkh: [':.', '-=', 'oxa', 'hbdQ', '&$@'],
   birch: [':.', '-=', 'oec', 'bdq', 'O0@'],
@@ -71,7 +72,8 @@ export const ASCII_RULES = [
   [/^props\.cut\.[sr]\.(\d)\./, (m) => EDGES[Number(m[1])]],
   [/^props\.shade/, ''],
   [/^props\.strip/, '|'],
-  [/^props\.ridge/, '-'],
+  // Facet ridges would break a boulder's face into dashes; the stone shows.
+  [/^props\.ridge/, ''],
   [/^props\.moss/, '"'],
   [/^props\.lichen/, '*'],
   [/^props\.fungus/, 'n'],
