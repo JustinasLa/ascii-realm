@@ -1,9 +1,12 @@
 import { valueNoise } from '../core/noise.js';
-import { MIRRORED, glyph } from '../render/glyphs.js';
+import { LAYER, MIRRORED, family } from '../render/glyphs.js';
 import { REFLECTION_TINT } from '../render/palette.js';
+import { FLOATING } from './terrain/water.js';
 import { WATER } from './world.js';
 
-const RIPPLE = glyph('~');
+// Moonlit wavelets that cross a reflection, drawn over the mirrored image.
+const RIPPLE = family('water.line.');
+const RIPPLE_COLOUR = [50, 66, 108];
 const buffers = new WeakMap();
 
 // A writer (see render/cells.js) that draws a sprite upside down below the
@@ -17,20 +20,24 @@ export function reflector(t, view) {
   let prepared = null;
   let sums;
   let shifts;
+  let lights;
   function prepare(r) {
     if (prepared === r) return;
     let buffer = buffers.get(r);
     const size = (r.cols + 1) * (r.rows + 1);
     if (!buffer || buffer.sums.length !== size || buffer.shifts.length !== r.rows) {
-      buffer = { sums: new Uint32Array(size), shifts: new Int8Array(r.rows) };
+      buffer = { sums: new Uint32Array(size), shifts: new Int8Array(r.rows), lights: new Float32Array(r.rows) };
       buffers.set(r, buffer);
     }
-    ({ sums, shifts } = buffer);
+    ({ sums, shifts, lights } = buffer);
     sums.fill(0, 0, r.cols + 1);
     const stride = r.cols + 1;
     for (let y = 0; y < r.rows; y++) {
       const wy = y + view.y0;
       shifts[y] = Math.round(Math.sin(wy * 0.85 + t * 2.1) * 0.7 + Math.sin(wy * 0.31 - t * 1.3) * 0.5);
+      // Rows on the face of a swell catch more light than those behind it,
+      // so the image shimmers in bands as the swell rolls through.
+      lights[y] = 0.8 + 0.32 * (0.5 + 0.5 * Math.sin(wy * 1.37 + t * 2.3)) + 0.1 * Math.sin(wy * 0.43 - t * 0.9);
       const row = (y + 1) * stride;
       sums[row] = 0;
       let count = 0;
@@ -50,21 +57,30 @@ export function reflector(t, view) {
     const tx = sx + shifts[ty];
     if (tx < 0 || tx >= r.cols) return;
     const m = ty * r.cols + tx;
-    if (r.mask[m] !== WATER) return;
+    // Water that cannot mirror: off the lake, or under a floating pad.
+    if (r.mask[m] !== WATER || FLOATING[r.glyphAt(m)]) return;
 
     // Drifting gaps where the swell breaks the image up into slivers.
     const n = valueNoise((tx + view.x0) * 0.12 + t * 0.35, wy * 0.9, 5);
     if (n < 0.24) return;
-    // Upside down, a drawn blade stroke leans the other way.
-    g = n < 0.34 ? RIPPLE : MIRRORED[g];
 
     // Dimmer the further the reflected point is from the mirror line, a
     // little washed out, and pulled toward the colour of the night water.
-    const fade = Math.max(0.35, 1 - (base - sy) / 40) * 0.42;
+    // Upside down, a drawn blade stroke leans the other way.
+    const fade = Math.max(0.35, 1 - (base - sy) / 40) * 0.42 * lights[ty];
     const grey = (cr + cg + cb) * 0.1;
-    r.putAt(m, g, (cr * 0.7 + grey) * fade + REFLECTION_TINT[0],
-      (cg * 0.7 + grey) * fade + REFLECTION_TINT[1],
-      (cb * 0.7 + grey) * fade + REFLECTION_TINT[2]);
+    let k = fade;
+    // Where a wavelet crest crosses the image it shows through dimmer, with
+    // the moonlit ripple drawn over it.
+    const crest = n < 0.36 && !(g & LAYER);
+    if (crest) k *= 0.7;
+    r.putAt(m, MIRRORED[g], (cr * 0.7 + grey) * k + REFLECTION_TINT[0],
+      (cg * 0.7 + grey) * k + REFLECTION_TINT[1],
+      (cb * 0.7 + grey) * k + REFLECTION_TINT[2]);
+    if (crest) {
+      const c = 1.4 - n * 2;
+      r.layerAt(m, RIPPLE[(((wy * 7 + ((tx + view.x0) >> 2)) % 3) + 3) % 3], RIPPLE_COLOUR[0] * c, RIPPLE_COLOUR[1] * c, RIPPLE_COLOUR[2] * c);
+    }
   };
   // A summed water mask rejects whole blades/sprites before rasterisation.
   // Expand sideways for the swell; keep the object's own reflection base.

@@ -140,9 +140,13 @@ test('weather rings remain anchored in world space and clip to the lake across a
   const ring = { ...weather.splashes.rings[0] };
   weather.drawSurface(r, { ...area, x0: 1 }, 0.3);
   assert.deepEqual(weather.splashes.rings[0], ring, 'drawing from a shifted camera never moves the ring');
-  assert.ok(r.fg.some(value => value > 0));
+  // Ring crests are layered over the water.
+  assert.ok(r.ov.some(value => value > 0));
   for (let i = 0; i < r.mask.length; i++) {
-    if (r.mask[i] !== WATER) assert.ok(r.fg.slice(i * 4, i * 4 + 4).every(value => value === 0));
+    if (r.mask[i] !== WATER) {
+      assert.ok(r.fg.slice(i * 4, i * 4 + 4).every(value => value === 0));
+      assert.ok(r.ov.slice(i * 4, i * 4 + 4).every(value => value === 0));
+    }
   }
 });
 

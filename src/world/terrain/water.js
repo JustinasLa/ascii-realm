@@ -1,48 +1,490 @@
-// Open water: drifting swell, depth and lapping foam at the bank.
+// Open water, built up in layers like a painting of a night lake:
+//
+//   the bed     - rippled sand, stones and weed, seen faintly through the
+//                 shallows and fading out as the water deepens;
+//   the surface - a broad slow swell drawn as long streaks and joined wave
+//                 crests, with fine wavelets and glints riding over it, and
+//                 caustics netting the shallow bed;
+//   the edge    - lacy foam that laps in and out against the bank;
+//   life        - lily pad colonies with blooms in calm shallow bays, pond
+//                 skaters, bubbles off the weed, drifting leaves and fish
+//                 rising in rings out in the deep.
+//
+// Water cells are reshaded every frame, so everything that does not move is
+// decided once per chunk (see statics) and the per-frame work is one value
+// noise lookup and a few sines per cell.
 
-import { valueNoise } from '../../core/noise.js';
-import { glyph } from '../../render/glyphs.js';
-import { FOAM, SWELL, WATER_DEEP, WATER_SHALLOW } from '../../render/palette.js';
-import { ASPECT, WATER_LEVEL } from '../world.js';
+import { fbm, valueNoise } from '../../core/noise.js';
+import { hash2 } from '../../core/rng.js';
+import { GLYPH_COUNT, dg, family } from '../../render/glyphs.js';
+import { FOAM } from '../../render/palette.js';
+import { ASPECT, WATER, WATER_LEVEL } from '../world.js';
 import { emit } from './cell.js';
 
-const WAVE_HI = glyph('≈');
-const WAVE_MID = glyph('~');
-const WAVE_LO = glyph('-');
-const WAVE_DOT = glyph('·');
+const N = 64;
+const TAU = Math.PI * 2;
+// Rings and pads lie flat on the water, so the view squashes them.
+const FLAT = 0.5;
+const PAD_FLAT = 0.62;
+
+const LINE = family('water.line.');
+const WAVE = family('water.wave.');
+const DASH = family('water.dash.');
+const CHOP = family('water.chop.');
+const GLINT = family('water.glint.');
+const SAND = family('water.sand.');
+const STONES = family('water.stones.');
+const WEED = family('water.weed.');
+const CAUSTIC = family('water.caustic.');
+const PAD = family('water.pad.');
+const PADS = family('water.pads.');
+const PAD_FILL = family('water.padfill.');
+const PAD_RIM = Array.from({ length: 8 }, (_, h) => [dg(`water.padrim.${h}.0`), dg(`water.padrim.${h}.1`)]);
+const BLOOM = family('water.bloom.');
+const SLIT = family('water.slit.');
+const RING = family('water.ring.');
+const PLOP = dg('water.plop');
+const FOAM_CH = family('water.foam.');
+const FROTH = family('water.froth.');
+const BUBBLES = family('water.bubbles.');
+const SKATER = family('water.skater.');
+const LEAF = Array.from({ length: 8 }, (_, k) => dg(`leaf.${k}`));
+
+// Glyphs that float on the surface and hide what the water would mirror,
+// and how strongly each surface glyph catches the moon (where glitter and
+// moonlight gather). Both are indexed by glyph.
+export const FLOATING = new Uint8Array(GLYPH_COUNT);
+for (const g of [...PAD, ...PADS, ...PAD_FILL, ...PAD_RIM.flat(), ...FOAM_CH]) FLOATING[g] = 1;
+export const SHEEN = new Float32Array(GLYPH_COUNT);
+for (const g of WAVE) SHEEN[g] = 1;
+for (const g of LINE) SHEEN[g] = 0.8;
+for (const g of DASH) SHEEN[g] = 0.55;
+for (const g of GLINT) SHEEN[g] = 0.55;
+for (const g of CHOP) SHEEN[g] = 0.35;
+
+// Colours, 0-255. The water deepens from a faintly teal navy at the bank
+// to near black; moonlit crests are pale steel blue.
+const BG_SHALLOW = [16, 23, 42];
+const BG_DEEP = [5, 6, 19];
+const TROUGH_COL = [50, 64, 112];
+const CREST_COL = [146, 172, 220];
+const GLINT_COL = [214, 226, 246];
+const CAUSTIC_COL = [62, 96, 120];
+const SAND_COL = [56, 66, 84];
+const STONE_COL = [74, 82, 104];
+const WEED_COL = [34, 74, 66];
+const PAD_COL = [52, 98, 76];
+const PAD_LIT = [92, 140, 106];
+// Older pads yellow toward olive.
+const PAD_OLD = [84, 94, 54];
+const BLOOM_PINK = [226, 168, 204];
+const BLOOM_WHITE = [214, 222, 238];
+const LEAF_COL = [118, 86, 52];
+const RING_COL = [150, 176, 216];
+
+// Kinds of static cell.
+const OPEN = 0;
+const BED = 1;
+const FLOAT = 2;
+
+const cache = new WeakMap();
 
 export function animated() {
   return true;
 }
 
-export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
-  const rnd = chunk.rnd[i];
-  let ch = 0;
-  // Long horizontal streaks that drift slowly, like moonlight broken up
-  // by a gentle swell.
-  const depth = Math.min(1, (WATER_LEVEL - chunk.elev[i]) * 12);
-  const v = valueNoise(wx * ASPECT * 0.09 + t * 0.25, wy * 0.7 - t * 0.05, seed + 300) +
-    Math.sin(wx * ASPECT * 0.4 + wy * 1.3 + t * 1.2) * 0.12 +
-    wind * Math.sin(wx * ASPECT * 0.7 + wy * 0.9 + t * 2.7) * 0.14;
-  if (v > 0.74) ch = WAVE_HI;
-  else if (v > 0.63) ch = WAVE_MID;
-  else if (v > 0.53) ch = WAVE_LO;
-  else if (v > 0.47 && rnd < 0.4) ch = WAVE_DOT;
-  const k = (0.3 + Math.max(0, v - 0.47) * 2.2) * (1 - depth * 0.3);
-  let cr = SWELL[0] * k;
-  let cg = SWELL[1] * k;
-  let cb = SWELL[2] * k;
-  // Thin lapping foam right where the water meets the shore.
-  if (depth < 0.07) {
-    const lap = Math.sin(t * 1.8 + wx * ASPECT * 0.5 + rnd * 2);
-    ch = lap > 0.1 ? WAVE_MID : WAVE_LO;
-    const f = 0.6 + 0.4 * Math.max(0, lap);
-    cr = FOAM[0] * f;
-    cg = FOAM[1] * f;
-    cb = FOAM[2] * f;
+// Fractional part, for the repeating timers below.
+const fract = (x) => x - Math.floor(x);
+
+// Everything about a water cell that does not change from frame to frame,
+// computed for a whole chunk at once and rebuilt when the chunk is edited.
+let last = null;
+function statics(chunk, seed) {
+  const version = chunk.version ?? 0;
+  // Cells arrive in runs from one chunk, so remember the last one.
+  if (last?.chunk === chunk && last.version === version && last.seed === seed) return last;
+  let s = cache.get(chunk);
+  if (s?.version === version && s.seed === seed) return (last = s);
+  const n = N * N;
+  s = {
+    chunk, version, seed,
+    depth: new Float32Array(n),
+    // Sine and cosine of each cell's phase in the moving swell, wavelets
+    // and lapping, so a frame only has to rotate them by the time.
+    phase: new Float32Array(n * 8),
+    kind: new Uint8Array(n),
+    glyph: new Uint16Array(n),
+    layer: new Uint16Array(n),
+    col: new Uint8Array(n * 3),
+    lcol: new Uint8Array(n * 3),
+    bg: new Uint8Array(n * 3),
+    // A nearby fish rise: distance from its middle (Infinity for none),
+    // the heading of this cell from it, its period and phase.
+    rise: new Float32Array(n).fill(Infinity),
+    riseHeading: new Uint8Array(n),
+    risePeriod: new Float32Array(n),
+    risePhase: new Float32Array(n),
+    // 1 bubbles rise here now and then; 2 a pond skater rests here.
+    life: new Uint8Array(n),
+  };
+  const pads = new Map();
+  const rises = new Map();
+  for (let ly = 0; ly < N; ly++) {
+    for (let lx = 0; lx < N; lx++) {
+      const i = ly * N + lx;
+      if (chunk.type[i] !== WATER) continue;
+      const wx = chunk.cx * N + lx;
+      const wy = chunk.cy * N + ly;
+      const d = Math.max(0, Math.min(1, (WATER_LEVEL - chunk.elev[i]) * 12));
+      s.depth[i] = d;
+      const h = chunk.rnd[i];
+      const xs = wx * ASPECT;
+      const ph = s.phase;
+      for (const [k, a] of [[0, xs * 0.4 + wy * 1.3], [2, xs * 1.7 + wy * 0.55 + h * 3],
+        [4, wy * 1.9 + xs * 0.3], [6, xs * 0.5 + h * 2]]) {
+        ph[i * 8 + k] = Math.sin(a);
+        ph[i * 8 + k + 1] = Math.cos(a);
+      }
+      // Ground colour: deepening away from the bank, softly mottled.
+      const m = 0.92 + (chunk.shade[i] ?? 0.5) * 0.16;
+      const deep = d ** 0.7;
+      for (let c = 0; c < 3; c++) s.bg[i * 3 + c] = (BG_SHALLOW[c] + (BG_DEEP[c] - BG_SHALLOW[c]) * deep) * m;
+
+      if (d > 0.06 && d < 0.95 && placePad(s, i, wx, wy, seed, pads)) continue;
+
+      // The bed shows through the shallows, fading with depth.
+      if (d > 0.03 && d < 0.5) {
+        const see = (1 - d / 0.5) ** 1.3;
+        const weed = valueNoise(xs * 0.07, wy * 0.11, seed + 1302);
+        const stones = valueNoise(xs * 0.12, wy * 0.2, seed + 1301);
+        const pick = hash2(wx, wy, seed + 1303);
+        let g = 0;
+        let col = SAND_COL;
+        let k = see;
+        if (weed > 0.6 && d > 0.12) {
+          g = WEED[Math.floor(pick * WEED.length)];
+          col = WEED_COL;
+          k *= 0.7 + (weed - 0.6) * 1.5;
+          if (pick < 0.08) s.life[i] = 1;
+        } else if (stones > 0.6 || pick < 0.06) {
+          g = STONES[Math.floor(pick * 97) % STONES.length];
+          col = STONE_COL;
+        } else if (pick < 0.55) {
+          g = SAND[Math.floor(pick * 31) % SAND.length];
+          k *= 0.75;
+        }
+        if (g) {
+          s.kind[i] = BED;
+          s.glyph[i] = g;
+          for (let c = 0; c < 3; c++) s.col[i * 3 + c] = s.bg[i * 3 + c] + (col[c] - s.bg[i * 3 + c]) * k;
+        }
+        // Pond skaters keep to calm, shallow water.
+        if (d > 0.1 && d < 0.35 && h < 0.006) s.life[i] = 2;
+      }
+      if (d > 0.3) placeRise(s, i, wx, wy, seed, rises);
+    }
   }
-  emit(out, o, ch, cr, cg, cb,
-    WATER_DEEP[0] + (WATER_SHALLOW[0] - WATER_DEEP[0]) * (1 - depth),
-    WATER_DEEP[1] + (WATER_SHALLOW[1] - WATER_DEEP[1]) * (1 - depth),
-    WATER_DEEP[2] + (WATER_SHALLOW[2] - WATER_DEEP[2]) * (1 - depth));
+  cache.set(chunk, s);
+  return (last = s);
+}
+
+// Each frame's rotations of the swell, wavelet and lapping phases.
+let clock = NaN;
+const turn = new Float32Array(8);
+function tick(t) {
+  clock = t;
+  for (const [k, a] of [[0, t * 1.2], [2, -t * 2.1], [4, t * 1.3], [6, t * 1.8]]) {
+    turn[k] = Math.sin(a);
+    turn[k + 1] = Math.cos(a);
+  }
+}
+
+// Lily pads grow in colonies, scattered on a jittered grid so neighbours
+// never stack exactly; a few are big enough to span several cells.
+const PAD_GX = 5;
+const PAD_GY = 3;
+function padAt(gx, gy, seed, pads) {
+  const key = gx * 100003 + gy;
+  if (pads.has(key)) return pads.get(key);
+  let pad = null;
+  const x = (gx + 0.15 + 0.7 * hash2(gx, gy, seed + 1202)) * PAD_GX;
+  const y = (gy + 0.15 + 0.7 * hash2(gx, gy, seed + 1203)) * PAD_GY;
+  const colony = valueNoise(x * ASPECT * 0.035, y * 0.06, seed + 1204);
+  if (colony > 0.5 && hash2(gx, gy, seed + 1201) < (colony - 0.5) * 4) {
+    const d = (WATER_LEVEL - fbm(x * ASPECT * 0.011, y * 0.011, seed, 5)) * 12;
+    if (d > 0.08 && d < 0.85) {
+      const size = hash2(gx, gy, seed + 1205);
+      const bloom = hash2(gx, gy, seed + 1206);
+      pad = {
+        x, y,
+        r: 0.5 + size * size * 1.5,
+        notch: hash2(gx, gy, seed + 1207) * TAU,
+        tone: 0.8 + hash2(gx, gy, seed + 1208) * 0.35,
+        bloom: bloom < 0.3 ? BLOOM[bloom < 0.16 ? 0 : bloom < 0.24 ? 1 : 2] : 0,
+        white: hash2(gx, gy, seed + 1209) < 0.4,
+        small: size,
+        age: hash2(gx, gy, seed + 1210) * 0.6,
+      };
+    }
+  }
+  pads.set(key, pad);
+  return pad;
+}
+
+function placePad(s, i, wx, wy, seed, pads) {
+  const gx0 = Math.floor(wx / PAD_GX);
+  const gy0 = Math.floor(wy / PAD_GY);
+  let best = null;
+  let bestQ = 1.35;
+  let bx = 0;
+  let by = 0;
+  for (let gy = gy0 - 1; gy <= gy0 + 1; gy++) {
+    for (let gx = gx0 - 1; gx <= gx0 + 1; gx++) {
+      const pad = padAt(gx, gy, seed, pads);
+      if (!pad) continue;
+      const dx = (wx + 0.5 - pad.x) * ASPECT;
+      const dy = wy + 0.5 - pad.y;
+      const q = Math.hypot(dx, dy / PAD_FLAT) / pad.r;
+      if (q < bestQ) { best = pad; bestQ = q; bx = dx; by = dy; }
+    }
+  }
+  if (!best) return false;
+  const centre = Math.floor(best.x) === wx && Math.floor(best.y) === wy;
+  let g;
+  let lit = 0.9;
+  let slit = false;
+  if (best.r < 0.8) {
+    // A small pad sits whole in the cell holding its middle.
+    if (!centre) return false;
+    g = best.r < 0.6 ? PADS[Math.floor(best.small * 1e3) % PADS.length] : PAD[Math.floor(best.small * 1e4) % PAD.length];
+  } else {
+    const a = Math.atan2(by, bx);
+    // The notch: a slit from the middle out to the rim.
+    let off = Math.abs(a - best.notch) % TAU;
+    if (off > Math.PI) off = TAU - off;
+    slit = off < 0.4 && bestQ > 0.2;
+    const heading = ((Math.round(a / (TAU / 8)) % 8) + 8) % 8;
+    // How far the rim lies beyond this cell's middle, against how far the
+    // cell itself reaches that way (it is 0.6 wide and 1 tall).
+    const c = Math.cos(a);
+    const sn = Math.sin(a);
+    const r = Math.hypot(bx, by);
+    const margin = best.r / Math.sqrt(c * c + (sn * sn) / (PAD_FLAT * PAD_FLAT)) - r;
+    const reach = Math.abs(c) * 0.3 + Math.abs(sn) * 0.5;
+    if (centre || margin > reach) g = PAD_FILL[Math.floor(hash2(wx, wy, seed + 1211) * 8)];
+    else if (margin > 0.04) g = PAD_RIM[heading][0];
+    else if (margin > -0.2) g = PAD_RIM[heading][1];
+    else return false;
+    // The rim facing the moon (upper left) is lit; the far rim is in shade.
+    if (g !== PAD_RIM[heading][0] && g !== PAD_RIM[heading][1]) lit = 0.88;
+    else lit = 0.8 + 0.32 * Math.max(0, Math.cos(a + 2.36));
+  }
+  s.kind[i] = FLOAT;
+  s.glyph[i] = g;
+  const k = best.tone * lit;
+  for (let c = 0; c < 3; c++) {
+    const base = PAD_COL[c] + (PAD_OLD[c] - PAD_COL[c]) * best.age;
+    s.col[i * 3 + c] = (base + (PAD_LIT[c] - base) * (lit - 0.82) * 3.5) * k;
+  }
+  if (slit) {
+    s.layer[i] = SLIT[((Math.round(best.notch / (TAU / 8)) % 8) + 8) % 8];
+    for (let c = 0; c < 3; c++) s.lcol[i * 3 + c] = s.bg[i * 3 + c];
+  } else if (centre && best.bloom) {
+    s.layer[i] = best.bloom;
+    const b = best.white ? BLOOM_WHITE : BLOOM_PINK;
+    for (let c = 0; c < 3; c++) s.lcol[i * 3 + c] = b[c] * 0.86;
+  }
+  return true;
+}
+
+// Now and then a fish rises in deep water and a ring spreads from it.
+const RISE_GX = 22;
+const RISE_GY = 12;
+const RISE_REACH = 3.6;
+function riseAt(gx, gy, seed, rises) {
+  const key = gx * 100003 + gy;
+  if (rises.has(key)) return rises.get(key);
+  let rise = null;
+  if (hash2(gx, gy, seed + 1401) < 0.55) {
+    rise = {
+      x: (gx + 0.2 + 0.6 * hash2(gx, gy, seed + 1402)) * RISE_GX,
+      y: (gy + 0.2 + 0.6 * hash2(gx, gy, seed + 1403)) * RISE_GY,
+      period: 6 + hash2(gx, gy, seed + 1404) * 12,
+      phase: hash2(gx, gy, seed + 1405) * 100,
+    };
+  }
+  rises.set(key, rise);
+  return rise;
+}
+
+function placeRise(s, i, wx, wy, seed, rises) {
+  const gx0 = Math.floor(wx / RISE_GX);
+  const gy0 = Math.floor(wy / RISE_GY);
+  for (let gy = gy0 - 1; gy <= gy0 + 1; gy++) {
+    for (let gx = gx0 - 1; gx <= gx0 + 1; gx++) {
+      const rise = riseAt(gx, gy, seed, rises);
+      if (!rise) continue;
+      const dx = (wx + 0.5 - rise.x) * ASPECT;
+      const dy = (wy + 0.5 - rise.y) / FLAT;
+      const dist = Math.hypot(dx, dy);
+      if (dist >= RISE_REACH || dist >= s.rise[i]) continue;
+      s.rise[i] = dist;
+      // The ring's outward normal; on the squashed ellipse it tips toward
+      // the vertical.
+      const a = Math.atan2(dy / FLAT, dx);
+      s.riseHeading[i] = ((Math.round(a / (TAU / 8)) % 8) + 8) % 8;
+      s.risePeriod[i] = rise.period;
+      s.risePhase[i] = rise.phase;
+    }
+  }
+}
+
+export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
+  const s = statics(chunk, seed);
+  if (t !== clock) tick(t);
+  const i3 = i * 3;
+  const p8 = i * 8;
+  const ph = s.phase;
+  let bgR = s.bg[i3];
+  let bgG = s.bg[i3 + 1];
+  let bgB = s.bg[i3 + 2];
+  const kind = s.kind[i];
+  const rnd = chunk.rnd[i];
+
+  // Floating pads ride the swell with a slow sheen and keep their blooms.
+  if (kind === FLOAT) {
+    const k = 0.94 + 0.08 * Math.sin(t * 0.7 + rnd * 40);
+    emit(out, o, s.glyph[i], s.col[i3] * k, s.col[i3 + 1] * k, s.col[i3 + 2] * k, bgR, bgG, bgB,
+      s.layer[i], s.lcol[i3], s.lcol[i3 + 1], s.lcol[i3 + 2]);
+    return;
+  }
+
+  const d = s.depth[i];
+  const xs = wx * ASPECT;
+  // Broad swell: long horizontal bands that drift slowly, plus a diagonal
+  // roll; wind adds a quicker chop in gusty patches.
+  const drift = xs * 0.09 + t * (0.25 + wind * 0.4);
+  let v = valueNoise(drift, wy * 0.7 - t * 0.05, seed + 300) +
+    (ph[p8] * turn[1] + ph[p8 + 1] * turn[0]) * 0.12;
+  if (wind > 0.02) v += wind * Math.sin(xs * 0.7 + wy * 0.9 + t * 2.7) * 0.14;
+  // Fine wavelets over the swell, in [-1, 1].
+  const fine = (ph[p8 + 2] * turn[3] + ph[p8 + 3] * turn[2]) * (ph[p8 + 4] * turn[5] + ph[p8 + 5] * turn[4]);
+  const chop = fine + wind * 0.6;
+  // Streaks keep one height along their length so neighbours join.
+  const row = (((Math.floor(drift) * 13 + wy * 7) % 3) + 3) % 3;
+
+  let g = 0;
+  let k = 0;
+  let cr = 0;
+  let cg = 0;
+  let cb = 0;
+  let lg = 0;
+  let lr = 0;
+  let lgG = 0;
+  let lb = 0;
+  // Every cell carries a mark of the surface; the swell sets how bright and
+  // how long it is, from faint wavelets in the troughs to joined crests.
+  // The light runs from a deep violet-blue in the troughs to pale steel.
+  const lv = v < 0.2 ? 0 : v > 0.9 ? 1 : (v - 0.2) / 0.7;
+  k = 0.72 + lv * 0.28;
+  cr = (TROUGH_COL[0] + (CREST_COL[0] - TROUGH_COL[0]) * lv * lv) * k;
+  cg = (TROUGH_COL[1] + (CREST_COL[1] - TROUGH_COL[1]) * lv * lv) * k;
+  cb = (TROUGH_COL[2] + (CREST_COL[2] - TROUGH_COL[2]) * lv * lv) * k;
+  if (v > 0.72) {
+    g = WAVE[row * 2 + (wx & 1)];
+  } else if (v > 0.6) {
+    g = LINE[row];
+  } else if (v > 0.44) {
+    g = chop > 0.45 ? CHOP[Math.floor(rnd * 6)] : DASH[row + (rnd < 0.5 ? 0 : 3)];
+  } else if (chop > -0.6 || rnd < 0.4) {
+    g = chop > 0 ? CHOP[Math.floor(rnd * 6)] : DASH[row + (rnd < 0.5 ? 0 : 3)];
+  }
+  // Fine wavelets ride over the long swell marks, and where they peak on
+  // a lit swell they flash.
+  if (fine > 0.6 && v > 0.55) {
+    lg = GLINT[Math.floor(rnd * 4)];
+    const f = (fine - 0.6) * 2.5 * (0.5 + lv * 0.5);
+    lr = GLINT_COL[0] * f; lgG = GLINT_COL[1] * f; lb = GLINT_COL[2] * f;
+  } else if (chop > 0.4 && v > 0.44) {
+    lg = CHOP[Math.floor(rnd * 6 + 3) % 6];
+    lr = TROUGH_COL[0] * 0.8; lgG = TROUGH_COL[1] * 0.8; lb = TROUGH_COL[2] * 0.8;
+  }
+  // Out in the dark deep the surface quietens.
+  if (d > 0.6) { const q = 1.3 - d * 0.5; cr *= q; cg *= q; cb *= q; }
+  // The swell's broad back holds a little moonlight in the water itself.
+  const sheen = v > 0.45 ? (v - 0.45) * 1.4 : 0;
+  bgR += 5 * sheen; bgG += 8 * sheen; bgB += 16 * sheen;
+
+  // The bed lies under the surface glyph; in the shallows a net of
+  // caustics plays over it when no wavelet does.
+  if (kind === BED) {
+    if (g && !lg) { lg = g; lr = cr; lgG = cg; lb = cb; }
+    else if (!g && d < 0.32 && fine > -0.1) {
+      lg = CAUSTIC[Math.floor(rnd * 4 + t * 0.6 + fine) & 3];
+      k = (0.35 + fine * 0.65) * (1 - d / 0.32);
+      lr = bgR + (CAUSTIC_COL[0] - bgR) * k; lgG = bgG + (CAUSTIC_COL[1] - bgG) * k; lb = bgB + (CAUSTIC_COL[2] - bgB) * k;
+    }
+    g = s.glyph[i];
+    cr = s.col[i3]; cg = s.col[i3 + 1]; cb = s.col[i3 + 2];
+  }
+
+  // Lacy foam laps in and out at the bank, leaving froth as it draws back.
+  if (d < 0.23) {
+    const lap = ph[p8 + 6] * turn[7] + ph[p8 + 7] * turn[6];
+    const reach = 0.07 + 0.07 * (0.5 + 0.5 * lap);
+    if (d < reach) {
+      const f = (0.5 + 0.5 * (1 - d / reach)) * (0.7 + 0.3 * Math.max(0, lap));
+      g = FOAM_CH[(Math.floor(rnd * 6 + t * 0.5) % 6)];
+      cr = FOAM[0] * f; cg = FOAM[1] * f; cb = FOAM[2] * f;
+      if (fine > 0.5) { lg = GLINT[Math.floor(rnd * 4)]; lr = GLINT_COL[0] * f; lgG = GLINT_COL[1] * f; lb = GLINT_COL[2] * f; }
+      else lg = 0;
+    } else if (d < reach + 0.08 && rnd > 0.25) {
+      const f = 0.45 * (1 - (d - reach) / 0.08);
+      lg = FROTH[Math.floor(rnd * 4)];
+      lr = FOAM[0] * f + bgR; lgG = FOAM[1] * f + bgG; lb = FOAM[2] * f + bgB;
+    }
+  }
+
+  // Life on the surface, layered over the water.
+  const dist = s.rise[i];
+  if (dist !== Infinity) {
+    const period = s.risePeriod[i];
+    const age = fract((t + s.risePhase[i]) / period) * period;
+    if (age < 2.2) {
+      const fade = (1 - age / 2.2) ** 1.5;
+      const radius = 0.25 + age * 1.5;
+      let rg = 0;
+      if (Math.abs(dist - radius) < 0.42) rg = RING[s.riseHeading[i]];
+      else if (age < 0.5 && dist < 0.5) rg = PLOP;
+      if (rg) {
+        lg = rg;
+        lr = bgR + (RING_COL[0] - bgR) * fade; lgG = bgG + (RING_COL[1] - bgG) * fade; lb = bgB + (RING_COL[2] - bgB) * fade;
+      }
+    }
+  }
+  const life = s.life[i];
+  if (life === 1) {
+    const p = fract(t * 0.23 + rnd * 7);
+    if (p < 0.12) {
+      lg = BUBBLES[Math.floor(p * 33)];
+      const f = 1 - p * 5;
+      lr = 90 * f + bgR; lgG = 120 * f + bgG; lb = 150 * f + bgB;
+    }
+  } else if (life === 2 && fract(t * 0.07 + rnd * 13) < 0.7) {
+    lg = SKATER[Math.floor(t * 0.4 + rnd * 9) & 1];
+    lr = 120; lgG = 128; lb = 140;
+  }
+  // Leaves drift across, each row at its own pace.
+  if (d > 0.1) {
+    const lane = hash2(0, wy, seed + 1501);
+    const fx = Math.floor(wx - t * (0.12 + lane * 0.2 + wind * 0.8));
+    const leaf = hash2(fx, wy, seed + 1502);
+    if (leaf < 0.0035) {
+      lg = LEAF[Math.floor(leaf * 2286) & 7];
+      const f = 0.55 + leaf * 100;
+      lr = LEAF_COL[0] * f; lgG = LEAF_COL[1] * f; lb = LEAF_COL[2] * f;
+    }
+  }
+
+  emit(out, o, g, cr, cg, cb, bgR, bgG, bgB, lg, lr, lgG, lb);
 }
