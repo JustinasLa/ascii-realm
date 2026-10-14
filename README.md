@@ -80,6 +80,20 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
+- **Status frames and quick slots.** A party-style frame in the top-left
+  corner shows the outlaw's name, segmented HP and stamina bars, the satchel's
+  weight and what is in the free hand. Running and sword strikes spend
+  stamina, which recovers after a short rest. A compass and nine quick slots
+  sit at the edges of the screen.
+- **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
+  paper doll drawn with the outlaw's own glyphs, item details and a 40 kg
+  carrying limit. The hood, jerkin, boots, bracers, cloak, short sword and
+  buckler each show on the 3D character and come off to reveal what is
+  underneath. Assign items to quick slots and use the starter draughts,
+  tonics and bandages to restore health or stamina. Opening the inventory
+  blocks movement and attacks while the world keeps running.
+
+![Inventory with the outlaw's gear, a satchel and selected item details](docs/inventory.png)
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,
@@ -164,7 +178,7 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
 | `Space` | Jump; again in the air for a trick (a barrel roll when running) |
-| `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
+| `J` / left click | Strike with the equipped short sword: repeat for a combo, sprint for a thrust, jump for a plunge |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | `T` | Stow the torch or draw a fresh lit torch |
@@ -177,6 +191,14 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `L` / Audio panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
+| `1`–`9` | Select a quick slot; gear in it is equipped |
+| `Q` | Use the selected quick-slot item |
+| `I` / `Tab` | Open or close the inventory (`Escape` also closes it) |
+| `G`, with inventory open | Switch between the satchel and equipment |
+| Arrow keys, with inventory open | Move through items in the selected pane |
+| `Enter`, with inventory open | Use or equip a satchel item, or take off selected gear |
+| `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
+| `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
 
 ## Scenery builder
@@ -218,7 +240,9 @@ src/
   core/              input, hashing, noise
   editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
+  inventory/         items, satchel, equipment, quick slots and carry weight
   render/            glyph atlas, WebGL renderer, cell writers
+  ui/                status frames, inventory panel, item art and notifications
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
 ```

@@ -2,6 +2,7 @@ import { ASPECT, MAX_WATER_DEPTH } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
+import { ATTACK_STAMINA_COST, SPRINT_RECOVERY_STAMINA, Vitals } from './vitals.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
 // SCALE row units, but a metre up or down the screen is foreshortened by
@@ -76,6 +77,9 @@ export class Player {
     this.walkSpeed = WALK_SPEED;
     this.runSpeed = RUN_SPEED;
     this.combat = new Combat();
+    this.vitals = new Vitals();
+    // Out of breath: no sprinting until a useful reserve has come back.
+    this.sprintExhausted = false;
     // A lit torch occupies the free hand; T stows it or draws a fresh one.
     this.torch = true;
     // Recent blade positions in world cells, for the swing trail.
@@ -154,7 +158,28 @@ export class Player {
 
   // The attack depends on what the warrior is doing at the time.
   attack() {
-    this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
+    if (!this.combat.canAcceptAttack || !this.vitals.spendStamina(ATTACK_STAMINA_COST)) return false;
+    return this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
+  }
+
+  takeDamage(amount) {
+    const applied = this.vitals.takeDamage(amount);
+    if (applied > 0) this.events.push({ type: 'damage', amount: applied, x: this.x, y: this.y });
+    return applied;
+  }
+
+  heal(amount) {
+    return this.vitals.heal(amount);
+  }
+
+  restoreStamina(amount) {
+    return this.vitals.restoreStamina(amount);
+  }
+
+  // Unequipping the weapon puts it away at once, mid-swing or not.
+  cancelWeapon() {
+    this.combat.cancel();
+    this.trail.length = 0;
   }
 
   toggleSword() {
@@ -254,8 +279,16 @@ export class Player {
   }
 
   // `held`: whether the attack button is still down, to charge a spin.
-  update(dt, world, move, running, held = false) {
+  // `resourceDt` is real time for stamina, unaffected by hit stop.
+  update(dt, world, move, running, held = false, resourceDt = dt) {
     this.time += dt;
+    // Wait for a useful reserve after exhaustion rather than alternating
+    // between a frame of sprinting and a frame of recovery.
+    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
+    else if (this.vitals.stamina >= Math.min(SPRINT_RECOVERY_STAMINA, this.vitals.maxStamina)) {
+      this.sprintExhausted = false;
+    }
+    running = running && !this.sprintExhausted;
     const fromX = this.x;
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
@@ -320,6 +353,8 @@ export class Player {
     // always matches the speed and stops when the way is blocked.
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
     const going = moving && metres > 0.15 * dt;
+    this.vitals.update(resourceDt, moving && running && metres > 0);
+    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
 
     // A lunge carries the warrior on along their heading, fading fast.
     if (this.surge > 0.05) {
@@ -369,7 +404,8 @@ export class Player {
     // Critically damped springs: they ease in as well as out, so neither
     // setting off nor pulling up jolts the limbs in the first frame.
     [this.walk, this.walkV] = spring(this.walk, this.walkV, going ? 1 : 0, 11, dt);
-    [this.run, this.runV] = spring(this.run, this.runV, moving && running ? 1 : 0, 6, dt);
+    // Pressing on against a wall is not running.
+    [this.run, this.runV] = spring(this.run, this.runV, going && running ? 1 : 0, 6, dt);
     this.walk = Math.max(0, Math.min(1, this.walk));
     this.run = Math.max(0, Math.min(1, this.run));
     // The walk cycle is not reset on stopping: its effect fades out with
