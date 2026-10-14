@@ -1,5 +1,8 @@
 # Full-detail performance pass
 
+This report covers the original performance pass. The subsequent requested
+water and grass density changes are described in [scene-density.md](scene-density.md).
+
 The optimizations retain the UI overhaul, layered glyphs, grass density,
 reflections, weather, character supersampling, controls, audio, inventory,
 scenery editing, and multiplayer. They do not change zoom, resolution budgets,

@@ -26,6 +26,14 @@ const ITEMS = {
   bow: ')', shaft: '/', head: '^', hammerhead: 'T', flask: 'u', liquid: '~', roll: '@',
 };
 
+// A blade keeps its physical lean, expressed with ordinary font characters.
+export function grassCharacter(bottom, top, tip = 0) {
+  const lean = top - bottom;
+  if (lean > 1) return '/';
+  if (lean < -1) return '\\';
+  return tip === 2 ? "'" : '|';
+}
+
 export const ASCII_RULES = [
   [/^veil\./, ''],
   [/^block\.full$/, '#'],
@@ -39,6 +47,7 @@ export const ASCII_RULES = [
   [/^bark\./, 'Q&$'],
 
   // Flowers in the grass are bright stars; their eyes would only smudge them.
+  [/^flora\.stem\.(\d+)\.(\d+)$/, (m) => grassCharacter(Number(m[1]), Number(m[2]))],
   [/^flora\.[a-z.0-9]*eye/, ''],
   [/^flora\.seed\./, ';'],
   [/^flora\.foxglove\.throat/, ''],

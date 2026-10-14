@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { dg, family } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawSkyReflection } from '../src/world/sky.js';
-import { FLOATING, shade } from '../src/world/terrain/water.js';
+import { animated, FLOATING, shade } from '../src/world/terrain/water.js';
 import { ASPECT, WATER, World } from '../src/world/world.js';
 import { withLayers } from './helpers/renderer.js';
 
@@ -41,22 +41,50 @@ test('lake detail is deterministic and floating pads stay put while the water mo
   assert.ok(moved > 500, 'the surface swell moves');
 });
 
-test('every water cell is shaded with a surface mark or lake-bed detail, and fish rise in rings', () => {
+test('the lake has scattered wave marks, calm gaps and fish rise rings', () => {
   const world = new World(1);
   const rings = new Set(family('water.ring.'));
   let marked = 0;
   let cells = 0;
   let risen = 0;
+  let moving = 0;
   for (let t = 0; t < 20; t += 0.5) {
     const { chunk, out } = shadeChunk(world, 0, 1, t);
     for (let i = 0; i < 4096; i++) {
       if (chunk.type[i] !== WATER) continue;
-      if (t === 0) { cells++; if (glyphOf(out, i)) marked++; }
+      if (t === 0) {
+        cells++;
+        if (glyphOf(out, i)) marked++;
+        if (animated(chunk, i, i & 63, 64 + (i >> 6), world.seed)) moving++;
+      }
       if (rings.has(layerOf(out, i)) || rings.has(glyphOf(out, i))) risen++;
     }
   }
-  assert.ok(marked / cells > 0.85, `most of the lake carries detail (${marked}/${cells})`);
+  assert.ok(marked / cells > 0.1 && marked / cells < 0.45, `waves leave plenty of clear water (${marked}/${cells})`);
+  assert.ok(moving / cells < 0.6, `calm water skips per-frame shading (${moving}/${cells})`);
   assert.ok(risen > 0, 'a fish rise ring spreads somewhere within twenty seconds');
+});
+
+test('cached calm water stays fixed in wind and becomes animated when edited into shore', () => {
+  const world = new World(1);
+  const { chunk, out } = shadeChunk(world, 0, 1, 0);
+  let i = -1;
+  for (let k = 0; k < 4096; k++) {
+    if (chunk.type[k] === WATER && !animated(chunk, k, k & 63, 64 + (k >> 6), world.seed) && !glyphOf(out, k)) {
+      i = k;
+      break;
+    }
+  }
+  assert.ok(i >= 0, 'there is calm open water to cache');
+  const o = i * 4;
+  const before = [out.fg.slice(o, o + 4), out.bg.slice(o, o + 4), out.ov.slice(o, o + 4)];
+  shade(out, o, chunk, i, i & 63, 64 + (i >> 6), world.seed, 13, 1);
+  assert.deepEqual([out.fg.slice(o, o + 4), out.bg.slice(o, o + 4), out.ov.slice(o, o + 4)], before);
+  chunk.elev[i] = 0.399;
+  chunk.version = (chunk.version ?? 0) + 1;
+  assert.equal(animated(chunk, i, i & 63, 64 + (i >> 6), world.seed), true, 'editing the bank invalidates the calm-water cache');
+  shade(out, o, chunk, i, i & 63, 64 + (i >> 6), world.seed, 13, 1);
+  assert.ok(FLOATING[glyphOf(out, i)], 'the new bank carries lapping foam');
 });
 
 test('reflections, the moon and stars pass under floating lily pads', () => {

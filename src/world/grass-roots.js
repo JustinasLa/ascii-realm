@@ -51,6 +51,15 @@ const TALL = new Set([LUPIN, FOXGLOVE]);
 // the ground with the cell aspect corrected so they come out round.
 const DRIFT = 24;
 
+// Broad islands of grass, with soft, ragged edges and open ground between.
+// The field retains about one fifth of roots, leaving full tufts inside
+// each patch rather than scattering thin blades across the whole meadow.
+export function patchAt(wx, wy, seed) {
+  const n = valueNoise(wx * ASPECT * 0.045, wy * 0.045, seed + 1321);
+  const u = Math.max(0, Math.min(1, (n - 0.66) / 0.14));
+  return u * u * (3 - 2 * u);
+}
+
 // Blades grow in clumps. Small-scale noise thins the roots between them so
 // the dark ground shows through in irregular gaps, as in a real meadow.
 // Inside a clump the roots are only as dense as needed to fill it: more
@@ -130,6 +139,7 @@ export function flowerAt(wx, wy, seed, style, height, elev) {
 // which drifts from clump to clump so neighbouring tufts differ.
 export function grassRoots(chunk, seed, size) {
   const roots = [];
+  const present = new Uint8Array(size * size);
   const rows = new Uint16Array(size + 1);
   const heights = [];
   const variations = [];
@@ -146,6 +156,9 @@ export function grassRoots(chunk, seed, size) {
       const grass = chunk.grassHeight[i];
       // Burnt ground keeps only its stubble and ash.
       if (chunk.burnt?.[i] || grass < 2) continue;
+      // Flowers and reeds share the islands, so gaps stay visibly open.
+      // Reject bare ground before the more expensive habitat lookups.
+      if (hash2(wx, wy, seed + 1322) >= patchAt(wx, wy, seed)) continue;
       const elev = chunk.elev?.[i] ?? 0.55;
       const flower = flowerAt(wx, wy, seed, style, grass, elev);
       const density = chunk.grassDensity[i] * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1) *
@@ -158,6 +171,7 @@ export function grassRoots(chunk, seed, size) {
       if (LOW.has(flower)) height = Math.min(height, 2 + (variation > 0.6));
       else if (TALL.has(flower)) height = Math.max(4, Math.min(5, height + 1));
       roots.push(i);
+      present[i] = 1;
       heights.push(height);
       variations.push(variation);
       flowers.push(flower);
@@ -171,7 +185,7 @@ export function grassRoots(chunk, seed, size) {
     }
   }
   rows[size] = roots.length;
-  return { rows, indices: Uint16Array.from(roots), heights: Uint8Array.from(heights),
+  return { rows, present, indices: Uint16Array.from(roots), heights: Uint8Array.from(heights),
     variations: Float64Array.from(variations), flowers: Uint8Array.from(flowers),
     extras: Uint8Array.from(extras), tones: Float32Array.from(tones) };
 }

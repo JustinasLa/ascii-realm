@@ -1,7 +1,7 @@
 // Every character the game can draw, rasterised once into a single texture.
 // Glyphs are addressed by index; a cell stores its glyph in twelve bits.
 
-import { ruleFor } from './ascii-rules.js';
+import { grassCharacter, ruleFor } from './ascii-rules.js';
 import { PACKS } from './glyph-packs/index.js';
 
 const ASCII = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('');
@@ -13,12 +13,9 @@ export function glyph(ch) {
   return indexOf.get(ch) ?? 0;
 }
 
-// Grass blades use drawn strokes after the font glyphs. A font's `/` or `|`
-// stops short of the cell edges, so stacked rows read as dashes; these run
-// edge to edge, letting several rows join into one long, separate blade.
-// Upright strokes cross from a point on the bottom edge to one on the top
-// edge, with long and short tapered variants for the tip, so neighbouring
-// blades end at different heights; flat strokes cross sideways.
+// Grass pose IDs follow the font glyphs. They keep the blade's quantized
+// bottom/top positions and tip height for bending and reflections, while
+// the atlas shows each pose as a real ASCII character from the same font.
 export const STROKE_STEPS = 6;
 const FLAT_STEPS = 3;
 const STROKE_BASE = GLYPHS.length;
@@ -29,8 +26,6 @@ const FLAT_BASE = SHORT_BASE + STROKE_STEPS * STROKE_STEPS;
 export const BLOSSOM = FLAT_BASE + FLAT_STEPS * FLAT_STEPS;
 export const BUD = BLOSSOM + 1;
 const PACK_BASE = BUD + 1;
-const stepX = (i) => (i + 0.5) / STROKE_STEPS;
-const stepY = (i) => (i + 0.5) / FLAT_STEPS;
 
 // Detail glyphs come from packs (see glyph-packs/): each entry is drawn by
 // its own function and found again by name. An entry may name its mirror
@@ -60,11 +55,9 @@ for (const pack of PACKS) {
 }
 export const GLYPH_COUNT = PACK_BASE + packed.length;
 export const BLANK_GLYPH = 1;
-export const GRASS_GLYPH = 2;
 
-// A cell holds a base glyph and may hold a second one layered over it, like
-// a flower over grass. Adding LAYER to a glyph asks any writer to stack it
-// on top of the cell instead of replacing what is there.
+// Adding LAYER gives a glyph foreground priority, like a flower above its
+// stalk. The cell writer resolves it to one visible character per cell.
 export const GLYPH_BITS = 12;
 export const LAYER = 1 << GLYPH_BITS;
 export const GLYPH_MASK = LAYER - 1;
@@ -125,12 +118,9 @@ const ATLAS_COLS = 32;
 export const INNER_W = 30;
 export const INNER_H = 50;
 const PAD = 6;
-// Strokes fill the padding too, so mipmaps keep the joins between rows solid.
-const REACH = PAD;
-const BLADE_WIDTH = 17;
 
-// Draws one glyph clipped to its own padded atlas cell: a thick stroke near
-// the cell edge must not leave a sliver in the neighbouring glyph.
+// Clip each glyph to its own padded atlas cell so neighbouring glyphs
+// cannot leave stray coverage in its texture.
 function inCell(ctx, at, g, draw) {
   const [ox, oy] = at(g);
   ctx.save();
@@ -143,46 +133,17 @@ function inCell(ctx, at, g, draw) {
 }
 
 function drawStrokes(ctx, at) {
-  ctx.strokeStyle = '#fff';
-  ctx.lineCap = 'butt';
-  const half = BLADE_WIDTH / 2;
+  const character = (g, ch) => inCell(ctx, at, g, (ox, oy) => {
+    ctx.fillText(ch, ox + INNER_W / 2, oy + INNER_H / 2);
+  });
   for (let b = 0; b < STROKE_STEPS; b++) {
     for (let t = 0; t < STROKE_STEPS; t++) {
-      const x0 = stepX(b) * INNER_W;
-      const x1 = stepX(t) * INNER_W;
-      const ext = (x1 - x0) / INNER_H * REACH;
-      inCell(ctx, at, strokeGlyph(b, t), (ox, oy) => {
-        ctx.lineWidth = BLADE_WIDTH;
-        ctx.moveTo(ox + x0 - ext, oy + INNER_H + REACH);
-        ctx.lineTo(ox + x1 + ext, oy - REACH);
-        ctx.stroke();
-      });
-      // Tips narrow to a point near the top edge, or halfway up the cell.
-      for (const [tip, reach] of [[1, 0.9], [2, 0.5]]) {
-        inCell(ctx, at, strokeGlyph(b, t, tip), (ox, oy) => {
-          const tipX = ox + x0 + (x1 - x0) * reach;
-          const tipY = oy + INNER_H * (1 - reach);
-          ctx.moveTo(ox + x0 - ext - half, oy + INNER_H + REACH);
-          ctx.lineTo(ox + x0 - ext + half, oy + INNER_H + REACH);
-          ctx.lineTo(tipX + half * 0.45, tipY);
-          ctx.lineTo(tipX - half * 0.45, tipY);
-          ctx.closePath();
-          ctx.fill();
-        });
-      }
+      for (let tip = 0; tip < 3; tip++) character(strokeGlyph(b, t, tip), grassCharacter(b, t, tip));
     }
   }
   for (let l = 0; l < FLAT_STEPS; l++) {
     for (let r = 0; r < FLAT_STEPS; r++) {
-      const y0 = stepY(l) * INNER_H;
-      const y1 = stepY(r) * INNER_H;
-      const ext = (y1 - y0) / INNER_W * REACH;
-      inCell(ctx, at, flatGlyph(l, r), (ox, oy) => {
-        ctx.lineWidth = BLADE_WIDTH * 0.8;
-        ctx.moveTo(ox - REACH, oy + y0 - ext);
-        ctx.lineTo(ox + INNER_W + REACH, oy + y1 + ext);
-        ctx.stroke();
-      });
+      character(flatGlyph(l, r), l === r ? (l === 2 ? '_' : '-') : r < l ? '/' : '\\');
     }
   }
 }
@@ -199,7 +160,7 @@ function drawBlossoms(ctx, at, fontPx, fontFamily) {
   ctx.restore();
 }
 
-// Everything in the world except grass is drawn with real characters. Pack
+// Everything in the world is drawn with real characters. Pack
 // glyphs keep their names (and the code that picks them), but each one is
 // shown as a character: the one an entry names with `ascii`, the one a rule
 // below gives its family, or else the character whose shape matches the
@@ -207,19 +168,15 @@ function drawBlossoms(ctx, at, fontPx, fontFamily) {
 // brightness, so shading carried by grey glyphs survives.
 const GRID_X = 6;
 const GRID_Y = 10;
-// Flower stems are drawn like the grass they grow in.
-const DRAWN = /^flora\.stem\./;
 
 // What a glyph is when cells are written: a cell shows one character, so a
-// glyph layered over another replaces it, except where grass grows over
-// grass; a blank glyph layered over a cell leaves it as it was.
+// glyph layered over another replaces it; a blank glyph layered over a
+// cell leaves it as it was.
 export const GLYPH_KIND = (() => {
   const kind = new Uint8Array(GLYPH_COUNT);
   kind[0] = BLANK_GLYPH;
-  for (let g = STROKE_BASE; g < BLOSSOM; g++) kind[g] = GRASS_GLYPH;
   packed.forEach((entry, k) => {
-    if (DRAWN.test(entry.name)) kind[PACK_BASE + k] = GRASS_GLYPH;
-    else if ((entry.ascii ?? ruleFor(entry.name)) === '') kind[PACK_BASE + k] = BLANK_GLYPH;
+    if ((entry.ascii ?? ruleFor(entry.name)) === '') kind[PACK_BASE + k] = BLANK_GLYPH;
   });
   return kind;
 })();
@@ -260,10 +217,6 @@ function asciify(ctx, at, canvas, fontPx, fontFamily) {
   const choose = (k) => {
     const entry = packed[k];
     if (chosen.has(entry.name)) return chosen.get(entry.name);
-    if (DRAWN.test(entry.name)) {
-      chosen.set(entry.name, null);
-      return null;
-    }
     const f = features(PACK_BASE + k);
     let peak = 0;
     for (const v of f) peak = Math.max(peak, v);
@@ -315,14 +268,13 @@ function asciify(ctx, at, canvas, fontPx, fontFamily) {
   return new Map(packed.map((entry, k) => [entry.name, picks[k]?.ch ?? null]));
 }
 
-// Pack glyphs draw in their own inner-cell coordinates, 0..INNER_W across
-// and 0..INNER_H down, in white; grey fills draw a glyph at partial strength.
-// Only glyphs shown as drawn, or matched to a character by their drawing,
-// need drawing: the rest already know their character.
+// Pack glyphs without a character rule are drawn temporarily in their own
+// inner-cell coordinates to find the closest font character. Grey coverage
+// supplies their brightness; explicit ASCII rules skip this drawing step.
 function drawPacks(ctx, at) {
   packed.forEach((entry, k) => {
     const hi = entry.name.endsWith('.hi') && byName.has(entry.name.slice(0, -3));
-    if (!DRAWN.test(entry.name) && (entry.ascii !== undefined || ruleFor(entry.name) !== undefined || hi)) return;
+    if (entry.ascii !== undefined || ruleFor(entry.name) !== undefined || hi) return;
     inCell(ctx, at, PACK_BASE + k, (ox, oy) => {
       ctx.translate(ox, oy);
       ctx.fillStyle = '#fff';

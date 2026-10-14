@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Grass, MAX_GRASS_HEIGHT, grassWind } from '../src/world/grass.js';
-import { clumpAt, grassRoots } from '../src/world/grass-roots.js';
+import { clumpAt, grassRoots, patchAt } from '../src/world/grass-roots.js';
 import { hash2 } from '../src/core/rng.js';
 import { Player } from '../src/entities/player.js';
 import { SCALE, TILT, buildRig } from '../src/entities/rig.js';
@@ -532,7 +532,7 @@ for (let tip = 0; tip < 3; tip++) {
 }
 const tipOf = (cells) => cells.reduce((a, c) => (c.y < a.y ? c : a));
 
-test('upright blades are long joined strokes: each row starts where the row below ended', () => {
+test('upright blades retain their connected physical path across character cells', () => {
   const world = meadow(new Map([['0,0', 5]]));
   const view = { x0: -12, y0: -20, cols: 32, rows: 40 };
   for (const t of [0, 1.3, 4.2, 7.7]) {
@@ -581,6 +581,49 @@ test('meadow roots grow in clumps with dark gaps between them', () => {
   assert.ok(lushRoots / lush > indices.length / n * 1.2, 'roots crowd together inside the clumps');
   const bloom = flowers.filter(Boolean).length / indices.length;
   assert.ok(bloom > 0.02 && bloom < 0.2, `flowers on ${bloom} of roots`);
+});
+
+test('broad grass patches retain about one fifth of the former roots across seeded terrain', () => {
+  // These same 75 chunks held 62,345 roots before the patch-density change.
+  const before = 62345;
+  let roots = 0;
+  let bare = 0;
+  for (const seed of [1, 19, 42]) {
+    const world = new World(seed);
+    for (let cy = -2; cy <= 2; cy++) for (let cx = -2; cx <= 2; cx++) {
+      const chunk = world.chunk(cx, cy);
+      roots += chunk.blades.indices.length;
+      for (let i = 0; i < CHUNK_SIZE * CHUNK_SIZE; i++) {
+        if (chunk.grassHeight[i] < 2) continue;
+        const x = cx * CHUNK_SIZE + (i % CHUNK_SIZE);
+        const y = cy * CHUNK_SIZE + Math.floor(i / CHUNK_SIZE);
+        if (patchAt(x, y, seed) !== 0) continue;
+        bare++;
+        assert.equal(chunk.blades.present[i], 0, 'flowers and reeds also leave the patch gaps open');
+      }
+    }
+  }
+  assert.ok(roots / before > 0.18 && roots / before < 0.22, `${roots} of the former ${before} roots`);
+  assert.ok(bare > 100000, 'large regions of the meadow are open ground');
+});
+
+test('footsteps, body parting and sword wakes only affect grass that actually grows', () => {
+  const world = new World(19);
+  const chunk = world.chunk(0, 0);
+  const i = chunk.blades.indices.find(i => i % CHUNK_SIZE > 10 && i % CHUNK_SIZE < 50 && i > CHUNK_SIZE * 10 && i < CHUNK_SIZE * 50);
+  assert.notEqual(i, undefined, 'a tuft well inside the chunk');
+  const x = (i % CHUNK_SIZE) + 0.5;
+  const y = Math.floor(i / CHUNK_SIZE) + 0.5;
+  const grass = new Grass();
+  grass.update(world, player(x, y), 1);
+  grass.disturb(world, x - 5, y, x + 5, y, 4, 1, 0, 1);
+  for (const entries of [grass.parts, grass.tracks, grass.bends]) {
+    assert.ok(entries.size > 0, 'the remaining tuft still responds to contact');
+    for (const entry of entries.values()) {
+      const { c, i } = world.locate(entry.x, entry.y);
+      assert.equal(c.blades.present[i], 1, 'contact never paints ghost grass into a bare gap');
+    }
+  }
 });
 
 test('wind arrives in gusts that travel downwind across the meadow', () => {

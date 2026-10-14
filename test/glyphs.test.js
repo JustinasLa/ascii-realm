@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BLANK_GLYPH, BLOSSOM, BUD, FLAT_GLYPHS, GLYPH_KIND, GRASS_GLYPH, GLYPH_COUNT, GLYPHS, LAYER, MIRRORED, STROKE_STEPS, buildAtlas, dg, flatGlyph,
+import { BLANK_GLYPH, BLOSSOM, BUD, FLAT_GLYPHS, GLYPH_KIND, GLYPH_COUNT, GLYPHS, LAYER, MIRRORED, STROKE_STEPS, buildAtlas, dg, flatGlyph,
   glyph, over, strokeGlyph } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
 import { WATER } from '../src/world/world.js';
@@ -25,10 +25,12 @@ test('stroke glyphs are distinct, follow the font glyphs and flip upside down in
 
 test('every drawn glyph is clipped to its own padded atlas cell and detail glyphs show as characters', (t) => {
   const clips = [];
+  const text = [];
   const canvas = {};
   const ctx = new Proxy({
     measureText: () => ({ width: 60 }),
     rect: (...args) => clips.push(args),
+    fillText: (ch, x, y) => text.push({ ch, x, y }),
     getImageData: () => ({ data: new Uint8ClampedArray(canvas.width * canvas.height * 4) }),
   }, { get: (target, name) => target[name] ?? (() => {}) });
   canvas.getContext = () => ctx;
@@ -43,14 +45,24 @@ test('every drawn glyph is clipped to its own padded atlas cell and detail glyph
     return (y / atlas.cellH) * atlas.cols + x / atlas.cellW;
   }));
   assert.equal(cells.size, clips.length, 'no glyph is drawn twice');
-  for (const g of [...strokes, ...FLAT_GLYPHS]) assert.ok(cells.has(g), 'grass strokes are drawn');
+  const textAt = new Map(text.map(({ ch, x, y }) => [Math.floor(y / atlas.cellH) * atlas.cols + Math.floor(x / atlas.cellW), ch]));
+  for (const g of [...strokes, ...FLAT_GLYPHS]) {
+    assert.ok(cells.has(g), 'grass characters stay inside their atlas cells');
+    assert.match(textAt.get(g), /^[|/\\'_-]$/, 'every grass pose is rasterized with a real ASCII font character');
+  }
+  assert.equal(textAt.get(strokeGlyph(2, 2)), '|', 'an upright blade');
+  assert.equal(textAt.get(strokeGlyph(1, 4)), '/', 'a blade leaning right');
+  assert.equal(textAt.get(strokeGlyph(4, 1)), '\\', 'a blade leaning left or reflected');
+  assert.equal(textAt.get(strokeGlyph(2, 2, 2)), "'", 'a short tip');
+  assert.equal(textAt.get(flatGlyph(2, 2)), '_', 'a trampled stalk lies flat');
   assert.equal(atlas.ascii.size, GLYPH_COUNT - BUD - 1);
   for (const [name, ch] of atlas.ascii) {
-    if (name.startsWith('flora.stem.')) assert.equal(ch, null, 'flower stems are drawn like grass');
-    else assert.ok(ch === '' || (ch.length === 1 && GLYPHS.includes(ch)), `${name} shows as a character`);
+    assert.ok(ch === '' || (ch.length === 1 && GLYPHS.includes(ch)), `${name} shows as a character`);
   }
   assert.equal(atlas.ascii.get('pebble.0'), 'o');
   assert.equal(atlas.ascii.get('props.cut.s.0.0'), '(');
+  assert.equal(atlas.ascii.get('flora.stem.1.4'), '/', 'flower stems also use ordinary ASCII');
+  assert.equal(atlas.ascii.get('flora.stem.4.1'), '\\');
 });
 
 test('reflected blade strokes lean the other way in the water', () => {
@@ -77,15 +89,16 @@ test('detail glyphs are named, flipped twins mirror each other, and layered glyp
   assert.ok(GLYPH_COUNT <= LAYER);
 });
 
-test('a cell shows one character: a layered glyph replaces it, except grass over grass', () => {
+test('a cell shows one character, including overlapping grass blades', () => {
   const r = withLayers({ cols: 2, rows: 1, fg: new Uint8ClampedArray(8) });
   const grass = strokeGlyph(1, 2);
   const blade = strokeGlyph(3, 4);
   const petals = dg('flower.ring5');
   r.put(0, 0, grass, 10, 20, 30);
   r.put(0, 0, over(blade), 40, 50, 60);
-  assert.equal(r.glyphAt(0), grass);
-  assert.equal(r.ov[3] | ((r.bg[3] >> 4) << 8), blade, 'grass grows over grass');
+  assert.equal(r.glyphAt(0), blade, 'the foreground blade takes the cell');
+  assert.equal(r.hasLayer(0), false, 'grass characters do not blend into custom shapes');
+  assert.deepEqual([...r.fg.slice(0, 3)], [40, 50, 60]);
   r.layer(0, 0, petals, 200, 200, 200);
   assert.equal(r.glyphAt(0), petals, 'a flower takes the cell');
   assert.equal(r.hasLayer(0), false);
@@ -93,5 +106,5 @@ test('a cell shows one character: a layered glyph replaces it, except grass over
   r.layer(0, 0, dg('veil.0'), 1, 2, 3);
   assert.equal(r.glyphAt(0), petals, 'a blank glyph leaves the cell as it was');
   assert.equal(GLYPH_KIND[dg('veil.0')], BLANK_GLYPH);
-  assert.equal(GLYPH_KIND[grass], GRASS_GLYPH);
+  assert.equal(GLYPH_KIND[grass], 0, 'grass uses the normal character compositor');
 });
