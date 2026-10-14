@@ -68,3 +68,23 @@ test('holding the button charges a spin that fires on release', () => {
   assert.ok(cb.events.some((e) => e.type === 'whirl'));
   assert.equal(cb.spin, 0);
 });
+
+test('an attack while drawing manually chooses a thrust when sprinting', () => {
+  const cb = new Combat();
+  cb.toggle();
+  cb.attack({ running: true });
+  run(cb, 0.45, { moving: true, running: true });
+  assert.equal(cb.move, 'thrust');
+});
+
+test('jumping with attack held pauses charging until an actual release', () => {
+  const cb = new Combat();
+  cb.inHand = true;
+  cb.update(0.6, { held: true });
+  const charge = cb.charge;
+  cb.update(0.2, { held: true, air: true });
+  assert.equal(cb.move, null);
+  assert.equal(cb.charge, charge);
+  cb.update(1 / 60, { air: true });
+  assert.equal(cb.move, 'spin');
+});

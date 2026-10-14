@@ -4,19 +4,19 @@
 export const midiToFrequency = note => 440 * 2 ** ((note - 69) / 12);
 
 const textures = Object.freeze({
-  drone: { voice: 'drone', type: 'sine', gain: 0.012, attack: 2,
+  drone: { voice: 'drone', gain: 0.012, attack: 2,
     decay: 1, sustain: 0.75, release: 2.5, length: 0.94,
     detune: 0, spread: 3, cutoff: 460 },
-  choir: { voice: 'choir', type: 'sine', gain: 0.014, attack: 1.5,
+  choir: { voice: 'choir', gain: 0.014, attack: 1.5,
     decay: 0.8, sustain: 0.65, release: 2, length: 0.9,
     detune: -2, spread: 6, cutoff: 1100 },
-  bowed: { voice: 'bowed', type: 'triangle', gain: 0.012, attack: 1.1,
+  bowed: { voice: 'bowed', gain: 0.012, attack: 1.1,
     decay: 0.9, sustain: 0.72, release: 1.6, length: 0.92,
     detune: 1, spread: 4, cutoff: 780 },
-  bell: { voice: 'bell', type: 'sine', gain: 0.022, attack: 0.012,
+  bell: { voice: 'bell', gain: 0.022, attack: 0.012,
     decay: 1.4, sustain: 0.02, release: 1.8, length: 0.72,
     detune: 0, spread: 0, cutoff: 1900, ratio: 2.71 },
-  breath: { voice: 'breath', type: 'sine', gain: 0.014, attack: 0.7,
+  breath: { voice: 'breath', gain: 0.014, attack: 0.7,
     decay: 0.6, sustain: 0.35, release: 1.2, length: 0.85,
     detune: -1, spread: 2, cutoff: 1200 },
 });
@@ -25,7 +25,7 @@ function score({ id, title, bpm, key, root, harmony, melody, night = false,
   lead = night ? 'bell' : 'breath', color = 1 }) {
   const events = [];
   const add = (beat, note, beats, part, variation = {}) => {
-    events.push(Object.freeze({ beat, note, beats, part,
+    events.push(Object.freeze({ beat, note, beats,
       ...textures[part], ...variation }));
   };
   // A two-bar pedal replaces a metronomic bass pulse. Night adds depth

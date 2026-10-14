@@ -134,7 +134,6 @@ test('42 original scores contain playable ordered notes across sixteen complete 
       for (const field of ['detune', 'spread', 'ratio']) {
         if (event[field] !== undefined) assert.ok(Number.isFinite(event[field]));
       }
-      assert.ok(['sine', 'triangle', 'square', 'sawtooth'].includes(event.type));
       bars.add(Math.floor(event.beat / 4));
       previousBeat = event.beat;
     }

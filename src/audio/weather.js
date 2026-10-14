@@ -31,6 +31,8 @@ export class WeatherAudio {
     this._water = null;
     this._disposed = false;
     this.onLightning = null;
+    this.onLightningSound = null;
+    this._lightningSounds = new Set();
     try {
       this._storage = storage === undefined ? globalThis.localStorage : storage;
       const saved = JSON.parse(this._storage?.getItem(STORAGE_KEY) || 'null');
@@ -53,6 +55,7 @@ export class WeatherAudio {
   setPreset(id) {
     if (this._disposed || (id !== 'clear' && !presets.has(id))) return false;
     if (this.preset === id) return true;
+    this._stopLightning();
     this.preset = id;
     this._save();
     if (this.engine.context?.state === 'running') this._synchronize();
@@ -63,6 +66,7 @@ export class WeatherAudio {
   setIntensity(value) {
     if (this._disposed || !Number.isFinite(value)) return false;
     this.intensity = clamp01(value);
+    if (this.intensity === 0) this._stopLightning();
     this._active?.setIntensity(this.intensity);
     for (const group of this._retiring) group.setIntensity(this.intensity);
     this._save();
@@ -92,7 +96,15 @@ export class WeatherAudio {
     if (!definition) return;
     const group = new WeatherGroup(this.engine, definition, {
       intensity: this.intensity, random: this._random, budget: this._budget,
-      onLightning: event => this.onLightning?.(event),
+      onLightning: event => {
+        const strike = this.onLightning?.(event);
+        const handles = this.onLightningSound?.({ ...event, ...strike }) ?? [];
+        for (const handle of this._lightningSounds) if (handle.ended) this._lightningSounds.delete(handle);
+        for (const handle of handles) if (!handle.ended) this._lightningSounds.add(handle);
+        // The gameplay sound owns a single recorded thunderclap; suppress the
+        // procedural event only once a real recording was started successfully.
+        return handles.some(handle => handle.bus === 'weather' && !handle.ended);
+      },
     });
     if (!group.ready) { group.dispose(); return; }
     this._active = group;
@@ -120,7 +132,13 @@ export class WeatherAudio {
     this._active?.update({ now, time: this._time, intensity: this.intensity, water: this._water });
   }
 
+  _stopLightning() {
+    for (const handle of this._lightningSounds) handle.stop();
+    this._lightningSounds.clear();
+  }
+
   pause() {
+    this._stopLightning();
     this._active?.dispose();
     this._active = null;
     for (const group of this._retiring) group.dispose();

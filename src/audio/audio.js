@@ -4,11 +4,11 @@ import { EnvironmentSampler, nightAmount, surfaceAt } from './environment.js';
 import { FireAudio } from './fire.js';
 import { playFootstep } from './footsteps.js';
 import { prepareGrassFootsteps } from './grass-steps.js';
-import { playLightning } from './lightning.js';
+import { playLightning, prepareLightningSounds } from './lightning.js';
 import { playMovement } from './movement.js';
 import { Music } from './music.js';
 import { ChargeHum, playSword } from './sword.js';
-import { playWaterSound } from './water.js';
+import { playWaterSound, prepareWaterSounds } from './water.js';
 import { WeatherAudio } from './weather.js';
 import { WATER } from '../world/world.js';
 
@@ -26,6 +26,7 @@ export class GameAudio {
     this.charge = new ChargeHum(engine);
     this.effects = new Set();
     this.weather = new WeatherAudio(engine);
+    this.weather.onLightningSound = event => this.play({ ...event, type: 'lightning' });
   }
 
   play(event) {
@@ -36,7 +37,11 @@ export class GameAudio {
         handles = this.fires.react(event);
         break;
       case 'lightning':
-        handles = playLightning(this.engine, event);
+        handles = event.thunder === false ? [] : playLightning(this.engine, event);
+        if (!event.distant && Number.isFinite(event.x) && Number.isFinite(event.y)
+          && this.world.typeAt(event.x, event.y) === WATER) {
+          handles.push(...playWaterSound(this.engine, event));
+        }
         break;
       case 'step': case 'jump': case 'land': case 'skid': {
         const surface = surfaceAt(this.world, event.x, event.y);
@@ -57,6 +62,7 @@ export class GameAudio {
         break;
     }
     for (const handle of handles ?? []) if (handle && !handle.ended) this.effects.add(handle);
+    return handles ?? [];
   }
 
   update(dt, time, player, camera, fireflies, fires = []) {
@@ -70,6 +76,8 @@ export class GameAudio {
     }
     const signals = this.environment.update(dt, camera.x, camera.y, time);
     void prepareGrassFootsteps(this.engine);
+    void prepareWaterSounds(this.engine);
+    void prepareLightningSounds(this.engine);
     this.charge.update(player.combat.charge, player.x, player.y);
     this.music.update({ night: signals.night, time, dt,
       weather: this.weather.preset, weatherIntensity: this.weather.intensity });

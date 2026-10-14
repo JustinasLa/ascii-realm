@@ -250,8 +250,9 @@ export class WeatherGroup {
       } catch { continue; }
       if (!Array.isArray(cues)) continue;
       if (event.definition.lightning && cues.length > 0) {
-        this.onLightning?.({ strength: this._intensity,
+        const recorded = this.onLightning?.({ strength: this._intensity,
           distant: this.definition.id === 'distant-thunder', bearing: cues[0].pan ?? 0 });
+        if (recorded === true) continue;
       }
       for (const [layer, cue] of cues.slice(0, 16).entries()) this._play(varySound(variant, cue, layer), now);
     }

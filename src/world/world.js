@@ -18,16 +18,27 @@ export const WATER_LEVEL = 0.4;
 export const MAX_WATER_DEPTH = 0.42;
 const SHORE_LEVEL = 0.415;
 const STONE_LEVEL = 0.7;
+const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78];
+const cellKey = (x, y) => `${x},${y}`;
+const chunkKey = (cx, cy) => `${cx},${cy}`;
 
 export class World {
   constructor(seed = 1) {
     this.seed = seed;
     this.chunks = new Map();
+    this.terrainEdits = new Map();
+    this.addedProps = new Map();
+    this.removedProps = new Set();
+    this.addedPropChunks = new Map();
+    this.propRenderW = 30;
+    this.propRenderH = 50;
+    this.propFootW = 10;
+    this.propFootH = 2;
     this.spawn = this.findSpawn();
   }
 
   chunk(cx, cy) {
-    const key = (cx + 32768) * 65536 + (cy + 32768);
+    const key = chunkKey(cx, cy);
     let c = this.chunks.get(key);
     if (!c) {
       c = this.generate(cx, cy);
@@ -66,7 +77,20 @@ export class World {
         rnd[i] = hash2(x, y, s + 5);
       }
     }
-    return { cx, cy, type, elev, shade, rnd, props: null };
+    const baseType = type.slice();
+    const baseElev = elev.slice();
+    // Ground rendering reads these arrays directly, so overrides must live in
+    // the chunk as well as in the editor's portable scene description.
+    for (let ly = 0; ly < CHUNK; ly++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        const edit = this.terrainEdits.get(cellKey(cx * CHUNK + lx, cy * CHUNK + ly));
+        if (edit === undefined) continue;
+        const i = ly * CHUNK + lx;
+        type[i] = edit;
+        elev[i] = EDIT_ELEVATION[edit];
+      }
+    }
+    return { cx, cy, type, elev, baseType, baseElev, shade, rnd, props: null, burnt: null };
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays
@@ -83,7 +107,77 @@ export class World {
     return c.type[i];
   }
 
+  originalTypeAt(x, y) {
+    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
+    return c.baseType[i];
+  }
+
+  setTerrain(x, y, type) {
+    const { c, i } = this.locate(x, y);
+    const key = cellKey(x, y);
+    if (type === c.baseType[i]) {
+      this.terrainEdits.delete(key);
+      c.type[i] = c.baseType[i];
+      c.elev[i] = c.baseElev[i];
+    } else {
+      this.terrainEdits.set(key, type);
+      c.type[i] = type;
+      c.elev[i] = EDIT_ELEVATION[type];
+    }
+  }
+
+  addProp(prop) {
+    if (this.addedProps.has(prop.id)) this.deleteProp(prop.id);
+    this.addedProps.set(prop.id, prop);
+    for (const cell of prop.cells) {
+      this.propRenderW = Math.max(this.propRenderW, Math.abs(cell.dx));
+      this.propRenderH = Math.max(this.propRenderH, -cell.dy);
+    }
+    this.propFootW = Math.max(this.propFootW, prop.footW);
+    this.propFootH = Math.max(this.propFootH, prop.footH);
+    const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
+    if (!this.addedPropChunks.has(key)) this.addedPropChunks.set(key, new Map());
+    this.addedPropChunks.get(key).set(prop.id, prop);
+  }
+
+  deleteProp(id) {
+    const prop = this.addedProps.get(id);
+    if (!prop) return false;
+    this.addedProps.delete(id);
+    const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
+    const list = this.addedPropChunks.get(key);
+    list.delete(id);
+    if (!list.size) this.addedPropChunks.delete(key);
+    return true;
+  }
+
+  clearScenery() {
+    for (const key of this.terrainEdits.keys()) {
+      const [x, y] = key.split(',').map(Number);
+      const { c, i } = this.locate(x, y);
+      c.type[i] = c.baseType[i];
+      c.elev[i] = c.baseElev[i];
+    }
+    this.terrainEdits.clear();
+    this.addedProps.clear();
+    this.addedPropChunks.clear();
+    this.removedProps.clear();
+    this.propRenderW = 30;
+    this.propRenderH = 50;
+    this.propFootW = 10;
+    this.propFootH = 2;
+  }
+
+  // Metres below the surface, rising gently from the bank and capped at
+  // the knee regardless of how low the terrain noise goes.
+  waterDepthAt(x, y) {
+    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
+    if (c.type[i] !== WATER) return 0;
+    return Math.min(MAX_WATER_DEPTH, Math.max(0, (WATER_LEVEL - c.elev[i]) / 0.065) * MAX_WATER_DEPTH);
+  }
+
   // Scorched grass belongs to the terrain, so it survives leaving the view.
+  // Only affected chunks allocate a burn map; overlapping fires deepen it.
   burnGrass(x, y) {
     const bx = Math.floor(x);
     const by = Math.floor(y);
@@ -96,42 +190,63 @@ export class World {
         if (distance >= edge) continue;
         const { c, i } = this.locate(wx, wy);
         if (c.type[i] !== GRASS) continue;
-        if (!c.burnt) c.burnt = new Uint8Array(CHUNK_SIZE * CHUNK_SIZE);
+        if (!c.burnt) c.burnt = new Uint8Array(CHUNK * CHUNK);
         const strength = Math.round(Math.min(1, (edge - distance) * 2.3) * 255);
         c.burnt[i] = Math.max(c.burnt[i], strength);
       }
     }
   }
 
-  // Metres below the surface, rising gently from the bank and capped at
-  // the knee regardless of how low the terrain noise goes.
-  waterDepthAt(x, y) {
-    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
-    if (c.type[i] !== WATER) return 0;
-    return Math.min(MAX_WATER_DEPTH, Math.max(0, (WATER_LEVEL - c.elev[i]) / 0.065) * MAX_WATER_DEPTH);
-  }
-
   // Props are generated on first request rather than with the terrain,
   // because placing them needs the spawn point, which needs terrain first.
   propsOf(cx, cy) {
     const c = this.chunk(cx, cy);
-    if (!c.props) c.props = generateProps(this, cx, cy, CHUNK);
-    return c.props;
+    if (!c.props) {
+      // Procedural scenery belongs to the original seeded landscape, even if
+      // a brush changed this chunk before its props were first requested.
+      const original = {
+        seed: this.seed,
+        spawn: this.spawn,
+        typeAt: (x, y) => this.originalTypeAt(x, y),
+      };
+      c.props = generateProps(original, cx, cy, CHUNK);
+      c.props.forEach((prop, i) => { prop.id = `p:${cx}:${cy}:${i}`; });
+    }
+    const added = this.addedPropChunks.get(chunkKey(cx, cy));
+    if (!added && !this.removedProps.size) return c.props;
+    const props = c.props.filter((prop) => !this.removedProps.has(prop.id));
+    if (added) props.push(...added.values());
+    return props;
   }
 
   // Every prop whose base lies in the chunks touching the given cell range.
   propsIn(x0, y0, x1, y1) {
     const out = [];
     for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
-      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+      // The jittered final procedural grid column can put bases up to 11
+      // cells into the next chunk; its props still belong to the source chunk.
+      for (let cx = Math.floor((x0 - 11) / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
         for (const p of this.propsOf(cx, cy)) out.push(p);
       }
     }
     return out;
   }
 
+  // A tall prop can reach the viewport directly from below, or reflect into
+  // water from above. Include both silhouettes plus the horizontal ripple.
+  propsInView(view) {
+    return this.propsIn(view.x0 - this.propRenderW - 2,
+      view.y0 - Math.max(view.rows, this.propRenderH) - 1,
+      view.x0 + view.cols + this.propRenderW + 2,
+      view.y0 + view.rows + this.propRenderH);
+  }
+
   isWalkable(x, y) {
-    for (const p of this.propsIn(x - 4, y - 2, x + 4, y + 2)) {
+    // A large prop may straddle a chunk edge while its base lies outside the
+    // old fixed query radius. Include every possible collision footprint.
+    const width = this.propFootW;
+    const height = this.propFootH;
+    for (const p of this.propsIn(x - width, y - height, x + width, y + height)) {
       if (blocks(p, x, y)) return false;
     }
     return true;

@@ -1,4 +1,5 @@
-import { isDown, moveAxis, wasTapped } from './core/input.js';
+import { isControlTarget, isDown, moveAxis, wasTapped } from './core/input.js';
+import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
 import { bindAudioControls } from './audio/controls.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
@@ -54,19 +55,20 @@ function updateZoom(dt) {
 // Mouse wheel or +/- to zoom in and out. Trackpads send many tiny deltas and
 // mice a few large ones, so scale by the distance scrolled.
 window.addEventListener('wheel', (e) => {
-  if (e.target.closest?.('#audio-controls')) return;
+  if (e.target !== canvas) return;
   e.preventDefault();
   const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
   zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest?.('#audio-controls')) return;
+  if (isControlTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === '+' || e.key === '=') zoomBy(1.15);
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
 
 const params = new URLSearchParams(location.search);
-const seed = Number(params.get('seed')) || 1;
+const requestedSeed = Number(params.get('seed'));
+const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 const name = (params.get('name') || 'Kael').slice(0, 24);
 const world = new World(seed);
@@ -78,6 +80,7 @@ const dust = new Dust();
 const footprints = new Footprints();
 const splashes = new Splashes();
 const fires = new Fires();
+fires.addStarter(world);
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
 const sound = new GameAudio(world);
 sound.weather.onLightning = event => weather.strike(world, camera.view(renderer), event);
@@ -110,13 +113,25 @@ if (params.has('debug')) window.game = debug;
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
 let walked = 0;
+const fireStatus = document.getElementById('fire-status');
+let fireNoticeUntil = 0;
+const fireMessages = {
+  lit: 'Campfire lit. Press C nearby to put it out.', out: 'Campfire extinguished.',
+  water: 'Find dry ground to build a campfire.', air: 'Land before building a campfire.',
+  blocked: 'Find an open patch of dry ground.', limit: 'Put out a campfire before building another.',
+};
+function fireNotice(message) {
+  fireStatus.textContent = message;
+  fireStatus.classList.add('visible');
+  fireNoticeUntil = time + 3;
+}
 
 // A click on the scene swings the sword.
 // Holding it down charges a spin.
 let clicked = false;
 let mouseHeld = false;
 canvas.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
+  if (e.button !== 0 || builder.enabled) return;
   clicked = true;
   mouseHeld = true;
 });
@@ -129,6 +144,28 @@ window.addEventListener('blur', () => {
 
 let hitStop = 0;
 
+const builder = new SceneryBuilder({ world, player, camera, renderer,
+  onModeChange: () => {
+    clicked = false;
+    mouseHeld = false;
+    hitStop = 0;
+    player.combat.charge = 0;
+    player.combat.queued = null;
+    player.vx = 0;
+    player.vz = 0;
+    player.surge = 0;
+    player.skid = 0;
+    player.wasMoving = false;
+  },
+  onReset: () => {
+    dust.list.length = 0;
+    footprints.list.length = 0;
+    fireflies.list.length = 0;
+  },
+});
+debug.builder = builder;
+if (params.has('builder')) builder.setEnabled(true);
+
 // The player's 3D character; until it has loaded the shape-built figure
 // stands in.
 let model = null;
@@ -137,11 +174,11 @@ ModelFigure.load('assets/ual1.glb')
     model = m;
     debug.model = m;
     player.modelTrail = true;
-    // Walk a touch quicker than the walking clip, and run at exactly the
-    // jog's own ground speed so the feet never slide.
+    // Walk and run a little quicker than the clips' own ground speeds; the
+    // cadence rises to match, so the feet still keep pace.
     const gait = Object.fromEntries(m.gaits.map((g) => [g.key, g]));
-    player.walkSpeed = gait.walk.speed * 1.3;
-    player.runSpeed = gait.jog.speed;
+    player.walkSpeed = gait.walk.speed * 1.3 * 1.2;
+    player.runSpeed = gait.jog.speed * 1.2;
   })
   .catch((e) => console.error('Could not load the character model', e));
 
@@ -161,32 +198,45 @@ let last = performance.now();
 let time = 0;
 
 function frame(now) {
-  // Clamp dt so a backgrounded tab does not produce one enormous step.
-  const dt = Math.min((now - last) / 1000, 0.1);
+  // Clamp dt for early first-frame timestamps and long pauses in background tabs.
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1));
   last = now;
   time += dt;
   updateZoom(dt);
 
-  const move = moveAxis();
-  if (wasTapped('Space')) player.jump();
-  if (wasTapped('KeyJ') || clicked) player.attack();
-  if (wasTapped('KeyF')) player.toggleSword();
+  const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
+  const jump = wasTapped('Space');
+  const attack = wasTapped('KeyJ') || clicked;
+  const sword = wasTapped('KeyF');
+  const campfire = wasTapped('KeyC');
+  if (!builder.enabled && !debug.freeze) {
+    if (jump) player.jump();
+    if (attack) player.attack();
+    if (sword) player.toggleSword();
+    if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
+  }
+  if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
   clicked = false;
-  hitStop = Math.max(0, hitStop - dt);
-  const playerDt = hitStop > 0 ? dt * 0.05 : dt;
+  const stoppedDt = Math.min(dt, hitStop);
+  hitStop -= stoppedDt;
+  const playerDt = dt - stoppedDt + stoppedDt * 0.05;
   const held = isDown('KeyJ') || mouseHeld;
-  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
+  const fromX = player.x, fromY = player.y, fromAir = player.air;
+  const paused = debug.freeze || builder.enabled || playerDt === 0;
+  if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {
-    if (!debug.freeze) model.update(playerDt, player);
+    if (!paused) model.update(playerDt, player);
     // The sword's trail follows the blade of the 3D character.
     player.trail = player.trail.filter((t) => player.time - t.t < 0.16);
-    const blade = player.combat.trailing ? model.swordLine() : null;
+    const blade = !paused && player.combat.trailing ? model.swordLine() : null;
     if (blade) {
       player.trail.push({ t: player.time, hx: player.x + blade.base[0], hy: player.y + blade.base[1],
         tx: player.x + blade.tip[0], ty: player.y + blade.tip[1] });
     }
   }
+  if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
+    if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
     splashes.react(world, e);
     if (e.type === 'step') {
@@ -213,7 +263,8 @@ function frame(now) {
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
-  camera.follow(player.x, player.y - 11, dt);
+  if (builder.enabled) builder.updateCamera(dt, move, isDown('ShiftLeft', 'ShiftRight'));
+  else camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
   weather.update(dt, time, world, view, sound.weather);
@@ -222,15 +273,21 @@ function frame(now) {
     if (bolt) sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
     summonLightning = false;
   }
-  if (!debug.freeze) fires.update(dt, time, world, weather.wind);
+  const blownOut = debug.freeze ? [] : fires.update(dt, time, world, weather.wind);
+  for (const reaction of fires.events) {
+    sound.play(reaction);
+    if (reaction.extinguished) fireNotice('The impact smothered the fire.');
+  }
+  fires.events.length = 0;
+  if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
+    fireNotice('Strong wind put out the campfire.');
+  }
   drawGround(renderer, world, view, time, player, weather.wind);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
-  // Props up to a screen above the view can still be reflected into it.
-  const props = world.propsIn(view.x0 - 30, view.y0 - view.rows, view.x0 + view.cols + 30,
-    view.y0 + view.rows + 50);
+  const props = world.propsInView(view);
 
   const mirror = reflector(time, view);
   for (const p of props) drawProp(renderer, view, p, mirror);
@@ -252,9 +309,7 @@ function frame(now) {
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
-  for (const fire of visibleFires) {
-    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
-  }
+  for (const fire of visibleFires) drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
   drawables.push({
     y: player.y,
     draw: () => (model ? model.draw(renderer, putCell) : drawFigure(renderer, view, player, figure)),
@@ -270,9 +325,11 @@ function frame(now) {
   else drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
+  fires.drawParticles(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   weather.draw(renderer, view);
+  builder.drawPreview(view);
   if (debug.freeze) sound.pause();
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();

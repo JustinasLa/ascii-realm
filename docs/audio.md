@@ -1,8 +1,8 @@
 # Audio
 
 ASCII Realm creates its original soundtrack, weather and most effects with
-Web Audio oscillators and filtered noise. Grass footfalls use six local CC0
-recordings of grass brushing and foot contact. Audio adds no runtime
+Web Audio oscillators and filtered noise. Grass footfalls, water movement
+and lightning thunder use local CC0 recordings. Audio adds no runtime
 library dependencies; the recordings are served with the game, without
 requests to third-party sites.
 
@@ -44,11 +44,9 @@ the current levels after the preview and respects mute.
   buffers and voice counts. Music articulation varies while note pitches and
   beat positions stay authored. `climate.js` defines the audio seasons, weather
   families and seasonal wildlife balance.
-- `footsteps.js` selects recorded grass contacts or layers close, unpitched
-  procedural material textures: compressed dirt and grit, dense sand drag,
-  low stone contact and sole scrape, or shallow-water splash and runoff. Broad
-  filters, falling envelopes and small timing/level variations keep them earthy.
-  Footfalls follow animation contact events rather than an independent timer.
+- `footsteps.js` selects recorded grass or water contacts, or layers close,
+  unpitched procedural textures for compressed dirt, dense sand drag and stone
+  contact. Footfalls follow animation contact events rather than a timer.
 - `grass-steps.js` loads and decodes the six local grass recordings once per
   audio context, varies the chosen recording and plays it through the positional
   Effects route. Loading begins after audio unlock. Contacts while locked or
@@ -58,13 +56,24 @@ the current levels after the preview and respects mute.
   brushes on skidding. Skid particles can arrive every frame, so scrape grains
   are limited to ten per second. Fast attacks decay to low sustain levels and
   soft releases, leaving space for the music.
-- `water.js` gives wading contacts their own close slosh and droplet tails,
-  a rising wash when the boots leave the water, and a heavier splash and
-  returning wash on landing. Water strikes and spinning attacks add a
-  positional splash alongside the blade sound. These cues follow the same
-  animation events as the visible splashes, scale with contact strength,
-  use the Effects bus, and stop cleanly on pause. Skid washes are throttled;
-  standing still creates no water movement sounds.
+- `recordings.js` shares context-local loading, shuffled sample selection,
+  25 subtle articulations, positional routes and bounded voice ownership for
+  water and lightning. It preserves each recording's real envelope and runoff.
+  Samples load after unlock, decode once per context, and retry missing files
+  with backoff. Locked, muted and missed contacts stay quiet without replay.
+- `water.js` plays six creek-wading contacts, two boot-lift washes, short wet
+  skids, two spinning washes, and heavier recorded splash/returning-droplet
+  tails on landings and water strikes. A lake lightning strike gets a larger
+  displaced-water recording. These contact-synced Effects sounds add no
+  synthesized noise or oscillator layers. Running increases contact weight;
+  standing still stays quiet. Skids are throttled and at most 24 voices overlap.
+- `lightning.js` plays a recorded thunderclap and rolling tail through Weather,
+  with at most four overlapping thunder voices. Manual and weather-driven
+  bolts share this sound. The visible strike callback supplies actual impact
+  coordinates; nearby water impacts add a positional Effects splash, while
+  dry strikes and distant sky flashes do not. Successfully started recordings
+  replace the procedural weather thunder, avoiding duplicate thunderclaps.
+  Weather intensity zero, preset changes and pause stop automatic strike tails.
 - `sword.js` supplies draw, sheathe, swing, slam and spinning-slash sounds. Its
   filtered-noise layers combine weathered steel scrapes, leather handling,
   broad air rush, a low pressure wake and deeply damped impact grit. `ChargeHum`
@@ -131,6 +140,27 @@ natural envelope remain intact. Synthetic splash,
 squeeze and noise layers are absent from grass
 footfalls. A contact that arrives before the recordings are ready stays quiet;
 the helper does not queue it or substitute a procedural grass sound.
+
+## Water and lightning recordings
+
+The 15 local files in `assets/audio/water` retain real sloshing, water
+displacement, bubbles and returning droplets. Sources are rosenberg3's
+[Walking through water](https://freesound.org/people/rosenberg3/sounds/627004/),
+wormer2's [bucket splash 2](https://freesound.org/people/wormer2/sounds/415670/)
+and [bucket splash 3](https://freesound.org/people/wormer2/sounds/415669/), and
+qubodup's [Big Water Splash](https://freesound.org/people/qubodup/sounds/442773/).
+Thunder comes from WuxiaScrub's
+[Rain + Long Thunder](https://opengameart.org/content/rain-long-thunder).
+All are CC0. Source URLs, excerpt offsets and edits are recorded in the
+[water license](../assets/audio/water/LICENSE.txt) and
+[thunder license](../assets/audio/lightning/LICENSE.txt).
+
+The mono 16-bit PCM files use 24,000 Hz and total about 1.25 MB. Edits remove
+subsonic rumble and boundary clicks and balance levels; playback preserves the
+entire recorded envelope. Water and thunder use subtle rate changes within
+1.5% (running footfalls can be 4% faster) and positional category gains.
+There is no procedural water fallback: unavailable contacts are discarded.
+Weather retains its original thunder if the recording cannot start.
 
 ## Weather soundscapes
 
@@ -381,3 +411,9 @@ routing. `window.game.sound.music` exposes `currentSong`, `songCount` and
 `playlist`, `climateLabel` and `setSeason('auto' | 'spring' | 'summer' | 'autumn' | 'winter')`.
 `window.game.sound.weather` exposes `preset`, `intensity`, `presets`,
 `setPreset(id)` and `setIntensity(value)`; intensity uses the range 0 to 1.
+
+For lightning, use the existing summon control or a thunder weather preset.
+Check a dry strike, a strike meeting lake water, and a distant sky flash:
+all have a single thunderclap; only the lake hit adds the displaced-water
+splash and falling-droplet tail. Master/Ambience/Weather control thunder;
+Master/Effects control the lake splash. Intensity zero stops automatic tails.

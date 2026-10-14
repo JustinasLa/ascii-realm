@@ -98,6 +98,8 @@ export function drawGround(r, world, view, t, bend, wind = 0) {
         bb = 6;
         const burnt = (chunk.burnt?.[i] ?? 0) / 255;
         if (burnt > 0) {
+          // A charcoal and ash centre fades into short, browned grass at
+          // the ragged edge. Dew and flowers disappear with the blades.
           const family = burnt > 0.6 ? ASH : STUBBLE;
           ch = family[Math.floor(rnd * family.length)];
           const ash = 0.7 + rnd * 0.3;
