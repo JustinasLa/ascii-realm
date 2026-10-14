@@ -1,7 +1,8 @@
-import { glyph } from '../render/glyphs.js';
+import { dg, LAYER as LAYER_BIT, over } from '../render/glyphs.js';
+import { WOOD_STEPS } from '../render/glyph-packs/trees.js';
 import { hash2 } from '../core/rng.js';
 import { valueNoise } from '../core/noise.js';
-import { FOLIAGE_TINT, FOLIAGE_TINT_AMOUNT, MOON_RIM, MOONLIGHT, SHADE } from '../render/palette.js';
+import { FOLIAGE_TINT, FOLIAGE_TINT_AMOUNT, MOONLIGHT, SHADE } from '../render/palette.js';
 import { ASPECT } from './world.js';
 
 export const TREE_SPECIES = Object.freeze([
@@ -9,21 +10,24 @@ export const TREE_SPECIES = Object.freeze([
 ]);
 export const MAX_TREE_HEIGHT = 240;
 export const MAX_TREE_HALF_WIDTH = 64;
+// Leaf litter is scattered on the ground in front of the trunk, below its base.
+export const MAX_LITTER_DEPTH = 8;
 
 const TAU = Math.PI * 2;
 const SUB_X = [-0.25, 0.25];
 const SUB_Y = [-5 / 6, -0.5, -1 / 6];
 const EVERGREEN = new Set(['pine', 'spruce']);
 const SEASONS = new Set(['spring', 'summer', 'autumn', 'winter']);
-// From sparse to dense: moonlit leaves are drawn solid, shaded ones thin out
-// into the dark beneath the crown.
-const LEAF_GLYPHS = ['.,:;*', '*+xo', 'o%&#', '@&%#'];
-const RUSTLE_GLYPHS = '@&%#*';
 const SWAY = { oak: 1.05, birch: 1.3, pine: 0.7, spruce: 0.55, acacia: 0.8, jungle: 1.1, cherry: 1.2, willow: 1.5 };
 const BARK = {
-  oak: [146, 104, 72], birch: [214, 216, 204], pine: [150, 102, 70],
-  spruce: [122, 94, 80], acacia: [168, 120, 78], jungle: [140, 112, 80],
-  cherry: [146, 94, 86], willow: [130, 118, 86],
+  oak: [146, 104, 72], birch: [214, 216, 204], pine: [160, 98, 66],
+  spruce: [122, 94, 80], acacia: [168, 120, 78], jungle: [150, 132, 104],
+  cherry: [150, 92, 84], willow: [130, 118, 86],
+};
+// How each species' bark is textured (see glyph-packs/trees.js).
+const BARK_KIND = {
+  oak: 'furrow', birch: 'birch', pine: 'plate', spruce: 'plate',
+  acacia: 'furrow', jungle: 'smooth', cherry: 'smooth', willow: 'furrow',
 };
 const SUMMER = {
   oak: [69, 153, 63], birch: [123, 187, 64], pine: [51, 127, 76],
@@ -45,28 +49,79 @@ const WINTER = {
   spruce: [57, 111, 124], acacia: [159, 145, 93], jungle: [85, 124, 99],
   cherry: [172, 134, 151], willow: [154, 161, 116],
 };
-
+// Autumn crowns turn patch by patch rather than all at once: each leaf mass
+// takes one of these colours, so a single crown mixes them.
+const AUTUMN_MIX = {
+  oak: [[215, 117, 43], [190, 82, 38], [160, 96, 46], [214, 160, 58], [112, 128, 54]],
+  birch: [[226, 186, 56], [238, 206, 84], [204, 150, 44], [150, 160, 60]],
+  acacia: [[189, 153, 62], [206, 128, 52], [150, 150, 66]],
+  jungle: [[113, 151, 62], [70, 140, 74], [170, 160, 60]],
+  cherry: [[222, 115, 106], [200, 70, 62], [232, 146, 70], [176, 64, 86]],
+  willow: [[190, 180, 70], [214, 188, 64], [150, 164, 70]],
+};
+const SNOW = [214, 232, 244];
+const MOSS_GREEN = [78, 112, 66];
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
 const blend = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 function leafPalette(species, season, variation) {
   const colors = { spring: SPRING, summer: SUMMER, autumn: AUTUMN, winter: WINTER };
-  const pink = species === 'cherry';
+  const pink = species === 'cherry' && season !== 'autumn';
   // The night cools every canopy toward teal. Blossom and autumn colour are
   // only lightly cooled so they still stand out from the green around them.
   const cool = FOLIAGE_TINT_AMOUNT * (pink || season === 'autumn' ? 0.4 : 1);
-  const base = blend(colors[season][species], FOLIAGE_TINT, cool)
-    .map((v, i) => clamp(v + variation * (i === 1 ? 15 : 8), 0, 255));
+  const tint = (c) => blend(c, FOLIAGE_TINT, cool).map((v, i) => clamp(v + variation * (i === 1 ? 15 : 8), 0, 255));
+  const base = tint(colors[season][species]);
+  const mix = season === 'autumn' && AUTUMN_MIX[species] ? AUTUMN_MIX[species].map(tint) : [base];
   return {
     base,
-    // Undersides sink into a cool navy shade; tops catch pale moonlight, and
-    // the edge facing the upper left picks up a blue rim.
-    shadow: blend(base.map((v) => v * 0.3), SHADE, 0.55),
-    light: blend(base, pink ? [255, 224, 234] : MOONLIGHT, 0.62),
-    rim: blend(base, pink ? [181, 188, 239] : MOON_RIM, 0.46),
-    accent: season === 'autumn' ? blend(base, [235, 76, 38], 0.4) : blend(base, [162, 209, 116], pink ? 0.02 : 0.18),
+    mix,
+    // Cherry trees carry green leaves among their blossom.
+    green: tint(season === 'spring' ? [120, 190, 80] : [70, 150, 70]),
+    light: pink ? [255, 226, 238] : MOONLIGHT,
+    rim: pink ? [205, 196, 240] : [150, 200, 230],
   };
 }
+
+// The leaf glyph family of each species.
+function foliageFamily(species, season, growth) {
+  if (growth === 'bush') {
+    return { oak: 'broad', birch: 'round', pine: 'brush', spruce: 'brush', acacia: 'round',
+      jungle: 'broad', cherry: season === 'autumn' ? 'almond' : 'almond', willow: 'lance' }[species];
+  }
+  if (species === 'cherry') return season === 'autumn' ? 'almond' : 'bloom';
+  return { oak: 'broad', birch: 'round', pine: 'tuft', spruce: 'brush', acacia: 'spray',
+    jungle: 'almond', willow: 'lance' }[species];
+}
+
+const HEADINGS = 8;
+// Glyph names for a leaf cluster of a family. Families differ in how many
+// densities and variants they were drawn with.
+function leafName(family, heading, density, variant) {
+  switch (family) {
+    case 'broad': return `tree.broad.${heading}.${density}.${variant & 1}`;
+    case 'round': case 'lance': case 'almond': return `tree.${family}.${heading}.${density}.0`;
+    case 'tuft': return `tree.tuft.${heading}.${density}`;
+    case 'brush': case 'spray': return `tree.${family}.${heading}.${Math.min(1, density)}`;
+    case 'frond': return `tree.frond.${heading}.${variant & 1}`;
+    default: return `tree.bloom.${density}.${variant % 3}`;
+  }
+}
+
+// Bounds of a wood segment, wide enough for a trunk's flared base.
+function padWood(wood) {
+  const pad = Math.max(1.5, wood.r0 * (wood.trunk ? 1.9 : 1), wood.r1);
+  wood.minX = Math.min(wood.x0, wood.x1) - pad;
+  wood.maxX = Math.max(wood.x0, wood.x1) + pad;
+  wood.minY = Math.min(wood.y0, wood.y1) - pad;
+  wood.maxY = Math.max(wood.y0, wood.y1) + pad;
+}
+
+// Trunks flare into their roots at the ground.
+const flare = (s, py) => 1 + 0.85 * Math.exp(py / (s.r0 * 1.7 + 0.5));
+// Wood at least this thick (in world units) is filled with bark; anything
+// thinner is drawn as a single smooth stroke along its centre line.
+const THICK = 0.5;
 
 function segmentDistance(px, py, s) {
   const vx = s.x1 - s.x0;
@@ -239,16 +294,19 @@ function grow(shape, growth, rand) {
     const x = xAt(b.x, b.y);
     const y = b.y * sy;
     const rx = b.rx * sx;
-    const ry = b.ry * sy * (0.88 + rand() * 0.22);
+    const ry = b.ry * sy * (0.8 + rand() * 0.2);
     // A core and smaller overlapping lobes provide an irregular crown and
     // visible shaded pockets between outward-facing leaf masses.
-    clusters.push({ x, y, rx: rx * 0.8, ry: ry * 0.85, layer: b.layer, depth: rand() * 2 });
-    const count = mature ? 5 : 3;
+    clusters.push({ x, y, rx: rx * 0.78, ry: ry * 0.8, layer: b.layer, depth: rand() * 2 });
+    // Many smaller lobes bulging out of the core make a crown of distinct
+    // leaf masses, with dark creases between them and a lumpy outline.
+    const count = mature ? 9 : 4;
     for (let i = 0; i < count; i++) {
-      const a = i / count * TAU + rand() * 0.6;
-      clusters.push({ x: x + Math.cos(a) * rx * (0.45 + rand() * 0.12),
-        y: y + Math.sin(a) * ry * (0.42 + rand() * 0.13),
-        rx: rx * (0.32 + rand() * 0.18), ry: ry * (0.32 + rand() * 0.16),
+      const a = i / count * TAU + rand() * 0.5;
+      const reach = 0.5 + rand() * 0.22;
+      clusters.push({ x: x + Math.cos(a) * rx * reach,
+        y: y + Math.sin(a) * ry * reach * 0.92,
+        rx: rx * (0.25 + rand() * 0.14), ry: ry * (0.25 + rand() * 0.13),
         layer: b.layer, depth: 1 + rand() * 4 });
     }
   }
@@ -273,11 +331,7 @@ function grow(shape, growth, rand) {
     wood.y1 *= sy;
     wood.r0 *= sx;
     wood.r1 *= sx;
-    const pad = Math.max(1.5, wood.r0, wood.r1);
-    wood.minX = Math.min(wood.x0, wood.x1) - pad;
-    wood.maxX = Math.max(wood.x0, wood.x1) + pad;
-    wood.minY = Math.min(wood.y0, wood.y1) - pad;
-    wood.maxY = Math.max(wood.y0, wood.y1) + pad;
+    padWood(wood);
   }
   shape.h *= sy;
   shape.footW *= sx;
@@ -297,8 +351,8 @@ function geometryAtRow(shape, y) {
   };
   for (const b of shape.blobs) {
     const ny = Math.max(0, b.y - y, y - 1 - b.y) / b.ry;
-    // The sampler's squared radius is at most 0.86 + 0.24 + 0.065.
-    const reach2 = 1.17 - ny * ny;
+    // The sampler's squared radius is at most 0.8 + 0.22 + 0.05 + 0.2.
+    const reach2 = 1.28 - ny * ny;
     if (reach2 < 0) continue;
     const reach = b.rx * Math.sqrt(reach2);
     include(row.blobs, b, b.x - reach, b.x + reach);
@@ -322,43 +376,80 @@ function geometryAtRow(shape, y) {
   return row;
 }
 
-function makeSampler(shape, species, season, palette, seed) {
+// The moon is up and to the left of the viewer.
+const LX = -0.5;
+const LY = -0.62;
+const LZ = 0.6;
+
+function makeSampler(shape, species, season, seed) {
   const winter = season === 'winter';
   const evergreen = EVERGREEN.has(species);
-  const bark = BARK[species];
-  // The crown as a whole is lit from above as well as lobe by lobe, so its
-  // top reads pale against a darker underside instead of an even speckle.
+  // The crown as a whole is lit like one big sphere, and each leaf mass on
+  // it again like a small one: the masses tucked deepest are darkest.
   let crownTop = Infinity;
   let crownBottom = -Infinity;
+  let crownLeft = Infinity;
+  let crownRight = -Infinity;
+  let deepest = -Infinity;
+  let shallowest = Infinity;
   for (const b of shape.blobs) {
     crownTop = Math.min(crownTop, b.y - b.ry);
     crownBottom = Math.max(crownBottom, b.y + b.ry);
+    crownLeft = Math.min(crownLeft, b.x - b.rx);
+    crownRight = Math.max(crownRight, b.x + b.rx);
+    deepest = Math.max(deepest, b.depth + Math.min(b.rx, b.ry) * 0.32);
+    shallowest = Math.min(shallowest, b.depth);
   }
   for (const t of shape.tiers) {
     crownTop = Math.min(crownTop, t.y);
     crownBottom = Math.max(crownBottom, t.y + t.depth);
+    crownLeft = Math.min(crownLeft, t.x - t.width);
+    crownRight = Math.max(crownRight, t.x + t.width);
   }
   const crownSpan = Math.max(1, crownBottom - crownTop);
+  const cx = (crownLeft + crownRight) / 2;
+  const cy = (crownTop + crownBottom) / 2;
+  const crx = Math.max(1, (crownRight - crownLeft) / 2);
+  const cry = crownSpan / 2;
+  const depthSpan = Math.max(0.5, deepest - shallowest);
+
   // Each row passes only the geometry that can touch it; the crown's
   // lighting above still comes from the whole tree.
   return (px, py, row = shape) => {
-    let leaf = null;
     const grain = hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 41);
     const clump = valueNoise(px * 0.24, py * 0.2, seed + 89);
     const height = clamp(1 - (py - crownTop) / crownSpan);
+    const global = clamp(0.62 - (px - cx) / crx * 0.3 - (py - cy) / cry * 0.45);
+    let leaf = null;
+    let covers = 0;
+    let leafy = -1;
 
     for (const b of row.blobs) {
       const nx = (px - b.x) / b.rx;
       const ny = (py - b.y) / b.ry;
       const d = nx * nx + ny * ny;
-      // Small notches give the clustered edge an ASCII/blocky silhouette.
-      if (d > 0.86 + clump * 0.24 + grain * 0.065) continue;
-      const nz = Math.sqrt(Math.max(0, 1 - d));
-      const lobe = clamp(0.22 + (-nx * 0.42 - ny * 0.62 + nz * 0.55) * 0.67);
-      const light = clamp(lobe * 0.7 + height * 0.5 - 0.1);
+      // Notches at two scales give the edge a leafy silhouette.
+      let limit = 0.8 + clump * 0.22 + grain * 0.05;
+      if (d > limit) {
+        if (leafy < 0) leafy = valueNoise(px * 1.1, py * 0.75, seed + 97);
+        limit += leafy * 0.2;
+        if (d > limit) continue;
+      }
+      covers++;
+      const rel = d / limit;
+      const nz = Math.sqrt(1 - rel);
       const depth = b.depth + nz * Math.min(b.rx, b.ry) * 0.32;
-      if (!leaf || depth > leaf.depth) leaf = { light, depth, edge: d > 0.79,
-        rim: nx < -0.45 && ny < 0.35 && d > 0.77, snow: false, layer: b.layer, strand: false };
+      if (leaf && depth <= leaf.depth) continue;
+      leaf = { kind: 'leaf', depth, rel, nx, ny, nz, mass: b, tier: null, strand: null, v: 0 };
+    }
+    if (leaf) {
+      const lobe = clamp(0.35 + (leaf.nx * LX + leaf.ny * LY + leaf.nz * LZ) * 0.65);
+      const recess = clamp((leaf.depth - shallowest) / depthSpan);
+      // A dark crease where one leaf mass tucks in behind another.
+      const crease = covers > 1 && leaf.rel > 0.66 ? clamp((leaf.rel - 0.66) * 3) : 0;
+      leaf.light = clamp((lobe * 0.64 + global * 0.36) * (0.52 + recess * 0.48) - crease * 0.3 + height * 0.14 - 0.04);
+      leaf.edge = leaf.rel > 0.84;
+      leaf.rim = leaf.nx < -0.4 && leaf.ny < 0.3 && leaf.rel > 0.78;
     }
     for (const t of row.tiers) {
       const v = (py - t.y) / t.depth;
@@ -366,95 +457,111 @@ function makeSampler(shape, species, season, palette, seed) {
       const half = t.width * (0.04 + v * 0.96) * (0.86 + clump * 0.22);
       const edge = Math.abs(px - t.x) / (half || 0.01);
       if (edge > 0.96 + grain * 0.08 || v > 0.95 + Math.sin((px - t.x) * 1.3 + t.layer) * 0.045) continue;
+      if (leaf && t.layer <= leaf.depth) continue;
       const nx = (px - t.x) / t.width;
-      const light = clamp((0.65 - nx * 0.28 - v * 0.42 + clump * 0.12) * 0.7 + height * 0.35 - 0.05);
-      const snow = winter && (v < 0.21 || edge > 0.86 || (v > 0.92 && grain > 0.53));
-      if (!leaf || t.layer > leaf.depth) leaf = { light, depth: t.layer, edge: edge > 0.85, rim: nx < -0.5, snow, layer: t.layer, strand: false };
+      // Each tier is a skirt: pale along its upper surface, sinking into
+      // shadow at its hem and under the tier above.
+      const light = clamp((0.7 - nx * 0.32 - v * 0.62 + clump * 0.1) * 0.74 + height * 0.3);
+      leaf = { kind: 'leaf', depth: t.layer, light, rel: edge, edge: edge > 0.86, rim: nx < -0.45 && v < 0.6,
+        nx: px - t.x, ny: v, mass: t, tier: t, strand: null, v };
     }
     for (const s of row.strands) {
       const v = (py - s.y) / s.length;
       if (v < 0 || v > 1) continue;
       const curve = s.x + s.bend * v * v + Math.sin(v * 5 + s.layer * 1.7) * 0.24;
       const width = s.radius * (1 - v * 0.65);
-      if (Math.abs(px - curve) > width || (s.vine && grain < 0.23)) continue;
+      const across = (px - curve) / (width || 0.01);
+      if (Math.abs(across) > 1 || (s.vine && grain < 0.23)) continue;
       // Strands hang below the crown, so they dim toward their tips too.
-      leaf = { light: clamp((0.52 + grain * 0.2 - v * 0.14) * 0.7 + height * 0.4 - 0.1), edge: true, rim: px > 5, snow: false, layer: s.layer, strand: true, vine: s.vine };
+      const light = clamp(0.6 + (s.tone - 0.5) * 0.36 - v * 0.32 - across * 0.12 + height * 0.2);
+      leaf = { kind: 'leaf', light, edge: false, rim: false, strand: s, v, nx: across, ny: 1, mass: s, tier: null, rel: Math.abs(across) };
+    }
+    if (leaf && !leaf.strand) {
+      // Deep in the shade the canopy opens into holes where the branches
+      // inside show through.
+      const hole = valueNoise(px * 0.5, py * 0.36, seed + 211);
+      leaf.gap = leaf.light < 0.3 && hole > 0.52 + leaf.light * 1.1;
     }
 
+    const bare = winter && !evergreen;
+    if (leaf && !leaf.gap && !bare) return leaf;
     let wood = null;
     let nearTwig = false;
-    if (!leaf || (winter && !evergreen)) {
-      for (const s of row.wood) {
-        if (px < s.minX || px > s.maxX || py < s.minY || py > s.maxY) continue;
-        const hit = segmentDistance(px, py, s);
-        if (hit.distance < 1.5) nearTwig = true;
-        if (hit.distance > hit.radius) continue;
-        const edge = hit.distance / hit.radius;
-        if (!wood || s.trunk) wood = { segment: s, edge, t: hit.t };
-      }
+    for (const s of row.wood) {
+      if (px < s.minX || px > s.maxX || py < s.minY || py > s.maxY) continue;
+      const hit = segmentDistance(px, py, s);
+      const radius = s.trunk ? hit.radius * flare(s, py) : hit.radius;
+      if (hit.distance < 1.5) nearTwig = true;
+      // Thin branches are drawn afterwards, as strokes (see strokeWood).
+      if (hit.distance > radius || radius < THICK) continue;
+      if (!wood || s.trunk) wood = { kind: 'wood', segment: s, edge: hit.distance / radius, t: hit.t, radius, inCrown: !!leaf };
     }
-
-    if (leaf && winter && !evergreen) {
-      // Bare branch networks with small persistent, frosted leaf clusters.
-      const patch = hash2(Math.floor(px / 1.5), Math.floor(py / 1.5), seed + 113);
-      if (!nearTwig || patch > (species === 'jungle' ? 0.2 : 0.08)) leaf = null;
-      else leaf.snow = grain > 0.45;
-    }
-
-    if (leaf) {
-      // A steep ramp: deep shade below, the species colour through the
-      // middle of the crown and pale moonlight across its top.
-      let c = blend(palette.shadow, palette.base, clamp(leaf.light * 1.6 - 0.2));
-      if (leaf.light > 0.5) c = blend(c, palette.light, (leaf.light - 0.5) * 1.6);
-      const patch = hash2(Math.floor(px / 2), Math.floor(py / 2), seed + leaf.layer * 19);
-      c = blend(c, palette.accent, patch > 0.74 ? 0.24 : 0);
-      c = c.map(v => v * (0.8 + clump * 0.3 + grain * 0.08));
-      if (leaf.rim) c = blend(c, palette.rim, 0.55);
-      if (leaf.snow) c = blend(c, [216, 235, 244], 0.76 + grain * 0.2);
-      return { c, light: leaf.light, foliage: true, edge: leaf.edge, strand: leaf.strand, vine: leaf.vine, snow: leaf.snow };
-    }
-    if (!wood) return null;
-
-    const rough = valueNoise(px * 1.7, py * 0.13, seed + 71);
-    let c;
-    let band = false;
-    let shine = 0.48 + rough * 0.28;
-    if (species === 'birch') {
-      band = (Math.floor(-py * 0.77) % 5 === 0 && rough > 0.3) || rough < 0.09;
-      c = band ? [66, 69, 65] : blend(bark, [252, 242, 207], 0.23 + (px < 0 ? 0.2 : 0));
-    } else {
-      const trunkX = wood.segment.x0 + (wood.segment.x1 - wood.segment.x0) * wood.t;
-      const radius = wood.segment.r0 + (wood.segment.r1 - wood.segment.r0) * wood.t;
-      const nx = (px - trunkX) / radius;
-      // Round bark: bright where it faces the moon, falling off steeply into
-      // shadow on the far side so trunks read as solid columns.
-      const light = 0.42 - nx * 0.4 + Math.sqrt(Math.max(0, 1 - nx * nx)) * 0.24 - wood.edge * 0.1;
-      c = bark.map((v, i) => v * light + (i === 0 ? 12 : 4));
-      c = c.map(v => v * (0.84 + rough * 0.3));
-      shine = clamp(light);
-    }
-    if (winter && !wood.segment.trunk && wood.edge > 0.68 && rough > 0.58) c = blend(c, [205, 221, 230], 0.7);
-    return { c, light: shine, foliage: false, band, trunk: wood.segment.trunk, slant: wood.segment.x1 - wood.segment.x0, grain: rough };
+    if (wood) return wood;
+    if (leaf && bare) return { kind: 'bare', light: leaf.light, nearTwig, edge: leaf.edge, mass: leaf.mass, v: leaf.v, tier: leaf.tier };
+    return leaf;
   };
 }
 
-// Six subcell samples smooth the outline without allocating any geometry in
-// the drawing loop. The returned glyph/color cells are the complete sprite.
-function bake(sample, seed, species, shape) {
+// Leaf colour for a lighting level: from a cool navy shade through the
+// species colour to pale moonlight. Each leaf mass has its own tone.
+function leafColor(palette, mass, light, species, season) {
+  const tone = mass?.tone ?? 0.5;
+  let base = palette.mix[Math.floor(tone * palette.mix.length) % palette.mix.length];
+  base = base.map((v, i) => clamp(v * (0.93 + tone * 0.14) + (i === 1 ? (tone - 0.5) * 10 : 0), 0, 255));
+  const shade = blend(base.map((v) => v * 0.3), SHADE, 0.5);
+  if (light < 0.55) return { base, color: blend(shade, base, light / 0.55) };
+  return { base, color: blend(base, palette.light, (light - 0.55) * 0.5) };
+}
+
+const rgb = (cell, c) => {
+  cell.r = Math.round(clamp(c[0], 0, 255));
+  cell.gg = Math.round(clamp(c[1], 0, 255));
+  cell.b = Math.round(clamp(c[2], 0, 255));
+  return cell;
+};
+
+function headingOf(x, y, jitter) {
+  const a = Math.atan2(y, x) + jitter;
+  return ((Math.round(a / (TAU / HEADINGS)) % HEADINGS) + HEADINGS) % HEADINGS;
+}
+
+// Accents layered over a few leaf clusters: fruit, cones and catkins.
+function accentFor(species, season, leaf, growth) {
+  if (growth === 'bush') return null;
+  if (EVERGREEN.has(species)) return leaf.v > 0.6 ? { g: 'tree.cone', p: 0.012, c: [126, 84, 56] } : null;
+  if (season === 'spring' && (species === 'birch' || species === 'willow' || species === 'oak')) {
+    return { g: 'tree.catkins', p: 0.02, c: [196, 192, 118] };
+  }
+  if (species === 'oak' && (season === 'summer' || season === 'autumn')) return { g: 'tree.acorns', p: 0.014, c: [150, 116, 66] };
+  if (species === 'cherry' && season === 'summer') return { g: 'tree.cherries', p: 0.03, c: [206, 34, 58] };
+  if (species === 'jungle' && season !== 'winter' && leaf.ny > 0.2) return { g: 'tree.fruits', p: 0.014, c: [226, 166, 58] };
+  return null;
+}
+
+const BERRIES = [[196, 38, 52], [80, 70, 168], [40, 30, 58], [226, 120, 40]];
+
+// Six subcell samples smooth the outline; each covered cell becomes a glyph
+// chosen from what it shows (a leaf cluster facing out of the crown, bark,
+// a branch running through it) with highlights, snow, fruit and moss
+// layered over it. The returned cells are the complete sprite.
+function bake(sample, seed, species, season, growth, shape, palette) {
   const cells = [];
   const fullHeight = shape.h + 14;
   let left = -4.5;
   let right = 4.5;
   let top = -shape.h - 2;
+  let crownBottom = -Infinity;
   for (const b of shape.blobs) {
     left = Math.min(left, b.x - b.rx * 1.04);
     right = Math.max(right, b.x + b.rx * 1.04);
     top = Math.min(top, b.y - b.ry * 1.04);
+    crownBottom = Math.max(crownBottom, b.y + b.ry * 0.7);
   }
   for (const t of shape.tiers) {
     left = Math.min(left, t.x - t.width * 1.04);
     right = Math.max(right, t.x + t.width * 1.04);
     top = Math.min(top, t.y);
+    crownBottom = Math.max(crownBottom, t.y + t.depth);
   }
   for (const s of shape.strands) {
     left = Math.min(left, s.x + Math.min(0, s.bend) - s.radius - 0.3);
@@ -469,80 +576,385 @@ function bake(sample, seed, species, shape) {
   const minX = Math.max(-MAX_TREE_HALF_WIDTH, Math.floor(left / ASPECT - 1));
   const maxX = Math.min(MAX_TREE_HALF_WIDTH, Math.ceil(right / ASPECT + 1));
   const minY = Math.max(1 - MAX_TREE_HEIGHT, Math.floor(top - 1));
-  const leafGlyphs = LEAF_GLYPHS.map(f => [...f].map(glyph));
-  const rustles = [...RUSTLE_GLYPHS].map(glyph);
   const bounds = { minX: MAX_TREE_HALF_WIDTH, minY: 0, maxX: -MAX_TREE_HALF_WIDTH, maxY: 1 - MAX_TREE_HEIGHT };
+  const family = foliageFamily(species, season, growth);
+  const kind = BARK_KIND[species];
+  const bark = BARK[species];
+  const winter = season === 'winter';
+  const evergreen = EVERGREEN.has(species);
+  const bush = growth === 'bush';
+  // A bush may bear berries or flowers, chosen once for the whole bush.
+  const bushKind = hash2(seed, 7, seed + 5);
+  const berry = bush && bushKind < 0.4 && season !== 'spring' ? BERRIES[Math.floor(hash2(seed, 9, 3) * BERRIES.length)] : null;
+  const flowers = bush && !berry && bushKind < 0.65 && (season === 'spring' || season === 'summer');
+
+  const woodAt = new Set();
+  const push = (cell) => {
+    cells.push(cell);
+    bounds.minX = Math.min(bounds.minX, cell.dx);
+    bounds.minY = Math.min(bounds.minY, cell.dy);
+    bounds.maxX = Math.max(bounds.maxX, cell.dx);
+    bounds.maxY = Math.max(bounds.maxY, cell.dy);
+  };
+  // A second glyph layered over the cell just pushed, moving with it.
+  const layer = (base, g, color, rustle = g) => {
+    cells.push(rgb({ dx: base.dx, dy: base.dy, g: over(g), r: 0, gg: 0, b: 0, foliage: base.foliage, flex: base.flex,
+      phaseSin: base.phaseSin, phaseCos: base.phaseCos, rustle: over(rustle) }, color));
+  };
+
   for (let dy = minY; dy <= 0; dy++) {
     const row = geometryAtRow(shape, dy);
     const rowMinX = Math.max(minX, Math.floor(row.left / ASPECT - 1));
     const rowMaxX = Math.min(maxX, Math.ceil(row.right / ASPECT + 1));
     for (let dx = rowMinX; dx <= rowMaxX; dx++) {
       let hits = 0;
-      let foliageHits = 0;
-      let red = 0;
-      let green = 0;
-      let blue = 0;
+      let leafHits = 0;
+      let woodL = 0;
+      let woodR = 0;
       let light = 0;
-      let detail = null;
-      let leafDetail = null;
-      let woodDetail = null;
-      for (const oy of SUB_Y) {
-        for (const ox of SUB_X) {
-          const s = sample((dx + ox) * ASPECT, dy + oy, row);
+      let leaf = null;
+      let wood = null;
+      for (let j = 0; j < 3; j++) {
+        for (let i = 0; i < 2; i++) {
+          const s = sample((dx + SUB_X[i]) * ASPECT, dy + SUB_Y[j], row);
           if (!s) continue;
           hits++;
-          if (s.foliage) foliageHits++;
-          if (s.foliage) leafDetail = s;
-          else woodDetail = s;
-          red += s.c[0];
-          green += s.c[1];
-          blue += s.c[2];
-          light += s.light;
+          if (s.kind === 'wood') {
+            if (i === 0) woodL++;
+            else woodR++;
+            if (!wood || j === 1) wood = s;
+          } else {
+            leafHits++;
+            light += s.light;
+            if (!leaf || j === 1) leaf = s;
+          }
         }
       }
       if (hits < 2) continue;
-      const foliage = foliageHits > hits / 2;
-      detail = foliage ? leafDetail : woodDetail;
       const texture = hash2(dx, dy, seed + 3);
-      let g;
-      if (foliage) {
-        const family = leafGlyphs[clamp(Math.floor(light / hits * 4.4 - 0.4), 0, 3)];
-        g = family[Math.floor(texture * family.length)];
-        if (hits < 4 || detail.strand) g = glyph(detail.vine ? (texture < 0.5 ? ':' : ';') : (texture < 0.54 ? '*' : ';'));
-        else if (species === 'cherry' && texture > 0.58) g = glyph(texture > 0.86 ? '+' : '*');
-        if (detail.snow && texture > 0.35) g = glyph(texture > 0.7 ? '*' : '#');
-      } else if (species === 'birch' && detail.band) {
-        g = glyph(texture > 0.4 ? '=' : '#');
-      } else if (detail.trunk) {
-        // Dense glyphs on the moonlit side of the trunk, thin ones in shadow.
-        const lit = light / hits;
-        g = glyph(lit > 0.7 ? (detail.grain < 0.5 ? '#' : '%') : lit > 0.4 ? (detail.grain < 0.45 ? '|' : '!') : ':');
-      } else {
-        g = glyph(Math.abs(detail.slant) < 0.5 ? '|' : detail.slant < 0 ? '/' : '\\');
-      }
-      const flex = foliage ? clamp(0.24 + (-dy / fullHeight) * 0.61 + (detail.strand ? 0.12 : 0), 0.2, 1) : 0;
       const phase = hash2(dx, dy, seed + 97) * TAU;
-      cells.push({
-        dx, dy, g,
-        r: Math.round(clamp(red / hits, 0, 255)),
-        gg: Math.round(clamp(green / hits, 0, 255)),
-        b: Math.round(clamp(blue / hits, 0, 255)),
-        br: hits >= 5 ? Math.round(red / hits * 0.14) : undefined,
-        bgG: hits >= 5 ? Math.round(green / hits * 0.15) : undefined,
-        bb: hits >= 5 ? Math.round(blue / hits * 0.17) : undefined,
-        foliage,
-        flex,
-        phaseSin: Math.sin(phase),
-        phaseCos: Math.cos(phase),
-        rustle: foliage ? rustles[Math.floor(hash2(dx, dy, seed + 103) * rustles.length)] : g,
-      });
-      bounds.minX = Math.min(bounds.minX, dx);
-      bounds.minY = Math.min(bounds.minY, dy);
-      bounds.maxX = Math.max(bounds.maxX, dx);
-      bounds.maxY = Math.max(bounds.maxY, dy);
+      const solid = hits >= 5;
+
+      if (leafHits > hits / 2 && leaf.kind === 'leaf') {
+        // ---- Foliage ----
+        const lt = light / leafHits;
+        const flex = clamp(0.24 + (-dy / fullHeight) * 0.61 + (leaf.strand ? 0.12 : 0), 0.2, 1);
+        let { base, color } = leafColor(palette, leaf.mass, lt, species, season);
+        const cell = { dx, dy, g: 0, r: 0, gg: 0, b: 0, foliage: true, flex,
+          phaseSin: Math.sin(phase), phaseCos: Math.cos(phase), rustle: 0 };
+        const variant = Math.floor(texture * 6);
+        let name;
+        let rustleName;
+        let density = 0;
+        if (leaf.strand) {
+          // Strands keep one glyph down each column so they read unbroken.
+          const v = Math.floor(hash2(dx, leaf.strand.layer, seed + 5) * 4);
+          name = leaf.v > 0.9 ? `tree.strand.tip.${v}` : `tree.strand.${v}`;
+          rustleName = `tree.strand.${(v + 1) % 4}`;
+          density = 1;
+        } else {
+          let ax;
+          let ay;
+          if (leaf.tier) {
+            // Needles sweep up and out along a tier's upper surface, out
+            // through its middle and droop at its hem.
+            const side = leaf.nx < 0 ? -1 : 1;
+            const droop = species === 'spruce' ? 0.25 : 0;
+            ay = leaf.v < 0.3 - droop ? -0.7 : leaf.v < 0.7 - droop ? 0 : 0.8;
+            ax = side;
+          } else {
+            ax = leaf.nx;
+            ay = leaf.ny * 0.8 + (family === 'spray' ? 0.05 : 0.45);
+            if (family === 'spray') ay *= 0.35;
+          }
+          const heading = headingOf(ax, ay, (texture - 0.5) * 0.9);
+          density = leaf.edge || hits < 5 || leaf.gap ? 0 : lt > 0.52 ? 2 : lt > 0.26 ? 1 : 0;
+          // Young spring foliage and thinning autumn crowns are airier.
+          if ((season === 'spring' || season === 'autumn') && density > 0 && texture < 0.3) density--;
+          let fam = family;
+          if (species === 'jungle' && !bush && (leaf.edge || lt > 0.6) && texture > 0.35) fam = 'frond';
+          // Green leaves show among the blossom where it is shaded.
+          const greenery = family === 'bloom' && season === 'summer' && lt < 0.36 && texture > 0.45;
+          if (greenery) fam = 'almond';
+          name = leafName(fam, heading, density, variant);
+          rustleName = leafName(fam, (heading + 1) % HEADINGS, density, variant + 1);
+        }
+        cell.g = dg(name);
+        cell.rustle = dg(rustleName);
+        if (name.startsWith('tree.almond') && family === 'bloom') color = blend(palette.green, SHADE, 0.45 - lt);
+        let c = leaf.strand?.vine ? blend(color, [40, 70, 50], 0.4) : color;
+        if (leaf.gap) c = color.map((v) => v * 0.55);
+        else if (leaf.rim) c = blend(c, palette.rim, 0.4);
+        if (winter && evergreen && (leaf.v < 0.3 || (leaf.edge && texture > 0.6))) c = blend(c, SNOW, 0.35);
+        rgb(cell, c);
+        if (leaf.gap) cell.gap = true;
+        if (solid) {
+          // Hide the ground behind the crown with a near-black of its colour.
+          cell.br = Math.round(8 + c[0] * 0.06);
+          cell.bgG = Math.round(10 + c[1] * 0.07);
+          cell.bb = Math.round(18 + c[2] * 0.07);
+        }
+        push(cell);
+        if (leaf.gap) continue;
+        // One layer at most: snow first, then fruit, then the moonlit rims.
+        const accent = accentFor(species, season, leaf, growth);
+        const pick = hash2(dx, dy, seed + 71);
+        if (winter && evergreen && leaf.tier && (leaf.v < 0.3 || (leaf.edge && texture > 0.6))) {
+          layer(cell, dg(`tree.snow.${Math.floor(texture * 4)}`), blend(SNOW, palette.light, 0.2).map((v) => v * (0.82 + lt * 0.2)));
+        } else if (berry && lt > 0.25 && pick < 0.22) {
+          layer(cell, dg(`tree.berries.${Math.floor(pick * 13.6)}`), berry.map((v) => v * (0.7 + lt * 0.4)));
+        } else if (flowers && lt > 0.3 && pick < 0.24) {
+          const f = Math.floor(pick * 16.6);
+          layer(cell, dg(`flower.spray.${f}`), blend([236, 232, 244], [240, 170, 200], hash2(seed, 1, 2) > 0.5 ? 0.6 : 0));
+        } else if (accent && pick < accent.p && lt > 0.2 && lt < 0.6 && !leaf.edge) {
+          layer(cell, dg(accent.g), accent.c.map((v) => v * (0.75 + lt * 0.4)));
+        } else if (name.startsWith('tree.bloom') && density > 0 && lt < 0.56) {
+          layer(cell, dg(`${name}.eye`), blend(base, [150, 40, 90], 0.55).map((v) => v * (0.6 + lt * 0.6)));
+        } else if (lt > 0.54 || (leaf.rim && density === 0)) {
+          const hi = blend(color, leaf.rim ? palette.rim : palette.light, 0.38 + clamp(lt - 0.54) * 0.9);
+          layer(cell, dg(`${name}.hi`), hi, dg(`${rustleName}.hi`));
+        }
+        continue;
+      }
+
+      if (leafHits > hits / 2) {
+        // ---- A bare winter crown: a lace of fine twigs ----
+        const lace = valueNoise(dx * 0.6, dy * 0.4, seed + 301);
+        if (species === 'oak' && !bush && texture < 0.07) {
+          // Oaks hold on to a few dry brown leaves through the winter.
+          const cell = rgb({ dx, dy, g: dg(leafName('broad', 2 + Math.floor(texture * 30) % 3, 0, variant2(texture))),
+            r: 0, gg: 0, b: 0, foliage: true, flex: 0.4, phaseSin: Math.sin(phase), phaseCos: Math.cos(phase), rustle: 0 },
+          [150, 104, 66].map((v) => v * (0.6 + leaf.light * 0.5)));
+          cell.rustle = cell.g;
+          push(cell);
+          continue;
+        }
+        if (!(leaf.nearTwig || lace > 0.42 - leaf.light * 0.2) || texture < 0.18) continue;
+        const v = Math.floor(texture * 6) % 6;
+        const c = bark.map((x) => x * (0.42 + leaf.light * 0.5));
+        const cell = rgb({ dx, dy, g: dg(`tree.sprig.${v}`), r: 0, gg: 0, b: 0, foliage: false, flex: 0,
+          phaseSin: Math.sin(phase), phaseCos: Math.cos(phase), rustle: 0, sprig: true }, c);
+        cell.rustle = cell.g;
+        push(cell);
+        if (leaf.light > 0.3 && texture > 0.3) layer(cell, dg(`tree.sprig.${v}.snow`), SNOW.map((x) => x * (0.75 + leaf.light * 0.25)));
+        else if (berry && texture > 0.8) layer(cell, dg(`tree.berries.${v % 3}`), berry.map((x) => x * 0.8));
+        continue;
+      }
+
+      // ---- Wood: trunks and boughs, filled with bark ----
+      const s = wood.segment;
+      const trunkX = s.x0 + (s.x1 - s.x0) * wood.t;
+      const nx = clamp((dx * ASPECT - trunkX) / wood.radius, -1, 1);
+      const shine = woodShine(nx, dy, wood.inCrown);
+      const c = barkColor(shine, dx, dy);
+      const cell = { dx, dy, g: 0, r: 0, gg: 0, b: 0, foliage: false, flex: 0,
+        phaseSin: Math.sin(phase), phaseCos: Math.cos(phase), rustle: 0 };
+      // Where the outline of a steep trunk or bough crosses this cell, the
+      // cell is filled only on the wood's side of it.
+      let name = null;
+      let hiName = null;
+      if (Math.abs(s.x1 - s.x0) / ASPECT < Math.abs(s.y1 - s.y0) * 1.2) {
+        for (const side of [-1, 1]) {
+          const fb = outline(s, dy, side) - (dx - 0.5);
+          const ft = outline(s, dy - 1, side) - (dx - 0.5);
+          const mid = (fb + ft) / 2;
+          if (mid < 0 || mid >= 1) continue;
+          const b = Math.min(WOOD_STEPS - 1, Math.max(0, Math.floor(fb * WOOD_STEPS)));
+          const t = Math.min(WOOD_STEPS - 1, Math.max(0, Math.floor(ft * WOOD_STEPS)));
+          name = `tree.edge.${side < 0 ? 'l' : 'r'}.${b}.${t}`;
+          if (side < 0) hiName = `${name}.hi`;
+          break;
+        }
+      }
+      if (!name) {
+        name = `tree.bark.${kind}.${Math.floor(texture * 4)}`;
+        if (nx < -0.3) hiName = `${name}.hi`;
+      }
+      cell.g = cell.rustle = dg(name);
+      rgb(cell, c);
+      if (solid) {
+        cell.br = Math.round(8 + c[0] * 0.08);
+        cell.bgG = Math.round(8 + c[1] * 0.07);
+        cell.bb = Math.round(14 + c[2] * 0.07);
+      }
+      push(cell);
+      woodAt.add(dy * 1024 + dx);
+      if (winter && !s.trunk && !woodAt.has((dy - 1) * 1024 + dx) && texture > 0.15) {
+        // Snow lies along the upper side of a bough.
+        layer(cell, dg(`tree.snow.${Math.floor(texture * 4)}`), SNOW.map((v) => v * 0.9));
+      } else if (hiName) layer(cell, dg(hiName), blend(c, [214, 222, 236], 0.38 + clamp(-nx - 0.3) * 0.45));
+      else if (kind !== 'birch' && s.trunk && nx > 0.2 && dy > -shape.h * 0.6 &&
+        valueNoise(dx * 0.45, dy * 0.22, seed + 401) > 0.52) {
+        // Moss grows up the shaded side of the trunk.
+        layer(cell, dg(`tree.moss.${Math.floor(texture * 3)}`), MOSS_GREEN.map((v) => v * (0.55 + shine * 0.6)));
+      }
     }
   }
-  return { cells, bounds };
+  strokeWood();
+  return { cells: cells.filter((cell) => !cell.dead), bounds };
+
+  // Round bark: bright where it faces the moon, falling off steeply into
+  // shadow on the far side so trunks read as solid columns. The canopy
+  // shades the wood beneath and inside it.
+  function woodShine(nx, dy, inCrown) {
+    let shine = (0.42 - nx * 0.4 + Math.sqrt(Math.max(0, 1 - nx * nx)) * 0.24) * 0.88;
+    if (!winter || evergreen) {
+      if (inCrown) shine *= 0.55;
+      else if (crownBottom > -Infinity && !bush) shine *= 0.5 + 0.5 * clamp((dy - crownBottom) / 26);
+    }
+    return shine;
+  }
+
+  function barkColor(shine, dx, dy) {
+    const rough = valueNoise(dx * 0.7, dy * 0.12, seed + 71);
+    if (kind === 'birch') return blend(bark, [236, 236, 226], 0.2).map((v) => v * (0.12 + shine * 0.74));
+    return bark.map((v, i) => (v * shine + (i === 0 ? 12 : 4)) * (0.88 + rough * 0.22));
+  }
+
+  // Thin branches and twigs: one stroke glyph per row (or per column for a
+  // flat branch), entering and leaving each cell where the branch's centre
+  // line does, so every branch is a single smooth line. They show below
+  // the crown, through its holes, and everywhere in a bare winter crown.
+  function strokeWood() {
+    const gridW = maxX - minX + 1;
+    const occupied = new Int32Array(gridW * (1 - minY));
+    const strokes = [];
+    cells.forEach((cell, i) => {
+      if ((cell.g & LAYER_BIT) || cell.dx < minX || cell.dx > maxX || cell.dy < minY) return;
+      occupied[(cell.dy - minY) * gridW + cell.dx - minX] = i + 1;
+    });
+    const place = (x, y, name, snowName) => {
+      if (x < minX || x > maxX || y < minY || y > 0) return;
+      const at = (y - minY) * gridW + x - minX;
+      if (occupied[at] === -1) return;
+      const found = occupied[at] - 1;
+      const old = found >= 0 ? cells[found] : null;
+      // Leaves and bark hide the branch; holes in the crown and the bare
+      // winter twig lace give way to it.
+      if (old && !(old.gap || old.sprig)) return;
+      const shine = woodShine(-0.3, y, !!old?.gap) * (winter && !evergreen ? 1.05 : 0.9);
+      const c = barkColor(shine, x, y);
+      const g = dg(name);
+      const cell = rgb({ dx: x, dy: y, g, r: 0, gg: 0, b: 0, foliage: false, flex: 0,
+        phaseSin: 0, phaseCos: 1, rustle: g }, c);
+      if (old) {
+        // Take over the slot (keeping its background) and drop its layer.
+        cell.br = old.br;
+        cell.bgG = old.bgG;
+        cell.bb = old.bb;
+        old.dead = true;
+        const next = cells[found + 1];
+        if (next && next.dx === x && next.dy === y && (next.g & LAYER_BIT)) next.dead = true;
+      }
+      occupied[at] = -1;
+      strokes.push(cell);
+      if (snowName && winter) {
+        strokes.push(rgb({ dx: x, dy: y, g: over(dg(snowName)), r: 0, gg: 0, b: 0, foliage: false, flex: 0,
+          phaseSin: 0, phaseCos: 1, rustle: over(dg(snowName)) }, SNOW.map((v) => v * 0.88)));
+      }
+    };
+    const step = (f) => Math.min(WOOD_STEPS - 1, Math.max(0, Math.floor(f * WOOD_STEPS)));
+    for (const s of shape.wood) {
+      if (s.trunk) continue;
+      const sx0 = s.x0 / ASPECT;
+      const sx1 = s.x1 / ASPECT;
+      const spanX = Math.abs(sx1 - sx0);
+      const spanY = Math.abs(s.y1 - s.y0);
+      if (spanX < 1e-6 && spanY < 1e-6) continue;
+      if (spanX <= spanY) {
+        // Steep: one cell per row.
+        const xAt = (y) => sx0 + (sx1 - sx0) * (y - s.y0) / (s.y1 - s.y0);
+        const top = Math.min(s.y0, s.y1);
+        const bottom = Math.max(s.y0, s.y1);
+        for (let y = Math.floor(top) + 1; y <= Math.ceil(bottom); y++) {
+          const ym = (Math.min(y, bottom) + Math.max(y - 1, top)) / 2;
+          const radius = s.r0 + (s.r1 - s.r0) * clamp((ym - s.y0) / (s.y1 - s.y0));
+          if (radius >= THICK) continue;
+          const x = Math.round(xAt(ym));
+          place(x, y, `tree.stroke.${radius < 0.22 ? 'twig' : 'limb'}.${step(xAt(y) - (x - 0.5))}.${step(xAt(y - 1) - (x - 0.5))}`, null);
+        }
+      } else {
+        // Flat: one cell per column.
+        const yAt = (x) => s.y0 + (s.y1 - s.y0) * (x - sx0) / (sx1 - sx0);
+        const left = Math.min(sx0, sx1);
+        const right = Math.max(sx0, sx1);
+        for (let x = Math.round(left); x <= Math.round(right); x++) {
+          const xm = (Math.max(x - 0.5, left) + Math.min(x + 0.5, right)) / 2;
+          const radius = s.r0 + (s.r1 - s.r0) * clamp((xm - sx0) / (sx1 - sx0));
+          if (radius >= THICK) continue;
+          const y = Math.ceil(yAt(xm));
+          const l = step(yAt(x - 0.5) - (y - 1));
+          const r = step(yAt(x + 0.5) - (y - 1));
+          place(x, y, `tree.flat.${radius < 0.22 ? 'twig' : 'limb'}.${l}.${r}`, `tree.flat.snow.${l}.${r}`);
+        }
+      }
+    }
+    for (const cell of strokes) push(cell);
+  }
+}
+
+// Where the left (side -1) or right outline of a wood segment crosses row
+// boundary y, in cells. A leaning segment is wider across than its radius.
+function outline(s, y, side) {
+  const t = clamp((y - s.y0) / (s.y1 - s.y0 || 1));
+  const lean = (s.x1 - s.x0) / (s.y1 - s.y0 || 1);
+  const radius = (s.r0 + (s.r1 - s.r0) * t) * (s.trunk ? flare(s, y) : 1) * Math.sqrt(1 + lean * lean);
+  return (s.x0 + (s.x1 - s.x0) * t + side * radius) / ASPECT;
+}
+
+function variant2(t) {
+  return Math.floor(t * 97) & 1;
+}
+
+// Leaves, needles and petals lying in the grass in front of the trunk,
+// thickest close to it. They are layered over whatever ground is there.
+function scatterLitter(cells, bounds, species, season, seed, crownHalf, growth) {
+  const halfW = Math.max(4, Math.min(crownHalf * 0.8, 30));
+  const depth = Math.min(MAX_LITTER_DEPTH, Math.round(2 + halfW * 0.16));
+  // The litter's ground is part of the sprite in every season, so its
+  // bounds do not change with the season.
+  bounds.maxY = Math.max(bounds.maxY, depth);
+  bounds.minX = Math.min(bounds.minX, -Math.ceil(halfW));
+  bounds.maxX = Math.max(bounds.maxX, Math.ceil(halfW));
+  if (growth === 'bush' && season !== 'autumn') return;
+  const evergreen = EVERGREEN.has(species);
+  const blossom = species === 'cherry' && season === 'spring';
+  if (season === 'winter' && !evergreen) return;
+  const amount = evergreen ? 0.32 : blossom ? 0.4 : season === 'autumn' ? 0.5 : 0.12;
+  const autumnMix = AUTUMN_MIX[species] ?? [AUTUMN[species]];
+  for (let dy = 1; dy <= depth; dy++) {
+    for (let dx = -Math.ceil(halfW); dx <= Math.ceil(halfW); dx++) {
+      const d = (dx / halfW) ** 2 + (dy / (depth + 0.5)) ** 2;
+      if (d >= 1) continue;
+      const roll = hash2(dx, dy, seed + 501);
+      if (roll > amount * (1 - d) ** 1.3) continue;
+      const pick = hash2(dx, dy, seed + 503);
+      let name;
+      let c;
+      if (evergreen) {
+        if (pick < 0.08) { name = 'tree.litter.cone'; c = [118, 84, 58]; }
+        else { name = `tree.litter.needle.${Math.floor(pick * 3)}`; c = season === 'winter' ? [120, 96, 72] : [132, 92, 60]; }
+      } else if (blossom) {
+        name = `tree.litter.petal.${Math.floor(pick * 3)}`;
+        c = [236, 176, 204];
+      } else if (pick < 0.08) {
+        name = `tree.litter.twig.${Math.floor(pick * 25) & 1}`;
+        c = [110, 84, 60];
+      } else {
+        name = `tree.litter.leaf.${Math.floor(pick * 6)}`;
+        c = season === 'autumn' ? autumnMix[Math.floor(hash2(dx, dy, seed + 507) * autumnMix.length)]
+          : [120, 112, 62];
+      }
+      // Lying in the crown's shade, the litter is dim; nearer the edge of
+      // the shade it catches a little more light.
+      const dim = 0.42 + d * 0.25;
+      cells.push(rgb({ dx, dy, g: over(dg(name)), r: 0, gg: 0, b: 0, foliage: false, flex: 0,
+        phaseSin: 0, phaseCos: 1, rustle: over(dg(name)), litter: true }, c.map((v) => v * dim)));
+      bounds.maxY = Math.max(bounds.maxY, dy);
+      bounds.minX = Math.min(bounds.minX, dx);
+      bounds.maxX = Math.max(bounds.maxX, dx);
+    }
+  }
 }
 
 export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed = 1, growth = 'mature', girth } = {}) {
@@ -562,18 +974,25 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
     const factor = wood.trunk ? thickness : 0.6 + thickness * 0.4;
     wood.r0 *= factor;
     wood.r1 *= factor;
-    const pad = Math.max(1.5, wood.r0, wood.r1);
-    wood.minX = Math.min(wood.x0, wood.x1) - pad;
-    wood.maxX = Math.max(wood.x0, wood.x1) + pad;
-    wood.minY = Math.min(wood.y0, wood.y1) - pad;
-    wood.maxY = Math.max(wood.y0, wood.y1) + pad;
+    padWood(wood);
   }
   shape.footW *= thickness;
   shape.footH *= Math.sqrt(thickness);
+  // Every leaf mass gets its own tone, seeded by its place in the crown so
+  // seasons recolour the same masses.
+  for (const part of [...shape.blobs, ...shape.tiers, ...shape.strands]) {
+    part.tone = hash2(Math.floor(part.x * 7), Math.floor(part.y * 7), spriteSeed + 13);
+  }
   const palette = leafPalette(species, season, random() - 0.5);
-  const sample = makeSampler(shape, species, season, palette, spriteSeed);
-  const { cells, bounds } = bake(sample, spriteSeed, species, shape);
+  const sample = makeSampler(shape, species, season, spriteSeed);
+  const { cells, bounds } = bake(sample, spriteSeed, species, season, growth, shape, palette);
   const top = bounds.minY;
+  // The crown's half width, in cells, from its geometry (the same in every season).
+  let crownHalf = 0;
+  for (const b of shape.blobs) crownHalf = Math.max(crownHalf, Math.abs(b.x) + b.rx);
+  for (const t of shape.tiers) crownHalf = Math.max(crownHalf, Math.abs(t.x) + t.width);
+  crownHalf /= ASPECT;
+  scatterLitter(cells, bounds, species, season, spriteSeed, crownHalf, growth);
   return {
     kind: growth === 'bush' ? 'bush' : 'tree', growth, species, season, x, y,
     girth: thickness,
