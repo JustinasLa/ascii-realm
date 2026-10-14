@@ -45,8 +45,11 @@ export class World {
     // eviction: hits on trees by prop id, loose items of chunks whose items
     // changed, and gathered plants.
     this.treeHits = new Map();
+    this.burntTrees = new Set();
+    this.burningTrees = new Map();
     this.loot = new Map();
     this.gathered = new Set();
+    this.burntPlants = new Set();
     // How many edited cells each chunk holds, so budgets need no full scan.
     this.editChunks = new Map();
     // Scorch maps by chunk, kept here so they outlive chunk eviction.
@@ -352,6 +355,48 @@ export class World {
     }
   }
 
+  // Natural fires consume exact fuel cells instead of scorching a radius.
+  burnGrassCell(x, y) {
+    x = Math.floor(x); y = Math.floor(y);
+    const cx = Math.floor(x / CHUNK), cy = Math.floor(y / CHUNK);
+    const key = chunkKey(cx, cy);
+    const c = this.chunks.get(key) ?? this.chunk(cx, cy);
+    const i = (y - cy * CHUNK) * CHUNK + x - cx * CHUNK;
+    if (c.type[i] !== GRASS && c.type[i] !== SHORE) return;
+    if (!c.burnt) { c.burnt = new Uint8Array(CHUNK * CHUNK); this.burns.set(key, c.burnt); }
+    if (c.burnt[i] === 255) return;
+    c.burnt[i] = 255;
+    this.touched(c);
+  }
+
+  beginTreeBurn(prop, burn) {
+    prop.burning = burn;
+    if (prop.id) this.burningTrees.set(prop.id, burn);
+  }
+
+  endTreeBurn(prop, burn) {
+    if (prop.id && this.burningTrees.get(prop.id) === burn) this.burningTrees.delete(prop.id);
+    const copies = [prop, ...this.addedProps.values()];
+    for (const c of this.chunks.values()) copies.push(...(c.props ?? []));
+    for (const p of copies) if ((p === prop || (prop.id && p.id === prop.id)) && p.burning === burn) delete p.burning;
+  }
+
+  burnTree(prop) {
+    if (prop.burnt || prop.chopped) return;
+    this.coverGrass(prop, -1);
+    if (prop.id) { this.burntTrees.add(prop.id); this.treeHits.set(prop.id, TREE_HITS); }
+    const copies = [prop, ...this.addedProps.values()];
+    for (const c of this.chunks.values()) copies.push(...(c.props ?? []));
+    for (const p of copies) if (p === prop || (prop.id && p.id === prop.id)) {
+      p.burnt = true; p.chopped = true; p.hits = TREE_HITS;
+    }
+    for (let y = Math.floor(prop.y - prop.footH); y <= Math.ceil(prop.y + prop.footH); y++) {
+      for (let x = Math.floor(prop.x - prop.footW); x <= Math.ceil(prop.x + prop.footW); x++) {
+        if (((x + 0.5 - prop.x) / prop.footW) ** 2 + ((y + 0.5 - prop.y) / prop.footH) ** 2 <= 1) this.burnGrassCell(x, y);
+      }
+    }
+  }
+
   // Props are generated on first request rather than with the terrain,
   // because placing them needs the spawn point, which needs terrain first.
   propsOf(cx, cy) {
@@ -373,6 +418,9 @@ export class World {
           prop.hits = hits;
           prop.chopped = hits >= TREE_HITS;
         }
+        if (this.burntTrees.has(prop.id)) prop.burnt = true;
+        const burning = this.burningTrees.get(prop.id);
+        if (burning) prop.burning = burning;
         // Grass is only cleared the first time; it stays bare after eviction.
         if (!this.coveredChunks.has(chunkKey(cx, cy))) this.coverGrass(prop, 1);
       });

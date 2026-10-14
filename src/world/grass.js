@@ -464,11 +464,18 @@ export class Grass {
     }
   }
 
-  drawTracks(r, view, t) {
+  drawTracks(r, view, t, world) {
     for (const track of this.tracks.values()) {
       const sx = track.x - view.x0;
       const sy = track.y - view.y0;
       if (sx < 0 || sy < 0 || sx >= view.cols || sy >= view.rows) continue;
+      const cx = Math.floor(track.x / CHUNK_SIZE), cy = Math.floor(track.y / CHUNK_SIZE);
+      const chunk = world?.chunks?.get(`${cx},${cy}`);
+      const i = (track.y - cy * CHUNK_SIZE) * CHUNK_SIZE + track.x - cx * CHUNK_SIZE;
+      if (chunk?.burnt?.[i]) {
+        this.tracks.delete(`${track.x},${track.y}`);
+        continue;
+      }
       const pressure = track.press * this.trackRecovery(track, t);
       if (pressure < 0.1) continue;
       const o = (sy * r.cols + sx) * 4;

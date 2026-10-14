@@ -564,7 +564,12 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
   if (prop.chopped) {
-    for (const c of stumpCells(prop)) write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
+    for (const c of stumpCells(prop)) {
+      const char = prop.burnt ? 0.24 : 1;
+      write(r, bx + c.dx, by + c.dy, c.g, c.r * char, c.gg * char, c.b * char, by,
+        c.br === undefined ? undefined : c.br * char, c.bgG === undefined ? undefined : c.bgG * char,
+        c.bb === undefined ? undefined : c.bb * char);
+    }
     return;
   }
   const bounds = prop.bounds;
@@ -631,7 +636,16 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
       const flutter = sin * c.phaseCos + cos * c.phaseSin;
       const light = 1 + flutter * 0.035 + sheen;
       const ch = flutter > 0.94 && gust > 0.58 && c.rustle !== undefined ? c.rustle | (c.g & LAYER) : c.g;
-      write(r, sx, sy, ch, c.r * light, c.gg * light, c.b * light, by, c.br, c.bgG, c.bb);
+      let red = c.r * light, green = c.gg * light, blue = c.b * light;
+      if (prop.burning) {
+        const burn = prop.burning.progress;
+        const char = 1 - burn * 0.85;
+        const ember = burn * prop.burning.heat * (0.7 + Math.sin(t * 7 + c.dx + c.dy) * 0.3);
+        red = red * char + 95 * ember;
+        green = green * char + 26 * ember;
+        blue *= char;
+      }
+      write(r, sx, sy, ch, red, green, blue, by, c.br, c.bgG, c.bb);
     }
   }
 }

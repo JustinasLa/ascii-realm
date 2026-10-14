@@ -36,7 +36,7 @@ export async function createScene(root = new URL('../', import.meta.url), option
     const view = camera.view(r);
     mark('update');
     drawGround(r, world, view, time);
-    grass.drawTracks(r, view, time);
+    grass.drawTracks(r, view, time, world);
     drawSkyReflection(r, view, time);
     figure.drawShadow(r, view, player.x, player.y, player.air);
     mark('groundAndSky');

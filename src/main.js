@@ -151,7 +151,7 @@ const splashes = new Splashes();
 const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
 fires.addStarter(world);
 const torches = new Torches();
-const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
+const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
 const sound = new GameAudio(world);
 sound.weather.onLightning = event => weather.strike(world, camera.view(renderer), event);
 let summonLightning = false;
@@ -634,14 +634,16 @@ function frame(now) {
     if (reaction.extinguished) fireNotice('The impact smothered the fire.');
   }
   fires.events.length = 0;
-  if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
+  if (blownOut.some(fire => fire.outReason === 'wind' && Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
     fireNotice('Strong wind put out the fire.');
+  } else if (blownOut.some(fire => fire.outReason === 'fuel' && Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
+    fireNotice('The fire ran out of fuel.');
   }
   const wide = view.cols * view.rows > WIDE_VIEW;
   // A wide view generates its missing chunks a little each frame.
   if (wide) world.load(view.x0, view.y0, view.x0 + view.cols, view.y0 + view.rows, 6);
   drawGround(renderer, world, view, time, player, weather.wind, wide);
-  grass.drawTracks(renderer, view, time);
+  grass.drawTracks(renderer, view, time, world);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
