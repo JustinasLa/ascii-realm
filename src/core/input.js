@@ -4,7 +4,7 @@ export const input = new InputState();
 let gameplayBlocked = false;
 
 // Panels, form fields and buttons keep their own keys.
-const CONTROLS = '#scenery-builder, #audio-controls, #inventory-root, input, textarea, select, button, summary, '
+const CONTROLS = '#scenery-builder, #audio-controls, #weather-panel, #inventory-root, input, textarea, select, button, summary, '
   + 'a[href], [role="button"], [role="link"], [role="textbox"], [contenteditable="true"], [data-game-ui]';
 
 export function isControlTarget(target) {

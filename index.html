@@ -127,13 +127,16 @@
       <label>Weather <input type="range" min="0" max="100" data-volume="weather" aria-label="Weather volume" /><output></output></label>
       <p id="audio-status" role="status">Press a key or click to enable sound</p>
       <p>Now playing: <span id="audio-song"></span></p>
-      <div class="weather-controls">
-        <label for="audio-season">Season</label>
-        <select id="audio-season" aria-label="Sound season"></select>
-        <p id="audio-climate"></p>
-      </div>
       <button id="audio-skip" type="button">Skip song (N)</button>
       <button id="grass-preview" type="button">Preview grass footsteps</button>
+    </details>
+    <details id="weather-panel">
+      <summary>Weather &amp; seasons</summary>
+      <div class="weather-controls">
+        <label for="audio-season">Season</label>
+        <select id="audio-season" aria-label="Season"></select>
+        <p id="audio-climate"></p>
+      </div>
       <div class="weather-controls">
         <label for="audio-weather">Weather</label>
         <select id="audio-weather" aria-label="Weather"><option value="clear">Clear</option></select>

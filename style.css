@@ -132,16 +132,16 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 #builder-banner { position: fixed; z-index: 11; top: 126px; left: 12px; padding: 5px 8px; background: var(--surface); border: 1px solid var(--frame); pointer-events: none; }
 #builder-banner span { display: block; color: var(--quiet); font-size: 11px; }
 #builder-cursor { position: fixed; z-index: 4; width: 24px; height: 24px; border: 1px solid var(--ink); border-radius: 50%; background: #e3e8e40a; transform: translate(-50%, -50%); pointer-events: none; }
-#audio-controls > :not(summary), #multiplayer-controls > :not(summary), #help-controls > :not(summary) { margin: 8px; }
-#audio-controls label { display: grid; grid-template-columns: 64px minmax(0, 1fr) 30px; align-items: center; gap: 8px; font-size: 11px; }
-#audio-controls input { width: 100%; min-width: 0; }
-#audio-controls output { color: var(--quiet); text-align: right; font-variant-numeric: tabular-nums; }
-#audio-controls p { color: var(--muted); font-size: 11px; }
+#audio-controls > :not(summary), #weather-panel > :not(summary), #multiplayer-controls > :not(summary), #help-controls > :not(summary) { margin: 8px; }
+#audio-controls label, #weather-panel label { display: grid; grid-template-columns: 64px minmax(0, 1fr) 30px; align-items: center; gap: 8px; font-size: 11px; }
+#audio-controls input, #weather-panel input { width: 100%; min-width: 0; }
+#audio-controls output, #weather-panel output { color: var(--quiet); text-align: right; font-variant-numeric: tabular-nums; }
+#audio-controls p, #weather-panel p { color: var(--muted); font-size: 11px; }
 #audio-controls #audio-status { color: var(--quiet); }
-#audio-controls .weather-controls { padding-top: 8px; border-top: 1px solid var(--line); }
-#audio-controls .weather-controls > label[for] { display: block; margin-bottom: 5px; color: var(--quiet); }
-#audio-controls .weather-controls p { margin: 6px 0; }
-#audio-controls .weather-controls button { margin-top: 5px; }
+#weather-panel .weather-controls + .weather-controls { padding-top: 8px; border-top: 1px solid var(--line); }
+#weather-panel .weather-controls > label[for] { display: block; margin-bottom: 5px; color: var(--quiet); }
+#weather-panel .weather-controls p { margin: 6px 0; }
+#weather-panel .weather-controls button { margin-top: 5px; }
 #audio-weather, #audio-season { margin-bottom: 6px; }
 #multiplayer-controls p { font-size: 11px; }
 #multiplayer-controls label { display: block; margin: 8px 0 4px; color: var(--muted); font-size: 11px; }

@@ -2,7 +2,7 @@
 import { playGrassFootstep, prepareGrassFootsteps } from './grass-steps.js';
 import { setParam } from './voices.js';
 
-export function bindAudioControls(engine, music, weather, onPause = () => {}, root = document.getElementById('audio-controls')) {
+export function bindAudioControls(engine, music, weather, onPause = () => {}, root = document) {
   const mute = root.querySelector('#audio-mute');
   const status = root.querySelector('#audio-status');
   const skip = root.querySelector('#audio-skip');
