@@ -24,7 +24,7 @@ const inert = () => class {
 
 async function loadGame(move = { x: 0, y: 0 }) {
   const taps = new Set();
-  const canvas = new EventTarget();
+  const canvas = Object.assign(new EventTarget(), { classList: { add: noop, remove: noop, toggle: noop } });
   const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
@@ -48,7 +48,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
   const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), {
     console, URLSearchParams, window,
-    document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop },
+    document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop,
+      createElement: () => ({ classList: { add: noop, remove: noop }, hidden: false, textContent: '' }) },
     matchMedia: () => ({ matches: false }), innerWidth: 800, innerHeight: 600,
     cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: noop,
     Grass: inert(),
@@ -62,6 +63,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     clearInput: noop, isGameplayBlocked: () => false, setGameplayBlocked: noop,
     Inventory, ITEMS, Hud: inert(), InventoryScreen: inert(),
     GroundItems: inert(), Harvesting: inert(), Collection: inert(), drawItem: noop, drawResource: noop,
+    Projectiles: inert(), screenToWorld: () => null, isBow: () => false, isThrown: () => false, SCALE: 13, TILT: 0.5,
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
     Player, ASPECT, GRASS,

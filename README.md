@@ -95,6 +95,17 @@ For now it is a single outlaw exploring procedurally generated terrain.
 
 ![Inventory with the outlaw's gear, a satchel and selected item details](docs/inventory.png)
 
+- **Weapons.** Nine weapons in iron by default, each a satchel item that shows
+  on the 3D character, in hand or slung across the back or at the hip: short
+  sword, greatsword, battle axe, war hammer, spear, dagger, quarterstaff,
+  javelin and yew longbow. Heavier weapons swing more slowly and cost more
+  stamina; spears reach further; an axe fells a tree in one blow and a
+  greatsword or hammer in two. Hold the attack to draw the bow and release to
+  shoot at the cursor (or straight ahead from the keyboard), using arrows from
+  the satchel; tap with a spear or javelin to jab, or hold and release to throw
+  it. Arrows and thrown weapons stay where they land until you walk over them,
+  and the next spear or javelin in the satchel is taken up after a throw. The
+  satchel holds 60 kg and starts with every weapon and 30 arrows to try.
 - **Gathering.** Loose resources bob and glint above the ground and reflect in
   water: granite, basalt or limestone stones to match the local rock layer,
   sticks under trees, flint, berries, mushrooms, reeds and clay by the shore.
@@ -189,7 +200,8 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
 | `Space` | Jump; again in the air for a trick (a barrel roll when running) |
-| `J` / left click | Strike with the equipped short sword: repeat for a combo, sprint for a thrust, jump for a plunge; cuts fell trees and mow tall grass |
+| `J` / left click | Strike with the equipped weapon: repeat for a combo, sprint for a thrust, jump for a plunge; cuts fell trees and mow tall grass |
+| Hold `J` / left button | Draw the bow, or ready a spear or javelin throw; release to shoot or throw at the cursor |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | `T` | Stow the torch or draw a fresh lit torch |

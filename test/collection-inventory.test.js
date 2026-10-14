@@ -45,7 +45,7 @@ test('a new collection bag is empty and emits no starter pickups', () => {
   assert.ok(inventory.slots.every((stack) => stack === null));
   assert.ok(Object.values(inventory.equipment).every((stack) => stack === null));
   assert.ok(inventory.hotbar.every((id) => id === null));
-  assert.equal(inventory.capacity, 40);
+  assert.equal(inventory.capacity, 60);
   assert.equal(inventory.weight, 0);
   assert.deepEqual(inventory.events, []);
 });

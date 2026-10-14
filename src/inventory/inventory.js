@@ -13,13 +13,21 @@ function validStack(stack) {
   return !!item && validCount(stack.count) && stack.count <= item.stackLimit;
 }
 
+// A stack's own properties beyond its item and count, e.g. a weapon's
+// material. Only stacks with the same properties merge.
+const MATERIALS = ['stone', 'copper', 'bronze', 'iron', 'steel'];
+export function stackExtras(stack) {
+  return MATERIALS.includes(stack?.material) ? { material: stack.material } : {};
+}
+const sameExtras = (stack, extras) => (stack.material ?? null) === (extras.material ?? null);
+
 // Fills existing stacks before empty slots. Callers can use a copy of the bag
 // to plan a transfer without changing anything when it cannot fit in full.
-function putInSlots(slots, id, count) {
+function putInSlots(slots, id, count, extras = {}) {
   const item = ITEMS[id];
   let remaining = count;
   for (const stack of slots) {
-    if (!stack || stack.id !== id || !validStack(stack)) continue;
+    if (!stack || stack.id !== id || !validStack(stack) || !sameExtras(stack, extras)) continue;
     const amount = Math.min(remaining, item.stackLimit - stack.count);
     stack.count += amount;
     remaining -= amount;
@@ -28,7 +36,7 @@ function putInSlots(slots, id, count) {
   for (let index = 0; index < SLOT_COUNT && remaining; index++) {
     if (slots[index] !== null) continue;
     const amount = Math.min(remaining, item.stackLimit);
-    slots[index] = { id, count: amount };
+    slots[index] = { id, count: amount, ...extras };
     remaining -= amount;
   }
   return count - remaining;
@@ -51,12 +59,12 @@ function restore(vitals, stat, amount) {
 }
 
 export class Inventory {
-  constructor({ starter = true, capacity = 40 } = {}) {
+  constructor({ starter = true, capacity = 60 } = {}) {
     this.slots = Array(SLOT_COUNT).fill(null);
     this.equipment = Object.fromEntries(EQUIPMENT_SLOTS.map((slot) => [slot, null]));
     this.hotbar = Array(HOTBAR_COUNT).fill(null);
     this.selectedHotbar = 0;
-    this.capacity = Number.isFinite(capacity) && capacity >= 0 ? capacity : 40;
+    this.capacity = Number.isFinite(capacity) && capacity >= 0 ? capacity : 60;
     this.events = [];
     if (!starter) return;
 
@@ -66,8 +74,12 @@ export class Inventory {
     for (const [id, count] of [
       ['healingDraught', 3], ['staminaTonic', 3], ['bandage', 5],
       ['ironOre', 6], ['oakLog', 3], ['woodenBuckler', 1],
+      // Every weapon to try, with arrows for the bow.
+      ['longbow', 1], ['arrow', 30], ['spear', 1], ['javelin', 3], ['battleAxe', 1], ['dagger', 1],
+      ['greatsword', 1], ['warHammer', 1], ['quarterstaff', 1],
     ]) this.add(id, count);
-    for (const [index, id] of ['shortSword', 'healingDraught', 'staminaTonic', 'bandage'].entries()) {
+    for (const [index, id] of ['shortSword', 'healingDraught', 'staminaTonic', 'bandage',
+      'longbow', 'spear', 'javelin', 'battleAxe', 'dagger'].entries()) {
       this.assignHotbar(index, id);
     }
     this.events.length = 0;
@@ -102,10 +114,11 @@ export class Inventory {
     return Math.min(amount, space);
   }
 
-  add(id, count = 1) {
+  // `extras` are the stack's own properties, e.g. { material: 'steel' }.
+  add(id, count = 1, extras = {}) {
     const amount = this.spaceFor(id, count);
     if (!amount) return 0;
-    const added = putInSlots(this.slots, id, amount);
+    const added = putInSlots(this.slots, id, amount, stackExtras(extras));
     if (added) this.events.push({ type: 'pickup', id, count: added });
     return added;
   }
@@ -122,7 +135,7 @@ export class Inventory {
     if (!validCount(count)) return null;
     const selected = this.getItem(index);
     if (!selected) return null;
-    const removed = { id: selected.stack.id, count: Math.min(count, selected.stack.count) };
+    const removed = { id: selected.stack.id, count: Math.min(count, selected.stack.count), ...stackExtras(selected.stack) };
     selected.stack.count -= removed.count;
     if (!selected.stack.count) this.slots[index] = null;
     return removed;
@@ -167,12 +180,12 @@ export class Inventory {
       // Prefer the source slot for replaced gear. Any hand conflict can need
       // another slot, so finish planning both transfers before changing state.
       if (planned[index] === null) planned[index] = { ...previous };
-      else if (putInSlots(planned, previous.id, previous.count) !== previous.count) return false;
+      else if (putInSlots(planned, previous.id, previous.count, stackExtras(previous)) !== previous.count) return false;
     }
 
     this.slots.splice(0, SLOT_COUNT, ...planned);
     for (const previousSlot of displaced) this.equipment[previousSlot] = null;
-    this.equipment[slot] = { id: selected.stack.id, count: 1 };
+    this.equipment[slot] = { id: selected.stack.id, count: 1, ...stackExtras(selected.stack) };
     return true;
   }
 
@@ -181,7 +194,7 @@ export class Inventory {
     const stack = this.equipment[slot];
     if (!validStack(stack)) return false;
     const planned = this.slots.map((entry) => entry ? { ...entry } : null);
-    if (putInSlots(planned, stack.id, stack.count) !== stack.count) return false;
+    if (putInSlots(planned, stack.id, stack.count, stackExtras(stack)) !== stack.count) return false;
     this.slots.splice(0, SLOT_COUNT, ...planned);
     this.equipment[slot] = null;
     return true;
