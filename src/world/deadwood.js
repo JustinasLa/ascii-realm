@@ -1,7 +1,8 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
-import { glyph } from '../render/glyphs.js';
+import { dg } from '../render/glyphs.js';
 import { MOSS } from '../render/palette.js';
+import { bakeSurface, cellBounds, ringGlyph } from './prop-art.js';
 import { ASPECT } from './world.js';
 
 export const DEADWOOD_CONDITIONS = Object.freeze(['fallen', 'snag', 'stump', 'beaver']);
@@ -10,7 +11,6 @@ export const DEADWOOD_REACH_X = 64;
 export const DEADWOOD_REACH_Y = 16;
 
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
-const G = Object.fromEntries([...'.:,|/\\#%oO0=*'].map(c => [c, glyph(c)]));
 
 function closest(x, y, segment) {
   const dx = segment.bx - segment.ax;
@@ -37,52 +37,44 @@ export function deadwoodInClearing(prop, spawn, radius = 36) {
   });
 }
 
-function bake(sample, left, right, top, bottom) {
-  const cells = [];
-  const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
-  for (let dy = Math.floor(top) - 1; dy <= Math.ceil(bottom) + 1; dy++) {
-    for (let dx = Math.floor(left / ASPECT) - 1; dx <= Math.ceil(right / ASPECT) + 1; dx++) {
-      let hits = 0, red = 0, green = 0, blue = 0, detail = null;
-      for (const oy of [-5 / 6, -0.5, -1 / 6]) {
-        for (const ox of [-0.25, 0.25]) {
-          const s = sample((dx + ox) * ASPECT, dy + oy);
-          if (!s) continue;
-          hits++;
-          red += s.color[0]; green += s.color[1]; blue += s.color[2];
-          detail = s;
-        }
-      }
-      if (hits < 2) continue;
-      const cell = { dx, dy, g: detail.g, r: Math.round(red / hits), gg: Math.round(green / hits),
-        b: Math.round(blue / hits), foliage: false, flex: 0 };
-      if (hits >= 5) {
-        cell.br = Math.round(cell.r * 0.15);
-        cell.bgG = Math.round(cell.gg * 0.15);
-        cell.bb = Math.round(cell.b * 0.16);
-      }
-      cells.push(cell);
-      bounds.minX = Math.min(bounds.minX, dx); bounds.maxX = Math.max(bounds.maxX, dx);
-      bounds.minY = Math.min(bounds.minY, dy); bounds.maxY = Math.max(bounds.maxY, dy);
-    }
+// Dead wood is baked like any other prop (see prop-art.js), over the full
+// reach of a fallen trunk on either side of its base.
+function bake(sample, left, right, top, bottom, seed, options) {
+  const cells = bakeSurface(0, Math.floor(top) - 1, Math.ceil(bottom) + 1, sample, seed,
+    { ...options, x0: Math.floor(left / ASPECT) - 1, x1: Math.ceil(right / ASPECT) + 1 });
+  for (const cell of cells) {
+    cell.foliage = false;
+    cell.flex = 0;
   }
-  return { cells, bounds };
+  return { cells, bounds: cellBounds(cells) };
 }
+
+const FUNGUS = [168, 146, 108];
+const mossGlyph = (px, py, seed) => dg(`props.moss.${Math.floor(hash2(Math.floor(px * 2), Math.floor(py), seed) * 6)}`);
 
 export function makeDeadwood(x, y, rand, { condition = 'fallen', species = 'oak', seed = 1 } = {}) {
   if (!DEADWOOD_CONDITIONS.includes(condition)) condition = 'fallen';
   const spriteSeed = Math.floor(hash2(Math.floor(x), Math.floor(y), seed + 763) * 2 ** 32);
   const random = rand ?? mulberry32(spriteSeed);
   const radius = 1.9 + random() * 2.1;
-  const bark = species === 'birch' ? [176, 182, 184] : [140, 96, 64];
-  const woodColor = [194, 146, 86];
+  const birch = species === 'birch';
+  const bark = birch ? [168, 174, 176] : [116, 86, 62];
+  const woodColor = [172, 136, 92];
   const branches = [];
   const chips = [];
   let colliders, sample, left, right, top, bottom;
-  const timber = (px, py, light, exposed = false, g = G['|']) => {
+  // Weathered timber: bark (furrowed, or birch's chalky skin) with bare
+  // wood where it has peeled. `lying` turns the bark's furrows sideways.
+  const timber = (px, py, light, exposed = false, lying = false) => {
     const grain = valueNoise(px * 1.2, py * 0.2, spriteSeed + 11);
-    const base = exposed ? woodColor : bark;
-    return { color: base.map((v, i) => clamp(v * light * (0.84 + grain * 0.28) + (i === 2 ? 6 : 0), 0, 255)), g };
+    const l = clamp(light * (0.84 + grain * 0.28));
+    if (exposed) return { m: lying ? 'plankh' : 'plank', l, c: woodColor };
+    return { m: birch ? 'birch' : lying ? 'barkh' : 'bark', l, c: bark };
   };
+  const endGrain = (nx, ny, d, px, py) => d > 0.78
+    ? timber(px, py, 0.5)
+    : { m: 'cut', l: clamp(0.66 - nx * 0.1 - ny * 0.12), c: woodColor,
+      g: ringGlyph(-nx, -ny, spriteSeed, Math.floor(px * 2), Math.floor(py * 2)) };
 
   if (condition === 'fallen') {
     const length = 23 + random() * 19;
@@ -97,6 +89,7 @@ export function makeDeadwood(x, y, rand, { condition = 'fallen', species = 'oak'
       const side = random() < 0.5 ? -1 : 1;
       branches.push({ ax, ay, bx: ax + side * (3 + random() * 6), by: ay - 3 - random() * 6, r: 0.35 + random() * 0.35 });
     }
+    const fungusAt = length * (0.15 + hash2(spriteSeed, 3, 1) * 0.7);
     left = trunk.ax - radius * 2; right = trunk.bx + radius * 2;
     top = Math.min(trunk.ay, trunk.by) - radius * 2 - 11;
     bottom = Math.max(trunk.ay, trunk.by) + radius;
@@ -107,26 +100,25 @@ export function makeDeadwood(x, y, rand, { condition = 'fallen', species = 'oak'
         const cy = trunk.ay + (trunk.by - trunk.ay) * t - radius;
         const nx = (px - end) / (radius * 0.65), ny = (py - cy) / radius;
         const d = nx * nx + ny * ny;
-        if (d < 1) {
-          if (d > 0.78) return timber(px, py, 0.6, false, G['#']);
-          const ring = Math.floor(Math.sqrt(d) * 7);
-          return timber(px, py, 0.72 + (1 - ny) * 0.18, true, ring % 2 ? G['o'] : G['O']);
-        }
+        if (d < 1) return endGrain(nx, ny, d, px, py);
       }
       const p = closest(px, py + radius, trunk);
       const along = (px - trunk.ax) * dx + (py + radius - trunk.ay) * dy;
       if (along >= 0 && along <= length && Math.abs(py - (p.y - radius)) < radius) {
         const normal = (py - p.y + radius) / radius;
         const grain = valueNoise(along * 0.35, normal * 2, spriteSeed + 17);
-        const exposed = grain > 0.8;
-        const moss = normal < -0.3 && grain < 0.27;
-        const s = timber(px, py, 0.62 - normal * 0.27, exposed, exposed ? G['='] : grain < 0.5 ? G[':'] : G['%']);
-        if (moss) s.color = MOSS.map((v) => v * (0.8 + grain * 0.6));
+        const exposed = grain > 0.86;
+        const s = timber(px, py, 0.68 - normal * 0.4, exposed, true);
+        if (normal < -0.25 && grain < 0.4) {
+          s.acc = { g: mossGlyph(px, py, spriteSeed), c: MOSS.map((v) => v * (0.75 + grain * 0.7)) };
+        } else if (Math.abs(along - fungusAt) < 1 && normal > -0.1 && normal < 0.6) {
+          s.acc = { g: dg(`props.fungus.${Math.floor(hash2(spriteSeed, 5, 2) * 3)}`), c: FUNGUS };
+        }
         return s;
       }
       for (const b of branches) {
         const p = closest(px, py, b);
-        if (Math.hypot(px - p.x, py - p.y) < b.r) return timber(px, py, 0.7, p.t > 0.88, G[b.bx > b.ax ? '/' : '\\']);
+        if (Math.hypot(px - p.x, py - p.y) < b.r) return timber(px, py, 0.7, p.t > 0.88);
       }
       return null;
     };
@@ -141,39 +133,49 @@ export function makeDeadwood(x, y, rand, { condition = 'fallen', species = 'oak'
       branches.push({ ax, ay, bx: ax + side * (5 + random() * 8), by: ay - 3 - random() * 7, r: 0.3 + random() * 0.35 });
     }
     if (condition === 'beaver') for (let i = 0; i < 9; i++) {
-      chips.push({ x: (random() - 0.5) * radius * 5, y: -random() * 2, g: i % 2 ? G['/'] : G[','] });
+      chips.push({ x: (random() - 0.5) * radius * 5, y: -random() * 2, g: i % 4 });
     }
+    const fungusY = -height * (0.2 + hash2(spriteSeed, 4, 1) * 0.4);
     left = -radius * 3 - 14; right = radius * 3 + 14; top = -height - 4; bottom = 2;
     sample = (px, py) => {
       const v = clamp(-py / height);
       const centre = -py * lean;
+      if (condition === 'stump') {
+        // The sawn top, seen from above.
+        const nx = (px - height * lean) / (radius * taper);
+        const ny = (py + height) / 1.2;
+        const d = nx * nx + ny * ny;
+        if (d < 1) return endGrain(nx, ny, d, px, py);
+      }
       let width = radius * (1 - v * (1 - taper));
       if (condition === 'beaver') width *= 1 - Math.max(0, 1 - Math.abs(v - 0.7) / 0.4) * 0.68;
       const nx = (px - centre) / width;
-      const splinter = valueNoise(px * 1.3, 0, spriteSeed + 29) * (condition === 'snag' ? 5 : 2);
+      const splinter = condition === 'stump' ? 0 : valueNoise(px * 1.3, 0, spriteSeed + 29) * (condition === 'snag' ? 5 : 2);
       if (py <= 0.2 && py >= -height + splinter && Math.abs(nx) < 1) {
-        const exposed = condition === 'beaver' && v > 0.25 || py < -height + 5;
-        const grain = valueNoise(px * 1.8, py * 0.16, spriteSeed + 37);
-        const g = exposed ? (condition === 'beaver' ? (Math.floor(py * 2) % 3 ? G['/'] : G[':']) : G['#']) : grain < 0.35 ? G[':'] : G['|'];
-        return timber(px, py, 0.65 - nx * 0.24 + Math.sqrt(Math.max(0, 1 - nx * nx)) * 0.16, exposed, g);
-      }
-      if (condition === 'stump') {
-        const d = ((px - height * lean) / (radius * taper)) ** 2 + ((py + height) / 1.2) ** 2;
-        if (d < 1) return timber(px, py, 0.95, true, Math.floor(Math.sqrt(d) * 6) % 2 ? G['O'] : G['o']);
+        const exposed = condition === 'beaver' && v > 0.45 && v < 0.95 || condition === 'snag' && py < -height + 5;
+        const round = Math.sqrt(Math.max(0, 1 - nx * nx));
+        const s = timber(px, py, 0.5 - nx * 0.34 + round * 0.18, exposed);
+        if (!exposed && nx > 0.2 && valueNoise(px * 1.4, py * 0.5, spriteSeed + 41) < 0.4 && v < 0.6) {
+          s.acc = { g: mossGlyph(px, py, spriteSeed), c: MOSS };
+        } else if (!exposed && Math.abs(py - fungusY) < 0.7 && nx < -0.3 && condition !== 'stump') {
+          s.acc = { g: dg('props.fungus.1'), c: FUNGUS };
+        }
+        return s;
       }
       for (const b of branches) {
         const p = closest(px, py, b);
-        if (Math.hypot(px - p.x, py - p.y) < b.r) return timber(px, py, 0.7, p.t > 0.88, G[b.bx > b.ax ? '/' : '\\']);
-      }
-      for (const chip of chips) if (Math.abs(px - chip.x) < 0.42 && Math.abs(py - chip.y) < 0.3) {
-        return { color: [180, 134, 78], g: chip.g };
+        if (Math.hypot(px - p.x, py - p.y) < b.r) return timber(px, py, 0.7, p.t > 0.88);
       }
       // Flared exposed roots keep a damaged upright tree grounded.
-      if (py > -2 && py < 0.2 && Math.abs(px) < radius + (py + 2) * 0.7) return timber(px, py, 0.6, false, G['/']);
+      if (py > -2 && py < 0.2 && Math.abs(px) < radius + (py + 2) * 0.7) return timber(px, py, 0.5, false, true);
       return null;
     };
   }
-  const { cells, bounds } = bake(sample, left, right, top, bottom);
+  // Gnawed chips lie scattered at the foot of a beaver's work.
+  const extras = chips.map((chip) => ({ dx: Math.round(chip.x / ASPECT), dy: Math.round(chip.y) + 1,
+    g: dg(`props.chips.${chip.g}`), c: [200, 156, 96] }));
+  const shadow = condition === 'fallen' ? null : { rx: radius * 1.6, ry: 1, ox: radius * 0.4 };
+  const { cells, bounds } = bake(sample, left, right, top, bottom, spriteSeed, { extras, shadow });
   return { kind: 'deadwood', condition, species, x, y, cells, bounds, colliders,
     footW: radius / ASPECT, footH: radius * 0.65, height: bounds.maxY - bounds.minY + 1, top: bounds.minY };
 }
