@@ -5,26 +5,27 @@ import { grassGust } from '../audio/environment.js';
 import { hash2 } from '../core/rng.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
-import { dg, over } from '../render/glyphs.js';
-import { BODY_SIDES, FLAME_STEPS, LICKS } from '../render/glyph-packs/effects.js';
+import { dg, glyph, over } from '../render/glyphs.js';
+import { FLAME_STEPS } from '../render/glyph-packs/effects.js';
 import { softLayer, subGlyph, veil } from './glow.js';
 import { ASPECT, WATER } from './world.js';
 
 const names = (prefix, n) => Array.from({ length: n }, (_, i) => dg(`${prefix}.${i}`));
-const pairs = (prefix) => Array.from({ length: FLAME_STEPS * FLAME_STEPS },
-  (_, i) => dg(`${prefix}.${Math.floor(i / FLAME_STEPS)}${i % FLAME_STEPS}`));
-const STROKE = pairs('effects.flame.s');
-const TIP = pairs('effects.flame.tip');
-const CORE = names('effects.flame.core', 3);
-const LICK = names('effects.flame.lick', LICKS);
-const BODY = [0, 1, 2].map((v) => BODY_SIDES.map((side) => dg(`effects.flame.body.${v}${side}`)));
-const EMBER = names('effects.ember', 9);
-const SPARK = names('effects.spark', 8);
+// Fire uses the font's full-strength characters directly. The soft effect
+// glyphs lose too much brightness when translated into plain characters.
+const chars = (text) => [...text].map(glyph);
+const STROKE = Array.from({ length: FLAME_STEPS * FLAME_STEPS }, (_, i) => {
+  const slope = i % FLAME_STEPS - Math.floor(i / FLAME_STEPS);
+  return glyph(slope > 0 ? '/' : slope < 0 ? '\\' : '|');
+});
+const TIP = STROKE.map((g, i) => Math.abs(i % FLAME_STEPS - Math.floor(i / FLAME_STEPS)) > 1 ? g : glyph('^'));
+const CORE = chars('@#*');
+const BODY = [chars('#()'), chars('*{}'), chars('#{}')];
+const EMBER = chars("..'...*..");
+const SPARK = chars('-\\|/-\\|/');
 const SMOKE = names('effects.smoke', 6);
-const COAL = names('effects.coal', 4);
-const LOG = names('effects.log', 4);
-const LOG_GLOW = names('effects.logglow', 4);
-const STONE = names('effects.stone', 4);
+const COAL = chars('*o*o');
+const STONE = chars('oOoO');
 const ASH = names('speck', 16);
 // Flung ash and burst embers keep to plain specks and embers.
 const ASH_FLAKE = names('speck', 4);
@@ -70,15 +71,16 @@ function hearth(seed) {
       const log = !stone && (falling || rising);
       const shade = 0.7 + rnd * 0.3 - dy * 0.08;
       const v = Math.floor(rnd * 4);
-      const g = stone ? STONE[v] : log ? LOG[(falling ? 1 : 0) + (v & 2)] : ASH[Math.floor(rnd * 16)];
+      const logGlyph = glyph(Math.abs(dx) < 2 ? 'X' : Math.abs(dx) < 4 ? '=' : falling ? '\\' : '/');
+      const g = stone ? STONE[v] : log ? logGlyph : ASH[Math.floor(rnd * 16)];
       const cell = { dx, dy, g, stone,
-        r: (stone ? 112 : log ? 88 : 70) * shade,
-        gg: (stone ? 102 : log ? 56 : 52) * shade,
-        b: (stone ? 92 : log ? 34 : 44) * shade, bg: stone ? [20, 15, 11] : [24, 13, 7] };
+        r: (stone ? 148 : log ? 128 : 70) * shade,
+        gg: (stone ? 132 : log ? 76 : 52) * shade,
+        b: (stone ? 112 : log ? 42 : 44) * shade, bg: stone ? [20, 15, 11] : [24, 13, 7] };
       cells.push(cell);
       // Charred logs glow along their cracks, and coals smoulder in the ash
       // around them; both pulse with the fire in prepare().
-      if (log) cells.push({ dx, dy, g: over(LOG_GLOW[(falling ? 1 : 0) + (v & 2)]), glow: 0.75, seed: rnd });
+      if (log) cells.push({ dx, dy, g: over(logGlyph), glow: 0.75, seed: rnd });
       else if (!stone && d < 0.5) cells.push({ dx, dy, g: over(COAL[v]), glow: 1, seed: rnd });
     }
   }
@@ -101,7 +103,7 @@ export function flameCell(cells, dx, dy, heat, up, left, right, off, offTop, top
   const axis = Math.abs(off) < 0.5 || Math.abs(offTop) < 0.5;
   const pair = step(off) * FLAME_STEPS + step(offTop);
   const light = Math.min(1.15, brightness * 1.08);
-  const lick = LICK[Math.floor(rnd * 97) % LICK.length];
+  const lick = glyph(left < right ? '(' : right < left ? ')' : '^');
   if (top && axis && heat < 0.45) {
     cells.push({ dx, dy, g: over(TIP[pair]), r, gg: g + 25, b });
   } else if (heat >= 0.4) {
@@ -110,7 +112,7 @@ export function flameCell(cells, dx, dy, heat, up, left, right, off, offTop, top
     const side = left < 0.3 && right >= 0.3 ? 1 : right < 0.3 && left >= 0.3 ? 2 : 0;
     const base = up >= 0.3 ? BODY[Math.floor(rnd * 3)][side] : lick;
     cells.push({ dx, dy, g: base, r, gg: g * 0.84, b: b * 0.6, bg });
-    if (heat >= 0.78) {
+    if (heat >= 0.58) {
       cells.push({ dx, dy, g: over(CORE[Math.floor(rnd * 7) % 3]), r: 255 * light, gg: 244 * light, b: 196 * light });
     } else if (axis) {
       cells.push({ dx, dy, g: over(top ? TIP[pair] : STROKE[pair]), r: 255 * light,
@@ -153,11 +155,12 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
 }
 
 export class Fires {
-  constructor({ windAt = grassGust, random = Math.random } = {}) {
+  constructor({ windAt = grassGust, random = Math.random, resourcesIn = () => [] } = {}) {
     this.list = [];
     this.nextId = 1;
     this.windAt = windAt;
     this.random = random;
+    this.resourcesIn = resourcesIn;
     this.particles = [];
     this.events = [];
   }
@@ -170,6 +173,14 @@ export class Fires {
         if ((dx / 7) ** 2 + (dy / 2.3) ** 2 > 1) continue;
         if (world.typeAt(x + dx, y + dy) === WATER || !world.isWalkable(x + dx, y + dy)) return false;
       }
+    }
+    // Resource plants have their own sprites, independent of meadow blades.
+    // A bush in front can hide the entire hearth even on walkable terrain.
+    for (const node of this.resourcesIn(x - 14, y - 2, x + 14, y + 10)) {
+      const bush = node.kind === 'bush';
+      if (!bush && (node.kind !== 'grass' || node.harvested)) continue;
+      if (Math.abs(node.x - x) <= 7 + (bush ? 7 : 3)
+        && node.y >= y - 2 && node.y - (bush ? 8 : 6) <= y + 2) return false;
     }
     return !this.nearest(x, y, 7);
   }
@@ -202,6 +213,11 @@ export class Fires {
       hearth: kind === 'campfire' ? base : base.filter(c => Math.abs(c.dx) <= 3 && Math.abs(c.dy) <= 1), cells: [],
       age: 0, intensity: START_INTENSITY, windStress: 0, gust: 0.42,
       flare: 0, leanX: 0, leanY: 0, smother: 0, nextContact: 0 };
+    // Clear the hearth and the roots immediately in front, whose tall blades
+    // would otherwise hide the logs and flame. Reuse the terrain's persistent
+    // prop coverage, so travelling never grows grass back through a live fire.
+    fire.clearing = { x, y: y + 3, footW: kind === 'campfire' ? 14 : 8, footH: kind === 'campfire' ? 10 : 7 };
+    world.coverGrass?.(fire.clearing, 1);
     this.list.push(fire);
     return fire;
   }
@@ -218,6 +234,7 @@ export class Fires {
   extinguish(world, fire) {
     const index = this.list.indexOf(fire);
     if (index < 0) return false;
+    world.coverGrass?.(fire.clearing, -1);
     world.burnGrass(fire.x, fire.y);
     this.list.splice(index, 1);
     fire.intensity = 0;
@@ -394,8 +411,8 @@ export class Fires {
         const k = pulse * ember * c.glow;
         cells.push({ dx: c.dx, dy: c.dy, g: c.g, r: 90 + 165 * k, gg: 24 + 112 * k * k, b: 8 + 30 * k * k * k });
       }
-      const size = (0.3 + strength * 0.7) * (1 + fire.flare * 0.25);
-      const brightness = Math.min(1.15, 0.25 + Math.sqrt(strength) * 0.75 + fire.flare * 0.2);
+      const size = (0.5 + strength * 0.5) * (1 + fire.flare * 0.25);
+      const brightness = Math.min(1.15, 0.8 + Math.sqrt(strength) * 0.2 + fire.flare * 0.2);
       const wind = (fire.gust - 0.42) * 2.4;
       const frame = Math.floor(time * 12);
       // Each of three tongues sways and stretches; axisAt gives its centre

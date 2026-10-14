@@ -148,7 +148,7 @@ const dust = new Dust();
 const footprints = new Footprints();
 const grass = new Grass();
 const splashes = new Splashes();
-const fires = new Fires();
+const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
 fires.addStarter(world);
 const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });

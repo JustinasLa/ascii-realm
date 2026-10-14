@@ -4,6 +4,11 @@ import { Fires, FIRE_GROW_SECONDS, MAX_FIRES, MAX_FIRE_PARTICLES, STRONG_WIND, f
 import { grassGust } from '../src/audio/environment.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
+import { Grass } from '../src/world/grass.js';
+import { GLYPHS, GLYPH_MASK } from '../src/render/glyphs.js';
+import { Harvesting } from '../src/world/harvesting.js';
+import { GroundItems } from '../src/world/items.js';
+import { drawResource } from '../src/world/item-draw.js';
 import { ASPECT, DIRT, GRASS, STONE, WATER, World } from '../src/world/world.js';
 import { withLayers } from './helpers/renderer.js';
 
@@ -49,6 +54,81 @@ test('starter fires are reproducible and stand beside real seeded spawn clearing
     assert.ok(Math.hypot((a.x - world.spawn.x) * ASPECT, a.y - world.spawn.y) > 8);
     assert.equal(new Fires().canPlace(world, a.x, a.y), true);
   }
+});
+
+test('a live hearth clears grass roots, stays clear after travel and releases its coverage when extinguished', () => {
+  const world = new World(1, 16);
+  const fires = new Fires();
+  const fire = fires.addStarter(world);
+  assert.ok(fire);
+  const cleared = () => world.locate(Math.floor(fire.x), Math.floor(fire.y));
+  let { c, i } = cleared();
+  assert.equal(c.grassHeight[i], 0);
+  assert.equal(c.burnt, null, 'a new hearth clears grass without scorching it');
+  assert.ok(!c.blades.indices.includes(i), 'no blade is rooted in the hearth');
+  const key = `${c.cx},${c.cy}`;
+  for (let n = 0; n < 48; n++) world.chunk(n + 20, 20);
+  assert.equal(world.chunks.has(key), false, 'the original chunk was evicted');
+  ({ c, i } = cleared());
+  assert.equal(c.grassHeight[i], 0, 'the live clearing survives terrain regeneration');
+  assert.ok(!c.blades.indices.includes(i));
+  fires.extinguish(world, fire);
+  assert.ok(!world.bareGround.get(key).has(i), 'the removed fire no longer covers this cell');
+  ({ c, i } = cleared());
+  assert.ok(c.grassHeight[i] > 0, 'the original grass height is restored');
+  assert.equal(c.burnt[i], 255, 'the usual ash remains after extinguishing');
+  assert.ok(!c.blades.indices.includes(i), 'ash keeps tall grass out of the burnt hearth');
+});
+
+test('tall foreground grass cannot overwrite a campfire stone ring', () => {
+  const world = grassWorld();
+  for (const c of world.chunks.values()) {
+    c.grassHeight.fill(5);
+    c.grassDensity.fill(1);
+    world.touched(c);
+  }
+  const fires = new Fires({ windAt: () => 0.42 });
+  const fire = fires.add(world, 0.5, 0.5);
+  const r = buffer();
+  const grass = new Grass();
+  for (const intensity of [0.18, 1]) {
+    fire.intensity = intensity;
+    fires.prepare(view, 1);
+    grass.drawLayered(r, world, view, 1, [{ y: fire.y, draw: () => fires.draw(r, view, fire, 1) }]);
+    for (const c of fire.hearth.filter(c => c.stone && c.dy === 2)) {
+      const i = (40 + c.dy) * r.cols + 40 + c.dx;
+      assert.equal(r.glyphAt(i), c.g, 'front stones stay visible at every fire size');
+    }
+    const flames = fire.cells.filter(c => c.dy < -2 && c.r > 180);
+    assert.ok(flames.length >= 8, 'even a newly lit fire has a visible flame');
+    assert.ok(flames.every(c => (c.g & GLYPH_MASK) < GLYPHS.length), 'flames use full-strength font characters');
+  }
+});
+
+test('campfires choose a clear hearth instead of building beneath foreground resource plants', () => {
+  const world = new World(1);
+  const harvesting = new Harvesting(world, new GroundItems(world));
+  const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
+  assert.equal(fires.add(world, 36.5, 39.5), null, 'the original starter location is hidden by a berry bush');
+  const fire = fires.addStarter(world);
+  assert.ok(fire, 'the starter still finds a nearby clearing');
+  const nearby = harvesting.resourcesIn(fire.x - 14, fire.y - 12, fire.x + 14, fire.y + 12);
+  assert.ok(nearby.some(n => n.kind === 'bush'), 'the campsite remains in the same planted meadow');
+  const fireView = { x0: Math.floor(fire.x) - 40, y0: Math.floor(fire.y) - 40, cols: 80, rows: 80 };
+  const r = buffer();
+  fires.prepare(fireView, 1);
+  const draws = nearby.map(node => ({ y: node.y, draw: () => drawResource(r, fireView, node, 1) }));
+  draws.push({ y: fire.y, draw: () => fires.draw(r, fireView, fire, 1) });
+  draws.sort((a, b) => a.y - b.y);
+  new Grass().drawLayered(r, world, fireView, 1, draws);
+  for (const c of fire.hearth.filter(c => c.stone && c.dy === 2)) {
+    assert.equal(r.glyphAt((40 + c.dy) * r.cols + 40 + c.dx), c.g, 'plants leave the front stone ring visible');
+  }
+  const nodes = [{ kind: 'grass', x: 0.5, y: 4.5, harvested: false }];
+  const placement = new Fires({ resourcesIn: () => nodes });
+  assert.equal(placement.add(dryWorld(), 0.5, 0.5), null, 'standing resource grass would cover the hearth');
+  nodes[0].harvested = true;
+  assert.ok(placement.add(dryWorld(), 0.5, 0.5), 'cut stubble leaves room for a fire');
 });
 
 test('C creates a fire ahead, extinguishes the closest fire, and rejects water and jumping', () => {
