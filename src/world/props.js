@@ -407,7 +407,6 @@ const STUMP = [
   { dx: 0, dy: 0, g: glyph('w'), r: 88, gg: 62, b: 40 },
 ];
 
-// A `t` of null draws the prop still, for views too far out to see it sway.
 export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
   const direct = write === putCell;
   if (direct && !propInView(view, prop)) return;
@@ -417,7 +416,7 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
     for (const c of STUMP) write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by);
     return;
   }
-  const tree = t !== null && (prop.kind === 'tree' || prop.kind === 'bush');
+  const tree = prop.kind === 'tree' || prop.kind === 'bush';
   const sway = tree ? treeWind(prop, t, seed) : 0;
   const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
   const sin = tree ? Math.sin(t * 1.4) : 0;
