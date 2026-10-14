@@ -80,7 +80,8 @@ export class Hud {
     this.frames = element('section', 'hud-frames hud-panel');
     attribute(this.frames, 'aria-label', 'Player status');
     const status = element('div', 'hud-frame hud-status');
-    status.append(element('div', 'hud-name', String(name || 'Wanderer').slice(0, 24)));
+    this.nameNode = element('div', 'hud-name', String(name || 'Wanderer').slice(0, 24));
+    status.append(this.nameNode);
     this.health = makeVital('Health', 'health', 'HP');
     this.stamina = makeVital('Stamina', 'stamina', 'ST');
     this.load = element('div', 'hud-frame-note');
@@ -148,7 +149,9 @@ export class Hud {
     attribute(this.toastLayer, 'aria-relevant', 'additions');
     this.damageLayer = element('div', 'hud-damage-layer');
     attribute(this.damageLayer, 'aria-hidden', 'true');
-    this.element.append(this.toastLayer, this.damageLayer);
+    // Notifications stack under the status and party frames, never over them.
+    this.frames.append(this.toastLayer);
+    this.element.append(this.damageLayer);
     this.root.append(this.element);
     this.update(0);
   }
@@ -263,6 +266,10 @@ export class Hud {
     if (!node) return;
     node.classList.add('hud-frame-note');
     this.status.append(node);
+  }
+
+  setName(name) {
+    text(this.nameNode, String(name || 'Wanderer').slice(0, 24));
   }
 
   // Party members' frames, below the player's own: [{ name, health, maxHealth,

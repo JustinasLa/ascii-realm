@@ -112,6 +112,10 @@ async function loadGame(move = { x: 0, y: 0 }) {
       update() {}
     },
     bindAudioControls: () => Object.assign(() => {}, { updateSong: noop }),
+    cleanName: (value) => String(value), PLAYER_COLORS: [[1, 2, 3]], playerState: () => ({}),
+    MultiplayerClient: class { constructor() { this.players = []; this.room = null; } leave() {} },
+    RemotePlayers: class { sync() {} update() {} visible() { return []; } },
+    bindMultiplayerControls: noop,
   });
   await Promise.resolve();
   return {
