@@ -8,6 +8,7 @@ import { putCell } from '../render/cells.js';
 import { dg, glyph, over } from '../render/glyphs.js';
 import { FLAME_STEPS } from '../render/glyph-packs/effects.js';
 import { softLayer, subGlyph, veil } from './glow.js';
+import { ConnectedFire, burnStrength, vegetationFuel } from './fire-spread.js';
 import { ASPECT, WATER } from './world.js';
 
 const names = (prefix, n) => Array.from({ length: n }, (_, i) => dg(`${prefix}.${i}`));
@@ -155,12 +156,13 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
 }
 
 export class Fires {
-  constructor({ windAt = grassGust, random = Math.random, resourcesIn = () => [] } = {}) {
+  constructor({ windAt = grassGust, random = Math.random, resourcesIn = () => [], fuelAt = vegetationFuel } = {}) {
     this.list = [];
     this.nextId = 1;
     this.windAt = windAt;
     this.random = random;
     this.resourcesIn = resourcesIn;
+    this.fuelAt = fuelAt;
     this.particles = [];
     this.events = [];
   }
@@ -177,6 +179,7 @@ export class Fires {
     // Resource plants have their own sprites, independent of meadow blades.
     // A bush in front can hide the entire hearth even on walkable terrain.
     for (const node of this.resourcesIn(x - 14, y - 2, x + 14, y + 10)) {
+      if (node.burnt) continue;
       const bush = node.kind === 'bush';
       if (!bush && (node.kind !== 'grass' || node.harvested)) continue;
       if (Math.abs(node.x - x) <= 7 + (bush ? 7 : 3)
@@ -192,32 +195,41 @@ export class Fires {
     return this.create(world, x, y, 'campfire');
   }
 
-  // A thrown torch ignites its landing spot without building a stone ring.
-  // Near an existing fire it feeds that fire instead of stacking flames.
-  ignite(world, x, y) {
+  // Natural ignitions share only the same burning fuel or a contained hearth.
+  // A nearby fire across bare ground belongs to a different incident.
+  ignite(world, x, y, { source = 'torch' } = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     x = Math.floor(x) + 0.5;
     y = Math.floor(y) + 0.5;
-    if (world.typeAt(x, y) === WATER || !world.isWalkable(x, y)) return null;
-    const nearby = this.nearest(x, y, 7);
+    if (world.typeAt(x, y) === WATER) return null;
+    const fuel = this.fuelAt(world, x, y, this.resourcesIn);
+    if (!world.isWalkable(x, y) && !fuel) return null;
+    const nearby = this.list.find(f => f.kind === 'campfire'
+      ? ((x - f.x) / 7) ** 2 + ((y - f.y) / 2.3) ** 2 <= 1
+      : [...f.spread.active.values()].some(n => ((x - n.fuel.x) / n.fuel.width) ** 2 + ((y - n.fuel.y) / n.fuel.height) ** 2 <= 1));
     if (nearby) return nearby;
+    if (source === 'lightning' && !fuel) return null;
     if (this.list.length >= MAX_FIRES) return null;
-    world.burnGrass(x, y);
-    return this.create(world, x, y, 'ground');
+    return this.create(world, x, y, 'ground', fuel, source);
   }
 
-  create(world, x, y, kind) {
+  create(world, x, y, kind, fuel = null, source = 'torch') {
     const seed = Math.floor(hash2(x, y, world.seed + 910) * 0x7fffffff);
     const base = hearth(seed);
     const fire = { id: this.nextId++, x, y, seed, kind,
-      hearth: kind === 'campfire' ? base : base.filter(c => Math.abs(c.dx) <= 3 && Math.abs(c.dy) <= 1), cells: [],
+      hearth: kind === 'campfire' ? base : [], cells: [], source: kind === 'campfire' ? 'campfire' : source,
       age: 0, intensity: START_INTENSITY, windStress: 0, gust: 0.42,
       flare: 0, leanX: 0, leanY: 0, smother: 0, nextContact: 0 };
     // Clear the hearth and the roots immediately in front, whose tall blades
     // would otherwise hide the logs and flame. Reuse the terrain's persistent
     // prop coverage, so travelling never grows grass back through a live fire.
-    fire.clearing = { x, y: y + 3, footW: kind === 'campfire' ? 14 : 8, footH: kind === 'campfire' ? 10 : 7 };
-    world.coverGrass?.(fire.clearing, 1);
+    if (kind === 'campfire') {
+      fire.clearing = { x, y: y + 3, footW: 14, footH: 10 };
+      world.coverGrass?.(fire.clearing, 1);
+    } else {
+      fire.spread = new ConnectedFire(world, fuel, x, y, { fuelAt: this.fuelAt, resourcesIn: this.resourcesIn });
+      fire.intensity = fire.spread.strength();
+    }
     this.list.push(fire);
     return fire;
   }
@@ -225,20 +237,24 @@ export class Fires {
   nearest(x, y, radius = 10) {
     let nearest = null;
     for (const fire of this.list) {
-      const distance = Math.hypot((fire.x - x) * ASPECT, fire.y - y);
+      const point = fire.spread?.nearest(x, y) ?? fire;
+      const distance = Math.hypot((point.x - x) * ASPECT, point.y - y);
       if (distance <= radius) { radius = distance; nearest = fire; }
     }
     return nearest;
   }
 
-  extinguish(world, fire) {
+  extinguish(world, fire, reason = 'manual') {
     const index = this.list.indexOf(fire);
     if (index < 0) return false;
-    world.coverGrass?.(fire.clearing, -1);
-    world.burnGrass(fire.x, fire.y);
+    if (fire.kind === 'campfire') {
+      world.coverGrass?.(fire.clearing, -1);
+      world.burnGrass(fire.x, fire.y);
+    } else fire.spread.stop();
     this.list.splice(index, 1);
     fire.intensity = 0;
     fire.cells = [];
+    fire.outReason = reason;
     return true;
   }
 
@@ -251,8 +267,15 @@ export class Fires {
     if (!Number.isFinite(distance2) || distance2 < 0.001) return false;
     let touched = false;
     for (const fire of [...this.list]) {
-      const t = Math.max(0, Math.min(1, ((fire.x - fromX) * ASPECT * dx + (fire.y - fromY) / TILT * dy) / distance2));
-      const point = { x: fromX + (player.x - fromX) * t, y: fromY + (player.y - fromY) * t };
+      let point = null, closest = Infinity;
+      const positions = fire.spread ? [...fire.spread.active.values()].map(n => n.fuel) : [fire];
+      for (const position of positions) {
+        const t = Math.max(0, Math.min(1, ((position.x - fromX) * ASPECT * dx + (position.y - fromY) / TILT * dy) / distance2));
+        const p = { x: fromX + (player.x - fromX) * t, y: fromY + (player.y - fromY) * t };
+        const d = Math.hypot((position.x - p.x) * ASPECT, (position.y - p.y) / TILT);
+        if (d < closest) { closest = d; point = p; }
+      }
+      if (!point) continue;
       const strength = 0.25 + Math.min(1, Math.max(player.run ?? 0, (player.speed ?? 0) / (player.runSpeed || 5))) * 0.75;
       touched = this.react(world, { type: 'pass', ...point, strength, dx, dy }, player, fire) || touched;
     }
@@ -269,8 +292,9 @@ export class Fires {
     let reacted = false;
     for (const fire of onlyFire ? [onlyFire] : [...this.list]) {
       if (!this.list.includes(fire) || (foot && fire.age < fire.nextContact)) continue;
-      const dx = (fire.x - event.x) * ASPECT;
-      const dy = (fire.y - event.y) / TILT;
+      const point = fire.spread?.nearest(event.x, event.y) ?? fire;
+      const dx = (point.x - event.x) * ASPECT;
+      const dy = (point.y - event.y) / TILT;
       const distance = Math.hypot(dx, dy);
       const radius = (fire.kind === 'ground' ? 2.5 : 4.5) + contact.reach;
       if (distance > radius) continue;
@@ -293,13 +317,13 @@ export class Fires {
       fire.leanX = Math.max(-3.5, Math.min(3.5, fire.leanX + pushX * power * 3));
       fire.leanY = Math.max(-3.5, Math.min(3.5, fire.leanY + pushY * power * 3));
       fire.flare = Math.min(1, fire.flare + power * 0.8);
-      this.burst(fire, power, pushX, pushY);
+      this.burst({ ...fire, x: point.x, y: point.y }, power, pushX, pushY);
       fire.smother = Math.min(1, fire.smother + contact.damage * power / (0.45 + fire.intensity * 0.55));
       if (foot) fire.nextContact = fire.age + 0.22;
       const out = fire.smother >= 1;
-      if (out) this.extinguish(world, fire);
-      else fire.intensity = growthAt(fire.age) * Math.max(0, 1 - fire.windStress) * (1 - fire.smother);
-      this.events.push({ type: 'fire-stir', x: fire.x, y: fire.y, strength: Math.min(1.5, power),
+      if (out) this.extinguish(world, fire, 'smother');
+      else fire.intensity = (fire.spread?.strength() ?? growthAt(fire.age)) * Math.max(0, 1 - fire.windStress) * (1 - fire.smother);
+      this.events.push({ type: 'fire-stir', x: point.x, y: point.y, strength: Math.min(1.5, power),
         cause: event.type, extinguished: out });
       if (this.events.length > 64) this.events.shift();
       reacted = true;
@@ -341,7 +365,7 @@ export class Fires {
     for (let index = this.list.length - 1; index >= 0; index--) {
       const fire = this.list[index];
       fire.age += dt;
-      const growth = growthAt(fire.age);
+      let growth = fire.spread?.strength() ?? growthAt(fire.age);
       fire.flare *= Math.exp(-6 * dt);
       fire.leanX *= Math.exp(-5 * dt);
       fire.leanY *= Math.exp(-5 * dt);
@@ -357,11 +381,21 @@ export class Fires {
       } else {
         fire.windStress = Math.max(0, fire.windStress - dt / 2);
       }
-      fire.intensity = growth * Math.max(0, 1 - fire.windStress) * (1 - fire.smother);
       if (fire.windStress >= 1) {
-        this.extinguish(world, fire);
+        this.extinguish(world, fire, 'wind');
         extinguished.push(fire);
+        continue;
       }
+      if (fire.spread) {
+        fire.spread.update(dt);
+        growth = fire.spread.strength();
+        if (!fire.spread.active.size) {
+          this.extinguish(world, fire, 'fuel');
+          extinguished.push(fire);
+          continue;
+        }
+      }
+      fire.intensity = growth * Math.max(0, 1 - fire.windStress) * (1 - fire.smother);
     }
     return extinguished;
   }
@@ -397,7 +431,20 @@ export class Fires {
 
   // Bake only visible flames once per frame; the same cells go into the lake.
   prepare(view, time) {
-    const visible = this.list.filter(f => f.x >= view.x0 - 40 && f.x <= view.x0 + view.cols + 40
+    const sources = this.list.filter(f => f.kind === 'campfire');
+    const ground = this.list.filter(f => f.kind === 'ground');
+    // Share the existing render budget between incidents, even if a burning
+    // clump contains hundreds of fuel cells. Offscreen fuel still updates.
+    const limit = Math.max(1, Math.floor((MAX_FIRES - sources.length) / Math.max(1, ground.length)));
+    for (const fire of ground) {
+      fire.cells = [];
+      for (const node of fire.spread.sources(view, limit)) {
+        sources.push({ ...fire, x: node.fuel.x, y: node.fuel.y, age: node.age, cells: [], sourceFire: fire,
+          seed: fire.seed + Math.floor(hash2(node.fuel.x, node.fuel.y, fire.seed) * 65535),
+          intensity: burnStrength(node) * Math.max(0, 1 - fire.windStress) * (1 - fire.smother) });
+      }
+    }
+    const visible = sources.filter(f => f.x >= view.x0 - 40 && f.x <= view.x0 + view.cols + 40
       && f.y >= view.y0 - LIGHT_RADIUS && f.y <= view.y0 + view.rows + 32);
     for (const fire of visible) {
       const strength = fire.intensity;
@@ -411,8 +458,9 @@ export class Fires {
         const k = pulse * ember * c.glow;
         cells.push({ dx: c.dx, dy: c.dy, g: c.g, r: 90 + 165 * k, gg: 24 + 112 * k * k, b: 8 + 30 * k * k * k });
       }
-      const size = (0.5 + strength * 0.5) * (1 + fire.flare * 0.25);
-      const brightness = Math.min(1.15, 0.8 + Math.sqrt(strength) * 0.2 + fire.flare * 0.2);
+      const size = (fire.kind === 'ground' ? 0.22 + strength * 0.55 : 0.5 + strength * 0.5) * (1 + fire.flare * 0.25);
+      const brightness = Math.min(1.15, 0.8 + Math.sqrt(strength) * 0.2 + fire.flare * 0.2)
+        * (fire.kind === 'ground' ? Math.min(1, strength * 2) : 1);
       const wind = (fire.gust - 0.42) * 2.4;
       const frame = Math.floor(time * 12);
       // Each of three tongues sways and stretches; axisAt gives its centre
@@ -496,6 +544,11 @@ export class Fires {
           r: 255 * fade, gg: 225 * fade, b: 140 * fade });
       }
       fire.cells = cells;
+      if (fire.sourceFire) {
+        const dx = Math.floor(fire.x) - Math.floor(fire.sourceFire.x);
+        const dy = Math.floor(fire.y) - Math.floor(fire.sourceFire.y);
+        fire.sourceFire.cells.push(...cells.map(c => ({ ...c, dx: c.dx + dx, dy: c.dy + dy })));
+      }
     }
     return visible;
   }

@@ -57,8 +57,13 @@ export class Harvesting {
     const chunk = this.world.chunk(cx, cy);
     if (!chunk.resources) {
       chunk.resources = generateResources(this.world, cx, cy);
-      // A chunk generated again after eviction keeps what was gathered.
-      for (const node of chunk.resources) if (this.world.gathered?.has(plantKey(node))) node.harvested = true;
+      // Gathering preserves berry leaves; burning consumes the whole plant.
+      // Both states survive regeneration after chunk eviction.
+      for (const node of chunk.resources) {
+        const key = plantKey(node);
+        if (this.world.gathered?.has(key)) node.harvested = true;
+        if (this.world.burntPlants?.has(key)) node.burnt = true;
+      }
     }
     return chunk.resources;
   }

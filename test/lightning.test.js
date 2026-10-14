@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AsciiRenderer } from '../src/render/renderer.js';
 import { Fires, MAX_FIRES } from '../src/world/fire.js';
+import { vegetationFuel } from '../src/world/fire-spread.js';
 import { Lightning, lightningPulse, MAX_BOLTS } from '../src/world/lightning.js';
 import { WeatherEffects } from '../src/world/weather.js';
 import { GRASS, WATER, World } from '../src/world/world.js';
@@ -137,12 +138,22 @@ test('repeated summons stay bounded and the double flash and all water effects e
   assert.equal(paused.age, 0);
 });
 
-test('automatic and summoned ground strikes ignite the hit cell and their fires survive the bolt', () => {
+test('ground strikes burn connected vegetation after the bolt fades, then exhaust their fuel', () => {
   const world = new World(1);
   const fires = new Fires({ windAt: () => 0.3 });
   const weather = new WeatherEffects({ random: random(),
-    onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
-  const { x, y } = world.spawn;
+    onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
+  let spot = null;
+  for (const [cx, cy] of [[0, 0], [1, 0], [0, 1]]) {
+    const chunk = world.chunk(cx, cy);
+    for (const i of chunk.blades.indices) {
+      const x = cx * 64 + (i % 64) + 0.5, y = cy * 64 + Math.floor(i / 64) + 0.5;
+      if (vegetationFuel(world, x, y)?.kind === 'grass') { spot = { x, y }; break; }
+    }
+    if (spot) break;
+  }
+  assert.ok(spot, 'a real grass clump supplies fuel');
+  const { x, y } = spot;
   const bolt = weather.strike(world, view, { x, y });
   assert.equal(fires.list.length, 1);
   assert.equal(bolt.fire, fires.list[0]);
@@ -156,11 +167,13 @@ test('automatic and summoned ground strikes ignite the hit cell and their fires 
   const manual = weather.strike(world, view, { x, y, manual: true });
   assert.equal(manual.fire, bolt.fire, 'a second strike reuses the existing fire');
   assert.equal(fires.list.length, 1);
-  const start = manual.fire.intensity;
-  fires.update(5, 5, world);
+  fires.update(0.5, 0.5, world);
   weather.lightning.update(3);
   assert.equal(weather.lightning.bolts.length, 0);
-  assert.ok(fires.list[0].intensity > start, 'the fire continues to grow after the lightning expires');
+  assert.ok(fires.list.length > 0, 'the vegetation fire survives the lightning afterglow');
+  fires.update(60, 60, world);
+  assert.equal(fires.list.length, 0, 'a lightning fire cannot keep growing after its connected fuel burns');
+  assert.equal(manual.fire.outReason, 'fuel');
 });
 
 test('water and distant lightning never ignite, and fire ignition happens only once per dry impact', () => {

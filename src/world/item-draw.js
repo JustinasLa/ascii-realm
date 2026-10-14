@@ -191,7 +191,7 @@ const PLUMES = [0, 1, 2, 3].map((v) => dg(`props.plume.${v}`));
 const BERRIES = [0, 1, 2, 3, 4, 5].map((v) => over(dg(`props.berry.${v}`)));
 
 export function drawResource(r, view, node, time, write = putCell) {
-  if (!node || !Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+  if (!node || node.burnt || !Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
   const sx = Math.floor(node.x) - view.x0;
   const base = Math.floor(node.y) - view.y0;
   const bush = node.kind === 'bush';

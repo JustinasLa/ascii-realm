@@ -168,11 +168,12 @@ test('solid obstacles stop a throw on the near side, even in one long frame', ()
   assert.ok(fires.list[0].x < 15);
 });
 
-test('torch ignition accepts a small dry patch, coalesces nearby fires and obeys the fire cap', () => {
+test('torch ignition accepts a small dry patch, reuses burning fuel and obeys the fire cap', () => {
   let burns = 0;
   const fires = new Fires();
   const patch = dryWorld({ typeAt: (x, y) => Math.floor(x) === 0 && Math.floor(y) === 0 ? GRASS : WATER,
-    burnGrass() { burns++; } });
+    burnGrassCell(x, y) { assert.deepEqual([x, y], [0.5, 0.5]); burns++; },
+    burnGrass() { assert.fail('a natural ignition must never scorch a radius'); } });
   assert.equal(fires.add(patch, 0, 0), null, 'a stone ring cannot fit');
   const fire = fires.ignite(patch, 0.2, 0.1);
   assert.ok(fire);
