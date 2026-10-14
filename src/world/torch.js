@@ -35,12 +35,14 @@ export class Torches {
   }
 
   toggle(player) {
+    if (player.handsFull) return 'hands';
     player.torch = !player.torch;
     player.idle = 0;
     return player.torch ? 'drawn' : 'stowed';
   }
 
   throw(player, pose) {
+    if (player.handsFull) return 'hands';
     if (!player.torch) return 'empty';
     if (this.list.length >= MAX_THROWN_TORCHES) return 'busy';
     const held = this.hold(player, pose);
