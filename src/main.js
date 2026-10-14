@@ -12,6 +12,10 @@ import { SCALE, TILT } from './entities/rig.js';
 import { Collection } from './inventory/collection.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
+import { MultiplayerClient } from './multiplayer/client.js';
+import { bindMultiplayerControls } from './multiplayer/controls.js';
+import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
+import { RemotePlayers } from './multiplayer/remote-players.js';
 import { putCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
@@ -107,7 +111,7 @@ const params = new URLSearchParams(location.search);
 const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
-const name = (params.get('name') || 'Kael').slice(0, 24);
+let name = cleanName(params.get('name') || 'Kael');
 const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: mobile ? 64 : 128 });
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
@@ -184,6 +188,42 @@ const inventoryScreen = new InventoryScreen({
 });
 debug.hud = hud;
 debug.inventoryScreen = inventoryScreen;
+
+// Friends in a lobby share the world's seed and see one another walk about.
+// Joining a lobby on another seed reloads the page into that world.
+const remotePlayers = new RemotePlayers();
+const multiplayer = new MultiplayerClient({
+  getState: () => playerState(player),
+  onJoin: (lobby) => {
+    if (lobby.seed !== seed) {
+      const url = new URL(location.href);
+      url.searchParams.set('seed', lobby.seed);
+      url.searchParams.set('room', lobby.code);
+      try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
+      multiplayer.leave(false);
+      location.replace(url);
+      return;
+    }
+    // Meet friends where they are, unless this is the lobby's first player.
+    if (lobby.self && multiplayer.players.some((member) => member.id !== lobby.id)) {
+      player.x = lobby.self.x;
+      player.y = lobby.self.y;
+      camera.x = player.x;
+      camera.y = player.y - 11;
+    }
+  },
+  onSnapshot: (members, selfId) => remotePlayers.sync(members, selfId),
+});
+debug.multiplayer = multiplayer;
+debug.remotePlayers = remotePlayers;
+bindMultiplayerControls(multiplayer, {
+  name, seed: () => seed,
+  onName: (value) => { name = value; hud.setName(value); },
+  onDone: () => canvas.focus({ preventScroll: true }),
+});
+window.addEventListener('pagehide', () => multiplayer.leave(false));
+window.addEventListener('pageshow', (event) => { if (event.persisted) multiplayer.leave(); });
+const colorOf = (index) => PLAYER_COLORS[index % PLAYER_COLORS.length];
 // Arrows, spears and javelins in flight or lying where they landed.
 const projectiles = new Projectiles();
 debug.projectiles = projectiles;
@@ -354,13 +394,13 @@ ModelFigure.load('assets/ual1.glb')
 
 // The name floating above the character's head; `top` is the highest row
 // the character covers.
-function drawName(top) {
+function drawName(top, color = [212, 218, 228]) {
   if (top === null || top === undefined) return;
   const view = camera.view(renderer);
   const sy = top - 2 - view.y0;
   const sx = Math.floor(player.x - name.length / 2) - view.x0;
   for (let i = 0; i < name.length; i++) {
-    renderer.put(sx + i, sy, glyph(name[i]), 212, 218, 228);
+    renderer.put(sx + i, sy, glyph(name[i]), ...color);
     renderer.putBg(sx + i, sy, 8, 10, 14);
   }
 }
@@ -478,6 +518,7 @@ function frame(now) {
     }
   }
   if (!paused) grass.update(world, player, time);
+  remotePlayers.update(dt, now);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
     if (e.type === 'damage') hud.damage(e.amount, e.x, e.y);
@@ -576,6 +617,11 @@ function frame(now) {
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
+  const peers = remotePlayers.visible(view);
+  for (const peer of peers) {
+    drawShadow(renderer, view, peer.player.x, peer.player.y, peer.player.air);
+    peer.figure = dressFigure(peer.player);
+  }
 
   // Props up to a screen above the view can still be reflected into it, and
   // the tallest trees reach into it from far below.
@@ -656,6 +702,11 @@ function frame(now) {
     else drawFigure(renderer, view, player, figure);
     for (const torch of carried) torches.draw(renderer, view, torch);
   } });
+  // Friends are drawn as the shape-built outlaw in their own gear.
+  for (const peer of peers) {
+    reflections.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure, mirror) });
+    drawables.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure) });
+  }
   reflections.sort((a, b) => a.y - b.y);
   drawables.sort((a, b) => a.y - b.y);
   grass.drawReflections(renderer, world, view, time, mirror, reflections);
@@ -671,8 +722,14 @@ function frame(now) {
 
   projectiles.drawFlying(renderer, view);
   drawTrail(renderer, view, player.trail, player.time);
-  if (model) drawName(model.top);
-  else drawNameTag(renderer, view, player, figure, name);
+  const self = multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
+  const ownColor = self ? colorOf(self.color) : undefined;
+  if (model) drawName(model.top, ownColor);
+  else drawNameTag(renderer, view, player, figure, name, ownColor);
+  for (const peer of peers) {
+    drawTrail(renderer, view, peer.player.trail, peer.trailTime);
+    drawNameTag(renderer, view, peer.player, peer.figure, peer.name, colorOf(peer.color));
+  }
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
@@ -685,6 +742,11 @@ function frame(now) {
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
   lastFrame = { width: canvas.width, height: canvas.height, cellW: renderer.cellW, cellH: renderer.cellH, view };
+  hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)
+    .map((member) => ({ id: member.id, name: member.name, health: member.state.health,
+      maxHealth: player.vitals.maxHealth, stamina: member.state.stamina, maxStamina: player.vitals.maxStamina,
+      note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
+        (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
   const workMs = performance.now() - started;

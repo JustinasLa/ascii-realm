@@ -56,3 +56,6 @@ globalThis.document?.addEventListener('visibilitychange', () => { if (document.h
 export const wasTapped = (...codes) => !gameplayBlocked && input.wasTapped(...codes);
 export const isDown = (...codes) => !gameplayBlocked && input.isDown(...codes);
 export const moveAxis = () => gameplayBlocked ? { x: 0, y: 0 } : input.moveAxis();
+
+// The lobby panel's name for the same test.
+export const isUiTarget = isControlTarget;

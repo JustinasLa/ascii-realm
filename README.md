@@ -9,7 +9,8 @@ player is a hooded outlaw drawn from hundreds of shaded characters.
 
 ![An armoured warrior mid-swing on a moonlit lakeshore, reflected in the water](docs/screenshot.png)
 
-For now it is a single outlaw exploring procedurally generated terrain.
+Explore procedurally generated terrain solo, or with up to eight friends in a
+shared online lobby.
 
 ## Features
 
@@ -168,17 +169,55 @@ For now it is a single outlaw exploring procedurally generated terrain.
   jump and sword buttons, and zoom controls in portrait or landscape. Rendering
   targets 60 fps, caps backing resolution, and adjusts the visible cell count
   under sustained load. Hidden tabs stop drawing and distant chunks are evicted.
+- **Multiplayer lobbies.** Create a lobby and share its six-character code;
+  friends enter the code to join the same seeded world. Movement, jumps, swings,
+  gear, weapons, nameplates and reflections are visible to everyone, and each
+  friend's health and stamina appear in the party frames under your own. Players
+  have distinct nameplate colours, and brief connection drops reconnect
+  automatically. The lobby keeps working when its creator leaves.
 
 ## Running
 
-No build step. Serve the folder with any static file server and open it:
+No build step. For solo and multiplayer, install Node 22+ and run:
+
+```sh
+npm ci
+npm start
+# then open http://localhost:8000
+```
+
+Open **Multiplayer**, enter your name and click **Create lobby**. Share the code
+shown in the panel. Friends open the same website, enter the code and click
+**Join lobby**. **Copy invite** shares a link that joins that lobby. Joining a
+lobby on another world seed reloads the page into that world. **Leave lobby**
+returns to solo exploration.
+
+The server listens on all interfaces so other devices on your network can open
+`http://<your-computer's-LAN-IP>:8000`. Set `PORT` or `HOST` to change the binding.
+Lobby codes belong to one server: friends must connect to the same server.
+
+For friends over the internet, deploy `npm start` on a Node host with WebSocket
+support and an HTTPS reverse proxy that forwards `/multiplayer` upgrades. The
+server serves both the game and the lobbies; `/health` is a health-check endpoint.
+No database is needed. Lobbies are held in memory and disappear when the last
+player leaves, after a 30-second reconnect grace for unexpected disconnects, or
+when the server restarts. Use one server process. Each address may hold 16
+connections and create 6 lobbies a minute.
+
+The game can also run solo on any static file server:
 
 ```sh
 python -m http.server 8000
 # then open http://localhost:8000
 ```
 
-A browser with WebGL2 is required.
+A browser with WebGL2 is required. Static hosting (including GitHub Pages) cannot
+run the lobby server. To use a separately hosted server, expand **Lobby server**
+in the panel and enter its HTTPS or WSS address, for example
+`https://lobby.example.com` or `wss://lobby.example.com/multiplayer`. Invite links
+include that address; an invite naming another server fills in the panel but
+waits for you to press **Join lobby**. You can also use the `?room=ABC234` and
+`?server=...` URL parameters.
 
 To play this checkout on a phone on the same Wi-Fi, open
 `http://<computer-LAN-IP>:8000` on the phone after starting the server.
@@ -263,6 +302,7 @@ fingers and reset when a touch is cancelled or the page is backgrounded.
 src/
   main.js            game loop and wiring
   core/              input, hashing, noise
+  multiplayer/       lobby client, controls, snapshot validation and interpolation
   editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   inventory/         items, satchel, equipment, quick slots and carry weight
@@ -271,6 +311,15 @@ src/
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
 ```
+
+`server/` contains the HTTP/WebSocket server and in-memory lobby lifecycle.
+The server owns lobby membership, IDs, colours and world seeds; each player
+simulates their own movement and sends bounded pose snapshots at 20 Hz.
+Other players interpolate snapshots 100 ms behind and are drawn as the
+shape-built outlaw in their own gear. This is cooperative exploration with
+cosmetic sword play; it does not add PvP damage, shared loot or competitive
+movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
+the browser uses its native WebSocket API.
 
 ## Credits
 

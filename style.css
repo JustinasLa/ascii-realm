@@ -800,6 +800,7 @@ kbd { color: var(--ink); font-size: 10px; font-weight: 400; }
 .hud-frame-note, #carried-item.hud-frame-note { position: static; max-width: none; margin-top: 3px; padding: 0; color: #c9d1cc; background: none; border: 0; font: 11px/1.4 var(--font); }
 .hud-party { display: flex; flex-direction: column; gap: 6px; }
 .hud-party:empty { display: none; }
+.hud-frames .hud-toasts { position: static; max-width: none; }
 .hud-party-tab { align-self: flex-start; padding: 0 6px; color: #e3e8e4; background: rgba(6, 9, 10, 0.84); border: 1px solid #c3ccc6; font: 11px/1.5 var(--font); }
 /* The controls hint sits above the quick slots. */
 #hint { bottom: 104px; }
@@ -811,3 +812,54 @@ kbd { color: var(--ink); font-size: 10px; font-weight: 400; }
 .hud-prompt[hidden] { display: none; }
 /* Aiming a bow or a throw at the cursor. */
 #screen.projectile-aiming { cursor: crosshair; }
+
+/* Multiplayer lobbies, in the panel dock. */
+#multiplayer-controls {
+  box-sizing: border-box;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  color: #b8c4b0;
+  background: rgba(5, 6, 10, 0.92);
+  border: 1px solid rgba(184, 196, 176, 0.3);
+  font: 12px "Cascadia Mono", Consolas, Menlo, monospace;
+}
+
+#multiplayer-controls[open] { width: 290px; }
+#multiplayer-controls summary { cursor: pointer; }
+#multiplayer-controls p { line-height: 1.5; margin: 10px 0; }
+#multiplayer-controls label { display: block; margin: 12px 0 5px; }
+#multiplayer-controls input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #52614d;
+  border-radius: 2px;
+  color: #e1ebdc;
+  background: #101810;
+  font: inherit;
+}
+#lobby-code { text-transform: uppercase; letter-spacing: 3px; }
+#multiplayer-controls button {
+  padding: 8px 10px;
+  border: 1px solid #63785c;
+  border-radius: 2px;
+  color: #d9e7d4;
+  background: #1b2c20;
+  cursor: pointer;
+  font: inherit;
+}
+#multiplayer-controls :disabled { cursor: wait; opacity: 0.5; }
+#multiplayer-controls :focus-visible { outline: 2px solid #a9d4ae; outline-offset: 3px; }
+.lobby-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.lobby-actions button { flex: 1; }
+.lobby-server-settings { margin-top: 16px; padding-top: 12px; border-top: 1px solid #34483a; }
+#multiplayer-status[data-state="error"] { color: #eda29b; }
+#multiplayer-status[data-state="reconnecting"] { color: #efcf97; }
+#multiplayer-controls .lobby-label { color: #86967e; margin-top: 16px; }
+#lobby-room-code { display: block; font-size: 25px; letter-spacing: 6px; color: #d5ead5; user-select: all; }
+#lobby-share { margin-top: 10px; }
+#lobby-players { list-style: none; padding: 0; margin: 8px 0 16px; }
+#lobby-players li { margin: 7px 0; overflow-wrap: anywhere; }
+#multiplayer-controls #lobby-leave { background: transparent; color: #b8c4b0; }
