@@ -6,6 +6,7 @@ import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { Player } from './entities/player.js';
+import { Collection } from './inventory/collection.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { putCell } from './render/cells.js';
@@ -21,6 +22,9 @@ import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
+import { Harvesting } from './world/harvesting.js';
+import { drawItem, drawResource } from './world/item-draw.js';
+import { GroundItems } from './world/items.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
 import { drawProp, propInView } from './world/props.js';
 import { reflector } from './world/reflection.js';
@@ -104,6 +108,10 @@ const world = new World(seed, { season: params.get('season') ?? undefined, maxCh
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const inventory = new Inventory();
+// Loose items and plants in the world, and gathering them into the satchel.
+const groundItems = new GroundItems(world);
+const harvesting = new Harvesting(world, groundItems);
+const collection = new Collection(world, inventory, groundItems, harvesting);
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
@@ -141,6 +149,7 @@ window.addEventListener('pageshow', (event) => {
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const debug = { player, camera, world, grass, splashes, weather, fires, torches, renderer, quality, inventory,
+  groundItems, harvesting, collection,
   audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 },
   pickup: (id, count = 1) => inventory.add(id, count) };
 if (params.has('debug')) window.game = debug;
@@ -167,6 +176,7 @@ const inventoryScreen = new InventoryScreen({
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
+  onDrop: (index) => collection.drop(player, index),
 });
 debug.hud = hud;
 debug.inventoryScreen = inventoryScreen;
@@ -348,6 +358,7 @@ function frame(now) {
   const torchKey = wasTapped('KeyT');
   const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
+  const gather = wasTapped('KeyE');
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
     if (attack && armed) player.attack();
@@ -355,6 +366,10 @@ function frame(now) {
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
+    if (gather) {
+      const result = collection.interact(player);
+      if (result?.message && result.status !== 'picked') hud.notify(result.message, result.ok ? 'pickup' : 'info');
+    }
   }
   const itemHint = player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
   if (carriedItem.textContent !== itemHint) carriedItem.textContent = itemHint;
@@ -384,6 +399,10 @@ function frame(now) {
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
     if (e.type === 'damage') hud.damage(e.amount, e.x, e.y);
+    // Each cut can fell a tree a blow at a time or mow tall grass.
+    if (e.type === 'strike' && !paused) {
+      for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
+    }
     if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
     splashes.react(world, e);
@@ -406,6 +425,14 @@ function frame(now) {
     }
   }
   player.events.length = 0;
+  if (!debug.freeze) collection.update(dt, player, { blocked: paused || isGameplayBlocked() });
+  for (const event of collection.events) {
+    if (event.type !== 'pickup') continue;
+    player.animatePickup();
+    sound.play({ ...event, x: player.x, y: player.y });
+  }
+  collection.events.length = 0;
+  hud.setPrompt(builder.enabled || isGameplayBlocked() ? '' : collection.prompt(player));
   for (const event of inventory.events) {
     if (event.type === 'pickup') hud.notify(`+${event.count} ${ITEMS[event.id].name}`, 'pickup');
   }
@@ -502,6 +529,18 @@ function frame(now) {
     if (torch.carried) continue;
     reflections.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch, mirror) });
     drawables.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch) });
+  }
+  // Loose items bob on the ground; bushes can reach in from below the view
+  // or reflect from above it.
+  const visibleItems = groundItems.in(view.x0 - 3, view.y0 - 4, view.x0 + view.cols + 3, view.y0 + view.rows + 3);
+  const plants = harvesting.resourcesIn(view.x0 - 9, view.y0 - 12, view.x0 + view.cols + 9, view.y0 + view.rows + 12);
+  for (const item of visibleItems) {
+    reflections.push({ y: item.y, draw: () => drawItem(renderer, view, item, time, mirror) });
+    drawables.push({ y: item.y, draw: () => drawItem(renderer, view, item, time) });
+  }
+  for (const node of plants) {
+    reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
+    drawables.push({ y: node.y, draw: () => drawResource(renderer, view, node, time) });
   }
   const carried = visibleTorches.filter((torch) => torch.carried);
   reflections.push({ y: player.y, draw: () => {

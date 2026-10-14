@@ -61,6 +61,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     isControlTarget: () => false,
     clearInput: noop, isGameplayBlocked: () => false, setGameplayBlocked: noop,
     Inventory, ITEMS, Hud: inert(), InventoryScreen: inert(),
+    GroundItems: inert(), Harvesting: inert(), Collection: inert(), drawItem: noop, drawResource: noop,
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
     Player, ASPECT, GRASS,
