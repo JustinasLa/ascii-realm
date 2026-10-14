@@ -105,5 +105,5 @@ test('adding builder props preserves existing procedural tree and rock generatio
   assert.ok(props.some(({ kind }) => kind === 'tree') && props.some(({ kind }) => kind === 'bush'));
   // Culling bounds are derived data; the generated props themselves must not change.
   const digest = createHash('sha256').update(JSON.stringify(props, (key, value) => key === 'bounds' ? undefined : value)).digest('hex');
-  assert.equal(digest, 'a9e134734c5393ac392e2bf47738752353ca1682a267321de5d3b104e281842f');
+  assert.equal(digest, 'e4b33a72de312d7f2d179ce68034ed24a93f194f249146c2da37665a4cb7cf9d');
 });

@@ -126,13 +126,13 @@ test('row culling preserves complete seeded sprites across seasons and growth st
   // both caller-supplied and fallback random streams.
   const fixtures = [
     { seed: 1, x: -100.5, y: 300.5, randomSeed: 123456,
-      expected: '21d5889f8bf8d428d46d966b3c73e4cab7ee56c1aab42b7b344fd5344da4566e' },
+      expected: 'dfee77d03d6bb48e5e216f4eaca4e95a00220a50e2368fc495b5cde4029736b9' },
     { seed: 42, x: 100.5, y: -300.5, girth: 0.6, randomSeed: 42,
-      expected: '737e96b67d1291a41f8f7bbfa75a80b0b031052f6a82a46e0d25365696b161e7' },
+      expected: '2adb35292287c78be9efafe50fa89a355d46d00f5d919f176217010547636cbb' },
     { seed: 9281, x: 63.5, y: 24.5, girth: 2, randomSeed: 9281,
-      expected: '13133a4a570d6be70523d13f7645d63581c00cd44a389de3ee7b0ebc3fa1e06c' },
+      expected: '2d6be8931e01c579484f77b64c2b3147a331078e783c853abb4f9aa857a0fa71' },
     { seed: 4294967295, x: -63.5, y: -24.5,
-      expected: 'f3e5f5751026d35ad767b558d8c164799c5bd1dc503a5a0328bb7b45412c0eac' },
+      expected: '1d280f6d4a0ce9d01735a8bb5b99b538eb7a4de1157999d3f31165784e12bb01' },
   ];
   for (const { expected, randomSeed, ...options } of fixtures) {
     const digest = createHash('sha256');

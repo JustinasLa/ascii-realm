@@ -273,8 +273,10 @@ function bushGeometry(rand) {
   const count = 4 + Math.floor(rand() * 4);
   for (let i = 0; i < count; i++) {
     const x = (i / (count - 1) - 0.5) * (6 + rand() * 4);
-    const y = -3.5 - rand() * 3;
-    shape.blobs.push({ x, y, rx: 2.6 + rand() * 1.8, ry: 2.3 + rand() * 2, layer: i });
+    // Domed: the middle of the bush stands taller than its sides.
+    const dome = 1 - Math.abs(i / (count - 1) - 0.5) * 2;
+    const y = -4 - dome * 2.5 - rand() * 1;
+    shape.blobs.push({ x, y, rx: 2.6 + rand() * 1.8, ry: 2.8 + rand() * 1.2 + dome * 0.6, layer: i });
     shape.wood.push({ x0: x * 0.3, y0: 0, x1: x, y1: y, r0: 0.25, r1: 0.1,
       trunk: false, minX: x - 5, maxX: x + 5, minY: y - 2, maxY: 2 });
   }
@@ -708,10 +710,11 @@ function bake(sample, seed, species, season, growth, shape, palette) {
           layer(cell, dg(`flower.spray.${f}`), blend([236, 232, 244], [240, 170, 200], hash2(seed, 1, 2) > 0.5 ? 0.6 : 0));
         } else if (accent && pick < accent.p && lt > 0.2 && lt < 0.6 && !leaf.edge) {
           layer(cell, dg(accent.g), accent.c.map((v) => v * (0.75 + lt * 0.4)));
-        } else if (name.startsWith('tree.bloom') && density > 0 && lt < 0.56) {
+        } else if (name.startsWith('tree.bloom') && density > 0 && lt < 0.56 && lt > 0.3 && pick > 0.5) {
           layer(cell, dg(`${name}.eye`), blend(base, [150, 40, 90], 0.55).map((v) => v * (0.6 + lt * 0.6)));
-        } else if (lt > 0.54 || (leaf.rim && density === 0)) {
-          const hi = blend(color, leaf.rim ? palette.rim : palette.light, 0.38 + clamp(lt - 0.54) * 0.9);
+        } else if (lt > 0.58 + (pick - 0.5) * 0.1 || (leaf.rim && density === 0)) {
+          // The moonlit rims of the leaves, fading in across the lit side.
+          const hi = blend(color, leaf.rim ? palette.rim : palette.light, 0.4 + clamp(lt - 0.56) * 0.9);
           layer(cell, dg(`${name}.hi`), hi, dg(`${rustleName}.hi`));
         }
         continue;
@@ -770,6 +773,8 @@ function bake(sample, seed, species, season, growth, shape, palette) {
         name = `tree.bark.${kind}.${Math.floor(texture * 4)}`;
         if (nx < -0.3) hiName = `${name}.hi`;
       }
+      // Inside the crown the moon does not reach the bark.
+      if (wood.inCrown && !(winter && !evergreen)) hiName = null;
       cell.g = cell.rustle = dg(name);
       rgb(cell, c);
       if (solid) {
@@ -993,6 +998,13 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
   for (const t of shape.tiers) crownHalf = Math.max(crownHalf, Math.abs(t.x) + t.width);
   crownHalf /= ASPECT;
   scatterLitter(cells, bounds, species, season, spriteSeed, crownHalf, growth);
+  // Every cell gets the same fields in the same order: drawing loops over
+  // tens of thousands of them each frame and stays fast on uniform objects.
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i];
+    cells[i] = { dx: c.dx, dy: c.dy, g: c.g, r: c.r, gg: c.gg, b: c.b, br: c.br, bgG: c.bgG, bb: c.bb,
+      foliage: c.foliage, flex: c.flex, phaseSin: c.phaseSin, phaseCos: c.phaseCos, rustle: c.rustle, litter: !!c.litter };
+  }
   return {
     kind: growth === 'bush' ? 'bush' : 'tree', growth, species, season, x, y,
     girth: thickness,
