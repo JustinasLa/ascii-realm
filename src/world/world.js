@@ -25,7 +25,7 @@ export class World {
   }
 
   chunk(cx, cy) {
-    const key = (cx + 32768) * 65536 + (cy + 32768);
+    const key = `${cx},${cy}`;
     let c = this.chunks.get(key);
     if (!c) {
       c = this.generate(cx, cy);
@@ -93,7 +93,9 @@ export class World {
   propsIn(x0, y0, x1, y1) {
     const out = [];
     for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
-      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+      // The final procedural grid column can jitter 11 cells beyond its
+      // source chunk, where its props remain stored.
+      for (let cx = Math.floor((x0 - 11) / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
         for (const p of this.propsOf(cx, cy)) out.push(p);
       }
     }
@@ -102,7 +104,8 @@ export class World {
 
   isWalkable(x, y) {
     if (this.typeAt(x, y) === WATER) return false;
-    for (const p of this.propsIn(x - 4, y - 2, x + 4, y + 2)) {
+    // Rock footprints reach almost 10 columns from their base.
+    for (const p of this.propsIn(x - 10, y - 2, x + 10, y + 2)) {
       if (blocks(p, x, y)) return false;
     }
     return true;
