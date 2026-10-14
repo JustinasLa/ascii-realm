@@ -34,6 +34,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     update: () => { modelUpdates++; },
     rasterise: noop,
     waterContacts: () => [],
+    torchPose: () => null,
     draw: noop,
     swordLine: () => {
       bladeSamples++;
@@ -70,6 +71,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Dust: class { update() {} draw() {} burst() {} sparks() {} },
     Footprints: class { draw() {} },
     Fires: inert(),
+    Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
     fireWeatherWind: () => 0,
     Splashes: class {

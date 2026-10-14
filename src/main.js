@@ -18,6 +18,7 @@ import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { Splashes } from './world/splashes.js';
+import { Torches } from './world/torch.js';
 import { WeatherEffects } from './world/weather.js';
 import { ASPECT, GRASS, WATER, World } from './world/world.js';
 
@@ -81,6 +82,7 @@ const footprints = new Footprints();
 const splashes = new Splashes();
 const fires = new Fires();
 fires.addStarter(world);
+const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
 const sound = new GameAudio(world);
 sound.weather.onLightning = event => weather.strike(world, camera.view(renderer), event);
@@ -107,19 +109,35 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, splashes, weather, fires, renderer, audio: sound.engine, sound, freeze: false };
+const debug = { player, camera, world, splashes, weather, fires, torches, renderer, audio: sound.engine, sound, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
-let walked = 0;
 const fireStatus = document.getElementById('fire-status');
-let fireNoticeUntil = 0;
+const carriedItem = document.getElementById('carried-item');
 const fireMessages = {
-  lit: 'Campfire lit. Press C nearby to put it out.', out: 'Campfire extinguished.',
-  water: 'Find dry ground to build a campfire.', air: 'Land before building a campfire.',
-  blocked: 'Find an open patch of dry ground.', limit: 'Put out a campfire before building another.',
+  lit: 'Campfire lit. Press C nearby to put it out.',
+  out: 'Fire extinguished.',
+  water: 'Find dry ground to build a campfire.',
+  air: 'Land before building a campfire.',
+  blocked: 'Find an open patch of dry ground.',
+  limit: 'Put out a fire before building another.',
 };
+const torchMessages = {
+  drawn: 'Fire torch drawn. G to throw it, T to stow it.',
+  stowed: 'Torch stowed. Press T to draw a lit torch.',
+  thrown: 'Torch thrown. Press T to draw another.',
+  empty: 'Press T to draw a torch before throwing.',
+  busy: 'Wait for a thrown torch to land.',
+  lit: 'The torch started a fire. Press C nearby to put it out.',
+  fed: 'The torch landed in a fire that was already burning.',
+  water: 'The water put out the torch.',
+  blocked: 'The torch went out. Find open ground or put out a fire with C.',
+};
+let fireNoticeUntil = 0;
+let walked = 0;
+
 function fireNotice(message) {
   fireStatus.textContent = message;
   fireStatus.classList.add('visible');
@@ -208,13 +226,19 @@ function frame(now) {
   const jump = wasTapped('Space');
   const attack = wasTapped('KeyJ') || clicked;
   const sword = wasTapped('KeyF');
+  const torchKey = wasTapped('KeyT');
+  const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
     if (attack) player.attack();
     if (sword) player.toggleSword();
+    if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
+    if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
   }
+  const itemHint = player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
+  if (carriedItem.textContent !== itemHint) carriedItem.textContent = itemHint;
   if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
   clicked = false;
   const stoppedDt = Math.min(dt, hitStop);
@@ -260,6 +284,16 @@ function frame(now) {
   player.events.length = 0;
   dust.update(dt);
   splashes.update(dt);
+  if (!debug.freeze) {
+    for (const impact of torches.update(dt, world, fires)) {
+      fireNotice(torchMessages[impact.type]);
+      if (impact.type === 'water') {
+        const splash = { type: 'land', x: impact.x, y: impact.y, strength: 0.3 };
+        splashes.react(world, splash);
+        sound.play(splash);
+      }
+    }
+  }
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
@@ -280,7 +314,7 @@ function frame(now) {
   }
   fires.events.length = 0;
   if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
-    fireNotice('Strong wind put out the campfire.');
+    fireNotice('Strong wind put out the fire.');
   }
   drawGround(renderer, world, view, time, player, weather.wind);
   drawSkyReflection(renderer, view, time);
@@ -293,6 +327,8 @@ function frame(now) {
   for (const p of props) drawProp(renderer, view, p, mirror);
   const visibleFires = fires.prepare(view, time);
   for (const fire of visibleFires) fires.draw(renderer, view, fire, time, mirror);
+  const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
+  for (const torch of visibleTorches) torches.draw(renderer, view, torch, mirror);
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
   if (model) {
@@ -309,15 +345,25 @@ function frame(now) {
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
-  for (const fire of visibleFires) drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
+  for (const fire of visibleFires) {
+    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
+  }
+  for (const torch of visibleTorches) {
+    if (!torch.carried) drawables.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch) });
+  }
   drawables.push({
     y: player.y,
-    draw: () => (model ? model.draw(renderer, putCell) : drawFigure(renderer, view, player, figure)),
+    draw: () => {
+      if (model) model.draw(renderer, putCell);
+      else drawFigure(renderer, view, player, figure);
+      for (const torch of visibleTorches) if (torch.carried) torches.draw(renderer, view, torch);
+    },
   });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
   splashes.drawContacts(renderer, view, time, contacts);
   fires.light(renderer, view, time, visibleFires);
+  torches.light(renderer, view, time, visibleTorches);
   weather.drawAtmosphere(renderer, view, time);
 
   drawTrail(renderer, view, player.trail, player.time);

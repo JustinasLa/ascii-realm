@@ -71,6 +71,13 @@ For now it is a single outlaw exploring procedurally generated terrain.
   jumping and landing stir the fire according to their force. Heavy or repeated
   contacts can smother it, with flying coals and ash lingering after it goes out.
   Nearby fires crackle through the Ambience volume control.
+- **Fire torch.** Start with a lit torch in your free hand. Its flickering flame
+  lights the player and nearby terrain, follows the hand while moving and
+  jumping, and reflects in water. Press `T` to stow it or draw a fresh torch;
+  `G` throws it in the direction you face. It tumbles through the air and
+  starts a ground fire when it lands on dry, open terrain. Water puts it out
+  with a splash. The carried-item hint stays visible after the movement hint
+  fades.
 - **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
   surfaces and movement effects,
   slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
@@ -126,6 +133,8 @@ npm test
 | `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
+| `T` | Stow the torch or draw a fresh lit torch |
+| `G` | Throw the carried torch in the direction faced; dry ground ignites on landing |
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |

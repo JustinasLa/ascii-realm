@@ -417,6 +417,16 @@ export function buildRig(st) {
     }
   }
 
+  // Keep the free hand raised and clear of the body while carrying a flame.
+  if (st.torch) {
+    const arm = arms.find(a => a.s !== SWORD_SIDE);
+    const target = torso([arm.s * 0.38, 0.28, 0.25]);
+    const [elbow, wrist] = reach(arm.shoulder, target, UPPER_ARM, FOREARM, [arm.s, -0.5, -0.3]);
+    arm.elbow = elbow;
+    arm.wrist = wrist;
+    arm.hand = add(wrist, [0, 0.02, 0]);
+  }
+
   const rig = {
     heading,
     pelvis,
