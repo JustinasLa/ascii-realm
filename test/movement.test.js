@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Player } from '../src/entities/player.js';
+import { JUMPS, Player, TRICKS } from '../src/entities/player.js';
 import { GRASS, WATER, World } from '../src/world/world.js';
 
 const meadow = { isWalkable: () => true, typeAt: () => GRASS };
@@ -140,4 +140,90 @@ test('footsteps coincide with alternating footfalls', () => {
 test('airborne and blocked players do not emit footsteps', () => {
   assert.equal(stepAt(Math.PI / 2, 0.5).length, 0);
   assert.equal(stepAt(Math.PI / 2, 0, { isWalkable: () => false }).length, 0);
+});
+
+test('a model supplies its own footsteps without procedural duplicates', () => {
+  const p = new Player(0, 0);
+  p.modelTrail = true;
+  p.phase = Math.PI / 2 - 1e-6;
+  p.walk = 1;
+  p.update(1 / 60, meadow, { x: 1, y: 0 }, false);
+  assert.ok(p.phase > Math.PI / 2);
+  assert.equal(p.events.filter((e) => e.type === 'step').length, 0);
+});
+
+function styledJump(kind) {
+  const p = new Player(0, 0);
+  if (kind === 'stride') p.speed = 1;
+  if (kind === 'leap') p.speed = p.runSpeed;
+  if (kind === 'hop' || kind === 'spin') {
+    p.sinceLand = 0;
+    p.lastJump = kind === 'hop' ? 'stand' : 'hop';
+  }
+  p.jump();
+  assert.equal(p.jumpKind, kind);
+  return p;
+}
+
+function advanceJump(p, elapsed, hz) {
+  let time = 0;
+  while (time < elapsed - 1e-12) {
+    const dt = Math.min(1 / hz, elapsed - time);
+    p.updateJump(dt);
+    time += dt;
+  }
+}
+
+test('all jump styles preserve flight clocks and landing chains across frame rates', () => {
+  for (const [name, kind] of Object.entries(JUMPS)) {
+    const impact = Math.sqrt(kind.rise ** 2 + 2 * 14 * 0.001);
+    const flight = (kind.rise + impact) / 14;
+    for (const hz of [10, 30, 60, 120]) {
+      for (const t of [0.05, kind.rise / 14, flight - 0.0001, flight + 0.05]) {
+        const p = styledJump(name);
+        advanceJump(p, kind.windUp + t, hz);
+        const landed = t >= flight;
+        close(p.air, landed ? 0 : 0.001 + kind.rise * t - 7 * t ** 2, `${name} height at ${hz} Hz`);
+        close(p.vy, landed ? -impact : kind.rise - 14 * t, `${name} velocity`);
+        close(p.jumpT, Math.min(t, flight), `${name} animation clock`);
+        close(p.flight, flight, `${name} animation flight duration`);
+        close(p.surge, kind.surge ?? 0, `${name} forward push`);
+        assert.equal(p.events.filter((e) => e.type === 'land').length, landed ? 1 : 0);
+        if (landed) {
+          close(p.sinceLand, t - flight, `${name} time since impact`);
+          close(p.landed, Math.min(1, impact / 3.6) - (t - flight) * 4, `${name} landing recovery`);
+          assert.equal(p.lastJump, name);
+        }
+      }
+    }
+  }
+});
+
+test('queued aerial tricks start at the same flight time for every frame partition', () => {
+  for (const [name, kind] of Object.entries(JUMPS)) {
+    const trickHeight = 0.001 + kind.rise * 0.1 - 7 * 0.1 ** 2;
+    const impact = Math.sqrt(4 ** 2 + 2 * 14 * trickHeight);
+    const trickFlight = (4 + impact) / 14;
+    for (const hz of [10, 30, 60, 120]) {
+      for (const t of [0, 0.2, trickFlight + 0.05]) {
+        const p = styledJump(name);
+        p.jump();
+        assert.equal(p.trickQueued, true);
+        advanceJump(p, kind.windUp + 0.1 + t, hz);
+        const landed = t >= trickFlight;
+        close(p.air, landed ? 0 : trickHeight + 4 * t - 7 * t ** 2, `${name} trick height at ${hz} Hz`);
+        close(p.vy, landed ? -impact : 4 - 14 * t, `${name} trick velocity`);
+        close(p.jumpT, 0.1 + Math.min(t, trickFlight), `${name} jump clock during trick`);
+        close(p.trickT, Math.min(t, trickFlight), `${name} trick animation clock`);
+        close(p.trickFlight, trickFlight, `${name} trick animation flight duration`);
+        assert.equal(p.trickQueued, false);
+        assert.equal(p.trick, landed ? null : TRICKS[name]);
+        assert.equal(p.events.filter((e) => e.type === 'land').length, landed ? 1 : 0);
+        if (landed) {
+          close(p.sinceLand, t - trickFlight, `${name} trick time since impact`);
+          assert.equal(p.lastJump, null, 'tricks reset the standing-jump chain');
+        }
+      }
+    }
+  }
 });

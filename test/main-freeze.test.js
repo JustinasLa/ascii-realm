@@ -17,10 +17,11 @@ async function loadGame(move = { x: 0, y: 0 }) {
   let nextFrame;
   let now = 0;
   let bladeSamples = 0;
+  let modelUpdates = 0;
   let cellHeight;
   const model = {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
-    update: noop,
+    update: () => { modelUpdates++; },
     rasterise: noop,
     draw: noop,
     swordLine: () => {
@@ -75,6 +76,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     game: window.game,
     frame: (dt = 1 / 60) => nextFrame(now += dt * 1000),
     bladeSamples: () => bladeSamples,
+    modelUpdates: () => modelUpdates,
     cellHeight: () => cellHeight,
     keydown(key, modifiers = {}) {
       const event = Object.assign(new Event('keydown', { cancelable: true }), { key, ...modifiers });
@@ -169,3 +171,28 @@ for (const action of ['Space', 'KeyJ', 'KeyF', 'mouse']) {
     else assert.equal(player.combat.move, 'draw');
   });
 }
+
+test('a frozen sword swing keeps its trail bounded and resumes sampling when unfrozen', async () => {
+  const { game, frame, bladeSamples, modelUpdates } = await loadGame();
+  const player = game.player;
+  assert.ok(game.model);
+  player.combat.inHand = true;
+  player.combat.trailing = true;
+  const sample = { t: player.time, hx: 0, hy: 0, tx: 1, ty: 1 };
+  player.trail.push(sample);
+  frame(0);
+  assert.equal(bladeSamples(), 0);
+  assert.equal(modelUpdates(), 0);
+  game.freeze = true;
+  for (let i = 0; i < 600; i++) frame();
+  assert.equal(player.time, 0);
+  assert.equal(bladeSamples(), 0);
+  assert.deepEqual(player.trail, [sample]);
+
+  game.freeze = false;
+  player.combat.start('a');
+  for (let i = 0; i < 10; i++) frame();
+  assert.ok(bladeSamples() > 0);
+  assert.ok(modelUpdates() > 0);
+  assert.ok(player.trail.some(point => point.t > sample.t));
+});

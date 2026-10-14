@@ -1,14 +1,14 @@
 import { ASPECT } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
-import { buildRig, project, SCALE, strideCycle, TILT } from './rig.js';
+import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
 // SCALE row units, but a metre up or down the screen is foreshortened by
 // the camera tilt, exactly as the figure's own feet are, so a planted foot
 // stays planted whichever way the warrior walks.
-const WALK_SPEED = 1.8;
-const RUN_SPEED = 4.6;
+const WALK_SPEED = 1.35;
+const RUN_SPEED = 5.3;
 const toCols = SCALE / ASPECT;
 const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second
@@ -18,7 +18,40 @@ const GRIP = 11;
 const SPRINT_GRIP = 5;
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
-const WIND_UP = 0.1; // seconds spent crouching before leaving the ground
+// The kinds of jump: seconds spent gathering before leaving the ground, how
+// fast the body leaves it (metres per second up), and any push forwards.
+//   stand  - a jump on the spot
+//   hop    - a second jump on the spot straight after landing: a two-footed
+//            spring forwards with a big swing of the arms
+//   spin   - a third: a whole turn in the air
+//   stride - off one foot from a walk, onto the other
+//   leap   - off one foot from a run, a long split stride
+export const JUMPS = {
+  stand: { windUp: 0.1, rise: JUMP_SPEED },
+  hop: { windUp: 0.18, rise: 4.0, surge: 2.4 },
+  spin: { windUp: 0.14, rise: 4.3 },
+  stride: { windUp: 0.08, rise: 3.2 },
+  leap: { windUp: 0.08, rise: 3.5 },
+};
+// The trick done by jumping again in the air, after each kind of jump: a
+// back somersault on the spot, a turn from a walk, and from a run a barrel
+// roll, somersaulting sideways about the line of travel.
+export const TRICKS = { stand: 'backflip', hop: 'backflip', spin: 'backflip', stride: 'spin', leap: 'barrel' };
+const TRICK_RISE = 4.0;
+// A jump on the spot within this many seconds of landing counts as the
+// next in a row.
+const CHAIN = 0.3;
+const IN_A_ROW = ['stand', 'hop', 'spin'];
+
+// Moves `x` (with velocity `v`) towards `target` like a critically damped
+// spring with natural frequency `w`, exactly for any time step.
+function spring(x, v, target, w, dt) {
+  const d = x - target;
+  const e = Math.exp(-w * dt);
+  const nx = (d + (v + w * d) * dt) * e;
+  const nv = (v - w * (v + w * d) * dt) * e;
+  return [target + nx, nv];
+}
 
 // Shortest signed angle from a to b.
 function angleTo(a, b) {
@@ -34,8 +67,14 @@ export class Player {
     this.phase = 0;
     this.walk = 0;
     this.run = 0;
+    this.walkV = 0;
+    this.runV = 0;
     this.time = 0;
     this.cape = new Cape();
+    // Ground speeds in metres per second; a 3D character sets these to suit
+    // its animation clips.
+    this.walkSpeed = WALK_SPEED;
+    this.runSpeed = RUN_SPEED;
     this.combat = new Combat();
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
@@ -47,6 +86,18 @@ export class Player {
     this.reach = 0;
     this.windUp = -1;
     this.landed = 0;
+    // The jump under way (see JUMPS), seconds since leaving the ground and
+    // how long the flight will last; the trick done in the air, if any, with
+    // its own clock and flight; and what was last landed, how long ago.
+    this.jumpKind = null;
+    this.jumpT = 0;
+    this.flight = 0;
+    this.trick = null;
+    this.trickT = 0;
+    this.trickFlight = 0;
+    this.trickQueued = false;
+    this.lastJump = null;
+    this.sinceLand = Infinity;
     // Things that happened this frame for the world to react to, such as
     // footfalls and landings: { type, x, y, strength }.
     this.events = [];
@@ -58,6 +109,7 @@ export class Player {
     // measured against (metres per second).
     this.lean = 0;
     this.speed = 0;
+    this.groundSpeed = 0;
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -77,6 +129,12 @@ export class Player {
     // Ground velocity in metres per second (x across the screen, z down it).
     this.vx = 0;
     this.vz = 0;
+    // Where each foot is pinned in the world, in metres: the footprint of a
+    // planted foot, or where a lifted one left the ground. Handed to the rig
+    // as `locks` in the body's frame.
+    this.anchors = [null, null];
+    this.liftAnchors = [null, null];
+    this.locks = [null, null];
     // The spring-smoothed height of the body above the planted foot, and
     // how fast it is moving.
     this.bob = undefined;
@@ -92,40 +150,84 @@ export class Player {
     this.combat.toggle();
   }
 
-  // Starts a jump if standing on the ground.
+  // Jumps from the ground, or does a trick if already in the air. What kind
+  // of jump depends on the pace: on the spot, walking or running, and on
+  // the spot, how many have been made in a row.
   jump() {
-    if (this.air > 0 || this.windUp >= 0) return;
+    if (this.windUp >= 0) {
+      // Pressed twice in quick succession: the trick follows as soon as the
+      // feet are off the ground.
+      this.trickQueued = true;
+      return;
+    }
+    if (this.air > 0) {
+      if (!this.trick) this.startTrick();
+      return;
+    }
+    let kind;
+    if (this.speed > (this.walkSpeed + this.runSpeed) / 2) kind = 'leap';
+    else if (this.speed > 0.6) kind = 'stride';
+    else if (this.sinceLand < CHAIN && IN_A_ROW.includes(this.lastJump)) {
+      kind = IN_A_ROW[(IN_A_ROW.indexOf(this.lastJump) + 1) % IN_A_ROW.length];
+    } else kind = 'stand';
+    this.jumpKind = kind;
     this.windUp = 0;
+    this.trickQueued = false;
+  }
+
+  // A second spring off the air itself, with a trick to show for it.
+  startTrick() {
+    this.trick = TRICKS[this.jumpKind];
+    this.trickQueued = false;
+    this.vy = TRICK_RISE;
+    this.trickT = 0;
+    // Time until the ground comes back up from this height.
+    this.trickFlight = (this.vy + Math.sqrt(this.vy * this.vy + 2 * FALL * this.air)) / FALL;
   }
 
   // Wind-up crouch, flight under gravity and a squash on landing.
   updateJump(dt) {
-    let flightDt = dt;
+    this.sinceLand += dt;
     this.landed = Math.max(0, this.landed - dt * 4);
+    let flightDt = dt;
     if (this.windUp >= 0) {
       this.windUp += dt;
+      const kind = JUMPS[this.jumpKind];
       // Only the part of the frame after takeoff belongs to the flight.
-      if (this.windUp + 1e-12 >= WIND_UP) {
-        flightDt = Math.max(0, this.windUp - WIND_UP);
+      if (this.windUp + 1e-12 >= kind.windUp) {
+        flightDt = Math.max(0, this.windUp - kind.windUp);
         this.windUp = -1;
-        this.vy = JUMP_SPEED;
+        this.vy = kind.rise;
         this.air = 0.001;
+        this.jumpT = 0;
+        this.flight = (kind.rise + Math.sqrt(kind.rise ** 2 + 2 * FALL * this.air)) / FALL;
+        if (kind.surge) this.surge = kind.surge;
       } else {
         flightDt = 0;
       }
     }
-    if (this.air > 0) {
-      // Integrate to the exact impact time so neither flight nor landing
-      // recovery depends on how the elapsed time was split into frames.
+    // Split at queued tricks and impact, advancing each animation clock
+    // only for the time actually spent in its part of the flight.
+    while (this.air > 0 && flightDt > 0) {
+      const untilTrick = this.trickQueued && !this.trick ? Math.max(0, 0.1 - this.jumpT) : Infinity;
       const untilLand = (this.vy + Math.sqrt(this.vy ** 2 + 2 * FALL * this.air)) / FALL;
-      const airborneDt = Math.min(flightDt, untilLand);
+      const airborneDt = Math.min(flightDt, untilTrick, untilLand);
       this.air += this.vy * airborneDt - 0.5 * FALL * airborneDt ** 2;
       this.vy -= FALL * airborneDt;
-      if (flightDt + 1e-12 >= untilLand) {
+      this.jumpT += airborneDt;
+      if (this.trick) this.trickT += airborneDt;
+      flightDt -= airborneDt;
+      if (airborneDt + 1e-12 >= untilLand) {
         this.air = 0;
         const strength = Math.min(1, -this.vy / JUMP_SPEED);
         this.events.push({ type: 'land', x: this.x, y: this.y, strength });
-        this.landed = Math.max(0, strength - Math.max(0, flightDt - untilLand) * 4);
+        this.landed = Math.max(0, strength - flightDt * 4);
+        this.lastJump = this.trick ? null : this.jumpKind;
+        this.sinceLand = flightDt;
+        this.trick = null;
+        this.trickQueued = false;
+      } else if (airborneDt + 1e-12 >= untilTrick) {
+        this.startTrick();
       }
     }
     // Tuck the legs on the way up, reach for the ground on the way down.
@@ -148,7 +250,7 @@ export class Player {
     // Letting go mid-sprint does not stop the warrior dead: they skid to a
     // halt, braced, throwing up dirt.
     if (!moving && this.wasMoving && this.speed > 3.2 && this.air === 0) {
-      this.skid = 0.42;
+      this.skid = 0.22;
       this.skidSpeed = this.speed;
       this.skidHeading = this.heading;
     }
@@ -156,19 +258,19 @@ export class Player {
     if (moving) this.skid = 0;
     if (this.skid > 0) {
       this.skid -= dt;
-      this.skidSpeed *= Math.exp(-7 * dt);
+      this.skidSpeed *= Math.exp(-14 * dt);
       const v = this.skidSpeed * dt;
       this.tryMove(world, Math.sin(this.skidHeading) * v * toCols, 0);
       this.tryMove(world, 0, Math.cos(this.skidHeading) * v * toRows);
       if (Math.random() < dt * 30) {
-        this.events.push({ type: 'skid', x: this.x, y: this.y, strength: this.skidSpeed / RUN_SPEED });
+        this.events.push({ type: 'skid', x: this.x, y: this.y, strength: this.skidSpeed / this.runSpeed });
       }
     }
     this.brace += ((this.skid > 0 ? 1 : 0) - this.brace) * ease(this.skid > 0 ? 18 : 6);
 
     // The warrior has momentum: velocity eases towards where the keys point
     // rather than jumping there, so changes of direction sweep round.
-    const speed = WALK_SPEED + (RUN_SPEED - WALK_SPEED) * this.run;
+    const speed = this.walkSpeed + (this.runSpeed - this.walkSpeed) * this.run;
     const tx = moving && this.skid <= 0 ? (move.x / len) * speed : 0;
     const tz = moving && this.skid <= 0 ? (move.y / len) * speed : 0;
     const grip = ease(moving ? GRIP + (SPRINT_GRIP - GRIP) * this.run : 16);
@@ -206,18 +308,21 @@ export class Player {
       this.surge *= Math.exp(-6 * dt);
     }
 
-    // Pitch forward when setting off or speeding up, and rock back on the
-    // heels when pulling up, then settle.
+    // Pitch forward a little when setting off or speeding up. Slowing down
+    // does not rock the body back: it just settles upright.
     const speedNow = this.skid > 0 ? this.speed : metres / Math.max(dt, 1e-3);
     const accel = (speedNow - this.speed) / Math.max(dt, 1e-3);
     this.speed += (speedNow - this.speed) * ease(8);
-    const leanTo = Math.max(-0.22, Math.min(0.22, accel * 0.025));
+    // How fast the body really moved this frame, unsmoothed, for anything
+    // that must stop the instant the body does, such as the legs.
+    this.groundSpeed = metres / Math.max(dt, 1e-3);
+    const leanTo = Math.max(0, Math.min(0.15, accel * 0.02));
     this.lean += (leanTo - this.lean) * ease(6);
     if (going) {
       const stride = Math.floor((this.phase - Math.PI / 2) / Math.PI);
       this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
       // The first foot lands at pi/2, then the feet alternate each half cycle.
-      if (this.air === 0 && Math.floor((this.phase - Math.PI / 2) / Math.PI) !== stride) {
+      if (!this.modelTrail && this.air === 0 && Math.floor((this.phase - Math.PI / 2) / Math.PI) !== stride) {
         this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
       }
     }
@@ -225,10 +330,14 @@ export class Player {
     if (!moving) this.bank += -this.bank * ease(8);
 
     // Ease the stride in and out so starting and stopping is not abrupt.
-    this.walk += ((going ? 1 : 0) - this.walk) * ease(10);
-    this.run += ((moving && running ? 1 : 0) - this.run) * ease(5);
-    // Settle into a neutral stance once stopped.
-    if (!moving && this.walk < 0.02) this.phase = 0;
+    // Critically damped springs: they ease in as well as out, so neither
+    // setting off nor pulling up jolts the limbs in the first frame.
+    [this.walk, this.walkV] = spring(this.walk, this.walkV, going ? 1 : 0, 11, dt);
+    [this.run, this.runV] = spring(this.run, this.runV, moving && running ? 1 : 0, 6, dt);
+    this.walk = Math.max(0, Math.min(1, this.walk));
+    this.run = Math.max(0, Math.min(1, this.run));
+    // The walk cycle is not reset on stopping: its effect fades out with
+    // `walk`, and picking up where it left off keeps the feet pinned.
 
     this.updateJump(dt);
 
@@ -284,6 +393,8 @@ export class Player {
     }
     cb.events.length = 0;
 
+    this.pinFeet();
+
     // Spring the body's bob towards where the legs put it: stiff enough to
     // follow every stride, soft enough to round off its corners.
     const want = buildRig({ ...this, bob: undefined, air: 0 }).gait;
@@ -314,11 +425,46 @@ export class Player {
     this.cape.update(dt, ...this.capeMount(rig), moved, wind);
   }
 
+  // Keeps planted feet where they landed. A foot touching down is pinned
+  // to the ground at its footprint; while it stays down the rig is told
+  // where that is relative to the body, however the body has moved or
+  // turned since. When it lifts, its swing starts from that same spot.
+  pinFeet() {
+    const heading = this.heading + this.combat.spin;
+    const here = [(this.x * ASPECT) / SCALE, 0, this.y / toRows];
+    const toWorld = (b) => {
+      const w = rotY([b[0], 0, b[1]], heading);
+      return [here[0] + w[0], here[2] + w[2]];
+    };
+    const toBody = (w) => {
+      const b = rotY([w[0] - here[0], 0, w[1] - here[2]], -heading);
+      return [b[0], b[2]];
+    };
+    if (this.walk <= 0.001) {
+      this.anchors = [null, null];
+      this.liftAnchors = [null, null];
+      this.locks = [null, null];
+      return;
+    }
+    gaitPlan(this.phase, this.run).forEach((g, j) => {
+      if (g.grounded) {
+        this.anchors[j] ??= toWorld(g.print);
+        this.liftAnchors[j] = null;
+        this.locks[j] = { print: toBody(this.anchors[j]) };
+      } else {
+        if (this.anchors[j]) this.liftAnchors[j] = this.anchors[j];
+        this.anchors[j] = null;
+        this.locks[j] = this.liftAnchors[j] ? { lift: toBody(this.liftAnchors[j]) } : null;
+      }
+    });
+  }
+
   // Remembers where the blade is while it cuts, in world cells.
   recordTrail(rig) {
     const keep = this.time - 0.16;
     this.trail = this.trail.filter((p) => p.t > keep);
-    if (!this.combat.trailing || !rig.sword) return;
+    // A 3D character records its own trail (see main.js).
+    if (this.modelTrail || !this.combat.trailing || !rig.sword) return;
     const h = project(rig.sword.guard);
     const tip = project(rig.sword.tip);
     this.trail.push({

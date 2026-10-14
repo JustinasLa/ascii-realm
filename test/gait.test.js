@@ -7,42 +7,63 @@ import { ASPECT, GRASS } from '../src/world/world.js';
 // An endless open meadow.
 const meadow = { isWalkable: () => true, typeAt: () => GRASS };
 
-// Walks the player in one direction and measures how far whichever foot is
-// planted slides across the ground, against how far the body travels. A
-// moonwalk scores above 1; a perfect walk scores 0.
+// Walks the player in one direction and measures how far the points the
+// feet are standing on slide across the ground, against how far the body
+// travels. A moonwalk scores above 1; a perfect walk scores 0.
+//
+// `move` and `running` may also be functions of the frame number, to steer.
 function slide(move, running) {
+  const at = (v, i) => (typeof v === 'function' ? v(i) : v);
   const p = new Player(0, 0);
   const dt = 1 / 60;
   let drift = 0;
-  let prev = null;
-  for (let i = 0; i < 60; i++) p.update(dt, meadow, move, running);
-  const x0 = p.x;
-  const y0 = p.y;
+  let prev = [null, null];
+  for (let i = 0; i < 60; i++) p.update(dt, meadow, at(move, i), at(running, i));
+  let travel = 0;
   for (let i = 0; i < 240; i++) {
-    p.update(dt, meadow, move, running);
+    const ox = p.x;
+    const oy = p.y;
+    p.update(dt, meadow, at(move, i), at(running, i));
+    travel += Math.hypot((p.x - ox) * ASPECT, p.y - oy);
     const rig = buildRig(p);
-    const feet = rig.legs.map((l) => {
-      const a = project(l.ankle);
-      return { x: p.x * ASPECT + a[0], y: p.y + a[1], h: l.ankle[1] };
+    rig.legs.forEach((l, k) => {
+      if (!l.contact) {
+        prev[k] = null;
+        return;
+      }
+      const c = project(l.contact);
+      const now = { x: p.x * ASPECT + c[0], y: p.y + c[1] };
+      if (prev[k]) drift += Math.hypot(now.x - prev[k].x, now.y - prev[k].y);
+      prev[k] = now;
     });
-    const k = feet[0].h < feet[1].h ? 0 : 1;
-    if (prev && prev.k === k) drift += Math.hypot(feet[k].x - prev.x, feet[k].y - prev.y);
-    prev = { k, x: feet[k].x, y: feet[k].y };
   }
-  const travel = Math.hypot((p.x - x0) * ASPECT, p.y - y0);
   return drift / travel;
 }
 
 test('planted feet barely slide when walking sideways', () => {
-  assert.ok(slide({ x: 1, y: 0 }, false) < 0.35);
+  assert.ok(slide({ x: 1, y: 0 }, false) < 0.05);
 });
 
 test('planted feet barely slide when walking towards the camera', () => {
-  assert.ok(slide({ x: 0, y: 1 }, false) < 0.5);
+  assert.ok(slide({ x: 0, y: 1 }, false) < 0.05);
 });
 
-test('running feet slide far less than a moonwalk', () => {
-  assert.ok(slide({ x: -1, y: 0 }, true) < 0.6);
+test('planted feet barely slide when sprinting', () => {
+  assert.ok(slide({ x: -1, y: 0 }, true) < 0.05);
+});
+
+test('planted feet stay put while turning in circles', () => {
+  assert.ok(slide((i) => ({ x: Math.cos(i / 40), y: Math.sin(i / 40) }), false) < 0.02);
+  assert.ok(slide((i) => ({ x: Math.cos(i / 40), y: Math.sin(i / 40) }), true) < 0.02);
+});
+
+test('planted feet stay put through sharp zigzags', () => {
+  assert.ok(slide((i) => ({ x: (i / 30) % 2 < 1 ? 1 : -1, y: 1 }), false) < 0.02);
+});
+
+test('planted feet stay put breaking into a sprint and stopping', () => {
+  assert.ok(slide({ x: 1, y: 0 }, (i) => i > 90) < 0.02);
+  assert.ok(slide((i) => ((i / 50) % 2 < 1 ? { x: 1, y: 0 } : { x: 0, y: 0 }), false) < 0.02);
 });
 
 test('legs stop striding when the way is blocked', () => {
