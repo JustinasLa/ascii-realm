@@ -1,5 +1,7 @@
 import { isControlTarget, isDown, moveAxis, wasTapped } from './core/input.js';
 import { SceneryBuilder } from './editor/builder.js';
+import { GameAudio } from './audio/audio.js';
+import { bindAudioControls } from './audio/controls.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { Player } from './entities/player.js';
@@ -14,7 +16,8 @@ import { drawGround } from './world/ground.js';
 import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
-import { ASPECT, GRASS, World } from './world/world.js';
+import { Splashes } from './world/splashes.js';
+import { ASPECT, GRASS, WATER, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
@@ -73,10 +76,27 @@ const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
 const footprints = new Footprints();
+const splashes = new Splashes();
+const sound = new GameAudio(world);
+sound.music.update({ night: 1 });
+const unbindAudio = bindAudioControls(sound.engine, sound.music, sound.weather, () => sound.pause());
+sound.engine.setListener(camera.x, camera.y);
+window.addEventListener('pagehide', (event) => {
+  if (event.persisted) {
+    sound.pause();
+    void sound.engine.suspend();
+  } else {
+    unbindAudio();
+    void sound.dispose();
+  }
+});
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted && sound.engine.context) void sound.engine.unlock();
+});
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, freeze: false };
+const debug = { player, camera, world, splashes, renderer, audio: sound.engine, sound, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -188,6 +208,8 @@ function frame(now) {
     }
   }
   for (const e of player.events) {
+    sound.play(e);
+    splashes.react(world, e);
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
       footprints.add(world, e.x, e.y, time);
@@ -198,7 +220,8 @@ function frame(now) {
     if (e.type === 'whirl') dust.burst(world, e.x, e.y, 18, 14);
     if (e.type === 'slam') {
       dust.burst(world, e.x, e.y, Math.round(22 * e.strength), 12 * e.strength);
-      if (world.typeAt(e.x, e.y) !== GRASS) dust.sparks(e.x, e.y, Math.round(14 * e.strength));
+      const surface = world.typeAt(e.x, e.y);
+      if (surface !== GRASS && surface !== WATER) dust.sparks(e.x, e.y, Math.round(14 * e.strength));
       camera.shake(0.7 * e.strength);
       // Freeze the warrior for a heartbeat as the blow lands, to sell its
       // weight.
@@ -207,6 +230,7 @@ function frame(now) {
   }
   player.events.length = 0;
   dust.update(dt);
+  splashes.update(dt);
   if (move.x || move.y) walked += dt;
   if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
@@ -233,6 +257,9 @@ function frame(now) {
     drawFigure(renderer, view, player, figure, mirror);
   }
 
+  const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
+  splashes.drawSurface(renderer, view, time);
+
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
   drawables.push({
@@ -241,14 +268,19 @@ function frame(now) {
   });
   drawables.sort((a, b) => a.y - b.y);
   for (const d of drawables) d.draw();
+  splashes.drawContacts(renderer, view, time, contacts);
 
   drawTrail(renderer, view, player.trail, player.time);
   if (model) drawName(model.top);
   else drawNameTag(renderer, view, player, figure, name);
   dust.draw(renderer, view);
+  splashes.drawSpray(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   builder.drawPreview(view);
+  if (debug.freeze) sound.pause();
+  else sound.update(dt, time, player, camera, fireflies.list);
+  unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
   requestAnimationFrame(frame);
 }

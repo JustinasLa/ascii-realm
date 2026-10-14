@@ -22,7 +22,10 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Living grass.** Blades lean with rolling gusts, flash lighter where the wind
   catches them, part around your feet, and hide twinkling dew drops.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
-  the moon) mirrored in every lake.
+  the moon) mirrored in every lake. Walk or run through any lake: the water
+  rises from your ankles to at most your knees, slows your stride, and hides
+  the submerged boots. Each footfall throws up droplets and spreading rings;
+  jumps, landings and sword impacts make larger splashes.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
@@ -54,6 +57,24 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
+- **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
+  surfaces and movement effects,
+  slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
+  wildlife calls and rare firefly noise glints,
+  with 42 original, mysterious RPG songs in 21 day/night pairs, using drifting
+  choir, bowed tones, low drones, distant bells and a synthesized room reverb.
+  Every sound has 25 shuffled variations; grass also shuffles its six recordings.
+  Music rotates automatically through a season and weather playlist. Choose
+  automatic seasons or Spring, Summer, Autumn or Winter in the Audio panel;
+  winter quiets insects and frogs, while autumn brings out leaf rustle.
+  Sword effects layer weathered steel, dry leather, low air rush and weighted
+  impacts. Sound starts on your first key press or click;
+  the Audio panel shows the current song, lets you skip, and saves mute and
+  master, music, effects, sword, ambience and weather levels. See [audio notes](docs/audio.md).
+- **Weather sounds.** Choose from 17 soundscapes, including rain, thunder,
+  hail, snow, wind, sandstorms and coastal storms, with a separate intensity
+  control and smooth transitions. Clear is the default; your selection is saved.
+  These choices control the audio atmosphere.
 
 ## Running
 
@@ -82,6 +103,11 @@ npm test
 | `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
+| `M` | Mute or unmute all sound |
+| `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
+| Audio panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
+| Audio panel's Weather sound / Intensity | Choose Clear or one of 17 weather soundscapes and adjust its intensity |
+| Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
 
@@ -118,6 +144,7 @@ src/
   main.js            game loop and wiring
   core/              input, hashing, noise
   editor/            scenery builder controls, scene history and persistence
+  audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   render/            glyph atlas, WebGL renderer, cell writers
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
@@ -135,3 +162,9 @@ The player character and its idle, walk, jog, jump and sword animations are
 from Quaternius' [Universal Animation Library](https://quaternius.com/packs/universalanimationlibrary.html)
 (CC0), rendered with [three.js](https://threejs.org/) (MIT, vendored in
 `vendor/three`).
+
+Grass footsteps use six excerpts from gabytoledosci's recorded
+[Walking on grass.wav](https://freesound.org/people/gabytoledosci/sounds/398266/),
+released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).
+The adapted WAV files are served locally from `assets/audio/grass`; see their
+[provenance and conversion notes](assets/audio/grass/LICENSE.txt).

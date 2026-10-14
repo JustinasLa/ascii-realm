@@ -4,7 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../src/entities/player.js';
 import { buildRig } from '../src/entities/rig.js';
-import { ASPECT, GRASS } from '../src/world/world.js';
+import { ASPECT, GRASS, WATER } from '../src/world/world.js';
 
 const noop = () => {};
 
@@ -23,6 +23,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
     update: () => { modelUpdates++; },
     rasterise: noop,
+    waterContacts: () => [],
     draw: noop,
     swordLine: () => {
       bladeSamples++;
@@ -47,6 +48,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
       typeAt() { return GRASS; }
       propsIn() { return []; }
       propsInView() { return []; }
+      waterDepthAt() { return 0; }
     },
     Camera: class {
       constructor(x, y) { this.x = x; this.y = y; }
@@ -57,6 +59,11 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Fireflies: class { constructor() { this.list = []; } update() {} draw() {} },
     Dust: class { update() {} draw() {} burst() {} sparks() {} },
     Footprints: class { draw() {} },
+    Splashes: class {
+      react() {} update() {} precipitate() {}
+      drawSurface() {} drawContacts() {} drawSpray() {}
+    },
+    WATER,
     AsciiRenderer: class {
       resize(width, height, pixelRatio, cellW, cellH) { cellHeight = cellH; }
       draw() {}

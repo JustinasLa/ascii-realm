@@ -133,6 +133,7 @@ export class Combat {
     this.lastSwing = '';
     this.calm = 0;
     this.trailing = false;
+    this.swingEmitted = false;
     // Seconds spent winding up a spin, and the extra turn of the body while
     // it spins, in radians.
     this.charge = 0;
@@ -159,6 +160,7 @@ export class Combat {
     if (!this.move) {
       if (ctx.air) {
         // No time to draw properly mid-air: the sword is simply in hand.
+        if (!this.inHand) this.events.push({ type: 'draw' });
         this.inHand = true;
         this.start('plunge');
       } else if (!this.inHand) {
@@ -185,7 +187,18 @@ export class Combat {
     this.step = 0;
     this.t = 0;
     this.charge = 0;
+    this.swingEmitted = false;
     if (SWINGS.includes(move)) this.lastSwing = move;
+    this.enterStep();
+  }
+
+  // A cutting motion sounds once when its first cutting step begins,
+  // even if a long frame immediately completes that step.
+  enterStep() {
+    const s = MOVES[this.move]?.[this.step];
+    if (!s?.trail || this.swingEmitted) return;
+    this.swingEmitted = true;
+    this.events.push({ type: 'swing', speed: Math.max(0.2, Math.min(2, s.rate / 50)), move: this.move });
   }
 
   // ctx: moving, running, air (the warrior's state) and held (whether the
@@ -198,6 +211,7 @@ export class Combat {
     if (this.move) {
       const steps = MOVES[this.move];
       const s = steps[this.step];
+      this.enterStep();
       target = KEYS[s.key];
       rate = s.rate;
       this.trailing = !!s.trail;
@@ -211,8 +225,14 @@ export class Combat {
       }
       if (s.spin) this.spin = Math.min(1, this.t / s.time) * Math.PI * 2 * s.spin;
       if (this.t >= s.time) {
-        if (s.grab) this.inHand = true;
-        if (s.release) this.inHand = false;
+        if (s.grab && !this.inHand) {
+          this.inHand = true;
+          this.events.push({ type: 'draw' });
+        }
+        if (s.release && this.inHand) {
+          this.inHand = false;
+          this.events.push({ type: 'sheathe' });
+        }
         if (s.impact) this.events.push({ type: 'slam', strength: s.impact });
         if (s.lunge) this.events.push({ type: 'lunge', speed: s.lunge });
         if (s.spin) {
@@ -229,7 +249,7 @@ export class Combat {
           this.queued = null;
           this.move = null;
           if (next) this.start(next);
-        }
+        } else this.enterStep();
       }
       this.calm = 0;
     } else if (this.inHand) {

@@ -18,7 +18,9 @@ test('terrain brushes update rendered chunk arrays and restore original elevatio
   assert.equal(scene.paint(x, y, 0, WATER), 1);
   assert.equal(c.type[i], WATER);
   assert.ok(c.elev[i] < WATER_LEVEL);
-  assert.equal(world.isWalkable(x, y), false);
+  // Painted water is a knee-deep ford, like every lake.
+  assert.equal(world.isWalkable(x, y), true);
+  assert.ok(world.waterDepthAt(x, y) > 0);
   const renderer = { cols: 1, mask: new Uint8Array(1), fg: new Float32Array(4), bg: new Float32Array(4) };
   drawGround(renderer, world, { x0: Math.floor(x), y0: Math.floor(y), rows: 1, cols: 1 }, 0, { x: -100, y: -100 });
   assert.equal(renderer.mask[0], WATER);

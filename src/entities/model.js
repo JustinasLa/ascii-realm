@@ -6,6 +6,7 @@ import { JUMPS as CAPTURES } from './jumps.js';
 import { JUMPS as KINDS } from './player.js';
 import { captureClip } from './retarget.js';
 import { SCALE, TILT } from './rig.js';
+import { footPlants } from './footfalls.js';
 
 // The player as a real rigged 3D character playing professionally animated
 // clips (Quaternius' Universal Animation Library, CC0), drawn every frame
@@ -172,6 +173,10 @@ export class ModelFigure {
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(COLS * SX, ROWS * SY, false);
     this.renderer.setClearColor(0x000000, 0);
+    // Clip the submerged geometry in 3D, so each leg meets the surface at
+    // its own position even when striding towards or away from the camera.
+    this.waterClipping = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)];
+    this.waterDepth = 0;
     this.pixels = new Uint8Array(COLS * SX * ROWS * SY * 4);
 
     this.scene = new THREE.Scene();
@@ -324,25 +329,28 @@ export class ModelFigure {
     // body stops, so do they, rather than running on in place while a
     // smoothed speed dies away.
     const speed = p.groundSpeed ?? p.speed;
+    // Water drag changes cadence, while the blend still follows whether
+    // the player is walking or running at that reduced ground speed.
+    const gaitSpeed = speed / (p.speedScale ?? 1);
     const w = Object.fromEntries(Object.keys(this.actions).map((k) => [k, 0]));
 
     // Locomotion: pure walk at the player's walking speed, pure jog at
     // their running speed, blended in between while speeding up or slowing.
     const walkAt = p.walkSpeed;
     const runAt = p.runSpeed;
-    const moving = Math.min(1, speed / (walkAt * 0.5));
-    const t = Math.max(0, Math.min(1, (speed - walkAt) / (runAt - walkAt)));
+    const moving = Math.min(1, gaitSpeed / (walkAt * 0.5));
+    const t = Math.max(0, Math.min(1, (gaitSpeed - walkAt) / (runAt - walkAt)));
     const loco = { walk: 1 - t, jog: t };
     // Advance one shared gait cycle by ground covered, so the feet keep pace
     // with the ground whichever clips are mixed.
     let perMetre = 0;
     for (const g of this.gaits) perMetre += (loco[g.key] ?? 0) / g.cycle;
     const before = this.phase;
-    this.phase = (this.phase + speed * dt * perMetre) % 1;
-    // A foot comes down as the cycle passes each half.
-    if (moving > 0.5 && p.air === 0 && Math.floor(this.phase * 2) !== Math.floor(before * 2)) {
-      p.events.push({ type: 'step', x: p.x, y: p.y, strength: Math.min(1, speed / 5) });
-    }
+    const after = before + speed * dt * perMetre;
+    this.phase = after % 1;
+    const plants = moving > 0.5 && p.air === 0 && p.windUp < 0
+      && !cb.charge && (!cb.move || cb.move === 'draw' || cb.move === 'sheathe') && !this.oneShot
+      ? footPlants(before, after) : [];
     for (const g of this.gaits) {
       const a = this.actions[g.key];
       a.time = (((this.phase + g.strike) % 1) + 1) % 1 * a.getClip().duration;
@@ -405,6 +413,12 @@ export class ModelFigure {
     // in the air.
     this.model.position.y = 0;
     this.model.updateMatrixWorld(true);
+    for (const side of plants) {
+      const foot = this.bones[bone(side === 0 ? 'DEF-foot.L' : 'DEF-foot.R')];
+      const at = foot.getWorldPosition(new THREE.Vector3());
+      p.events.push({ type: 'step', x: p.x + at.x * SCALE / ASPECT,
+        y: p.y + at.z * SCALE * TILT, strength: Math.min(1, speed / 5) });
+    }
     const v = new THREE.Vector3();
     let lowest = Infinity;
     for (const f of this.feet) lowest = Math.min(lowest, f.getWorldPosition(v).y);
@@ -414,9 +428,30 @@ export class ModelFigure {
     for (const k of this.jumpKeys) jumping += this.weights[k];
     const grounded = moving * Math.max(0, 1 - jumping);
     const lift = (off > 0 ? off * 0.85 : off) * grounded;
-    this.model.position.y = p.air - lift;
+    this.waterDepth = p.waterDepth ?? 0;
+    this.model.position.y = p.air - this.waterDepth - lift;
     this.model.updateMatrixWorld(true);
     this.steady(dt, grounded);
+  }
+
+  // Where the surface cuts each leg, in world-cell offsets from the body.
+  // These little waterlines follow the animated knees, rather than orbiting
+  // the player's centre, and vanish once a jumping foot clears the surface.
+  waterContacts() {
+    if (this.waterDepth <= 0.001) return [];
+    const contacts = [];
+    for (const leg of this.legs) {
+      const joints = [leg.thigh, leg.shin, leg.foot].map((b) => b.getWorldPosition(new THREE.Vector3()));
+      for (let i = 0; i < joints.length - 1; i++) {
+        const a = joints[i];
+        const b = joints[i + 1];
+        if (a.y < 0 || b.y > 0 || a.y === b.y) continue;
+        const at = a.clone().lerp(b, a.y / (a.y - b.y));
+        contacts.push({ x: at.x * SCALE / ASPECT, y: at.z * SCALE * TILT });
+        break;
+      }
+    }
+    return contacts;
   }
 
   // Jumping: picks the clip for the kind of jump at take-off and plays it in
@@ -531,7 +566,8 @@ export class ModelFigure {
     if (moving < 0.01) return;
     const planted = this.legs.map((l) => {
       const at = l.foot.getWorldPosition(new THREE.Vector3());
-      return at.y < FOOT_FLOOR + 0.035 ? at : null;
+      // Wading lowers the whole body; judge contact from the lake bed.
+      return at.y + this.waterDepth < FOOT_FLOOR + 0.035 ? at : null;
     });
     const shift = (this.level + (y - this.level) * BOB_KEEP - y) * moving;
     this.model.position.y += shift;
@@ -584,6 +620,7 @@ export class ModelFigure {
     cam.bottom = -(1 - fy) * heightM;
     cam.updateProjectionMatrix();
 
+    this.renderer.clippingPlanes = this.waterDepth > 0.001 ? this.waterClipping : [];
     this.renderer.render(this.scene, cam);
     const gl = this.renderer.getContext();
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);

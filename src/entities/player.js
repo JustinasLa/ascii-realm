@@ -1,4 +1,4 @@
-import { ASPECT } from '../world/world.js';
+import { ASPECT, MAX_WATER_DEPTH } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
@@ -110,6 +110,10 @@ export class Player {
     this.lean = 0;
     this.speed = 0;
     this.groundSpeed = 0;
+    // The lake bed stays within knee depth. Ease into it at the bank so
+    // neither the body nor its walking speed jumps between terrain cells.
+    this.waterDepth = 0;
+    this.speedScale = 1;
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -202,6 +206,7 @@ export class Player {
         this.jumpT = 0;
         this.flight = (kind.rise + Math.sqrt(kind.rise ** 2 + 2 * FALL * this.air)) / FALL;
         if (kind.surge) this.surge = kind.surge;
+        this.events.push({ type: 'jump', x: this.x, y: this.y, strength: 1 });
       } else {
         flightDt = 0;
       }
@@ -246,6 +251,10 @@ export class Player {
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
+    const depth = world.waterDepthAt?.(this.x, this.y) ?? 0;
+    this.waterDepth += (depth - this.waterDepth) * ease(12);
+    if (Math.abs(depth - this.waterDepth) < 0.001) this.waterDepth = depth;
+    this.speedScale = 1 - 0.38 * this.waterDepth / MAX_WATER_DEPTH;
 
     // Letting go mid-sprint does not stop the warrior dead: they skid to a
     // halt, braced, throwing up dirt.
@@ -270,7 +279,7 @@ export class Player {
 
     // The warrior has momentum: velocity eases towards where the keys point
     // rather than jumping there, so changes of direction sweep round.
-    const speed = this.walkSpeed + (this.runSpeed - this.walkSpeed) * this.run;
+    const speed = (this.walkSpeed + (this.runSpeed - this.walkSpeed) * this.run) * this.speedScale;
     const tx = moving && this.skid <= 0 ? (move.x / len) * speed : 0;
     const tz = moving && this.skid <= 0 ? (move.y / len) * speed : 0;
     const grip = ease(moving ? GRIP + (SPRINT_GRIP - GRIP) * this.run : 16);
@@ -321,9 +330,24 @@ export class Player {
     if (going) {
       const stride = Math.floor((this.phase - Math.PI / 2) / Math.PI);
       this.phase += (metres / strideCycle(this.run)) * Math.PI * 2;
-      // The first foot lands at pi/2, then the feet alternate each half cycle.
-      if (!this.modelTrail && this.air === 0 && Math.floor((this.phase - Math.PI / 2) / Math.PI) !== stride) {
-        this.events.push({ type: 'step', x: this.x, y: this.y, strength: 0.3 + 0.7 * this.run });
+      // Match each foot's heel strike in the gait, including every strike
+      // crossed by a long frame. The model supplies its own footfalls.
+      if (!this.modelTrail && this.air === 0 && this.windUp < 0 && !this.combat.busy && !this.combat.charge) {
+        const last = Math.floor((this.phase - Math.PI / 2) / Math.PI);
+        for (let k = stride + 1; k <= last; k++) {
+          const j = k % 2 === 0 ? 1 : 0;
+          // Reduce to one cycle so floating-point drift cannot sample the
+          // instant before touchdown once the phase grows large.
+          const touchdown = Math.PI / 2 + (j === 0 ? Math.PI : 0);
+          const foot = gaitPlan(touchdown, this.run)[j].print;
+          const at = rotY([foot[0], 0, foot[1]], this.heading);
+          this.events.push({
+            type: 'step',
+            x: this.x + at[0] * toCols,
+            y: this.y + at[2] * toRows,
+            strength: 0.3 + 0.7 * this.run,
+          });
+        }
       }
     }
 
@@ -346,7 +370,7 @@ export class Player {
     this.idle = moving || this.air > 0 || held ? 0 : this.idle + dt;
     // Left alone long enough with the sword away, the warrior kneels to
     // rest, and springs up again the moment there is something to do.
-    const rest = this.idle > 12 && !this.combat.inHand && !this.combat.busy;
+    const rest = this.idle > 12 && this.waterDepth < 0.01 && !this.combat.inHand && !this.combat.busy;
     this.kneel += ((rest ? 1 : 0) - this.kneel) * ease(rest ? 2.2 : 9);
     const glance = Math.min(1, Math.max(0, (this.idle - 3) / 1.5)) * (1 - this.kneel);
     const lookTo = glance * (Math.sin(this.idle * 0.55) * 0.75 + Math.sin(this.idle * 1.3) * 0.15);
@@ -389,6 +413,8 @@ export class Player {
         this.events.push({ type: 'land', x: this.x, y: this.y, strength: 0.6 });
       } else if (e.type === 'whirl') {
         this.events.push({ type: 'whirl', x: this.x, y: this.y, strength: 1 });
+      } else {
+        this.events.push({ ...e, x: this.x, y: this.y, strength: e.strength ?? 1 });
       }
     }
     cb.events.length = 0;
@@ -411,7 +437,7 @@ export class Player {
       const m = project(rig.headAt([0, -0.03, 0.17]));
       e.x = this.x + m[0] / ASPECT;
       e.y = this.y;
-      e.h = -m[1];
+      e.h = -m[1] - this.waterDepth * SCALE;
       e.dx = Math.sin(this.heading);
       e.dy = Math.cos(this.heading);
     }
@@ -467,12 +493,13 @@ export class Player {
     if (this.modelTrail || !this.combat.trailing || !rig.sword) return;
     const h = project(rig.sword.guard);
     const tip = project(rig.sword.tip);
+    const sink = this.waterDepth * SCALE;
     this.trail.push({
       t: this.time,
       hx: this.x + h[0] / ASPECT,
-      hy: this.y + h[1],
+      hy: this.y + h[1] + sink,
       tx: this.x + tip[0] / ASPECT,
-      ty: this.y + tip[1],
+      ty: this.y + tip[1] + sink,
     });
   }
 
@@ -486,7 +513,7 @@ export class Player {
     this.cape.settle(...this.capeMount());
   }
 
-  // Moves along one axis at a time so the player slides along shorelines.
+  // Moves along one axis at a time so the player slides around solid props.
   tryMove(world, dx, dy) {
     // Check the path as well as its endpoint, including thin obstacles.
     const steps = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 0.25);

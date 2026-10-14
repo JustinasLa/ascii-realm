@@ -84,7 +84,7 @@ test('every catalog prop survives placement, erase history, and JSON save/load',
   }
 });
 
-test('decorative scenery allows movement on grass while water still blocks it', () => {
+test('decorative scenery allows movement on grass and through painted shallow water', () => {
   const world = new World(42);
   const scene = new Scenery(world);
   const { x, y } = world.spawn;
@@ -92,7 +92,8 @@ test('decorative scenery allows movement on grass while water still blocks it', 
   scene.paint(x, y, 0, GRASS);
   assert.equal(world.isWalkable(x, y), true);
   scene.paint(x, y, 0, WATER);
-  assert.equal(world.isWalkable(x, y), false);
+  assert.equal(world.isWalkable(x, y), true);
+  assert.ok(world.waterDepthAt(x, y) > 0);
   assert.equal(scene.undo(), true);
   assert.equal(world.typeAt(x, y), GRASS);
   assert.equal(world.isWalkable(x, y), true);

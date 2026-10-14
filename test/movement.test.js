@@ -10,6 +10,7 @@ const meadow = { isWalkable: () => true, typeAt: () => GRASS };
 function obstacleWorld(props = [], typeAt = () => GRASS) {
   return Object.assign(Object.create(World.prototype), {
     typeAt,
+    waterDepthAt: (x, y) => typeAt(x, y) === WATER ? 0.3 : 0,
     propsIn: () => props,
   });
 }
@@ -49,16 +50,17 @@ test('movement cannot skip a thin obstacle between clear endpoints', () => {
   }
 });
 
-test('movement stops before a one-cell strip of water', () => {
+test('the player wades straight across a one-cell strip of water', () => {
   const world = obstacleWorld([], (_x, y) => Math.floor(y) === 0 ? WATER : GRASS);
   const p = new Player(0, -1);
   p.tryMove(world, 0, 3);
-  assert.ok(p.y < 0, `crossed the water: y=${p.y}`);
-  assert.ok(world.isWalkable(p.x, p.y));
+  assert.equal(p.y, 2);
+  assert.ok(world.isWalkable(p.x, 0.5), 'knee-deep water is fordable');
 });
 
-test('a blocked axis still lets the player slide along the shore', () => {
-  const world = obstacleWorld([], (x) => x >= 2 ? WATER : GRASS);
+test('a blocked axis still lets the player slide along a wall', () => {
+  const wall = { x: 4, y: 0, footW: 2, footH: 1000 };
+  const world = obstacleWorld([wall]);
   const p = new Player(0, 0);
   p.tryMove(world, 8, 0);
   const stoppedX = p.x;
@@ -226,4 +228,15 @@ test('queued aerial tricks start at the same flight time for every frame partiti
       }
     }
   }
+});
+
+test('jump audio events fire once at takeoff and once at landing', () => {
+  const p = new Player(0, 0);
+  p.jump();
+  p.updateJump(0.099);
+  assert.equal(p.events.length, 0);
+  p.updateJump(0.001);
+  assert.deepEqual(p.events.map((e) => e.type), ['jump']);
+  for (let i = 0; i < 10; i++) p.updateJump(0.1);
+  assert.deepEqual(p.events.map((e) => e.type), ['jump', 'land']);
 });

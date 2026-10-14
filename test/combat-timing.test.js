@@ -78,31 +78,83 @@ test('sheathe completion carries the remaining frame into the idle timer', () =>
   close(cb.calm, 0.03);
 });
 
-test('plunge holds in the air even with time left in a frame, then impacts only once', () => {
+test('repeated sprint attacks preserve the thrust queued during drawing', () => {
+  const cb = new Combat();
+  cb.attack({ running: true });
+  cb.attack({ running: true });
+  run(cb, 0.45, 0.1);
+  assert.equal(cb.move, 'thrust');
+  run(cb, 0.4, 0.1);
+  assert.deepEqual(cb.events.map((e) => e.type), ['draw', 'swing', 'lunge']);
+  assert.equal(cb.events[1].move, 'thrust');
+});
+
+test('an attack while drawing manually chooses a thrust when sprinting', () => {
+  const cb = new Combat();
+  cb.toggle();
+  cb.attack({ running: true });
+  run(cb, 0.45, 0.1);
+  assert.equal(cb.move, 'thrust');
+});
+
+test('jumping with attack held pauses charging until an actual release', () => {
+  const cb = new Combat();
+  cb.inHand = true;
+  cb.update(0.6, { held: true });
+  const charge = cb.charge;
+  cb.update(0.2, { held: true, air: true });
+  assert.equal(cb.move, null);
+  assert.equal(cb.charge, charge);
+  cb.update(1 / 60, { air: true });
+  assert.equal(cb.move, 'spin');
+});
+
+test('a coarse airborne plunge sounds once and waits for landing before impact', () => {
   const cb = new Combat();
   cb.attack({ air: true });
   cb.update(0.8, { air: true });
   assert.equal(cb.move, 'plunge');
   assert.equal(cb.step, 1);
   assert.equal(cb.t, 0);
-  assert.deepEqual(cb.events, []);
+  assert.deepEqual(cb.events.map((e) => e.type), ['draw', 'swing']);
   cb.update(0.09);
-  assert.deepEqual(cb.events, []);
+  assert.deepEqual(cb.events.map((e) => e.type), ['draw', 'swing']);
   cb.update(0.02);
-  assert.deepEqual(cb.events, [{ type: 'slam', strength: 1.3 }]);
+  assert.deepEqual(cb.events.map((e) => e.type), ['draw', 'swing', 'slam']);
   cb.update(0.5);
   assert.equal(cb.move, null);
-  assert.equal(cb.events.length, 1);
+  assert.equal(cb.events.length, 3);
 });
 
-test('releasing a charged spin consumes the frame and emits one whirl', () => {
+test('releasing a charged spin consumes the frame and sounds its cut and whirl once', () => {
   const cb = new Combat();
   cb.inHand = true;
   cb.update(0.6, { held: true });
   cb.update(0.7);
   assert.equal(cb.move, null);
   assert.equal(cb.spin, 0);
-  assert.deepEqual(cb.events, [{ type: 'whirl' }]);
+  assert.deepEqual(cb.events.map((e) => e.type), ['swing', 'whirl']);
   cb.update(0.1);
-  assert.equal(cb.events.length, 1);
+  assert.equal(cb.events.length, 2);
+});
+
+test('coarse combo frames preserve the order and count of sword sounds', (t) => {
+  t.mock.method(Math, 'random', () => 0);
+  const cb = new Combat();
+  cb.attack();
+  cb.update(0.4);
+  assert.equal(cb.move, 'a');
+  cb.attack();
+  cb.update(0.3);
+  assert.equal(cb.move, 'b');
+  cb.attack();
+  cb.update(0.8);
+  assert.equal(cb.move, null);
+  assert.deepEqual(cb.events.map((e) => e.type), ['draw', 'swing', 'swing', 'swing', 'slam']);
+  assert.deepEqual(cb.events.filter((e) => e.type === 'swing').map((e) => e.move), ['a', 'b', 'c']);
+  cb.toggle();
+  cb.update(0.55);
+  assert.deepEqual(cb.events.map((e) => e.type), ['draw', 'swing', 'swing', 'swing', 'slam', 'sheathe']);
+  cb.update(0.1);
+  assert.equal(cb.events.length, 6);
 });

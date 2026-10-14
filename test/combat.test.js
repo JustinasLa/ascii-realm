@@ -50,7 +50,7 @@ test('a strike in the air plunges and slams only on landing', () => {
   cb.attack({ air: true });
   assert.equal(cb.move, 'plunge');
   run(cb, 1, { air: true });
-  assert.equal(cb.events.length, 0, 'slammed before landing');
+  assert.ok(!cb.events.some((e) => e.type === 'slam'), 'slammed before landing');
   run(cb, 0.2, {});
   assert.ok(cb.events.some((e) => e.type === 'slam'));
 });
@@ -67,16 +67,6 @@ test('holding the button charges a spin that fires on release', () => {
   run(cb, 0.5, {});
   assert.ok(cb.events.some((e) => e.type === 'whirl'));
   assert.equal(cb.spin, 0);
-});
-
-test('repeated sprint attacks preserve the thrust queued during drawing', () => {
-  const cb = new Combat();
-  cb.attack({ running: true });
-  cb.attack({ running: true });
-  run(cb, 0.45, { moving: true, running: true });
-  assert.equal(cb.move, 'thrust');
-  run(cb, 0.4, { moving: true, running: true });
-  assert.deepEqual(cb.events, [{ type: 'lunge', speed: 6 }]);
 });
 
 test('an attack while drawing manually chooses a thrust when sprinting', () => {

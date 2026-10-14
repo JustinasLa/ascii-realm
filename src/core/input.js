@@ -4,7 +4,7 @@ const held = new Set();
 const tapped = new Set();
 
 export function isControlTarget(target) {
-  return Boolean(target?.closest?.('#scenery-builder, input, textarea, select, button, summary, [contenteditable="true"]'));
+  return Boolean(target?.closest?.('#scenery-builder, #audio-controls, input, textarea, select, button, summary, [contenteditable="true"]'));
 }
 
 export function clearInput() {
