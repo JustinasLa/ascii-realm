@@ -3,7 +3,7 @@ import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
 import { ATTACK_STAMINA_COST, SPRINT_RECOVERY_STAMINA, Vitals } from './vitals.js';
-import { heldWeapon, weaponFeel } from './loadout.js';
+import { heldWeapon, needsBothHands, weaponFeel } from './loadout.js';
 import { Ranged } from './ranged.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
@@ -88,7 +88,7 @@ export class Player {
     // Out of breath: no sprinting until a useful reserve has come back.
     this.sprintExhausted = false;
     // A lit torch occupies the free hand; T stows it or draws a fresh one.
-    this.torch = true;
+    this.torchOut = true;
     // Recent blade positions in world cells, for the swing trail.
     this.trail = [];
     // The active blade on the ground plane, for its wake through the grass.
@@ -196,6 +196,21 @@ export class Player {
     // makes the ends of each movement settle without a visible jolt.
     const t = Math.max(0, Math.min(1, this.pickupTime / 0.2, (PICKUP_TIME - this.pickupTime) / 0.32));
     this.pickupPose = t * t * (3 - 2 * t);
+  }
+
+  // Whether the lit torch is in hand. A two-handed weapon, such as the bow,
+  // needs the torch hand, so equipping one tucks the torch away until the
+  // weapon is unequipped again.
+  get torch() {
+    return this.torchOut && !this.handsFull;
+  }
+
+  set torch(lit) {
+    this.torchOut = lit;
+  }
+
+  get handsFull() {
+    return needsBothHands(this.equipment);
   }
 
   // The attack depends on what the warrior is doing at the time.

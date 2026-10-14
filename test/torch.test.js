@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Player } from '../src/entities/player.js';
+import { ITEMS } from '../src/inventory/items.js';
 import { Fires, MAX_FIRES } from '../src/world/fire.js';
 import { reflector } from '../src/world/reflection.js';
 import { Torches, MAX_THROWN_TORCHES, torchGrip } from '../src/world/torch.js';
@@ -40,6 +41,37 @@ test('the player carries a torch, can stow and redraw it, and stays standing whi
   assert.equal(torches.throw(player), 'empty');
   assert.equal(torches.toggle(player), 'drawn');
   assert.equal(player.idle, 0);
+});
+
+test('a two-handed weapon tucks the torch away until it is unequipped', () => {
+  const player = new Player(40, 40);
+  const torches = new Torches();
+  player.equipment = { mainHand: { id: 'longbow' } };
+  assert.equal(player.handsFull, true);
+  assert.equal(player.torch, false);
+  assert.deepEqual(torches.prepare(view, 1, player), []);
+  assert.equal(torches.toggle(player), 'hands');
+  assert.equal(torches.throw(player, { x: 0, y: 0, h: 12 }), 'hands');
+  assert.equal(torches.list.length, 0);
+  for (const id of ['greatsword', 'battleAxe', 'warHammer', 'spear', 'quarterstaff']) {
+    assert.ok(ITEMS[id].twoHanded, id);
+    player.equipment = { mainHand: { id } };
+    assert.equal(player.torch, false, id);
+  }
+  // One-handed weapons leave the torch hand free.
+  for (const id of ['shortSword', 'dagger', 'javelin']) {
+    assert.ok(!ITEMS[id].twoHanded, id);
+    player.equipment = { mainHand: { id } };
+    assert.equal(player.torch, true, id);
+  }
+  player.equipment = { mainHand: null };
+  assert.equal(player.torch, true);
+  assert.equal(torches.prepare(view, 2, player).length, 1);
+  // A torch stowed before taking up the bow stays stowed afterwards.
+  assert.equal(torches.toggle(player), 'stowed');
+  player.equipment = { mainHand: { id: 'longbow' } };
+  player.equipment = { mainHand: null };
+  assert.equal(player.torch, false);
 });
 
 test('the held torch follows the free hand across movement, turns, jumping and wading', () => {

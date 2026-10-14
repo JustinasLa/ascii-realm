@@ -345,6 +345,7 @@ const torchMessages = {
   fed: 'The torch landed in a fire that was already burning.',
   water: 'The water put out the torch.',
   blocked: 'The torch went out. Find open ground or put out a fire with C.',
+  hands: 'Both hands are on your weapon. Unequip it to carry a torch.',
 };
 let fireNoticeUntil = 0;
 let walked = 0;
@@ -507,7 +508,8 @@ function frame(now) {
       if (result?.message && result.status !== 'picked') hud.notify(result.message, result.ok ? 'pickup' : 'info');
     }
   }
-  const itemHint = player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
+  const itemHint = player.handsFull ? 'Two-handed · torch tucked away'
+    : player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
   if (carriedItem.textContent !== itemHint) carriedItem.textContent = itemHint;
   if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
   clicked = false;

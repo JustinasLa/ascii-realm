@@ -30,3 +30,6 @@ export function weaponFeel(weapon) {
 // Bows shoot; spears and javelins are thrown when held and released.
 export const isBow = (weapon) => weapon?.type === 'bow';
 export const isThrown = (weapon) => weapon?.type === 'spear' || weapon?.type === 'javelin';
+
+// A two-handed weapon in the main hand leaves no hand free for a torch.
+export const needsBothHands = (equipment) => Boolean(ITEMS[equipment?.mainHand?.id]?.twoHanded);
