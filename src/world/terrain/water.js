@@ -10,9 +10,8 @@
 //                 skaters, bubbles off the weed, drifting leaves and fish
 //                 rising in rings out in the deep.
 //
-// Water cells are reshaded every frame, so everything that does not move is
-// decided once per chunk (see statics) and the per-frame work is one value
-// noise lookup and a few sines per cell.
+// Calm gaps are cached ground. Only scattered swell bands, the shoreline
+// and surface life are reshaded, with fixed detail decided once per chunk.
 
 import { fbm, valueNoise, valueNoiseRow } from '../../core/noise.js';
 import { hash2 } from '../../core/rng.js';
@@ -89,8 +88,12 @@ const FLOAT = 2;
 
 const cache = new WeakMap();
 
-export function animated() {
-  return true;
+function moving(s, i) {
+  return !!(s.surface[i] || s.kind[i] === FLOAT || s.depth[i] < 0.23 || s.life[i] || s.rise[i] !== Infinity);
+}
+
+export function animated(chunk, i, wx, wy, seed) {
+  return moving(statics(chunk, seed), i);
 }
 
 // Fractional part, for the repeating timers below.
@@ -109,6 +112,7 @@ function statics(chunk, seed) {
   s = {
     chunk, version, seed,
     depth: new Float32Array(n),
+    surface: new Uint8Array(n),
     // Sine and cosine of each cell's phase in the moving swell, wavelets
     // and lapping, so a frame only has to rotate them by the time.
     phase: new Float32Array(n * 8),
@@ -149,6 +153,10 @@ function statics(chunk, seed) {
       const m = 0.92 + (chunk.shade[i] ?? 0.5) * 0.16;
       const deep = d ** 0.7;
       for (let c = 0; c < 3; c++) s.bg[i * 3 + c] = (BG_SHALLOW[c] + (BG_DEEP[c] - BG_SHALLOW[c]) * deep) * m;
+
+      // Long, irregular bands of ripples with quiet water between them.
+      // World coordinates keep the bands joined across chunk boundaries.
+      s.surface[i] = valueNoise(xs * 0.05, wy * 0.32, seed + 1601) > 0.6 ? 1 : 0;
 
       if (d > 0.06 && d < 0.95 && placePad(s, i, wx, wy, seed, pads)) continue;
 
@@ -344,7 +352,6 @@ let swellY, swellTime, swellSeed;
 
 export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   const s = statics(chunk, seed);
-  if (t !== clock) tick(t);
   const i3 = i * 3;
   const p8 = i * 8;
   const ph = s.phase;
@@ -353,6 +360,14 @@ export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   let bgB = s.bg[i3 + 2];
   const kind = s.kind[i];
   const rnd = chunk.rnd[i];
+
+  // No wave, shore foam or nearby life: preserve the bed and skip the
+  // animated noise, trigonometry and drifting-leaf lookups entirely.
+  if (!moving(s, i)) {
+    emit(out, o, s.glyph[i], s.col[i3], s.col[i3 + 1], s.col[i3 + 2], bgR, bgG, bgB);
+    return;
+  }
+  if (t !== clock) tick(t);
 
   // Floating pads ride the swell with a slow sheen and keep their blooms.
   if (kind === FLOAT) {
@@ -389,37 +404,34 @@ export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   let lr = 0;
   let lgG = 0;
   let lb = 0;
-  // Every cell carries a mark of the surface; the swell sets how bright and
-  // how long it is, from faint wavelets in the troughs to joined crests.
-  // The light runs from a deep violet-blue in the troughs to pale steel.
+  // Only the swell bands carry marks. Troughs stay clear, so crests read as
+  // separate waves instead of a carpet of fine chop.
   const lv = v < 0.2 ? 0 : v > 0.9 ? 1 : (v - 0.2) / 0.7;
   k = 0.72 + lv * 0.28;
   cr = (TROUGH_COL[0] + (CREST_COL[0] - TROUGH_COL[0]) * lv * lv) * k;
   cg = (TROUGH_COL[1] + (CREST_COL[1] - TROUGH_COL[1]) * lv * lv) * k;
   cb = (TROUGH_COL[2] + (CREST_COL[2] - TROUGH_COL[2]) * lv * lv) * k;
-  if (v > 0.72) {
+  if (s.surface[i] && v > 0.72) {
     g = WAVE[row * 2 + (wx & 1)];
-  } else if (v > 0.6) {
+  } else if (s.surface[i] && v > 0.6) {
     g = LINE[row];
-  } else if (v > 0.44) {
+  } else if (s.surface[i] && v > 0.48 && chop > 0.25) {
     g = chop > 0.45 ? CHOP[Math.floor(rnd * 6)] : DASH[row + (rnd < 0.5 ? 0 : 3)];
-  } else if (chop > -0.6 || rnd < 0.4) {
-    g = chop > 0 ? CHOP[Math.floor(rnd * 6)] : DASH[row + (rnd < 0.5 ? 0 : 3)];
   }
   // Fine wavelets ride over the long swell marks, and where they peak on
   // a lit swell they flash.
-  if (fine > 0.6 && v > 0.55) {
+  if (s.surface[i] && fine > 0.6 && v > 0.55) {
     lg = GLINT[Math.floor(rnd * 4)];
     const f = (fine - 0.6) * 2.5 * (0.5 + lv * 0.5);
     lr = GLINT_COL[0] * f; lgG = GLINT_COL[1] * f; lb = GLINT_COL[2] * f;
-  } else if (chop > 0.4 && v > 0.44) {
+  } else if (s.surface[i] && chop > 0.4 && v > 0.48) {
     lg = CHOP[Math.floor(rnd * 6 + 3) % 6];
     lr = TROUGH_COL[0] * 0.8; lgG = TROUGH_COL[1] * 0.8; lb = TROUGH_COL[2] * 0.8;
   }
   // Out in the dark deep the surface quietens.
   if (d > 0.6) { const q = 1.3 - d * 0.5; cr *= q; cg *= q; cb *= q; }
   // The swell's broad back holds a little moonlight in the water itself.
-  const sheen = v > 0.45 ? (v - 0.45) * 1.4 : 0;
+  const sheen = s.surface[i] && v > 0.45 ? (v - 0.45) * 1.4 : 0;
   bgR += 5 * sheen; bgG += 8 * sheen; bgB += 16 * sheen;
 
   // The bed lies under the surface glyph; in the shallows a net of

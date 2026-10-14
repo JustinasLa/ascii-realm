@@ -11,7 +11,7 @@ import {
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 
 // Terrain grows blades up to five cells high; drawn blades are longer than
-// that profile, so they read as separate strokes, and a flower can top one.
+// that profile, so they read as separate character stalks, and a flower can top one.
 const MAX_PROFILE = 5;
 const BLADE_LENGTH = 1.3;
 export const MAX_GRASS_HEIGHT = 8;
@@ -41,7 +41,7 @@ const place = (x) => {
   const f = x - Math.floor(x);
   return f < 0.36 ? 0 : f > 0.64 ? 2 : 1;
 };
-// Flower stalks: thin strokes standing in for the broad blade strokes.
+// Flower stalks share the grass's heading characters.
 const STROKE0 = strokeGlyph(0, 0, 0);
 const THIN = Array.from({ length: STROKE_STEPS * STROKE_STEPS * 3 }, (_, k) =>
   dg(`flora.stem.${Math.floor(k / STROKE_STEPS) % STROKE_STEPS}.${k % STROKE_STEPS}`));
@@ -130,9 +130,9 @@ function drawBlade(r, view, write, x, y, height, lean, flat, light, tone, phase 
   const sx = x - view.x0;
   const dim = 1 - flat * 0.25;
   if (rise >= 0.75 && Math.abs(reach) <= rise * 1.8) {
-    // Upright: one edge-to-edge stroke per row, joined where the blade
-    // crosses each row boundary. The tip bends over more than the base.
-    // A blade ending low in its last row gets a short tip there.
+    // Upright: one heading character per crossed cell. The physical curve
+    // still controls the stalk's footprint and bends its tip more than its
+    // base; a blade ending low in its last row gets a small tip character.
     const rows = Math.max(1, Math.ceil(rise - 0.25));
     const tip = rise - rows + 1 < 0.7 ? 2 : 1;
     const tr = tone[0];
@@ -451,7 +451,8 @@ export class Grass {
       for (let x = Math.floor(Math.min(ax, bx) - radius / ASPECT);
         x <= Math.ceil(Math.max(ax, bx) + radius / ASPECT); x++) {
         const { c, i } = world.locate(x, y);
-        if (!c.grassHeight[i]) continue;
+        // Bare gaps have no stalk to part or trample into a visible mat.
+        if (!c.grassHeight[i] || c.blades?.present?.[i] === 0) continue;
         const px = (x + 0.5 - ax) * ASPECT;
         const py = (y + 0.5 - ay) * yScale;
         const u = length2 ? Math.max(0, Math.min(1, (px * dx + py * dy) / length2)) : 0;

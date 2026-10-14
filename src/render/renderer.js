@@ -7,7 +7,7 @@
 // atlas for every pixel, so cost is independent of how many characters are
 // on screen.
 
-import { BLANK_GLYPH, GLYPH_KIND, GLYPH_MASK, GRASS_GLYPH, LAYER } from './glyphs.js';
+import { BLANK_GLYPH, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
 import { NIGHT, VIGNETTE } from './palette.js';
 
 // An rgb triple as a GLSL vec3 literal.
@@ -236,37 +236,17 @@ export class AsciiRenderer {
     this.ov[i + 3] = 0;
   }
 
-  // Stacks a glyph over the cell. A cell shows two glyphs at most: the one
-  // already layered there sinks to the base, so the latest two stay visible.
+  // The topmost character takes the cell, including overlapping blades.
+  // Blank highlights leave the current character and its colour intact.
   layer(x, y, glyphIndex, r, g, b) {
     if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) return;
     this.layerAt(y * this.cols + x, glyphIndex, r, g, b);
   }
 
   layerAt(cell, glyphIndex, r, g, b) {
-    const { fg, bg, ov } = this;
-    const i = cell * 4;
     const glyphIndexOnly = glyphIndex & GLYPH_MASK;
-    const kind = GLYPH_KIND[glyphIndexOnly];
-    if (kind === BLANK_GLYPH) return;
-    if (kind !== GRASS_GLYPH || GLYPH_KIND[this.glyphAt(cell)] !== GRASS_GLYPH) {
-      this.putAt(cell, glyphIndexOnly, r, g, b);
-      return;
-    }
-    const hi = bg[i + 3];
-    if (ov[i + 3] || hi >> 4) {
-      fg[i] = ov[i];
-      fg[i + 1] = ov[i + 1];
-      fg[i + 2] = ov[i + 2];
-      fg[i + 3] = ov[i + 3];
-      bg[i + 3] = (hi >> 4) | ((glyphIndexOnly >> 8) << 4);
-    } else {
-      bg[i + 3] = (hi & 15) | ((glyphIndexOnly >> 8) << 4);
-    }
-    ov[i] = r;
-    ov[i + 1] = g;
-    ov[i + 2] = b;
-    ov[i + 3] = glyphIndexOnly & 255;
+    if (GLYPH_KIND[glyphIndexOnly] === BLANK_GLYPH) return;
+    this.putAt(cell, glyphIndexOnly, r, g, b);
   }
 
   // The base glyph of a cell, without anything layered over it.

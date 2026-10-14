@@ -7,26 +7,27 @@ import { createScene, scenarios } from '../bench/scene.js';
 // culling and contact-field optimizations, re-captured once the meadow was
 // merged with the outlaw, wading, fires and weather, and again after the
 // layered detail pass (terrain, water, flora, trees, props and effects), and
-// again once everything but the grass became plain characters.
+// again once everything but the grass became plain characters, and after
+// the requested sparse water and grass-patch density pass.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
-  ['4d58b015d435419679036a5bbeb631b08f895e993cf93c3d67846a6eb5d2d6b7',
-    '6ba86821fda4927d7db29a1592c485fd0d680a4c76fb473dcda6a1b01cdfd44a',
-    'd524246b0e61dea318d94b912402c81051e798ef257f589fdc5dfa676c09a0f4',
-    'bccb9b2a8ed80770c663ca40ba8fb818f1bbf3d57b707927fbcbeadb3bdf31b5'],
-  ['7ae731eb1ce7fcfc05c9779251ddb3116133be10e309594cb9f50492c2395d73',
-    '231b4860ec829866e3e88f2dc4f12d2f4ac9b69cc283c38229e27dd5d701d48c',
-    '48bbcf66405b45561cc09ea52373816de7e3db67af34171a38016aa987347967',
-    '06cf3b6319dbb36501b8f72c29f02483e1ddae49106f9bd95bc843f9bfe8f7ff'],
-  ['6a3db581db7ef0f5a4b59ac8ca9ee56b6f04804d8275d3ae33766e64c5f70f36',
-    'c3d4fee2327bb1ea25eb40146328edd1193cafaf229d01981d57115995894c35',
-    'a46654507ecc2c64ea970ae0ae75255588817cc808632e3dfe8c71a4926f4b2e',
-    '77cc9452eaccc57583b8a3db6a817636f0f9b0c1de9438d07d6f7987831a92bd'],
-  ['106b33c77a06b01399cea67236447c06e700dbdacc49aa443c8c0b985b3a3abd',
-    'c76caef1600ed5add424a3e12c854a6c5940cc2231c1b96937d3c07ba33b3d91',
-    'f15dff70b81093fe5826f15537236cc01dc44c9c33232563886ffeba7d7de5dc',
-    '059eceb53ee0c618d802465edf4644f8ef3bd218fbcc62599d35fd6f6a48e2b2'],
+  ['047242a97b63dc28858e774c384760efb271b6a797fd21f1a0dcb52c2e449119',
+    '482845dc5d99298c7f3fcaf72c20fa5037abb8d0c43c16ad0ddb913aaf027fcb',
+    '78bc65461f881abad3723cbaa05f4c578176b258f6bd7192266c24f44e57d0b8',
+    '60263c24e803e35543bbdfca9145ea1c9b26aade53953ccd7bb62fe3ef368591'],
+  ['880286aff36593e4036060004149c84347f9822f74a5457de738f3a1f6bdcd79',
+    '0961c042b5ac59d310fbd4702a9cecdce3c2f4f755ba1989a0530b78c10c88c9',
+    '102c57b2e468a23a2c89af5a95de2929c2e233f1092edb060e0b067abe3db497',
+    '34bfa921fd3d7c59d51e391aad8c8563b8150b149f817c2bc9b056bb611b1dc2'],
+  ['93e2af286971b4dc7903d46ae6dbeb2c659391008d70b5acba5a1b1f243ff90a',
+    'c8ecf9a5adf8e4e98f8f6913dc24c47bade24c0fe456375e87749d68a100f09c',
+    '4c18dd860824d64a1b6ff790563e166bc6156bf7fe1e9053032b80c46d1b9401',
+    '135ad00e5d827152618024bc95ab4b4b38dec59c68051c2c3c83f925c32afeeb'],
+  ['8b52de829711799c6da813efc56e8ff59ff211627cec6172cf96b6eb1befde50',
+    '9a4457528ce3077b1958579ab1369266f33f5c9fa5d9defd5c85554aae6f3e58',
+    '5e9e5c17b22865d1c75b31b783dc79376d01d4f97b993b1de2dcbd57a89d2956',
+    '2ca0eec25798bf8be6d02e5f65bd53b8ad952788295df684458969dd7fbc51e2'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.
@@ -40,7 +41,7 @@ function seeded(seed = 1) {
 }
 
 for (let index = 0; index < scenarios.length; index++) {
-  test(`optimized ${scenarios[index].name} preserves the original rendered cells`, async (t) => {
+  test(`${scenarios[index].name} matches the sparse-water and grass-patch scene snapshots`, async (t) => {
     t.mock.method(Math, 'random', seeded());
     const scene = await createScene(undefined, scenarios[index]);
     let sample = 0;
