@@ -5,6 +5,7 @@ import { grassGust } from '../src/audio/environment.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, DIRT, GRASS, STONE, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const dryWorld = (overrides = {}) => ({ seed: 1, spawn: { x: 0.5, y: 0.5 },
   typeAt: () => GRASS, isWalkable: () => true, burnGrass() {}, ...overrides });
@@ -24,7 +25,7 @@ function buffer(type = GRASS) {
     if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) return;
     r.bg.set([red, green, blue, 0], (y * r.cols + x) * 4);
   };
-  return r;
+  return withLayers(r);
 }
 
 test('campfires require a dry, unobstructed footprint and cannot overlap', () => {

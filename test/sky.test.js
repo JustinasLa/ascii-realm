@@ -4,6 +4,7 @@ import { hash2 } from '../src/core/rng.js';
 import { glyph } from '../src/render/glyphs.js';
 import { drawSkyReflection } from '../src/world/sky.js';
 import { ASPECT, GRASS, WATER } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 function renderer(cellH, dpr = 1) {
   const cellW = cellH * ASPECT * dpr;
@@ -11,11 +12,11 @@ function renderer(cellH, dpr = 1) {
   const canvas = { width: 600 * dpr, height: 360 * dpr };
   const cols = Math.ceil(canvas.width / cellW) + 1;
   const rows = Math.ceil(canvas.height / cellH) + 1;
-  return {
+  return withLayers({
     canvas, cols, rows, cellW, cellH, dpr,
     fg: new Uint8ClampedArray(cols * rows * 4),
     mask: new Uint8Array(cols * rows).fill(GRASS),
-  };
+  });
 }
 
 function star(gx, gy, dpr) {

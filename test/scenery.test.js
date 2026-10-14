@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Scenery } from '../src/editor/scenery.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, DIRT, GRASS, STONE, WATER, WATER_LEVEL, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 function fixture(seed = 42) {
   const world = new World(seed);
@@ -21,7 +22,7 @@ test('terrain brushes update rendered chunk arrays and restore original elevatio
   // Painted water is a knee-deep ford, like every lake.
   assert.equal(world.isWalkable(x, y), true);
   assert.ok(world.waterDepthAt(x, y) > 0);
-  const renderer = { cols: 1, mask: new Uint8Array(1), fg: new Float32Array(4), bg: new Float32Array(4) };
+  const renderer = withLayers({ cols: 1, rows: 1, mask: new Uint8Array(1), fg: new Float32Array(4), bg: new Float32Array(4) });
   drawGround(renderer, world, { x0: Math.floor(x), y0: Math.floor(y), rows: 1, cols: 1 }, 0, { x: -100, y: -100 });
   assert.equal(renderer.mask[0], WATER);
   assert.equal(scene.undo(), true);

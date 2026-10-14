@@ -5,6 +5,7 @@ import { Fires, MAX_FIRES } from '../src/world/fire.js';
 import { reflector } from '../src/world/reflection.js';
 import { Torches, MAX_THROWN_TORCHES, torchGrip } from '../src/world/torch.js';
 import { GRASS, WATER } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const dryWorld = (overrides = {}) => ({ seed: 1, typeAt: () => GRASS,
   isWalkable: () => true, waterDepthAt: () => 0, burnGrass() {}, ...overrides });
@@ -25,7 +26,7 @@ function buffer(type = GRASS) {
     if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) return;
     r.bg.set([red, green, blue, 0], (y * r.cols + x) * 4);
   };
-  return r;
+  return withLayers(r);
 }
 
 test('the player carries a torch, can stow and redraw it, and stays standing while it burns', () => {

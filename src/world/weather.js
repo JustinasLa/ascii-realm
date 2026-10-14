@@ -169,6 +169,7 @@ export class WeatherEffects {
         const o = (sy * r.cols + sx) * 4;
         for (let c = 0; c < 3; c++) {
           r.fg[o + c] = r.fg[o + c] * light * (1 - k) + tint[c] * k + 180 * this.flash;
+          r.ov[o + c] = r.ov[o + c] * light * (1 - k) + tint[c] * k + 180 * this.flash;
           r.bg[o + c] = r.bg[o + c] * light * (1 - k) + tint[c] * k * 0.35 + 80 * this.flash;
         }
       }

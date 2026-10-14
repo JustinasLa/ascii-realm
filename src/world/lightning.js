@@ -136,6 +136,9 @@ export class Lightning {
           r.fg[o] += 55 * k;
           r.fg[o + 1] += 95 * k;
           r.fg[o + 2] += 145 * k;
+          r.ov[o] += 55 * k;
+          r.ov[o + 1] += 95 * k;
+          r.ov[o + 2] += 145 * k;
           r.bg[o] += 14 * k;
           r.bg[o + 1] += 27 * k;
           r.bg[o + 2] += 48 * k;

@@ -5,6 +5,7 @@ import { glyph } from '../src/render/glyphs.js';
 import { drawItem, drawResource } from '../src/world/item-draw.js';
 import { reflector } from '../src/world/reflection.js';
 import { GRASS, WATER } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const id = Object.keys(ITEMS)[0];
 const item = { uid: 'test-item', id, count: 1, x: 4.5, y: 4.5, phase: 0 };
@@ -26,7 +27,7 @@ function buffer(type = GRASS) {
     if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) return;
     r.bg.set([red, green, blue, 0], (y * r.cols + x) * 4);
   };
-  return r;
+  return withLayers(r);
 }
 
 test('loose items use their registry glyph and keep a fixed mirror base while bobbing', () => {

@@ -5,6 +5,7 @@ import { GLYPHS, glyph } from '../src/render/glyphs.js';
 import { AsciiRenderer } from '../src/render/renderer.js';
 import { Projectiles } from '../src/world/projectiles.js';
 import { ASPECT } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const PHYSICAL = ['arrow', 'spear', 'javelin'];
 const WEAPON = { arrow: 'bow', spear: 'spear', javelin: 'javelin' };
@@ -36,7 +37,7 @@ function offset(position, xMetres, yMetres) {
 }
 
 function bufferRenderer(cols = 128, rows = 80) {
-  return {
+  return withLayers({
     cols, rows, calls: [],
     fg: new Uint8ClampedArray(cols * rows * 4),
     bg: new Uint8ClampedArray(cols * rows * 4),
@@ -46,7 +47,7 @@ function bufferRenderer(cols = 128, rows = 80) {
       this.calls.push({ x, y, g });
       AsciiRenderer.prototype.put.call(this, x, y, g, r, gg, b);
     },
-  };
+  });
 }
 
 for (const kind of PHYSICAL) {

@@ -345,11 +345,12 @@ export class Grass {
       const texture = Math.abs(track.x * 7 + track.y * 13) % MATTED.length;
       for (let c = 0; c < 3; c++) {
         r.fg[o + c] += (MAT[c] * 0.5 - r.fg[o + c]) * mat * 0.55;
+        r.ov[o + c] += (MAT[c] * 0.5 - r.ov[o + c]) * mat * 0.55;
         // The compressed bed is dark; exposed, horizontal leaf surfaces
         // catch the moonlight and make the walked route easy to read.
         r.bg[o + c] *= 1 - mat * 0.3;
       }
-      if (pressure > 0.45) r.fg[o + 3] = MATTED[texture];
+      if (pressure > 0.45) r.setGlyph(o / 4, MATTED[texture]);
     }
   }
 

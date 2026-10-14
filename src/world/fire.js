@@ -72,6 +72,9 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
       r.fg[o] += 156 * k;
       r.fg[o + 1] += 72 * k;
       r.fg[o + 2] += 12 * k;
+      r.ov[o] += 156 * k;
+      r.ov[o + 1] += 72 * k;
+      r.ov[o + 2] += 12 * k;
       r.bg[o] += 34 * k;
       r.bg[o + 1] += 16 * k;
       r.bg[o + 2] += 4 * k;
@@ -375,9 +378,10 @@ export class Fires {
           for (let channel = 0; channel < 3; channel++) {
             const color = [112, 106, 100][channel];
             r.fg[o + channel] += (color - r.fg[o + channel]) * k;
+            r.ov[o + channel] += (color - r.ov[o + channel]) * k;
             r.bg[o + channel] += (color * 0.3 - r.bg[o + channel]) * k;
           }
-          if (r.fg[o] < 130 && Math.abs(dx) < 1) r.fg[o + 3] = SMOKE[Math.floor(phase * SMOKE.length)];
+          if (r.fg[o] < 130 && Math.abs(dx) < 1) r.setGlyph(o / 4, SMOKE[Math.floor(phase * SMOKE.length)]);
         }
       }
     }

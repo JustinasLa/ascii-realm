@@ -9,6 +9,7 @@ import { reflector } from '../src/world/reflection.js';
 import { makeBush, makeTree, MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT, TREE_SPECIES } from '../src/world/trees.js';
 import { treeWind, windGust } from '../src/world/wind.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
 const EVERGREEN = new Set(['pine', 'spruce']);
@@ -272,8 +273,8 @@ test('camera translation and reflection share the same animated source cells', (
   const t = 17.25;
   assert.deepEqual(worldCells(recordProp(prop, a, t), a, true),
     worldCells(recordProp(prop, b, t), b, true));
-  const r = { cols: a.cols, rows: a.rows,
-    mask: new Uint8Array(a.cols * a.rows).fill(WATER), fg: new Float64Array(a.cols * a.rows * 4) };
+  const r = withLayers({ cols: a.cols, rows: a.rows,
+    mask: new Uint8Array(a.cols * a.rows).fill(WATER), fg: new Float64Array(a.cols * a.rows * 4) });
   const sources = [];
   const mirror = reflector(t, a);
   drawProp(r, a, prop, (renderer, ...cell) => {
@@ -300,9 +301,9 @@ test('culling retains crowns below the viewport and reflections from trees above
   const lakeView = { x0: bx - 32, y0: by + 1, cols: 64, rows: 40 };
   assert.equal(propInView(lakeView, prop), false);
   assert.equal(propInView(lakeView, prop, true), true);
-  const r = { cols: lakeView.cols, rows: lakeView.rows,
+  const r = withLayers({ cols: lakeView.cols, rows: lakeView.rows,
     mask: new Uint8Array(lakeView.cols * lakeView.rows).fill(WATER),
-    fg: new Float64Array(lakeView.cols * lakeView.rows * 4) };
+    fg: new Float64Array(lakeView.cols * lakeView.rows * 4) });
   drawProp(r, lakeView, prop, reflector(5, lakeView), 5, null, 42);
   assert.ok(r.fg.some((value, i) => i % 4 === 3 && value > 0), 'above-screen tree reflects into lake');
 });
@@ -314,7 +315,7 @@ test('clipping large reflected sprites preserves the uncropped water image', () 
     { x0: 130, y0: 360, cols: 64, rows: 80 },
     { x0: 38, y0: 300, cols: 64, rows: 80 },
   ]) {
-    const renderer = () => ({ cols: view.cols, rows: view.rows,
+    const renderer = () => withLayers({ cols: view.cols, rows: view.rows,
       mask: new Uint8Array(view.cols * view.rows).fill(WATER),
       fg: new Float64Array(view.cols * view.rows * 4) });
     const full = renderer();

@@ -5,6 +5,7 @@ import { Fires, MAX_FIRES } from '../src/world/fire.js';
 import { Lightning, lightningPulse, MAX_BOLTS } from '../src/world/lightning.js';
 import { WeatherEffects } from '../src/world/weather.js';
 import { GRASS, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const view = { x0: -40, y0: -30, cols: 100, rows: 80 };
 const lake = { typeAt: () => WATER };
@@ -16,10 +17,10 @@ function random(seed = 42) {
   };
 }
 function buffer(type = WATER) {
-  return { cols: view.cols, rows: view.rows,
+  return withLayers({ cols: view.cols, rows: view.rows,
     fg: new Uint8ClampedArray(view.cols * view.rows * 4),
     bg: new Uint8ClampedArray(view.cols * view.rows * 4),
-    mask: new Uint8Array(view.cols * view.rows).fill(type), put: AsciiRenderer.prototype.put };
+    mask: new Uint8Array(view.cols * view.rows).fill(type), put: AsciiRenderer.prototype.put });
 }
 
 test('lightning makes a branching path from above the view to its fixed ground target', () => {

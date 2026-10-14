@@ -22,7 +22,7 @@ const MOON_R = 90;
 const STAR_GRID = 26;
 
 export function drawSkyReflection(r, view, t) {
-  const { fg, mask, cols, rows, cellW, cellH } = r;
+  const { mask, cols, rows, cellW, cellH } = r;
   const moonX = r.canvas.width * MOON_X;
   const moonY = r.canvas.height * MOON_Y;
   const moonR = MOON_R * r.dpr;
@@ -39,9 +39,8 @@ export function drawSkyReflection(r, view, t) {
     for (let sx = 0; sx < cols; sx++) {
       const m = sy * cols + sx;
       if (mask[m] !== WATER) continue;
-      const o = m * 4;
       const px = (sx + wobble + 0.5) * cellW - view.offX;
-      if (moon(fg, o, (px - moonX) / moonR, (py - moonY) / moonR, px / r.dpr, py / r.dpr, t)) continue;
+      if (moon(r, m, (px - moonX) / moonR, (py - moonY) / moonR, px / r.dpr, py / r.dpr, t)) continue;
 
       // A cell can straddle star-grid squares. Check every square it touches
       // so stars near their edges do not disappear as the view scrolls.
@@ -59,10 +58,8 @@ export function drawSkyReflection(r, view, t) {
           // Half-open bounds assign a star on an edge to exactly one cell.
           if (starX < left || starX >= right || starY < top || starY >= bottom) continue;
           const tw = 0.45 + 0.35 * Math.sin(t * (1.5 + h * 3) + h * 500);
-          fg[o] = STARLIGHT[0] * tw;
-          fg[o + 1] = STARLIGHT[1] * tw;
-          fg[o + 2] = STARLIGHT[2] * tw;
-          fg[o + 3] = STAR_CH[Math.floor(h * 1e5) % STAR_CH.length];
+          r.putAt(m, STAR_CH[Math.floor(h * 1e5) % STAR_CH.length],
+            STARLIGHT[0] * tw, STARLIGHT[1] * tw, STARLIGHT[2] * tw);
           found = true;
           break;
         }
@@ -74,7 +71,7 @@ export function drawSkyReflection(r, view, t) {
 // A pale disc with darker maria, cut into horizontal slivers by the ripples.
 // dx, dy are the offset from the moon's centre in moon radii; x, y the
 // position on screen in CSS pixels.
-function moon(fg, o, dx, dy, x, y, t) {
+function moon(r, m, dx, dy, x, y, t) {
   const d2 = dx * dx + dy * dy;
   if (d2 > 1) return false;
 
@@ -85,9 +82,7 @@ function moon(fg, o, dx, dy, x, y, t) {
   if (b < 0.12) return false;
 
   const k = Math.min(1, b);
-  fg[o] = MOON[0] * k;
-  fg[o + 1] = MOON[1] * k;
-  fg[o + 2] = MOON[2] * k;
-  fg[o + 3] = MOON_CH[Math.min(MOON_CH.length - 1, Math.floor(k * MOON_CH.length))];
+  r.putAt(m, MOON_CH[Math.min(MOON_CH.length - 1, Math.floor(k * MOON_CH.length))],
+    MOON[0] * k, MOON[1] * k, MOON[2] * k);
   return true;
 }

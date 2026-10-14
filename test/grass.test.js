@@ -9,6 +9,7 @@ import { FLAT_GLYPHS, STROKE_STEPS, strokeGlyph } from '../src/render/glyphs.js'
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 // Terrain-only fixtures keep blade geometry and interaction tests independent
 // of the procedural biome layout.
@@ -53,7 +54,7 @@ function meadow(roots = null) {
 }
 
 function renderer(view, onPut = () => {}) {
-  return {
+  return withLayers({
     cols: view.cols,
     rows: view.rows,
     fg: new Float32Array(view.cols * view.rows * 4),
@@ -66,7 +67,7 @@ function renderer(view, onPut = () => {}) {
       onPut(x, y, g);
     },
     putBg() {},
-  };
+  });
 }
 
 function rowCells(grass, world, view, t, y) {

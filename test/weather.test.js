@@ -6,6 +6,7 @@ import { AsciiRenderer } from '../src/render/renderer.js';
 import { Splashes } from '../src/world/splashes.js';
 import { WeatherEffects, WEATHER_EFFECTS } from '../src/world/weather.js';
 import { GRASS, WATER } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const view = { x0: -40, y0: -30, cols: 100, rows: 70 };
 const lake = { typeAt: () => WATER };
@@ -26,9 +27,9 @@ function advance(weather, settings, world = lake, frames = 120, area = view) {
 
 function buffer(area = view) {
   const { cols, rows } = area;
-  return { cols, rows, fg: new Uint8ClampedArray(cols * rows * 4),
+  return withLayers({ cols, rows, fg: new Uint8ClampedArray(cols * rows * 4),
     bg: new Uint8ClampedArray(cols * rows * 4), mask: new Uint8Array(cols * rows).fill(WATER),
-    put: AsciiRenderer.prototype.put };
+    put: AsciiRenderer.prototype.put });
 }
 
 test('every selectable weather has matching visual effects that render without changing terrain masks', () => {

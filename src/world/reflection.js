@@ -62,11 +62,9 @@ export function reflector(t, view) {
     // little washed out, and pulled toward the colour of the night water.
     const fade = Math.max(0.35, 1 - (base - sy) / 40) * 0.42;
     const grey = (cr + cg + cb) * 0.1;
-    const o = m * 4;
-    r.fg[o] = (cr * 0.7 + grey) * fade + REFLECTION_TINT[0];
-    r.fg[o + 1] = (cg * 0.7 + grey) * fade + REFLECTION_TINT[1];
-    r.fg[o + 2] = (cb * 0.7 + grey) * fade + REFLECTION_TINT[2];
-    r.fg[o + 3] = g;
+    r.putAt(m, g, (cr * 0.7 + grey) * fade + REFLECTION_TINT[0],
+      (cg * 0.7 + grey) * fade + REFLECTION_TINT[1],
+      (cb * 0.7 + grey) * fade + REFLECTION_TINT[2]);
   };
   // A summed water mask rejects whole blades/sprites before rasterisation.
   // Expand sideways for the swell; keep the object's own reflection base.

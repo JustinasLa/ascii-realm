@@ -130,7 +130,7 @@ export class Splashes {
         r.fg[o] += (155 - r.fg[o]) * k;
         r.fg[o + 1] += (193 - r.fg[o + 1]) * k;
         r.fg[o + 2] += (218 - r.fg[o + 2]) * k;
-        r.fg[o + 3] = Math.abs(dy) > radius * 0.45 ? RIPPLE : DOT;
+        r.setGlyph(cell, Math.abs(dy) > radius * 0.45 ? RIPPLE : DOT);
       }
     }
   }

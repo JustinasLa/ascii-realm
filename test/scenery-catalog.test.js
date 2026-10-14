@@ -5,6 +5,7 @@ import { PROP_CATALOG, PROP_KINDS, propDefinition } from '../src/world/prop-cata
 import { createProp, drawProp } from '../src/world/props.js';
 import { reflector } from '../src/world/reflection.js';
 import { GRASS, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const expectedKinds = [
   'tree', 'rock', 'bush', 'pine', 'stump', 'log', 'flowers', 'mushrooms', 'reeds',
@@ -110,12 +111,12 @@ test('viewport queries retain tall props that reflect from above or draw their c
     assert.ok(above.y < view.y0 - view.rows, `${kind} base is well above the viewport`);
     const queried = world.propsInView(view);
     assert.ok(queried.some(({ id }) => id === above.id), `${kind} reflection source stays queryable`);
-    const renderer = {
+    const renderer = withLayers({
       cols: view.cols,
       rows: view.rows,
       mask: new Uint8Array(view.cols * view.rows).fill(WATER),
       fg: new Float32Array(view.cols * view.rows * 4),
-    };
+    });
     drawProp(renderer, view, queried.find(({ id }) => id === above.id), reflector(0, view));
     assert.ok(renderer.fg.some((value, index) => index % 4 === 3 && value > 0), `${kind} writes reflected glyphs into visible water`);
 

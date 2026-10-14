@@ -4,6 +4,7 @@ import { Player } from '../src/entities/player.js';
 import { dressFigure, drawFigure, drawShadow } from '../src/entities/figure.js';
 import { Splashes } from '../src/world/splashes.js';
 import { GRASS, MAX_WATER_DEPTH, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const dt = 1 / 60;
 const still = { x: 0, y: 0 };
@@ -131,7 +132,7 @@ test('spray falls back into secondary ripples, expires, and stays bounded during
 test('surface rings and knee waterlines stay clipped to water across a shore and view boundary', () => {
   const cols = 24;
   const rows = 16;
-  const r = { cols, rows, fg: new Uint8ClampedArray(cols * rows * 4), mask: new Uint8Array(cols * rows) };
+  const r = withLayers({ cols, rows, fg: new Uint8ClampedArray(cols * rows * 4), mask: new Uint8Array(cols * rows) });
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) r.mask[y * cols + x] = x < 12 ? WATER : GRASS;
   }
