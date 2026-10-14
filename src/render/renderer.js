@@ -5,6 +5,11 @@
 // up the glyph in the atlas for every pixel, so cost is independent of how
 // many characters are on screen.
 
+import { NIGHT, VIGNETTE } from './palette.js';
+
+// An rgb triple as a GLSL vec3 literal.
+const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
+
 const VERT = `#version 300 es
 in vec2 aPos;
 void main() { gl_Position = vec4(aPos, 0.0, 1.0); }
@@ -42,11 +47,12 @@ void main() {
 
   vec3 color = mix(bg, fg.rgb, a);
 
-  // Darken toward the corners so the eye settles on the middle of the scene.
+  // Fade toward a deep navy at the corners so the eye settles on the middle
+  // of the scene and the edges stay night rather than plain black.
   vec2 uv = gl_FragCoord.xy / uView - 0.5;
   uv.x *= uView.x / uView.y;
   float vignette = 1.0 - smoothstep(0.35, 1.05, length(uv)) * 0.7;
-  outColor = vec4(color * vignette, 1.0);
+  outColor = vec4(mix(${vec3(VIGNETTE)}, color, vignette), 1.0);
 }
 `;
 
@@ -168,7 +174,7 @@ export class AsciiRenderer {
     }
   }
 
-  clear(r = 0, g = 0, b = 0) {
+  clear(r = NIGHT[0], g = NIGHT[1], b = NIGHT[2]) {
     const { fg, bg } = this;
     fg.fill(0);
     for (let i = 0; i < bg.length; i += 4) {

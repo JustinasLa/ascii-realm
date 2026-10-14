@@ -1,5 +1,6 @@
 import { valueNoise } from '../core/noise.js';
 import { MIRRORED, glyph } from '../render/glyphs.js';
+import { REFLECTION_TINT } from '../render/palette.js';
 import { WATER } from './world.js';
 
 const RIPPLE = glyph('~');
@@ -57,13 +58,14 @@ export function reflector(t, view) {
     // Upside down, a drawn blade stroke leans the other way.
     g = n < 0.34 ? RIPPLE : MIRRORED[g];
 
-    // Dimmer the further the reflected point is from the mirror line, and
-    // pulled toward the colour of the night water.
+    // Dimmer the further the reflected point is from the mirror line, a
+    // little washed out, and pulled toward the colour of the night water.
     const fade = Math.max(0.35, 1 - (base - sy) / 40) * 0.42;
+    const grey = (cr + cg + cb) * 0.1;
     const o = m * 4;
-    r.fg[o] = cr * fade + 8;
-    r.fg[o + 1] = cg * fade + 12;
-    r.fg[o + 2] = cb * fade + 24;
+    r.fg[o] = (cr * 0.7 + grey) * fade + REFLECTION_TINT[0];
+    r.fg[o + 1] = (cg * 0.7 + grey) * fade + REFLECTION_TINT[1];
+    r.fg[o + 2] = (cb * 0.7 + grey) * fade + REFLECTION_TINT[2];
     r.fg[o + 3] = g;
   };
   // A summed water mask rejects whole blades/sprites before rasterisation.

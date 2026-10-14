@@ -1,6 +1,7 @@
 import { fbm, valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { blocks, generateProps } from './props.js';
+import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 
 export const WATER = 0;
@@ -28,8 +29,11 @@ const smoothRange = (a, b, x) => {
 };
 
 export class World {
-  constructor(seed = 1, maxChunks = 128) {
+  constructor(seed = 1, options = {}) {
+    // A bare number is the chunk cache size.
+    const { season = 'summer', maxChunks = 128 } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
+    this.season = ['spring', 'summer', 'autumn', 'winter'].includes(season) ? season : 'summer';
     this.maxChunks = Math.max(16, Math.floor(maxChunks));
     this.clock = 0;
     this.chunks = new Map();
@@ -284,6 +288,7 @@ export class World {
       // a brush changed this chunk before its props were first requested.
       const original = {
         seed: this.seed,
+        season: this.season,
         spawn: this.spawn,
         typeAt: (x, y) => this.originalTypeAt(x, y),
       };
@@ -321,9 +326,10 @@ export class World {
 
   isWalkable(x, y) {
     // A large prop may straddle a chunk edge while its base lies outside the
-    // old fixed query radius. Include every possible collision footprint.
-    const width = this.propFootW;
-    const height = this.propFootH;
+    // old fixed query radius, and fallen trunks reach far along the ground.
+    // Include every possible collision footprint.
+    const width = Math.max(this.propFootW, DEADWOOD_REACH_X);
+    const height = Math.max(this.propFootH, DEADWOOD_REACH_Y);
     for (const p of this.propsIn(x - width, y - height, x + width, y + height)) {
       if (blocks(p, x, y)) return false;
     }

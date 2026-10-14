@@ -125,7 +125,7 @@ test('viewport queries retain tall props that reflect from above or draw their c
     const visible = [];
     drawProp({ put(sx, sy, ...cell) {
       if (sx >= 0 && sy >= 0 && sx < view.cols && sy < view.rows) visible.push(cell);
-    } }, view, fromBelow);
+    }, putBg() {} }, view, fromBelow);
     assert.ok(visible.length > 0, `${kind} canopy draws in the viewport through the default renderer writer`);
   }
 });

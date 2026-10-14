@@ -67,7 +67,8 @@ test('builder props can be drawn by the existing renderer without an adapter', (
     assert.equal(writes.length, prop.cells.length);
     for (let i = 0; i < writes.length; i++) {
       const cell = prop.cells[i];
-      assert.deepEqual(writes[i], [renderer, 8 + cell.dx, 5 + cell.dy, cell.g, cell.r, cell.gg, cell.b, 5]);
+      assert.deepEqual(writes[i], [renderer, 8 + cell.dx, 5 + cell.dy, cell.g, cell.r, cell.gg, cell.b, 5,
+        cell.br, cell.bgG, cell.bb]);
     }
   }
 });
@@ -100,9 +101,9 @@ test('factory calls return independent cells and accept finite fractional seeds'
 test('adding builder props preserves existing procedural tree and rock generation', () => {
   const world = { seed: 7, spawn: { x: -1000, y: -1000 }, typeAt: () => 2 };
   const props = generateProps(world, -4, -4, 64);
-  assert.equal(props.length, 6);
-  assert.ok(props.some(({ kind }) => kind === 'tree') && props.some(({ kind }) => kind === 'rock'));
+  assert.equal(props.length, 8);
+  assert.ok(props.some(({ kind }) => kind === 'tree') && props.some(({ kind }) => kind === 'bush'));
   // Culling bounds are derived data; the generated props themselves must not change.
   const digest = createHash('sha256').update(JSON.stringify(props, (key, value) => key === 'bounds' ? undefined : value)).digest('hex');
-  assert.equal(digest, 'a8ebb12fabbb47318dadf266e167d8d44642a0412575137d80297bf6ebf75fac');
+  assert.equal(digest, 'a9e134734c5393ac392e2bf47738752353ca1682a267321de5d3b104e281842f');
 });

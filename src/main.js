@@ -17,11 +17,13 @@ import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
-import { drawProp } from './world/props.js';
+import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
+import { drawProp, propInView } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { Splashes } from './world/splashes.js';
 import { Torches } from './world/torch.js';
+import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
 import { ASPECT, GRASS, WATER, World } from './world/world.js';
 
@@ -94,7 +96,7 @@ const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 const name = (params.get('name') || 'Kael').slice(0, 24);
-const world = new World(seed, mobile ? 64 : 128);
+const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: mobile ? 64 : 128 });
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
 const camera = new Camera(spawn.x, spawn.y - 11);
@@ -385,7 +387,12 @@ function frame(now) {
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
 
-  const props = world.propsInView(view);
+  // Props up to a screen above the view can still be reflected into it, and
+  // the tallest trees reach into it from far below.
+  const marginX = Math.max(world.propRenderW, MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT) + 2;
+  const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
+  const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
+    view.x0 + view.cols + marginX, view.y0 + view.rows + tall);
   const mirror = reflector(time, view);
   const visibleFires = fires.prepare(view, time);
   const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
@@ -394,39 +401,59 @@ function frame(now) {
   if (model) model.rasterise(view, player.x, player.y);
   else figure = dressFigure(player);
 
+  // Match the reveal region to this pose, including a jump or sword swing.
+  let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+  if (model) {
+    for (const cell of model.cells) {
+      left = Math.min(left, cell.sx + view.x0 - player.x);
+      right = Math.max(right, cell.sx + view.x0 - player.x);
+      top = Math.min(top, cell.sy + view.y0 - player.y);
+      bottom = Math.max(bottom, cell.sy + view.y0 - player.y);
+    }
+  } else {
+    for (const part of figure) {
+      left = Math.min(left, part.x0 / ASPECT);
+      right = Math.max(right, part.x1 / ASPECT);
+      top = Math.min(top, part.y0);
+      bottom = Math.max(bottom, part.y1);
+    }
+  }
+  player.foliageBounds = left === Infinity ? null : { x: player.x + (left + right) / 2,
+    y: player.y + (top + bottom) / 2,
+    rx: Math.max(6, (right - left) / 2 + 4), ry: Math.max(10, (bottom - top) / 2 + 4) };
+
   // Painter's order: whatever stands further down the screen is in front.
-  // Grass blades are interleaved by row, both above and in the water.
-  const drawables = props.map((p) => ({ y: p.y,
-    draw: () => drawProp(renderer, view, p),
-    reflect: () => drawProp(renderer, view, p, mirror) }));
+  // Reflections first, each prop measured about its own base.
+  const reflections = props.filter((p) => propInView(view, p, true)).map((p) => ({ y: p.y,
+    draw: () => drawProp(renderer, view, p, mirror, time, null, seed, true) }));
+  const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).map((p) => ({ y: p.y,
+    draw: () => {
+      drawProp(renderer, view, p, undefined, time, player, seed);
+      drawLeaves(renderer, view, p, time, seed);
+    } }));
   for (const fire of visibleFires) {
-    drawables.push({ y: fire.y,
-      draw: () => fires.draw(renderer, view, fire, time),
-      reflect: () => fires.draw(renderer, view, fire, time, mirror) });
+    reflections.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time, mirror) });
+    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
   }
   for (const torch of visibleTorches) {
     if (torch.carried) continue;
-    drawables.push({ y: torch.y,
-      draw: () => torches.draw(renderer, view, torch),
-      reflect: () => torches.draw(renderer, view, torch, mirror) });
+    reflections.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch, mirror) });
+    drawables.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch) });
   }
   const carried = visibleTorches.filter((torch) => torch.carried);
-  drawables.push({
-    y: player.y,
-    draw: () => {
-      if (model) model.draw(renderer, putCell);
-      else drawFigure(renderer, view, player, figure);
-      for (const torch of carried) torches.draw(renderer, view, torch);
-    },
-    reflect: () => {
-      if (model) model.draw(renderer, mirror);
-      else drawFigure(renderer, view, player, figure, mirror);
-      for (const torch of carried) torches.draw(renderer, view, torch, mirror);
-    },
-  });
+  reflections.push({ y: player.y, draw: () => {
+    if (model) model.draw(renderer, mirror);
+    else drawFigure(renderer, view, player, figure, mirror);
+    for (const torch of carried) torches.draw(renderer, view, torch, mirror);
+  } });
+  drawables.push({ y: player.y, draw: () => {
+    if (model) model.draw(renderer, putCell);
+    else drawFigure(renderer, view, player, figure);
+    for (const torch of carried) torches.draw(renderer, view, torch);
+  } });
+  reflections.sort((a, b) => a.y - b.y);
   drawables.sort((a, b) => a.y - b.y);
-  grass.drawReflections(renderer, world, view, time, mirror,
-    drawables.map((d) => ({ y: d.y, draw: d.reflect })));
+  grass.drawReflections(renderer, world, view, time, mirror, reflections);
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
   splashes.drawSurface(renderer, view, time);

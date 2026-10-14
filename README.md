@@ -28,6 +28,22 @@ For now it is a single outlaw exploring procedurally generated terrain.
   seconds; repeated footfalls keep a worn route flattened longer. Sword swings
   push blades aside too. Shoreline stems sway in their reflections
   too. Dew twinkles in the undergrowth.
+- **Living forests.** Eight distinct trees inspired by Minecraft's variety:
+  oak, pale-barked birch, pine, tiered spruce, umbrella-shaped acacia, tall
+  jungle trees, pink cherry groves and drooping willows near lakes. Mature
+  trees tower over the warrior, with varied heights, irregular leaf clusters,
+  branching trunks and shaded canopy pockets. Smaller saplings and walkable
+  shrubs grow between the widely spaced mature trees. Trunks vary
+  independently from slender stems to thick old trees. Mossy
+  fallen logs, snapped bare trunks, exposed stumps, and beaver-gnawed wood
+  with scattered chips add history to the forest; beaver damage stays near
+  water. Fallen trunks block their full length, including across chunks.
+  Layered foliage has shaded depth and moonlit edges; crowns rustle and gently
+  sway with the grass, while trunks and roots stay planted. Leaves and blossoms
+  drift down, and foliage thins around the warrior when it would hide them.
+  Add `?season=spring`, `?season=autumn` or `?season=winter` for seasonal
+  palettes and snow-tipped evergreens. Summer is the default; the season
+  stays fixed until reload and can be combined with `?seed=42&season=autumn`.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
   the moon) mirrored in every lake. Walk or run through any lake: the water
   rises from your ankles to at most your knees, slows your stride, and hides

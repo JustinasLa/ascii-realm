@@ -90,10 +90,11 @@ test('procedural props keep their original seed identity regardless of paint and
   assert.deepEqual(restored.world.propsOf(2, 2).find((p) => p.id.startsWith('s:')).cells, world.propsOf(2, 2).find((p) => p.id.startsWith('s:')).cells);
 });
 
-test('east-spilling procedural anchors are queryable and erasable from their actual chunk', () => {
+test('procedural props are queryable and erasable from their own chunk', () => {
   const { world, scene } = fixture();
-  const prop = world.propsOf(-6, -6).find((p) => p.x >= -320);
-  assert.ok(prop, 'seed fixture should contain a prop beyond its source chunk');
+  // Forest generation keeps every base inside the chunk that owns it.
+  const prop = world.propsOf(-6, -6).find((p) => Math.floor(p.x / 64) === -6 && Math.floor(p.y / 64) === -6);
+  assert.ok(prop, 'seed fixture should contain a procedural prop');
   assert.ok(world.propsIn(prop.x, prop.y, prop.x, prop.y).some((p) => p.id === prop.id));
   assert.equal(scene.erase(prop.x, prop.y, 0), 1);
   assert.ok(!world.propsOf(-6, -6).some((p) => p.id === prop.id));
