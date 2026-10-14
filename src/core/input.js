@@ -3,14 +3,23 @@ const held = new Set();
 // Keys pressed since the game last asked, so a quick tap is never missed.
 const tapped = new Set();
 
+export function isControlTarget(target) {
+  return Boolean(target?.closest?.('#scenery-builder, #audio-controls, input, textarea, select, button, summary, [contenteditable="true"]'));
+}
+
+export function clearInput() {
+  held.clear();
+  tapped.clear();
+}
+
 window.addEventListener('keydown', (e) => {
-  if (e.target.closest?.('#audio-controls')) return;
+  if (isControlTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
   if (!e.repeat) tapped.add(e.code);
   held.add(e.code);
 });
 window.addEventListener('keyup', (e) => held.delete(e.code));
-window.addEventListener('blur', () => held.clear());
+window.addEventListener('blur', clearInput);
 
 // True once for each press of any of the keys.
 export function wasTapped(...codes) {

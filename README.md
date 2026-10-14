@@ -39,12 +39,16 @@ For now it is a single outlaw exploring procedurally generated terrain.
   leather, wood, feather, iron) has its own glyph texture.
 - **Animation.** The player is a rigged 3D character playing professionally
   animated clips, drawn each frame into a small offscreen image from the
-  game's camera angle and converted into shaded, outlined glyphs. Walk, jog
-  and sprint clips are blended by speed and kept in step with the ground, so
+  game's camera angle and converted into shaded, outlined glyphs. Walk and
+  jog clips are blended by speed and kept in step with the ground, so
   the feet keep pace with the body.
   An idle stance that shifts its weight and looks around, then kneels to
-  rest; blinking eyes and breath fogging in the cold air; jumping with a
-  wind-up and landing squash; a skid to a halt from a sprint; and sword play:
+  rest; blinking eyes and breath fogging in the cold air; jumps from motion
+  capture that suit the pace (a hop on the spot, a leap off one foot from a
+  walk, a long split leap from a run), with jumps on the spot in a row
+  turning into a forward spring and then a full turn, and a second press in
+  the air for a trick: a back somersault on the spot, a spin from a walk and
+  a barrel roll from a run; a skid to a halt from a sprint; and sword play:
   draw, guard, a combo (forehand, then backhand or uppercut, then an overhead
   chop that strikes sparks, shakes the camera and freezes for a beat on
   impact), a lunging thrust from a sprint, a plunging strike from the air and
@@ -109,7 +113,7 @@ npm test
 | --- | --- |
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
-| `Space` | Jump |
+| `Space` | Jump; again in the air for a trick (a barrel roll when running) |
 | `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
@@ -120,6 +124,33 @@ npm test
 | Audio panel's Weather sound / Intensity | Choose Clear or one of 17 weather soundscapes and adjust its intensity |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
+| `B` | Enter the Scenery builder, or return to play and close its panel |
+
+## Scenery builder
+
+Press `B` to enter build mode and open the testing panel; press it again to return
+to play. You can also open the panel by clicking its summary, then choose
+**Start building**. Paint grass, dirt, shore, water or stone with terrain brushes,
+or choose from the **Nature** and **Camp** prop palettes: trees, pines, rocks,
+bushes, stumps, logs, flowers, mushrooms, reeds, crates, barrels, fences, tents,
+campfires and signposts. Flowers, mushrooms and reeds are decorative and can be
+walked through; the other props block movement. Adjust the brush radius or prop
+scale in the panel and preview props before placing them; the eraser removes
+props only. Every placement gets a fresh variation in shape, proportions and
+color; rocks also vary their outline, mineral colors and moss. The preview shows
+the variation you will place, and saving or undoing preserves its appearance.
+While building, `W A S D` pans the view and normal player movement
+is paused. With the canvas or page body focused, `Enter` applies the selected
+tool at the centre of the view.
+
+Each stroke can be undone with `Ctrl`/`Cmd` + `Z` and redone with
+`Ctrl`/`Cmd` + `Shift` + `Z` or `Ctrl` + `Y`. **Save** and **Load** keep scenery
+locally for the current world seed. JSON export and import let you transfer a
+scene; imports must match the current seed. **Reset scene** restores the
+generated world and can be undone.
+
+Add `?builder` to the URL to open the panel automatically. With `?debug`, the
+current scene is available as `window.game.builder.scene` for inspection.
 
 ## Layout
 
@@ -127,6 +158,7 @@ npm test
 src/
   main.js            game loop and wiring
   core/              input, hashing, noise
+  editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   render/            glyph atlas, WebGL renderer, cell writers
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, campfires, dust
@@ -136,7 +168,8 @@ src/
 ## Credits
 
 Walk and run motion from the [CMU Graphics Lab Motion Capture
-Database](http://mocap.cs.cmu.edu/) (subjects 8 and 9), via the BVH
+Database](http://mocap.cs.cmu.edu/) (subjects 8 and 9; jumps and tricks
+from subjects 13, 56, 75, 88, 90 and 127), via the BVH
 conversion by Bruce Hahne ([cgspeed](https://sites.google.com/a/cgspeed.com/cgspeed/motion-capture/the-daz-friendly-bvh-release-of-cmus-motion-capture-database)).
 The database was created with funding from NSF EIA-0196217.
 

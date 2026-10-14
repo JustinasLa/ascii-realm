@@ -31,6 +31,7 @@ export default {
   },
   events: [
     {
+      lightning: true,
       interval: [10, 24],
       firstDelay: [3, 8],
       create({ intensity, random }) {

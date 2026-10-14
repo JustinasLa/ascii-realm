@@ -1,5 +1,6 @@
 import { noise } from './voices.js';
 import { playGrassFootstep } from './grass-steps.js';
+import { playWaterSound } from './water.js';
 import { nextSoundVariant, varySound } from './variations.js';
 
 // Close material textures stay below the music's bells. Broad, low-Q filters
@@ -23,18 +24,12 @@ const MATERIALS = {
     { cutoff: 1300, filterType: 'bandpass', delay: 0.006, duration: 0.045, gain: 0.048, attack: 0.002, decay: 0.014, sustain: 0.15, release: 0.022 },
     { cutoff: 780, delay: 0.027, duration: 0.065, gain: 0.03, attack: 0.006, decay: 0.023, sustain: 0.14, release: 0.027 },
   ],
-  water: [
-    // Low shallow splash, displaced water, and the damp brush of heavy cloth.
-    { cutoff: 480, duration: 0.104, gain: 0.105, attack: 0.008, decay: 0.037, sustain: 0.24, release: 0.045 },
-    { cutoff: 950, filterType: 'bandpass', delay: 0.02, duration: 0.177, gain: 0.082, attack: 0.018, decay: 0.049, sustain: 0.3, release: 0.066 },
-    { cutoff: 680, delay: 0.06, duration: 0.11, gain: 0.047, attack: 0.016, decay: 0.031, sustain: 0.2, release: 0.044 },
-    { cutoff: 1300, delay: 0.083, duration: 0.22, gain: 0.038, attack: 0.028, decay: 0.064, sustain: 0.19, release: 0.072 },
-  ],
 };
 
 /** Gait-synchronized material contact; returned voices stop cleanly on pause. */
 export function playFootstep(engine, surface, event = {}) {
   if (surface === 'grass') return playGrassFootstep(engine, event);
+  if (surface === 'water') return playWaterSound(engine, { ...event, type: 'step' });
   if (engine?.context?.state !== 'running') return [];
 
   const strength = Number.isFinite(event?.strength)

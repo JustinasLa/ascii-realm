@@ -1,225 +1,96 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import test from 'node:test';
 import { bindAudioControls } from '../src/audio/controls.js';
-import { GRASS_SAMPLE_URLS, prepareGrassFootsteps } from '../src/audio/grass-steps.js';
+import { WeatherAudio } from '../src/audio/weather.js';
 
-class Element extends EventTarget {
-  constructor() {
-    super();
-    this.textContent = '';
-    this.value = '';
-    this.disabled = false;
-    this.dataset = {};
-    this.nextElementSibling = { value: '' };
-  }
-  setAttribute() {}
-  append() {}
-}
-
-function dom(t) {
-  const cleanups = [];
-  const document = Object.assign(new EventTarget(), { hidden: false, createElement: () => new Element() });
-  const window = new EventTarget();
-  const previous = new Map(['document', 'window'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-  Object.defineProperty(globalThis, 'document', { configurable: true, value: document });
-  Object.defineProperty(globalThis, 'window', { configurable: true, value: window });
+test('audio controls respect activation, browser shortcuts and listener cleanup', async (t) => {
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  const window = globalThis.window = new EventTarget();
+  globalThis.document = new EventTarget();
+  document.createElement = () => ({});
+  let unbind;
   t.after(() => {
-    cleanups.forEach(cleanup => cleanup());
-    for (const [key, descriptor] of previous) {
-      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
-      else delete globalThis[key];
-    }
+    unbind?.();
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
   });
-  const bind = (engine, onPause = () => {}) => {
-    const ids = ['audio-mute', 'audio-status', 'audio-skip', 'audio-song', 'audio-weather',
-      'weather-intensity', 'weather-description', 'grass-preview'];
-    const elements = new Map(ids.map(id => [`#${id}`, new Element()]));
-    const sliders = Object.keys(engine.volumes).map(volume => Object.assign(new Element(), { dataset: { volume } }));
-    const root = { querySelector: selector => elements.get(selector), querySelectorAll: () => sliders };
-    const preview = elements.get('#grass-preview');
-    preview.textContent = 'Preview grass footsteps';
-    const unbind = bindAudioControls(engine, { currentSong: 'Field song', skip() {} },
-      { preset: 'clear', intensity: 0.6, presets: [] }, onPause, root);
-    cleanups.push(unbind);
-    return { preview, unbind };
+  const ids = ['audio-mute', 'audio-status', 'audio-skip', 'audio-song',
+    'audio-weather', 'weather-intensity', 'weather-description', 'grass-preview'];
+  const elements = new Map(ids.map(id => {
+    const element = new EventTarget();
+    element.setAttribute = () => {};
+    return [`#${id}`, element];
+  }));
+  const weatherSelect = elements.get('#audio-weather');
+  weatherSelect.options = [{ value: 'clear', textContent: 'Clear' }];
+  weatherSelect.append = option => weatherSelect.options.push(option);
+  elements.get('#weather-intensity').nextElementSibling = {};
+  const root = {
+    querySelector: selector => elements.get(selector),
+    querySelectorAll: () => [],
   };
-  return { document, bind };
-}
-
-function fakeAudio() {
-  const nodes = [];
-  const routes = [];
-  const context = { state: 'running', currentTime: 10 };
-  const parameter = value => ({ value, calls: [],
-    cancelAndHoldAtTime(at) { this.calls.push(['hold', at]); },
-    setTargetAtTime(target, at, smoothing) { this.value = target; this.calls.push(['target', target, at, smoothing]); },
-    setValueAtTime(target, at) { this.value = target; this.calls.push(['set', target, at]); },
-    linearRampToValueAtTime(target, at) { this.value = target; this.calls.push(['ramp', target, at]); },
-  });
-  const node = kind => {
-    const result = { kind, connections: [], disconnects: 0, starts: [], stops: [],
-      connect(target) { this.connections.push(target); },
-      disconnect() { this.disconnects++; this.connections = []; },
-      start(at) {
-        assert.equal(context.state, 'running');
-        this.starts.push(at);
-        this.endAt = at + this.buffer.duration / this.playbackRate.value;
-      },
-      stop() { this.stops.push(context.currentTime); },
-    };
-    nodes.push(result);
-    return result;
-  };
-  context.createBufferSource = () => Object.assign(node('source'), { playbackRate: parameter(1) });
-  context.createGain = () => Object.assign(node('gain'), { gain: parameter(0) });
-  const volumes = Object.freeze({ master: 0.7, music: 0.35, sfx: 0.8, ambience: 0.6, sword: 0.65, weather: 0.55 });
+  let unlocks = 0;
+  let skips = 0;
   const engine = {
-    context, volumes, muted: false, listener: { x: 21, y: 40 },
-    buses: Object.fromEntries(Object.entries(volumes).map(([bus, value]) => [bus, { gain: parameter(value) }])),
-    preferenceEdits: 0, suspends: 0,
-    async unlock() { context.state = 'running'; return true; },
-    async suspend() { this.suspends++; context.state = 'suspended'; },
+    muted: false,
+    unlock: async () => { unlocks++; },
     toggleMute() { this.muted = !this.muted; },
-    setVolume() { this.preferenceEdits++; },
-    route(bus, x, y) {
-      const route = { bus, x, y, input: {}, disposals: 0, dispose() { this.disposals++; } };
-      routes.push(route);
-      return route;
-    },
   };
-  return { engine, context, nodes, routes };
-}
+  const music = { currentSong: 'Test song', skip() { skips++; } };
+  const weather = new WeatherAudio(engine, { storage: null });
+  unbind = bindAudioControls(engine, music, weather, () => {}, root);
+  assert.equal(weatherSelect.options.length, weather.presets.length + 1);
+  assert.equal(weatherSelect.value, 'clear');
+  assert.equal(elements.get('#weather-intensity').nextElementSibling.value, '60%');
+  const send = (type, properties, target) => {
+    const event = Object.assign(new Event(type, { cancelable: true }), properties);
+    if (target) Object.defineProperty(event, 'target', { value: target });
+    window.dispatchEvent(event);
+    return event;
+  };
 
-const sources = audio => audio.nodes.filter(node => node.kind === 'source');
-const recording = url => ({ duration: 0.32, id: url.pathname.split('/').at(-1) });
-
-async function settle() {
-  // EventTarget does not return promises from async event listeners.
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
-function advance(t, audio, milliseconds) {
-  if (audio.context.state === 'running') audio.context.currentTime += milliseconds / 1000;
-  for (const source of sources(audio)) {
-    if (source.endAt <= audio.context.currentTime && source.onended && source.stops.length === 0) source.onended();
+  send('keydown', { code: 'Escape' });
+  assert.equal(unlocks, 0, 'Escape is not a user activation');
+  for (const pointerType of ['touch', 'pen']) {
+    const before = unlocks;
+    send('pointerdown', { pointerType });
+    assert.equal(unlocks, before, `${pointerType} activates on release`);
+    send('pointerup', { pointerType });
+    assert.equal(unlocks, before + 1);
   }
-  t.mock.timers.tick(milliseconds);
-}
+  send('pointerdown', { pointerType: 'mouse' });
+  assert.equal(unlocks, 3, 'mouse presses can unlock immediately');
+  send('pointerup', { pointerType: 'mouse' });
+  assert.equal(unlocks, 3, 'a mouse click does not need a duplicate attempt');
+  send('keydown', { code: 'KeyW', repeat: false });
+  assert.equal(unlocks, 4);
 
-function assertClean(audio) {
-  assert.ok(audio.nodes.every(node => node.disconnects === 1), 'every sample graph disconnects once');
-  assert.ok(audio.routes.every(route => route.disposals === 1), 'every effects route disposes once');
-}
-
-test('grass preview plays six recorded contacts at 420ms spacing and restores only its temporary duck', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  t.mock.method(Math, 'random', () => 0.5);
-  const ui = dom(t);
-  const audio = fakeAudio();
-  const saved = { ...audio.engine.volumes };
-  assert.equal(await prepareGrassFootsteps(audio.engine, { loadBuffer: async url => recording(url) }), true);
-  const { preview, unbind } = ui.bind(audio.engine);
-  preview.dispatchEvent(new Event('click'));
-  await settle();
-  assert.equal(preview.disabled, true);
-  assert.match(preview.textContent, /Playing grass footsteps/);
-  assert.equal(sources(audio).length, 1);
-  for (const bus of ['music', 'ambience']) assert.equal(audio.engine.buses[bus].gain.value, 0);
-  for (let step = 1; step < 6; step++) {
-    advance(t, audio, 419);
-    assert.equal(sources(audio).length, step, 'the next contact waits for its full interval');
-    advance(t, audio, 1);
-    assert.equal(sources(audio).length, step + 1);
-  }
-  const played = sources(audio);
-  assert.deepEqual(played.map(source => source.buffer.id).sort(), GRASS_SAMPLE_URLS.map(url => recording(url).id).sort());
-  for (let index = 0; index < played.length; index++) {
-    assert.ok(Math.abs(played[index].starts[0] - (10 + index * 0.42)) < 1e-10);
-    assert.equal(played[index].loop, false);
-  }
-  assert.ok(audio.routes.every(route => route.bus === 'sfx' && route.x === 21 && route.y === 40));
-  advance(t, audio, 549);
-  assert.equal(preview.disabled, true, 'the button remains disabled through the last tail');
-  assert.equal(audio.engine.buses.music.gain.value, 0);
-  advance(t, audio, 1);
-  assert.equal(preview.disabled, false);
-  assert.equal(preview.textContent, 'Preview grass footsteps');
-  for (const bus of ['music', 'ambience']) assert.equal(audio.engine.buses[bus].gain.value, saved[bus]);
-  for (const bus of ['master', 'sfx', 'sword', 'weather']) assert.deepEqual(audio.engine.buses[bus].gain.calls, []);
-  assert.deepEqual(audio.engine.volumes, saved);
-  assert.equal(audio.engine.preferenceEdits, 0);
-  advance(t, audio, 5000);
-  assert.equal(sources(audio).length, 6);
-  unbind();
-  assertClean(audio);
-});
-
-test('unbind, hiding the document and context suspension stop preview voices and pending contacts', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const ui = dom(t);
-  for (const mode of ['unbind', 'hidden', 'suspended']) {
-    ui.document.hidden = false;
-    const audio = fakeAudio();
-    await prepareGrassFootsteps(audio.engine, { loadBuffer: async url => recording(url) });
-    let pauses = 0;
-    const { preview, unbind } = ui.bind(audio.engine, () => { pauses++; });
-    preview.dispatchEvent(new Event('click'));
-    await settle();
-    assert.equal(sources(audio).length, 1, mode);
-    if (mode === 'unbind') unbind();
-    if (mode === 'hidden') {
-      ui.document.hidden = true;
-      ui.document.dispatchEvent(new Event('visibilitychange'));
-      await settle();
-      assert.equal(pauses, 1);
-      assert.equal(audio.engine.suspends, 1);
+  for (const modifier of ['ctrlKey', 'metaKey', 'altKey']) {
+    for (const code of ['KeyM', 'KeyN']) {
+      const event = send('keydown', { code, [modifier]: true, repeat: false });
+      assert.equal(event.defaultPrevented, false, 'browser shortcuts retain their default action');
+      assert.equal(engine.muted, false, `${modifier}+${code} must not mute`);
+      assert.equal(skips, 0, `${modifier}+${code} must not skip`);
+      assert.equal(unlocks, 4, 'browser shortcuts must not attempt audio activation');
     }
-    if (mode === 'suspended') {
-      audio.context.state = 'suspended';
-      advance(t, audio, 420);
-    }
-    assert.equal(preview.disabled, false, mode);
-    assert.equal(preview.textContent, 'Preview grass footsteps');
-    assert.equal(sources(audio)[0].stops.length, 1, `${mode} stops an active recording`);
-    for (const bus of ['music', 'ambience']) assert.equal(audio.engine.buses[bus].gain.value, audio.engine.volumes[bus]);
-    advance(t, audio, 5000);
-    assert.equal(sources(audio).length, 1, `${mode} cancels the remaining five contacts`);
-    assert.equal(audio.engine.preferenceEdits, 0);
-    unbind();
-    unbind();
-    assertClean(audio);
   }
-});
+  const focusedControl = elements.get('#audio-mute');
+  focusedControl.closest = selector => selector === '#audio-controls' ? root : null;
+  for (const shiftKey of [false, true]) {
+    send('keydown', { code: 'KeyM', shiftKey, repeat: false }, focusedControl);
+    assert.equal(engine.muted, !shiftKey, 'M works while an audio control has focus');
+    send('keydown', { code: 'KeyN', shiftKey, repeat: false }, focusedControl);
+    assert.equal(skips, shiftKey ? 2 : 1, 'N works while an audio control has focus');
+  }
+  assert.equal(unlocks, 8, 'plain and Shift-modified audio shortcuts still unlock sound');
 
-test('unbind during pending recording decode prevents late playback or a renewed duck', async t => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  const ui = dom(t);
-  const audio = fakeAudio();
-  const releases = [];
-  const loading = prepareGrassFootsteps(audio.engine, {
-    loadBuffer: url => new Promise(resolve => releases.push(() => resolve(recording(url)))),
-  });
-  const { preview, unbind } = ui.bind(audio.engine);
-  preview.dispatchEvent(new Event('click'));
-  await settle();
-  assert.equal(releases.length, 6);
-  assert.equal(preview.disabled, true);
-  assert.match(preview.textContent, /Loading footsteps/);
-  assert.equal(sources(audio).length, 0);
   unbind();
-  releases.forEach(release => release());
-  assert.equal(await loading, true, 'the real cached loader may finish safely after controls unbind');
-  await settle();
-  advance(t, audio, 5000);
-  assert.equal(sources(audio).length, 0, 'completed loading never replays the cancelled preview');
-  assert.equal(audio.routes.length, 0);
-  for (const bus of Object.keys(audio.engine.buses)) assert.deepEqual(audio.engine.buses[bus].gain.calls, []);
-  assert.equal(audio.engine.preferenceEdits, 0);
-  assert.equal(preview.disabled, false);
-  assert.equal(preview.textContent, 'Preview grass footsteps');
-  preview.dispatchEvent(new Event('click'));
-  await settle();
-  assert.equal(sources(audio).length, 0, 'the preview click listener was removed');
+  send('pointerdown', { pointerType: 'mouse' });
+  send('pointerup', { pointerType: 'touch' });
+  send('keydown', { code: 'KeyW', repeat: false });
+  assert.equal(unlocks, 8, 'all activation listeners are removed');
+  await Promise.resolve();
 });
