@@ -2,9 +2,11 @@ import { clumpAt, patchAt } from './grass-roots.js';
 import { blocks } from './props.js';
 import { ASPECT, CHUNK_SIZE, GRASS, SHORE, WATER } from './world.js';
 
-export const MAX_BURN_NODES = 384;
+export const MAX_BURN_OBJECTS = 384;
+export const MAX_BURN_EVENTS = 256;
 const MIN_HEAT = 0.22;
 const NEIGHBOURS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+const grassFuel = fuel => fuel.kind === 'grass' || (fuel.kind === 'plant' && fuel.node.kind === 'grass');
 
 const within = (p, x, y, width, height) => ((x - p.x) / width) ** 2 + ((y - p.y) / height) ** 2 <= 1;
 
@@ -40,8 +42,11 @@ export function vegetationFuel(world, x, y, resourcesIn = () => []) {
   const chunk = world.chunks?.get(`${cx},${cy}`) ?? world.chunk?.(cx, cy);
   if (!chunk) return null;
   const i = (y - cy * CHUNK_SIZE) * CHUNK_SIZE + x - cx * CHUNK_SIZE;
-  if (![GRASS, SHORE].includes(chunk.type[i]) || chunk.burnt?.[i] || chunk.grassHeight[i] < 2.5 ||
-    !(chunk.grassDensity[i] > 0) || patchAt(x, y, world.seed) < 0.1 || clumpAt(x, y, world.seed) < 0.3) return null;
+  if (![GRASS, SHORE].includes(chunk.type[i]) || chunk.burnt?.[i] || chunk.grassHeight[i] < 2 ||
+    !(chunk.grassDensity[i] > 0)) return null;
+  // Include visible fringe roots as well as the continuous clump interior.
+  // The rendering mask can keep a few blades beyond the noise threshold.
+  if ((patchAt(x, y, world.seed) < 0.1 || clumpAt(x, y, world.seed) < 0.3) && !chunk.blades?.present?.[i]) return null;
   return { key: `grass:${x},${y}`, kind: 'grass', x: px, y: py, width: 0.5, height: 0.5,
     duration: 3.5 + chunk.grassHeight[i] * 0.3 };
 }
@@ -60,11 +65,15 @@ export class ConnectedFire {
     this.fuelAt = fuelAt;
     this.resourcesIn = resourcesIn;
     this.time = 0;
+    this.targetTime = 0;
+    this.objects = 0;
     this.nodes = new Map();
     this.active = new Map();
     this.events = [];
+    this.scorches = new Map();
     this.add(fuel ?? { key: `torch:${Math.floor(x)},${Math.floor(y)}`, kind: 'torch', x, y,
       width: 0.5, height: 0.5, duration: 3.5 }, 1, 0);
+    this.flushScorches();
   }
 
   schedule(node, type, at) {
@@ -79,12 +88,15 @@ export class ConnectedFire {
   }
 
   add(fuel, heat, at) {
-    if (!fuel || heat < MIN_HEAT || this.nodes.has(fuel.key) || this.nodes.size >= MAX_BURN_NODES) return;
+    if (!fuel || heat < MIN_HEAT || this.nodes.has(fuel.key) ||
+      (!grassFuel(fuel) && this.objects >= MAX_BURN_OBJECTS)) return;
+    if (fuel.kind === 'grass' && this.scorches.has(`${Math.floor(fuel.x)},${Math.floor(fuel.y)}`)) return;
     if (this.world.typeAt(fuel.x, fuel.y) === WATER || (fuel.kind === 'tree' && fuel.prop.burning) ||
       (fuel.kind === 'plant' && fuel.node.burnt)) return;
     const node = { fuel, heat, litAt: at, age: 0, progress: 0 };
     this.nodes.set(fuel.key, node);
     this.active.set(fuel.key, node);
+    if (!grassFuel(fuel)) this.objects++;
     if (fuel.kind === 'tree') this.world.beginTreeBurn?.(fuel.prop, node);
     else if (fuel.kind === 'plant') {
       fuel.node.harvested = true;
@@ -94,18 +106,27 @@ export class ConnectedFire {
       this.world.burntPlants?.add(key);
       for (let y = Math.floor(fuel.y - fuel.height); y <= Math.ceil(fuel.y + fuel.height); y++) {
         for (let x = Math.floor(fuel.x - fuel.width); x <= Math.ceil(fuel.x + fuel.width); x++) {
-          if (within(fuel, x + 0.5, y + 0.5, fuel.width, fuel.height)) this.world.burnGrassCell?.(x, y);
+          if (within(fuel, x + 0.5, y + 0.5, fuel.width, fuel.height)) this.scorch(x, y);
         }
       }
-    } else this.world.burnGrassCell?.(fuel.x, fuel.y);
+    } else this.scorch(fuel.x, fuel.y);
     this.schedule(node, 'spread', at + (fuel.kind === 'tree' ? 1.2 : 0.55));
     this.schedule(node, 'out', at + fuel.duration);
   }
 
+  scorch(x, y) {
+    this.scorches.set(`${Math.floor(x)},${Math.floor(y)}`, [x, y]);
+  }
+
+  flushScorches() {
+    // Commit the batch after fuel queries, so the grass render cache is
+    // rebuilt once for the front rather than after every ignited cell.
+    for (const [x, y] of this.scorches.values()) this.world.burnGrassCell?.(x, y);
+    this.scorches.clear();
+  }
+
   expand(node) {
     const fuel = node.fuel;
-    const heat = node.heat - (fuel.kind === 'tree' ? 0.24 : 0.08);
-    if (heat < MIN_HEAT || this.nodes.size >= MAX_BURN_NODES) return;
     const cells = new Set();
     const wx = Math.floor(fuel.x), wy = Math.floor(fuel.y);
     // A tree or resource clump is one connected object. Check only the
@@ -119,17 +140,26 @@ export class ConnectedFire {
         const key = `${nx},${ny}`;
         if (cells.has(key)) continue;
         cells.add(key);
-        if (this.nodes.size >= MAX_BURN_NODES) return;
-        this.add(this.fuelAt(this.world, nx, ny, this.resourcesIn), heat, this.time);
+        const next = this.fuelAt(this.world, nx, ny, this.resourcesIn);
+        if (!next) continue;
+        // Fresh grass sustains the front throughout its connected clump.
+        // Heat is lost when crossing into or out of other fuel objects.
+        const heat = grassFuel(fuel) && grassFuel(next) ? node.heat :
+          node.heat - (fuel.kind === 'tree' ? 0.24 : 0.08);
+        this.add(next, heat, this.time);
       }
     }
   }
 
   update(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
-    const end = this.time + dt;
-    while (this.events.length && this.events[0].at <= end) {
+    this.targetTime += dt;
+    let work = 0;
+    // Carry overdue events into the next frame instead of abandoning fuel
+    // after a fixed number of cells. Large clumps still burn completely.
+    while (this.events.length && this.events[0].at <= this.targetTime && work < MAX_BURN_EVENTS) {
       const event = this.events.shift();
+      work++;
       this.time = event.at;
       if (!this.active.has(event.node.fuel.key)) continue;
       if (this.world.typeAt(event.node.fuel.x, event.node.fuel.y) === WATER) {
@@ -146,7 +176,8 @@ export class ConnectedFire {
         this.active.delete(event.node.fuel.key);
       }
     }
-    this.time = end;
+    this.flushScorches();
+    if (!this.events.length || this.events[0].at > this.targetTime) this.time = this.targetTime;
     for (const node of this.active.values()) {
       node.age = this.time - node.litAt;
       node.progress = Math.min(1, node.age / node.fuel.duration);

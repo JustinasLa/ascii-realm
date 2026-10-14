@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Fires, MAX_FIRES } from '../src/world/fire.js';
-import { MAX_BURN_NODES, vegetationFuel } from '../src/world/fire-spread.js';
+import { MAX_BURN_EVENTS, MAX_BURN_OBJECTS, vegetationFuel } from '../src/world/fire-spread.js';
 import { Grass } from '../src/world/grass.js';
+import { clumpAt, patchAt } from '../src/world/grass-roots.js';
 import { Harvesting } from '../src/world/harvesting.js';
 import { drawResource } from '../src/world/item-draw.js';
 import { glyph } from '../src/render/glyphs.js';
@@ -38,14 +39,22 @@ function field(points = [], { plane = false, plant = false } = {}) {
     }
     if (solid.has(key) || (!plant && burned.has(key)) || (!plane && !material.has(key))) return null;
     if (plant) {
-      if (world.gathered.has(`grass:${x}:${y}`)) return null;
+      if (world.gathered.has(`${plant}:${x}:${y}`)) return null;
       return { key: `plant:${key}`, kind: 'plant', x: x + 0.5, y: y + 0.5, width: 4, height: 2,
-        duration: 5, node: { kind: 'grass', x: x + 0.5, y: y + 0.5 } };
+        duration: 5, node: { kind: plant, x: x + 0.5, y: y + 0.5 } };
     }
     return { key: `grass:${key}`, kind: 'grass', x: x + 0.5, y: y + 0.5, width: 0.5, height: 0.5, duration: 4 };
   };
   const fires = new Fires({ windAt: () => 0, fuelAt });
   return { world, fires, burned, types, solid, trees };
+}
+
+function finish(fires, world) {
+  fires.update(120, 120, world);
+  for (let i = 0; i < 256 && fires.list.some(f => f.kind === 'ground'); i++) {
+    fires.update(0.25, 120 + (i + 1) / 4, world);
+  }
+  assert.ok(!fires.list.some(f => f.kind === 'ground'), 'all finite connected fuel eventually burns out');
 }
 
 test('campfires stay contained beside combustible grass', () => {
@@ -70,6 +79,89 @@ test('a torch burns its connected clump and leaves a separate nearby clump intac
   assert.deepEqual([...burned].sort(), connected.map(([x, y]) => `${x},${y}`).sort());
   assert.equal(fire.outReason, 'fuel');
   assert.equal(fires.list.length, 0);
+});
+
+test('a clump larger than the old cell limit burns completely with bounded work per frame', () => {
+  const clump = [];
+  for (let y = -10; y < 10; y++) for (let x = -20; x < 20; x++) clump.push([x, y]);
+  const { world, fires, burned } = field([...clump, [24, 0], [25, 0]]);
+  const fire = fires.ignite(world, 0.5, 0.5);
+  let reads = 0;
+  const fuelAt = fire.spread.fuelAt;
+  fire.spread.fuelAt = (...args) => { reads++; return fuelAt(...args); };
+  fires.update(60, 60, world);
+  assert.ok(reads <= MAX_BURN_EVENTS * 4, 'one frame cannot process the entire overdue frontier');
+  assert.ok(fire.spread.active.size > 0, 'the unfinished front stays alive for later frames');
+  assert.ok(burned.size < clump.length, 'the full clump is not scorched in one synchronous burst');
+  const visible = fires.prepare({ x0: -50, y0: -30, cols: 100, rows: 60 }, 60);
+  assert.ok(visible.length <= MAX_FIRES, 'complete combustion retains the flame render budget');
+  for (let i = 0; i < 32 && fires.list.length; i++) fires.update(0.1, 60 + (i + 1) / 10, world);
+  assert.equal(fire.spread.nodes.size, clump.length);
+  assert.ok(fire.spread.nodes.size > MAX_BURN_OBJECTS, 'grass is not truncated by the object budget');
+  assert.deepEqual([...burned].sort(), clump.map(([x, y]) => `${x},${y}`).sort());
+  assert.equal(fire.outReason, 'fuel');
+  assert.equal(fires.list.length, 0);
+});
+
+test('grass reached from a burning tree sustains itself to the far end of the clump', () => {
+  const points = Array.from({ length: 48 }, (_, i) => [i + 2, 0]);
+  const { world, fires, burned, trees } = field(points);
+  const tree = { id: 'tree', x: 0.5, y: 0.5, footW: 1.5, footH: 0.5 };
+  trees.push(tree);
+  const fire = fires.ignite(world, 0.5, 0.5, { source: 'lightning' });
+  fires.update(60, 60, world);
+  assert.deepEqual([...burned].sort(), points.map(([x, y]) => `${x},${y}`).sort());
+  assert.equal(tree.burnt, true);
+  assert.equal(fire.outReason, 'fuel');
+});
+
+test('a resource grass tuft within a meadow clump does not weaken its advancing front', () => {
+  const points = Array.from({ length: 80 }, (_, x) => [x, 0]);
+  const { world, fires, burned } = field(points);
+  const tuft = { kind: 'grass', x: 24.5, y: 0.5 };
+  const original = fires.fuelAt;
+  fires.fuelAt = (w, x, y) => {
+    const fuel = original(w, x, y);
+    return fuel && Math.floor(x) === 24 ? { ...fuel, key: 'plant:tuft', kind: 'plant', node: tuft } : fuel;
+  };
+  const fire = fires.ignite(world, 0.5, 0.5);
+  fires.update(60, 60, world);
+  assert.equal(tuft.burnt, true);
+  assert.deepEqual([...burned].sort(), points.map(([x, y]) => `${x},${y}`).sort());
+  assert.equal(fire.outReason, 'fuel');
+});
+
+test('visible fringe blades burn with the clump even beyond its continuous fuel mask', () => {
+  const world = new World(19);
+  world.propsIn(-4, -4, 68, 68);
+  const chunk = world.chunk(0, 0);
+  let edge = null, body = null;
+  for (const i of chunk.blades.indices) {
+    const x = i % 64, y = Math.floor(i / 64);
+    if (patchAt(x, y, world.seed) >= 0.1 && clumpAt(x, y, world.seed) >= 0.3) continue;
+    if (!world.isWalkable(x + 0.5, y + 0.5)) continue;
+    body = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]
+      .find(([nx, ny]) => vegetationFuel(world, nx, ny)?.kind === 'grass');
+    if (body) { edge = [x, y]; break; }
+  }
+  assert.ok(edge, 'the generated patch has a visible edge blade touching its body');
+  const fires = new Fires({ windAt: () => 0 });
+  const fire = fires.ignite(world, body[0], body[1]);
+  fires.update(0.6, 0.6, world);
+  const { c, i } = world.locate(...edge);
+  assert.equal(c.burnt[i], 255, 'the edge blade joins the front instead of staying green');
+  assert.equal(c.blades.present[i], 0, 'the burned fringe is removed from rendering');
+  fires.extinguish(world, fire);
+});
+
+test('smothering a grass front cancels the rest of its clump', () => {
+  const { world, fires, burned } = field(Array.from({ length: 48 }, (_, x) => [x, 0]));
+  const fire = fires.ignite(world, 0.5, 0.5);
+  fires.update(0.6, 0.6, world);
+  fires.extinguish(world, fire, 'smother');
+  fires.update(60, 60, world);
+  assert.deepEqual([...burned].sort(), ['0,0', '1,0']);
+  assert.equal(fire.spread.events.length, 0);
 });
 
 test('corner contact and empty cells cannot bridge disconnected grass', () => {
@@ -168,8 +260,8 @@ test('flooding an ignition before its front advances stops its pending spread', 
   assert.deepEqual([...burned], ['0,0']);
 });
 
-test('large connected vegetation remains bounded and loses steam without exhausting the whole field', () => {
-  const { world, fires } = field([], { plane: true, plant: true });
+test('connected woody plants still lose heat and keep a bounded object budget', () => {
+  const { world, fires } = field([], { plane: true, plant: 'bush' });
   const fire = fires.ignite(world, 0.5, 0.5);
   fires.update(1.5, 1.5, world);
   const visible = fires.prepare({ x0: -50, y0: -30, cols: 100, rows: 60 }, 1.5);
@@ -177,21 +269,22 @@ test('large connected vegetation remains bounded and loses steam without exhaust
   assert.ok(visible.length <= MAX_FIRES, 'many fuel nodes share the existing flame budget');
   assert.ok(visible.every(f => f.hearth.length === 0), 'natural fires have no stone ring or campfire logs');
   fires.update(60, 60, world);
-  assert.equal(fire.spread.nodes.size, MAX_BURN_NODES);
+  for (let i = 0; i < 16 && fires.list.length; i++) fires.update(0.1, 60 + (i + 1) / 10, world);
+  assert.equal(fire.spread.nodes.size, MAX_BURN_OBJECTS);
   assert.equal(fire.spread.active.size, 0);
   assert.equal(fires.list.length, 0);
-  assert.ok(!world.gathered.has('grass:100:100'), 'connected fuel does not give the blaze unlimited reach');
+  assert.ok(!world.gathered.has('bush:100:100'), 'connected wood does not give the blaze unlimited reach');
 });
 
 test('fast-forward and small steps burn the same connected cells', () => {
-  const points = Array.from({ length: 12 }, (_, x) => [x, 0]);
+  const points = Array.from({ length: 48 }, (_, x) => [x, 0]);
   const a = field(points), b = field(points);
   a.fires.ignite(a.world, 0.5, 0.5);
   b.fires.ignite(b.world, 0.5, 0.5);
   a.fires.update(30, 30, a.world);
   for (let i = 0; i < 300; i++) b.fires.update(0.1, i / 10, b.world);
   assert.deepEqual([...a.burned].sort(), [...b.burned].sort());
-  assert.ok(a.burned.size < points.length, 'heat fades before the end of an oversized clump');
+  assert.equal(a.burned.size, points.length, 'the entire clump burns despite its length');
   assert.equal(a.fires.list.length, 0);
   assert.equal(b.fires.list.length, 0);
 });
@@ -248,7 +341,7 @@ for (const kind of ['grass', 'bush']) {
     assert.ok(world.burntPlants.has(`${kind}:${Math.floor(plant.x)}:${Math.floor(plant.y)}`));
     const { c, i } = world.locate(Math.floor(plant.x), Math.floor(plant.y));
     assert.equal(c.burnt[i], 255);
-    fires.update(60, 60, world);
+    finish(fires, world);
     for (let n = 0; n < 48; n++) world.chunk(n + 20, 20);
     const regenerated = harvesting.resourcesOf(0, 0).find(p => p.uid === plant.uid);
     assert.ok(regenerated);
@@ -295,7 +388,7 @@ test('burning trees survive chunk eviction as active fuel and leave persistent c
   for (let n = 0; n < 48; n++) world.chunk(n + 20, 20);
   const regenerated = world.propsOf(Number(cx), Number(cy)).find(p => p.id === tree.id);
   assert.ok(regenerated.burning?.progress > 0, 'the same burn state follows the regenerated tree');
-  fires.update(60, 60, world);
+  finish(fires, world);
   assert.equal(regenerated.burnt, true);
   assert.equal(regenerated.chopped, true);
   assert.equal(blocks(regenerated, regenerated.x, regenerated.y), false);
