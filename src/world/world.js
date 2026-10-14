@@ -332,9 +332,10 @@ export class World {
     return props;
   }
 
-  // One blow on a tree; enough of them fell it. Returns the hits so far.
-  hitTree(prop) {
-    prop.hits = (prop.hits ?? 0) + 1;
+  // A blow on a tree, worth `power` hits; enough of them fell it. Returns
+  // the hits so far.
+  hitTree(prop, power = 1) {
+    prop.hits = Math.min(TREE_HITS, (prop.hits ?? 0) + Math.max(1, Math.floor(power) || 1));
     prop.chopped = prop.hits >= TREE_HITS;
     if (prop.id) this.treeHits.set(prop.id, prop.hits);
     return prop.hits;

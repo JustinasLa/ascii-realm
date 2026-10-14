@@ -21,7 +21,7 @@ test('a new inventory exposes the required bag, equipment, and hotbar slots', ()
   assert.equal(inventory.slots.length, 24);
   assert.equal(inventory.hotbar.length, 9);
   assert.equal(inventory.selectedHotbar, 0);
-  assert.equal(inventory.capacity, 40);
+  assert.equal(inventory.capacity, 60);
   assert.deepEqual(Object.keys(inventory.equipment).sort(),
     ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand'].sort());
   assert.equal(EQUIPMENT_SLOTS.length, 7);

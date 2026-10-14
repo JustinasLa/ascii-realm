@@ -1,3 +1,4 @@
+import { screenToWorld } from './core/aim.js';
 import { clearInput, isControlTarget, isDown, isGameplayBlocked, moveAxis, setGameplayBlocked, wasTapped } from './core/input.js';
 import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
@@ -5,7 +6,9 @@ import { bindAudioControls } from './audio/controls.js';
 import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
+import { isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
+import { SCALE, TILT } from './entities/rig.js';
 import { Collection } from './inventory/collection.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
@@ -26,6 +29,7 @@ import { Harvesting } from './world/harvesting.js';
 import { drawItem, drawResource } from './world/item-draw.js';
 import { GroundItems } from './world/items.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
+import { Projectiles } from './world/projectiles.js';
 import { drawProp, propInView } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
@@ -180,7 +184,68 @@ const inventoryScreen = new InventoryScreen({
 });
 debug.hud = hud;
 debug.inventoryScreen = inventoryScreen;
-let swordEquipped = inventory.equipment.mainHand?.id === 'shortSword';
+// Arrows, spears and javelins in flight or lying where they landed.
+const projectiles = new Projectiles();
+debug.projectiles = projectiles;
+// How many arrows are left, or of the weapon being thrown.
+const ammoNote = document.createElement('div');
+hud.attachNote(ammoNote);
+const weaponKeyOf = (stack) => stack ? `${stack.id}:${stack.material ?? ''}` : '';
+let lastWeapon = weaponKeyOf(inventory.equipment.mainHand);
+// The pointer over the scene and the last frame drawn, for aiming.
+let pointer = null;
+let lastFrame = null;
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch') pointer = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('pointerleave', () => { pointer = null; });
+
+const carriedCount = (id) => inventory.slots.reduce((n, s) => n + (s?.id === id ? s.count : 0), 0)
+  + (inventory.equipment.mainHand?.id === id ? 1 : 0);
+
+// Where a shot or throw would land: the cursor, or a point straight ahead
+// within the weapon's range when aiming from the keyboard.
+function aimPoint(weapon, draw) {
+  const range = (weapon.projectileRange ?? 8) * (0.4 + 0.6 * draw);
+  const cursor = pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
+  let mx = cursor ? (cursor.x - player.x) * ASPECT / SCALE : Math.sin(player.heading) * range;
+  let mz = cursor ? (cursor.y - player.y) / (SCALE * TILT) : Math.cos(player.heading) * range;
+  const distance = Math.hypot(mx, mz);
+  if (distance > range) {
+    mx *= range / distance;
+    mz *= range / distance;
+  }
+  return { x: player.x + mx * SCALE / ASPECT, y: player.y + mz * SCALE * TILT };
+}
+
+// Lets fly an arrow, or throws the spear or javelin in hand.
+function fireRanged(release, weapon) {
+  const kind = isBow(weapon) ? 'arrow' : weapon.type;
+  const arrows = inventory.slots.findIndex((stack) => stack?.id === 'arrow');
+  if (kind === 'arrow' && arrows < 0) {
+    hud.notify('Out of arrows.', 'info');
+    return;
+  }
+  if (!player.vitals.spendStamina(player.feel.stamina)) {
+    hud.notify(kind === 'arrow' ? 'Too tired to draw the bow.' : 'Too tired to throw.', 'info');
+    return;
+  }
+  const shot = projectiles.launch({
+    x: player.x, y: player.y, h: SCALE * 1.1, aimTarget: aimPoint(weapon, release.draw),
+    projectile: { kind }, weapon: weapon.id, material: weapon.material,
+    strength: release.draw, damage: weapon.damage,
+  });
+  if (!shot) return;
+  if (kind === 'arrow') inventory.remove(arrows, 1);
+  else {
+    // The thrown weapon leaves the hand; another of the same is taken up.
+    const thrown = inventory.equipment.mainHand;
+    inventory.equipment.mainHand = null;
+    const next = inventory.slots.findIndex((stack) => stack?.id === thrown.id);
+    if (next >= 0) inventory.equip(next);
+  }
+  sound.play({ type: 'swing', move: 'thrust', speed: 1.2, x: player.x, y: player.y });
+}
 
 // Choosing a quick slot that holds gear puts it on.
 function selectHotbar(index) {
@@ -347,10 +412,21 @@ function frame(now) {
     if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`)) selectHotbar(index);
   }
   if (wasTapped('KeyQ')) useHotbar();
-  // Taking the sword off puts it away at once, even mid-swing.
-  const armed = inventory.equipment.mainHand?.id === 'shortSword';
-  if (swordEquipped && !armed) player.cancelWeapon();
-  swordEquipped = armed;
+  // Changing or taking off the weapon puts the last one away at once.
+  const weapon = player.weapon;
+  const hand = inventory.equipment.mainHand;
+  const weaponKey = weaponKeyOf(hand);
+  if (weaponKey !== lastWeapon) {
+    player.cancelWeapon();
+    player.ranged.reset();
+    lastWeapon = weaponKey;
+  }
+  const armed = Boolean(weapon);
+  const ranged = isBow(weapon) || isThrown(weapon);
+  canvas.classList.toggle('projectile-aiming', ranged);
+  const ammo = isBow(weapon) ? `Arrows ${carriedCount('arrow')}` : isThrown(weapon) ? `${ITEMS[hand.id].name} ×${carriedCount(hand.id)}` : '';
+  if (ammoNote.textContent !== ammo) ammoNote.textContent = ammo;
+  ammoNote.hidden = !ammo;
   const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
   const jump = wasTapped('Space');
   const attack = wasTapped('KeyJ') || clicked;
@@ -361,7 +437,7 @@ function frame(now) {
   const gather = wasTapped('KeyE');
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
-    if (attack && armed) player.attack();
+    if (attack && armed && !ranged) player.attack();
     if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
@@ -381,6 +457,12 @@ function frame(now) {
   const held = isDown('KeyJ') || mouseHeld;
   const fromX = player.x, fromY = player.y, fromAir = player.air;
   const paused = debug.freeze || builder.enabled || playerDt === 0;
+  // A bow draws while the attack is held and shoots on release; a spear or
+  // javelin jabs on a tap and is thrown after a longer hold.
+  const release = player.ranged.update(dt, ranged && held && !builder.enabled && !debug.freeze, weapon);
+  player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw) : null;
+  if (release?.action === 'jab') player.attack();
+  else if (release) fireRanged(release, weapon);
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held, dt);
   if (model) {
     if (!paused) model.update(playerDt, player);
@@ -437,6 +519,24 @@ function frame(now) {
     if (event.type === 'pickup') hud.notify(`+${event.count} ${ITEMS[event.id].name}`, 'pickup');
   }
   inventory.events.length = 0;
+  if (!paused) {
+    projectiles.update(dt, world);
+    for (const impact of projectiles.events) sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
+    projectiles.events.length = 0;
+    // Walking over a landed arrow or spear picks it up again.
+    if (player.air === 0) {
+      for (const shaft of projectiles.collectNear(player.x, player.y, 0.75, { x: fromX, y: fromY })) {
+        const id = shaft.kind === 'arrow' ? 'arrow' : shaft.kind;
+        if (!inventory.add(id, 1, { material: shaft.material })) {
+          projectiles.landed.push(shaft);
+          continue;
+        }
+        if (id !== 'arrow' && !inventory.equipment.mainHand) {
+          inventory.equip(inventory.slots.findIndex((stack) => stack?.id === id));
+        }
+      }
+    }
+  }
   dust.update(dt);
   splashes.update(dt);
   if (!debug.freeze) {
@@ -542,6 +642,9 @@ function frame(now) {
     reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
     drawables.push({ y: node.y, draw: () => drawResource(renderer, view, node, time) });
   }
+  for (const shaft of projectiles.landedDrawables()) {
+    drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
+  }
   const carried = visibleTorches.filter((torch) => torch.carried);
   reflections.push({ y: player.y, draw: () => {
     if (model) model.draw(renderer, mirror);
@@ -566,6 +669,7 @@ function frame(now) {
   torches.light(renderer, view, time, visibleTorches);
   weather.drawAtmosphere(renderer, view, time);
 
+  projectiles.drawFlying(renderer, view);
   drawTrail(renderer, view, player.trail, player.time);
   if (model) drawName(model.top);
   else drawNameTag(renderer, view, player, figure, name);
@@ -580,6 +684,7 @@ function frame(now) {
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
+  lastFrame = { width: canvas.width, height: canvas.height, cellW: renderer.cellW, cellH: renderer.cellH, view };
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
   const workMs = performance.now() - started;

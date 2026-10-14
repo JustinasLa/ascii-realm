@@ -3,6 +3,8 @@ import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
 import { ATTACK_STAMINA_COST, SPRINT_RECOVERY_STAMINA, Vitals } from './vitals.js';
+import { heldWeapon, weaponFeel } from './loadout.js';
+import { Ranged } from './ranged.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
 // SCALE row units, but a metre up or down the screen is foreshortened by
@@ -80,6 +82,9 @@ export class Player {
     this.runSpeed = RUN_SPEED;
     this.combat = new Combat();
     this.vitals = new Vitals();
+    // Drawing a bow or readying a throw, and the ground point aimed at.
+    this.ranged = new Ranged();
+    this.aimTarget = null;
     // Out of breath: no sprinting until a useful reserve has come back.
     this.sprintExhausted = false;
     // A lit torch occupies the free hand; T stows it or draws a fresh one.
@@ -194,9 +199,19 @@ export class Player {
   }
 
   // The attack depends on what the warrior is doing at the time.
+  // The equipped weapon and how it changes the swings.
+  get weapon() {
+    return heldWeapon(this.equipment);
+  }
+
+  get feel() {
+    return weaponFeel(this.weapon);
+  }
+
   attack() {
     this.cancelPickup();
-    if (!this.combat.canAcceptAttack || !this.vitals.spendStamina(ATTACK_STAMINA_COST)) return false;
+    const cost = this.equipment === undefined ? ATTACK_STAMINA_COST : this.feel.stamina;
+    if (!this.combat.canAcceptAttack || !this.vitals.spendStamina(cost)) return false;
     return this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
   }
 
@@ -440,6 +455,12 @@ export class Player {
     }
 
     if (!moving) this.bank += -this.bank * ease(8);
+    // Taking aim, the outlaw turns to face the point aimed at.
+    if (this.ranged.aiming && this.aimTarget) {
+      const ax = (this.aimTarget.x - this.x) / toCols;
+      const az = (this.aimTarget.y - this.y) / toRows;
+      if (Math.hypot(ax, az) > 0.05) this.heading += angleTo(this.heading, Math.atan2(ax, az)) * ease(14);
+    }
 
     // Ease the stride in and out so starting and stopping is not abrupt.
     // Critically damped springs: they ease in as well as out, so neither
@@ -486,7 +507,9 @@ export class Player {
     const cb = this.combat;
     if (cb.move === 'plunge' && cb.step >= 1 && this.air > 0) this.vy -= 30 * dt;
 
-    cb.update(dt, { moving, running: moving && this.run > 0.5, air: this.air > 0, held });
+    const feel = this.feel;
+    // Heavier weapons swing more slowly, lighter ones faster.
+    cb.update(dt * feel.tempo, { moving, running: moving && this.run > 0.5, air: this.air > 0, held });
     for (const e of cb.events) {
       if (e.type === 'slam' || e.type === 'strike') {
         // The blade lands a stride ahead, in the direction faced.
@@ -508,10 +531,11 @@ export class Player {
       if (e.type === 'swing') {
         // Each cut reaches a stride ahead, where it can fell trees and
         // mow grass.
-        const reach = 0.95 * SCALE;
+        const reach = feel.reach * SCALE;
         this.events.push({
           type: 'strike',
           swing: e.move,
+          chop: feel.chop,
           x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
           y: this.y + Math.cos(this.heading) * reach * TILT,
           strength: 1,

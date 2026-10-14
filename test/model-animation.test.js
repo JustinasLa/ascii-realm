@@ -30,6 +30,7 @@ moduleURL('../vendor/three/utils/BufferGeometryUtils.js');
 const { GLTFLoader } = await import(moduleURL('../vendor/three/loaders/GLTFLoader.js'));
 moduleURL('../src/entities/retarget.js');
 moduleURL('../src/entities/gear.js');
+moduleURL('../src/entities/armory.js');
 const { ModelFigure } = await import(moduleURL('../src/entities/model.js'));
 
 async function figure() {
@@ -100,4 +101,24 @@ test('worn gear shows on the 3D character and coming off reveals what is underne
   player.equipment = equipment;
   step();
   assert.deepEqual(colors(), dressed, 'putting everything back restores the same look');
+});
+
+test('weapons ride in the hand when drawn and on the back or hip when put away', async () => {
+  const model = await figure();
+  const player = new Player(0, 0);
+  player.equipment = { mainHand: { id: 'spear', count: 1 } };
+  model.update(1 / 60, player);
+  assert.equal(model.armory.held, null, 'a sheathed spear is not in hand');
+  assert.equal(model.armory.active.parent, model.armory.back);
+  player.combat.inHand = true;
+  model.update(1 / 60, player);
+  assert.equal(model.armory.held, model.armory.active);
+  assert.ok(model.swordLine(), 'a drawn spear leaves a trail');
+  player.equipment = { mainHand: { id: 'dagger', count: 1 } };
+  player.combat.inHand = false;
+  model.update(1 / 60, player);
+  assert.equal(model.armory.active.parent, model.armory.hip);
+  player.equipment = { mainHand: null };
+  model.update(1 / 60, player);
+  assert.equal(model.armory.active, null);
 });

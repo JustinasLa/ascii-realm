@@ -183,9 +183,10 @@ export class Harvesting {
       nearestDistance = d;
     }
     if (tree) {
-      if (typeof this.world.hitTree === 'function') this.world.hitTree(tree);
+      const power = Math.max(1, Math.floor(event.chop ?? 1));
+      if (typeof this.world.hitTree === 'function') this.world.hitTree(tree, power);
       else {
-        tree.hits = (tree.hits ?? 0) + 1;
+        tree.hits = Math.min(TREE_HITS, (tree.hits ?? 0) + power);
         tree.chopped = tree.hits >= TREE_HITS;
       }
       // Saplings give a single length of timber.

@@ -43,7 +43,7 @@ class Dresser {
   }
 
   add(shape, mat, z) {
-    shape.mat = MATERIALS[mat];
+    shape.mat = typeof mat === 'string' ? MATERIALS[mat] : mat;
     shape.z = z;
     this.parts.push(shape);
     return shape;
@@ -86,7 +86,7 @@ const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 // short sword at the hip.
 // `equipment` is the inventory's worn gear, slot by slot; without one the
 // outlaw is fully dressed. Each missing piece reveals what is underneath.
-function dress(rig, capeSim, equipment) {
+function dress(rig, capeSim, equipment, weapon = null) {
   const d = new Dresser();
   const wearing = (slot) => equipment === undefined || Boolean(equipment?.[slot]);
   if (wearing('cape') && capeSim?.pts) cloak(d, rig, capeSim.pts);
@@ -110,6 +110,7 @@ function dress(rig, capeSim, equipment) {
   quiverAndBow(d, rig);
   tunic(d, rig, wearing('chest'));
   if (equipment === undefined || equipment?.mainHand?.id === 'shortSword') sword(d, rig);
+  else if (weapon && rig.sword) heldWeapon(d, rig.sword, weapon);
 
   for (const a of rig.arms) {
     // Loose sleeves, then bracers and gloves or bare forearms and hands.
@@ -128,6 +129,44 @@ function dress(rig, capeSim, equipment) {
   else bareHead(d, rig);
 
   return d.sorted();
+}
+
+// Weapon sprite materials, by the names weapons.js uses. Metal takes the
+// colour of the weapon's material tier.
+const WEAPON_MAT = { blade: 'blade', darkPlate: 'iron', trim: 'iron', leather: 'leather', wood: 'wood',
+  string: 'feather', arrow: 'wood', cloth: 'leather' };
+const tinted = new Map();
+function weaponMat(weapon, name) {
+  const base = MATERIALS[WEAPON_MAT[name] ?? 'iron'] ?? MATERIALS.iron;
+  if (name !== 'blade' && name !== 'darkPlate' || !weapon.materialColor) return base;
+  const key = `${name}:${weapon.materialColor.join()}`;
+  if (!tinted.has(key)) {
+    const color = name === 'darkPlate' ? weapon.materialColor.map((c) => c * 0.4) : weapon.materialColor;
+    tinted.set(key, { ...base, color });
+  }
+  return tinted.get(key);
+}
+
+const unit = (v) => mul(v, 1 / (Math.hypot(...v) || 1));
+
+// Any weapon other than the short sword, drawn from its sprite parts along
+// the blade in hand: x across the blade, y from guard to tip.
+function heldWeapon(d, sw, weapon) {
+  const blade = unit(sub(sw.tip, sw.guard));
+  const side = unit(sub(sw.barA, sw.barB));
+  const normal = unit(cross(side, blade));
+  const at = (p) => add(add(add(sw.guard, mul(side, p[0])), mul(blade, p[1])), mul(normal, p[2] ?? 0));
+  for (const part of weapon.spriteParts ?? []) {
+    const mat = weaponMat(weapon, part.material);
+    let shape = null;
+    if (part.shape === 'limb') shape = d.limb(at(part.a), at(part.b), part.ra, part.rb ?? part.ra, mat, 0.03);
+    else if (part.shape === 'blob') shape = d.blob(at(part.c), part.rx, part.ry, mat, 0.03);
+    else if (part.shape === 'panel') {
+      const p = part.points.map(at);
+      shape = d.panel(p[0], p[1], p[2], p[3], mat, 0.03);
+    }
+    if (shape && part.glyph) shape.glyph = glyph(part.glyph);
+  }
 }
 
 // A small round buckler strapped to the forearm opposite the sword.
@@ -391,9 +430,9 @@ export function drawShadow(r, view, x, y, air = 0) {
 // Built once a frame and shared by the figure and its reflection.
 export function dressFigure(state) {
   const depth = state.waterDepth ?? 0;
-  if (depth <= 0) return dress(buildRig(state), state.cape, state.equipment);
+  if (depth <= 0) return dress(buildRig(state), state.cape, state.equipment, state.weapon);
   const cape = state.cape?.pts ? { pts: state.cape.pts.map((p) => [p[0], p[1] - depth, p[2]]) } : null;
-  return dress(buildRig({ ...state, air: state.air - depth }), cape, state.equipment);
+  return dress(buildRig({ ...state, air: state.air - depth }), cape, state.equipment, state.weapon);
 }
 
 // One reusable raster for the current pose. Both painter passes replay the
@@ -526,7 +565,7 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write, count) {
     const p = parts[claim];
     const [cr, cg, cbl] = p.mat.color;
     const l = p.mat.emissive ? 1 : 0.55 + 0.45 * Math.max(0, Math.min(1, claimLum));
-    write(r, sx, sy, p.mat.tex ? p.mat.tex() : p.bar, cr * l, cg * l, cbl * l, base, 6, 10, 14);
+    write(r, sx, sy, p.glyph ?? (p.mat.tex ? p.mat.tex() : p.bar), cr * l, cg * l, cbl * l, base, 6, 10, 14);
     return;
   }
   if (hits < 3) return;
