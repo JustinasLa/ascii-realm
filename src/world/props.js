@@ -532,6 +532,32 @@ function stumpCells(prop) {
   return cells;
 }
 
+// Sprites are immutable between edits. Index contiguous rows without
+// reordering their cells: base glyphs and their layers keep painter order.
+// Weak keys let this index disappear with evicted chunks and edited sprites.
+const spriteRows = new WeakMap();
+function rowsOf(cells) {
+  let cached = spriteRows.get(cells);
+  if (cached?.length === cells.length) return cached.rows;
+  const rows = [];
+  for (let start = 0; start < cells.length;) {
+    const y = cells[start].dy;
+    let end = start;
+    let left = Infinity, right = -Infinity, flex = 0;
+    while (end < cells.length && cells[end].dy === y) {
+      const c = cells[end++];
+      left = Math.min(left, c.dx);
+      right = Math.max(right, c.dx);
+      if (c.foliage) flex = Math.max(flex, Math.abs(c.flex));
+    }
+    const pad = Math.ceil(flex * 1.5);
+    rows.push({ start, end, y, left: left - pad, right: right + pad });
+    start = end;
+  }
+  spriteRows.set(cells, { length: cells.length, rows });
+  return rows;
+}
+
 export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
   const direct = write === putCell;
   if (direct && !propInView(view, prop)) return;
@@ -541,6 +567,9 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
     for (const c of stumpCells(prop)) write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
     return;
   }
+  const bounds = prop.bounds;
+  if (write.visible && bounds && !write.visible(r, bx + bounds.minX - 3, by + bounds.minY,
+    bx + bounds.maxX + 3, by + bounds.maxY, by)) return;
   const tree = prop.kind === 'tree' || prop.kind === 'bush';
   const sway = tree ? treeWind(prop, t, seed) : 0;
   const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
@@ -558,42 +587,52 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   let lastShift = 0;
   let lastHidden = true;
   const cells = prop.cells;
-  for (let i = 0; i < cells.length; i++) {
-    const c = cells[i];
-    let shift = 0;
-    if (c.g >= LAYER && c.dx === lastDx && c.dy === lastDy) {
-      if (lastHidden) continue;
-      shift = lastShift;
-    } else {
-      lastDx = c.dx;
-      lastDy = c.dy;
+  for (const row of rowsOf(cells)) {
+    const sy = by + row.y;
+    if ((direct && (sy < 0 || sy >= view.rows || bx + row.right < 0 || bx + row.left >= view.cols)) ||
+      (reflected && (by - row.y + 1 < 0 || by - row.y + 1 >= view.rows)) ||
+      (write.visible && !write.visible(r, bx + row.left, sy, bx + row.right, sy, by))) {
+      lastDx = lastDy = NaN;
       lastHidden = true;
-      if (c.foliage) shift = Math.round(sway * c.flex);
-      lastShift = shift;
-    }
-    const sy = by + c.dy;
-    // Reject invisible rows before calculating foliage lighting or texture.
-    // Reflections need source rows above the view, measured about the base.
-    if (direct && (sy < 0 || sy >= view.rows)) continue;
-    if (reflected && (by - c.dy + 1 < 0 || by - c.dy + 1 >= view.rows)) continue;
-    const dx = c.dx + shift;
-    const sx = bx + dx;
-    if ((direct || reflected) && (sx < -1 || sx >= view.cols + 1)) continue;
-    if (c.foliage && reveal && c.g < LAYER) {
-      const nx = (Math.floor(prop.x) + dx - reveal.x) / reveal.rx;
-      const ny = (Math.floor(prop.y) + c.dy - reveal.y) / reveal.ry;
-      const d2 = nx * nx + ny * ny;
-      if (d2 < 1 && hash2(c.dx, c.dy, prop.textureSeed) < (1 - d2) * 0.93) continue;
-    }
-    if (c.g < LAYER) lastHidden = false;
-    if (!c.foliage) {
-      write(r, sx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
       continue;
     }
-    const flutter = sin * c.phaseCos + cos * c.phaseSin;
-    const light = 1 + flutter * 0.035 + sheen;
-    const ch = flutter > 0.94 && gust > 0.58 && c.rustle !== undefined ? c.rustle | (c.g & LAYER) : c.g;
-    write(r, sx, sy, ch, c.r * light, c.gg * light, c.b * light, by, c.br, c.bgG, c.bb);
+    for (let i = row.start; i < row.end; i++) {
+      const c = cells[i];
+      let shift = 0;
+      if (c.g >= LAYER && c.dx === lastDx && c.dy === lastDy) {
+        if (lastHidden) continue;
+        shift = lastShift;
+      } else {
+        lastDx = c.dx;
+        lastDy = c.dy;
+        lastHidden = true;
+        if (c.foliage) shift = Math.round(sway * c.flex);
+        lastShift = shift;
+      }
+      const sy = by + c.dy;
+      // Reject invisible rows before calculating foliage lighting or texture.
+      // Reflections need source rows above the view, measured about the base.
+      if (direct && (sy < 0 || sy >= view.rows)) continue;
+      if (reflected && (by - c.dy + 1 < 0 || by - c.dy + 1 >= view.rows)) continue;
+      const dx = c.dx + shift;
+      const sx = bx + dx;
+      if ((direct || reflected) && (sx < -1 || sx >= view.cols + 1)) continue;
+      if (c.foliage && reveal && c.g < LAYER) {
+        const nx = (Math.floor(prop.x) + dx - reveal.x) / reveal.rx;
+        const ny = (Math.floor(prop.y) + c.dy - reveal.y) / reveal.ry;
+        const d2 = nx * nx + ny * ny;
+        if (d2 < 1 && hash2(c.dx, c.dy, prop.textureSeed) < (1 - d2) * 0.93) continue;
+      }
+      if (c.g < LAYER) lastHidden = false;
+      if (!c.foliage) {
+        write(r, sx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
+        continue;
+      }
+      const flutter = sin * c.phaseCos + cos * c.phaseSin;
+      const light = 1 + flutter * 0.035 + sheen;
+      const ch = flutter > 0.94 && gust > 0.58 && c.rustle !== undefined ? c.rustle | (c.g & LAYER) : c.g;
+      write(r, sx, sy, ch, c.r * light, c.gg * light, c.b * light, by, c.br, c.bgG, c.bb);
+    }
   }
 }
 

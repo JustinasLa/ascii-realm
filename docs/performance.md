@@ -1,100 +1,82 @@
-# Phone performance
+# Full-detail performance pass
 
-Measured on 2026-10-13 against `97c6d72` on `feat/19-taller-grass`.
-The test machine was a Ryzen 7 3800X, Windows, Node 24.15.0, with Chrome
-155.0.8059.39 and an RTX 2070 SUPER for browser checks.
+The optimizations retain the UI overhaul, layered glyphs, grass density,
+reflections, weather, character supersampling, controls, audio, inventory,
+scenery editing, and multiplayer. They do not change zoom, resolution budgets,
+frame caps, effect counts, or animation rates.
 
-## Repeatable CPU benchmark
+- Glyph coverage is uploaded as R8 instead of RGBA. The shader already reads
+  only red, so the same coverage and mipmaps use 75% less texture storage.
+- Scenery keeps a weakly cached index of contiguous sprite rows. Rows outside
+  the view or without any reflected water are rejected before cell shading;
+  cell order, layers, tree sway, and player reveal stay unchanged.
+- Overlapping reflections reuse the exact same wave noise at each water cell.
+  Grass and water reuse noise lattice corners along a row, and sky stars reuse
+  their fixed positions. All caches remain bounded or have weak owners.
+- The character submits its current pose and a pixel-buffer copy early in the
+  frame, while CPU terrain work runs. Cells are read back later in the same
+  frame. No previous-frame pose or extra input latency is introduced.
 
-`npm run bench` warms each scene for 45 frames and samples 180 frames. Both
-revisions run the same scene sizes, seed, animation, grass contacts, ground,
-sky, sprite and reflection passes. These times exclude WebGL submission,
-fireflies, dust, browser layout and startup; they are not phone FPS estimates.
+## Measurements
 
-| Scene, 8 px cells | Cells | Before median | After median | Speedup | After p95 |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Phone portrait, 390 × 844 | 8,881 | 9.28 ms | 1.89 ms | 4.9× | 2.44 ms |
-| Phone landscape, 844 × 390 | 8,850 | 9.92 ms | 1.94 ms | 5.1× | 2.63 ms |
-| Desktop, 1280 × 800 | 27,068 | 19.04 ms | 3.89 ms | 4.9× | 4.78 ms |
-| Meadow, seed 19 | 8,881 | 9.31 ms | 2.21 ms | 4.2× | 2.55 ms |
+Recorded on 2026-10-14 using Chromium 155, Windows, a Ryzen 7 3800X, and a
+GeForce RTX 2070 SUPER. This is the real game at its stationary spawn, with the
+3D character loaded, 1280×800 backing pixels, and 27,068 cells. Automatic pixel
+scaling was locked to 1 for both builds, including under CPU throttling.
+Each sample follows warmup and records 120 frames.
 
-To compare another checkout without modifying it:
+The baseline is the completed UI/detail merge at `da01b94`. The optimized
+checkout also includes main's subsequent unloaded-ground fix from `5db0cc5`.
+These timings and atlas dimensions describe that measured snapshot, before
+the later ASCII artwork and campfire changes in `719223a` and `6738466`.
+The optimization is rebased onto those changes; their frame times may differ.
+
+| CPU throttle | Median work, before → after | P95 work, before → after | FPS, before → after |
+| --- | --- | --- | --- |
+| 1× | 12.1 → 10.7 ms | 13.7 → 14.4 ms | 60.0 → 60.0 |
+| 2× | 31.3 → 27.4 ms | 33.1 → 29.0 ms | 30.6 → 34.8 |
+| 4× | 64.2 → 57.4 ms | 68.5 → 62.0 ms | 14.9 → 16.5 |
+| 6× | 103.8 → 91.5 ms | 118.5 → 102.8 ms | 9.1 → 10.3 |
+
+The atlas is 1344×5642 pixels. Its base texture drops from 30,331,392 to
+7,582,848 bytes (28.9 to 7.2 MiB); mipmap storage falls by the same proportion.
+The browser compared rendered RGBA and R8 images at cell heights 6, 8, and 24:
+zero differing pixel channels. Buffered and direct character readback also
+produced identical cells.
+
+CPU throttling does not emulate an old GPU or test a specific low-end device.
+The 4× and 6× stress cases remain below 30 FPS at full-screen detail. These
+results show lower work and memory use, rather than a guarantee that every old
+PC will run smoothly. The normal-speed P95 also varies between runs.
+
+Raw samples and browser assertions are in [performance.json](performance.json).
+The earlier grass-only measurements remain in the
+[archived phone report](performance-phone-2026-10-13.md); its adaptation and
+cell budgets describe that older build, rather than the current game.
+
+## Reproduce
+
+The normal application remains build-free. Run `npm ci`, then `npm start` to
+serve the game with multiplayer. Run `npm test` for the application and
+rendered-cell regression suite.
+
+For the optional browser checks, install Puppeteer in a separate tooling
+folder and set `PUPPETEER_MODULE` to its absolute module directory. This keeps
+browser tooling out of the game's runtime dependencies. Set `GAME_URL` to the
+running optimized server and optionally `GAME_BASELINE_URL` to a server for a
+baseline checkout, then run:
 
 ```sh
-node bench/run.mjs /path/to/other/checkout
-```
-
-The test suite also compares 16 complete foreground/background/terrain buffers
-against snapshots captured from the original commit. Movement, sword swings,
-jumping, trampled grass and reflections remain byte-for-byte identical at the
-same view and time.
-
-## Full browser loop
-
-Chrome mobile emulation used a 390 × 844 viewport, touch input and DPR 3.
-The game renders at DPR 1.5: 585 × 1266 backing pixels, 75% fewer pixels than
-the original full-DPR buffer, with the same world cell size.
-
-| CPU throttle | Average FPS | p95 frame interval | Median CPU work | Visible cells |
-| --- | ---: | ---: | ---: | ---: |
-| 1× | 60.0 | 16.8 ms | 2.4 ms | 8,881 |
-| 4× | 60.0 | 16.9 ms | 10.9 ms | 8,881 |
-| 6×, after adaptation | 58.7 | 16.8 ms | 11.9 ms | 3,484 |
-
-Each row samples 180 rendered frames after warmup (10 seconds at 6× to let
-adaptation settle). An additional 360-frame running, jumping and combat check
-at 4× covered 360 world columns and reached 58.2 fps, with a 16.8 ms p95 frame
-interval. Chunk entry produced an occasional 66.8 ms interval; generation is
-still synchronous. That run retained 52 chunks, below the phone limit of 64.
-
-These are desktop Chrome measurements with CPU throttling, not physical-device
-results. Phone GPU performance, thermal throttling and iOS Safari remain
-unverified on hardware.
-
-The browser smoke check verifies:
-
-- 320 × 568, 375 × 667, 390 × 844 and 844 × 390 layouts, without overflow or
-  clipped controls, with touch targets at least 44 px in both dimensions.
-- Simultaneous running, jumping and sword input, then touch cancellation
-  clearing all held actions and movement.
-- Zoom after automatic cell-budget reduction, with no WebGL errors.
-- Background tabs stop simulation and rendering; returning resumes correctly.
-- Losing and restoring the WebGL context recreates the renderer and resumes
-  gameplay. No JavaScript errors were reported.
-
-To run it, serve this checkout on port 8000, then in another terminal use
-Node 22.12+ and the optional browser dependency (the game itself has none):
-
-```sh
-npm install --no-save --package-lock=false puppeteer@25.13.0
+npm run bench:low-end
 npm run test:browser
 ```
 
-`GAME_URL` overrides `http://localhost:8000/?debug`. `PUPPETEER_MODULE` may point
-to an existing Puppeteer installation. `BENCH_OUTPUT` chooses the result folder;
-by default JSON measurements and screenshots go to `ascii-realm-browser-check`
-inside the system temporary directory. FPS is reported rather than asserted
-because it depends on the machine running the check.
+`BENCH_OUTPUT` selects the results directory. The low-end benchmark fixes
+detail and resolution, tests 1×/2×/4×/6× CPU throttling, compares atlas pixels
+and character cells, and checks movement, jumping, torches, and inventory.
+The existing browser suite checks touch layouts, simultaneous touch actions,
+zoom, hidden-tab suspension, and WebGL context recovery.
 
-## What changed
-
-- Immutable chunks cache sparse grass roots, height/variation values and static
-  terrain shading. Only water and dew need terrain animation each frame.
-- Reusable contact fields replace per-blade and per-stroke string/Map lookups.
-  Footprint recovery, species, wind and painter order remain intact.
-- A summed water mask culls reflections before expensive drawing. Ripple
-  displacement is calculated once per row. Offscreen props are skipped and
-  their glyphs are baked only when first visible.
-- The warrior filters candidate shapes once per cell, keeps the original
-  twelve coverage samples, and reuses its shaded raster for its reflection.
-- Phones cap DPR at 1.5, backing pixels at 1.2 million and the initial cell
-  budget at 14,000. Sustained CPU work above 12 ms reduces the cell budget,
-  down to 3,500; recovery uses an eight-second quiet period. This changes the
-  visible area by enlarging cells without thinning or disabling tall grass.
-- World chunks use bounded least-recently-used eviction: 64 on phones and
-  128 on desktop. Terrain and props regenerate deterministically on return.
-- Rendering is capped at 60 Hz, including on high-refresh displays, and
-  suspends when hidden or while the WebGL context is lost.
-
-The smaller backing buffer follows [MDN's WebGL performance guidance](https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/WebGL_best_practices).
-Touch ownership and cancellation follow the [Pointer Events model](https://developer.mozilla.org/en-US/docs/Web/API/Pointer_events).
+The dependency-free CPU scene benchmark remains available with `npm run
+bench`; `node bench/run.mjs path-to-other-checkout` measures another checkout.
+That synthetic scene uses the procedural character and is not a game-FPS test.

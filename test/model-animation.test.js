@@ -122,3 +122,77 @@ test('weapons ride in the hand when drawn and on the back or hip when put away',
   model.update(1 / 60, player);
   assert.equal(model.armory.active, null);
 });
+function fixture(buffered = false) {
+  const calls = [];
+  const gl = { RGBA: 1, UNSIGNED_BYTE: 2,
+    flush() { calls.push('flush'); },
+    readPixels(x, y, width, height, format, type, pixels) {
+      calls.push('read');
+      // One fully covered source cell, including the bottom-up row order.
+      pixels.fill(0);
+      for (let y = 0; y < 6; y++) for (let x = 0; x < 4; x++) {
+        pixels.set([100, 140, 180, 255], ((height - y - 1) * width + x) * 4);
+      }
+    } };
+  if (buffered) {
+    const read = gl.readPixels;
+    gl.createBuffer = () => ({});
+    gl.isBuffer = value => Boolean(value);
+    gl.bindBuffer = () => {};
+    gl.bufferData = () => calls.push('allocate');
+    gl.readPixels = () => calls.push('queue');
+    gl.getBufferSubData = (target, offset, pixels) => read(0, 0, 144, 312, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  }
+  const model = Object.assign(Object.create(ModelFigure.prototype), {
+    pixels: new Uint8Array(36 * 4 * 52 * 6 * 4), waterDepth: 0,
+    waterClipping: [{}], scene: {},
+    camera: { updateProjectionMatrix() {} },
+    renderer: { render() { calls.push('render'); }, getContext() { return gl; } },
+  });
+  return { model, calls };
+}
+
+test('early GPU submission and immediate rasterisation produce identical cells without a second render', () => {
+  const { model, calls } = fixture();
+  const view = { x0: -20, y0: -60 };
+  const direct = structuredClone(model.rasterise(view, 1.25, -2.75));
+  assert.equal(direct.length, 1);
+  assert.deepEqual(calls, ['render', 'flush', 'read']);
+  calls.length = 0;
+  model.renderPose(1.25, -2.75);
+  assert.deepEqual(calls, ['render', 'flush']);
+  assert.deepEqual(model.rasterise(view, 1.25, -2.75), direct);
+  assert.deepEqual(calls, ['render', 'flush', 'read']);
+  assert.equal(model.posePending, false);
+  model.rasterise(view, 1.25, -2.75);
+  assert.deepEqual(calls.slice(3), ['render', 'flush', 'read'], 'a consumed pose cannot become a stale frame');
+});
+
+test('moving after early submission renders the current position and preserves water clipping', () => {
+  const { model, calls } = fixture();
+  model.waterDepth = 0.2;
+  model.renderPose(1.2, 3.4);
+  assert.equal(model.renderer.clippingPlanes, model.waterClipping);
+  const cells = model.rasterise({ x0: -20, y0: -60 }, 2.2, 4.4);
+  assert.equal(cells.length, 1);
+  assert.deepEqual(calls, ['render', 'flush', 'render', 'flush', 'read']);
+  assert.equal(model.renderedX, 2.2);
+  assert.equal(model.renderedY, 4.4);
+  model.waterDepth = 0;
+  model.renderPose(2.2, 4.4);
+  assert.deepEqual(model.renderer.clippingPlanes, []);
+});
+
+test('pixel-buffer readback queues the copy before CPU work, reuses its storage and preserves all cells', () => {
+  const direct = fixture();
+  const buffered = fixture(true);
+  const view = { x0: -20, y0: -60 };
+  const expected = direct.model.rasterise(view, 1.25, -2.75);
+  buffered.model.renderPose(1.25, -2.75);
+  assert.deepEqual(buffered.calls, ['render', 'allocate', 'queue', 'flush']);
+  assert.deepEqual(buffered.model.rasterise(view, 1.25, -2.75), expected);
+  buffered.calls.length = 0;
+  buffered.model.renderPose(1.25, -2.75);
+  buffered.model.rasterise(view, 1.25, -2.75);
+  assert.deepEqual(buffered.calls, ['render', 'queue', 'flush', 'read']);
+});

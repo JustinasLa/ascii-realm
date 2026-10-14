@@ -21,15 +21,20 @@ export function reflector(t, view) {
   let sums;
   let shifts;
   let lights;
+  let noise;
   function prepare(r) {
     if (prepared === r) return;
     let buffer = buffers.get(r);
     const size = (r.cols + 1) * (r.rows + 1);
     if (!buffer || buffer.sums.length !== size || buffer.shifts.length !== r.rows) {
-      buffer = { sums: new Uint32Array(size), shifts: new Int8Array(r.rows), lights: new Float32Array(r.rows) };
+      buffer = { sums: new Uint32Array(size), shifts: new Int8Array(r.rows), lights: new Float32Array(r.rows),
+        noise: new Float64Array(r.cols * r.rows) };
       buffers.set(r, buffer);
     }
-    ({ sums, shifts, lights } = buffer);
+    ({ sums, shifts, lights, noise } = buffer);
+    // Every overlapping sprite samples the same swell at a water cell.
+    // Resolve it lazily once this frame, retaining full numeric precision.
+    noise.fill(NaN);
     sums.fill(0, 0, r.cols + 1);
     const stride = r.cols + 1;
     for (let y = 0; y < r.rows; y++) {
@@ -61,7 +66,8 @@ export function reflector(t, view) {
     if (r.mask[m] !== WATER || FLOATING[r.glyphAt(m)]) return;
 
     // Drifting gaps where the swell breaks the image up into slivers.
-    const n = valueNoise((tx + view.x0) * 0.12 + t * 0.35, wy * 0.9, 5);
+    let n = noise[m];
+    if (Number.isNaN(n)) noise[m] = n = valueNoise((tx + view.x0) * 0.12 + t * 0.35, wy * 0.9, 5);
     if (n < 0.24) return;
 
     // Dimmer the further the reflected point is from the mirror line, a

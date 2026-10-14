@@ -347,6 +347,7 @@ export class ModelFigure {
 
   // Sets the pose for this frame from the player's state.
   update(dt, p) {
+    this.posePending = false;
     const cb = p.combat;
     // The legs follow the ground actually covered this frame: as soon as the
     // body stops, so do they, rather than running on in place while a
@@ -653,13 +654,11 @@ export class ModelFigure {
     return { x: hand.x * SCALE / ASPECT, y: hand.z * SCALE * TILT, h: hand.y * SCALE * COS };
   }
 
-  // Renders the model for the feet at world cell (x, y) and turns the image
-  // into cells: { sx, sy, g, r, gg, b, br, bgG, bb } relative to the view.
-  rasterise(view, x, y) {
+  // Submit this frame's pose before the CPU draws the terrain. Flushing
+  // starts the GPU now, so its work can overlap the rest of this frame.
+  renderPose(x, y) {
     const cx0 = Math.floor(x) - (COLS >> 1);
     const cy0 = Math.floor(y) - FEET_ROW;
-    const w = COLS * SX;
-    const h = ROWS * SY;
     const widthM = (COLS * ASPECT) / SCALE;
     const heightM = ROWS / SCALE;
     // Offset the frustum so the feet land exactly at their fractional cell.
@@ -675,7 +674,38 @@ export class ModelFigure {
     this.renderer.clippingPlanes = this.waterDepth > 0.001 ? this.waterClipping : [];
     this.renderer.render(this.scene, cam);
     const gl = this.renderer.getContext();
-    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
+    if (gl.getBufferSubData) {
+      // Queue the GPU-to-buffer copy too. Reading straight into a JS array
+      // here would wait for the GPU before any terrain work could begin.
+      if (!this.pixelBuffer || !gl.isBuffer(this.pixelBuffer)) {
+        this.pixelBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pixelBuffer);
+        gl.bufferData(gl.PIXEL_PACK_BUFFER, this.pixels.byteLength, gl.STREAM_READ);
+      } else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pixelBuffer);
+      gl.readPixels(0, 0, COLS * SX, ROWS * SY, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    }
+    gl.flush();
+    this.renderedX = x;
+    this.renderedY = y;
+    this.posePending = true;
+  }
+
+  // Read the same frame's pose and turn it into cells. A standalone caller
+  // still gets a fresh render; no previous-frame image or animation is used.
+  rasterise(view, x, y) {
+    if (!this.posePending || this.renderedX !== x || this.renderedY !== y) this.renderPose(x, y);
+    this.posePending = false;
+    const cx0 = Math.floor(x) - (COLS >> 1);
+    const cy0 = Math.floor(y) - FEET_ROW;
+    const w = COLS * SX;
+    const h = ROWS * SY;
+    const gl = this.renderer.getContext();
+    if (gl.getBufferSubData) {
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pixelBuffer);
+      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.pixels);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    } else gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
     const px = this.pixels;
 
     const cells = [];
