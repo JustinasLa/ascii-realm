@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
-import { dg, GLYPH_COUNT, GLYPH_MASK, LAYER } from '../src/render/glyphs.js';
+import { dg, GLYPH_COUNT, GLYPH_MASK, GLYPHS, LAYER } from '../src/render/glyphs.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from '../src/world/leaves.js';
 import { blocks, drawProp, generateProps, nearWater, propInView, treeSpeciesAt } from '../src/world/props.js';
 import { reflector } from '../src/world/reflection.js';
@@ -106,6 +106,10 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
       assert.ok(cell.dy >= prop.bounds.minY && cell.dy <= prop.bounds.maxY);
       assert.ok(realGlyph(cell.g), `${species} glyph`);
       assert.ok(realGlyph(cell.rustle), `${species} rustle glyph`);
+      if (cell.foliage) {
+        assert.ok((cell.g & GLYPH_MASK) < GLYPHS.length, `${species} leaves use fine characters`);
+        assert.ok((cell.rustle & GLYPH_MASK) < GLYPHS.length, `${species} rustles keep fine characters`);
+      }
       for (const color of [cell.r, cell.gg, cell.b]) {
         assert.ok(Number.isFinite(color) && color >= 0 && color <= 255, `${species} color`);
       }
@@ -123,17 +127,17 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
 
 test('row culling preserves complete seeded sprites across seasons and growth stages', () => {
   // Fingerprints matching a full-rectangle bake (no row culling) of the
-  // character trees. Cover negative coordinates, thin/thick trunks, and
+  // fine character trees. Cover negative coordinates, thin/thick trunks, and
   // both caller-supplied and fallback random streams.
   const fixtures = [
     { seed: 1, x: -100.5, y: 300.5, randomSeed: 123456,
-      expected: 'd49719599b824b9373b92870f2faef12dcccb7b8297d97d9f048f0042dd44ab0' },
+      expected: '743b2db2226bbe8f56b7349ec7443dc2728169b9f991f8736dbc8b72e39b9f3b' },
     { seed: 42, x: 100.5, y: -300.5, girth: 0.6, randomSeed: 42,
-      expected: '28d306db06cce1ee49934d9169330220fd26a29de74d08d130a9da33efc0fbac' },
+      expected: '4b780db9f61bf5ed0820dc3320e8e99c78f70ed40e82ba4f6faabdb6a477382a' },
     { seed: 9281, x: 63.5, y: 24.5, girth: 2, randomSeed: 9281,
-      expected: '711b9658da1ee1233e71ef97caee516baec519996cc3e7b4014d6cc688920645' },
+      expected: 'ed872e6064ddb925959a8fa86b45d14107f7d023fc7c10b0f144022d842d0bc3' },
     { seed: 4294967295, x: -63.5, y: -24.5,
-      expected: 'd7fc60020f20f35cec9d5bf61e376841a885dbf85d76047b54eb0d5f0c9923b9' },
+      expected: '2a04de0d50e61c2bf43846cc1df486a662fe251be212aecd68f4a314729917fe' },
   ];
   for (const { expected, randomSeed, ...options } of fixtures) {
     const digest = createHash('sha256');

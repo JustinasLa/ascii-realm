@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ASCII Realm · Trees</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #c5d2d8; background: #0a0914; font: 12px Consolas, monospace; }
+    header { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #394348; background: #0c1017; }
+    strong { margin-right: auto; font-size: 13px; }
+    label { display: flex; align-items: center; gap: 6px; }
+    select, input, button, a { font: inherit; color: inherit; }
+    select, input[type=number], button, a { padding: 5px 7px; border: 1px solid #647279; background: #10171d; }
+    input[type=number] { width: 66px; }
+    input[type=range] { width: 100px; accent-color: #b5c8cc; }
+    button, a { cursor: pointer; text-decoration: none; }
+    button:hover, a:hover { background: #283239; }
+    canvas { display: block; width: 100%; }
+    #labels { position: fixed; bottom: 14px; left: 0; right: 0; display: flex; justify-content: space-around; pointer-events: none; color: #8fa6ad; }
+    #status { position: fixed; inset: 40% 16px auto; text-align: center; }
+  </style>
+</head>
+<body>
+  <header>
+    <strong>ASCII REALM / TREES</strong>
+    <label>View <select id="view"><option value="forest">Forest</option><option value="whole">Whole trees</option></select></label>
+    <label>Species <select id="species">
+      <option value="mixed">Mixed grove</option>
+      <option>oak</option><option>birch</option><option>pine</option><option>spruce</option>
+      <option>acacia</option><option>jungle</option><option>cherry</option><option>willow</option>
+    </select></label>
+    <label>Season <select id="season"><option>summer</option><option>spring</option><option>autumn</option><option>winter</option></select></label>
+    <label>Seed <input id="seed" type="number" min="1" max="99999" value="42"></label>
+    <label>Zoom <input id="zoom" type="range" min="4.5" max="12" step="0.1" value="8"></label>
+    <button id="fit" type="button">Fit trees</button>
+    <a href="../?seed=1">Play game</a>
+  </header>
+  <canvas id="trees" aria-label="Animated tree preview"></canvas>
+  <div id="labels"></div>
+  <p id="status">Growing the grove…</p>
+  <script type="module">
+    import { buildAtlas } from '../src/render/glyphs.js';
+    import { AsciiRenderer } from '../src/render/renderer.js';
+    import { makeTree } from '../src/world/trees.js';
+    import { drawProp } from '../src/world/props.js';
+    import { mulberry32 } from '../src/core/rng.js';
+    import { ASPECT } from '../src/world/world.js';
+
+    const canvas = document.getElementById('trees');
+    const header = document.querySelector('header');
+    const species = document.getElementById('species');
+    const mode = document.getElementById('view');
+    const season = document.getElementById('season');
+    const seed = document.getElementById('seed');
+    const zoom = document.getElementById('zoom');
+    const labels = document.getElementById('labels');
+    const status = document.getElementById('status');
+    let renderer;
+    let trees = [];
+    let height = 1;
+    let animation;
+
+    function resize() {
+      height = Math.max(240, innerHeight - header.getBoundingClientRect().height);
+      if (mode.value === 'whole' && trees.length) {
+        height = Math.max(height, (Math.max(...trees.slice(0, 3).map(t => t.height)) + 14) * 4.5);
+      }
+      canvas.style.height = `${height}px`;
+      renderer.resize(innerWidth, height, Math.min(devicePixelRatio || 1, 2), Number(zoom.value) * ASPECT, Number(zoom.value));
+    }
+
+    function grow() {
+      const n = Math.max(1, Math.min(99999, Math.trunc(Number(seed.value) || 42)));
+      seed.value = n;
+      const kinds = species.value === 'mixed' ? ['oak', 'birch', 'pine', 'pine', 'birch', 'oak', 'spruce'] : Array(7).fill(species.value);
+      trees = kinds.map((kind, i) => makeTree(i * 137, 0, mulberry32(n + i * 199),
+        { species: kind, season: season.value, seed: n, girth: [0.8, 1, 1.4, 0.65, 0.8, 1.1, 0.6][i] }));
+      labels.replaceChildren(...kinds.slice(0, 3).map((kind) => {
+        const label = document.createElement('span');
+        label.textContent = kind;
+        return label;
+      }));
+    }
+
+    function fit() {
+      mode.value = 'whole';
+      const tallest = Math.max(...trees.slice(0, 3).map(t => t.height));
+      zoom.value = Math.max(4.5, Math.min(12, (height - 34) / (tallest + 4)));
+      resize();
+    }
+
+    function render(now) {
+      renderer.clear();
+      const view = { x0: 0, y0: 0, cols: renderer.cols, rows: renderer.rows };
+      const forest = mode.value === 'forest';
+      labels.style.display = forest ? 'none' : 'flex';
+      const placements = forest ? [0.2, 0.5, 0.83, 0.04, 0.33, 0.65, 0.98] : [1 / 6, 0.5, 5 / 6];
+      const props = trees.slice(0, placements.length).map((tree, i) => ({ ...tree,
+        x: Math.floor(renderer.cols * placements[i]),
+        y: forest ? (i < 3 ? renderer.rows + 34 + i * 5 : renderer.rows - 20 + (i % 3) * 6) : renderer.rows - 9 }));
+      props.sort((a, b) => a.y - b.y).forEach(tree => drawProp(renderer, view,
+        tree, undefined, now / 1000, null, Number(seed.value)));
+      renderer.draw();
+    }
+
+    function draw(now) {
+      render(now);
+      animation = requestAnimationFrame(draw);
+    }
+
+    try {
+      renderer = new AsciiRenderer(canvas, buildAtlas('"Cascadia Mono", Consolas, Menlo, monospace'));
+      resize();
+      grow();
+      status.hidden = true;
+      window.treePreview = { render, renderer };
+      for (const control of [species, season, seed]) control.addEventListener('change', () => { grow(); if (mode.value === 'whole') fit(); });
+      mode.addEventListener('change', () => { if (mode.value === 'whole') fit(); else { zoom.value = 8; resize(); } });
+      zoom.addEventListener('input', resize);
+      document.getElementById('fit').addEventListener('click', fit);
+      addEventListener('resize', resize);
+      document.addEventListener('visibilitychange', () => {
+        cancelAnimationFrame(animation);
+        if (!document.hidden) animation = requestAnimationFrame(draw);
+      });
+      animation = requestAnimationFrame(draw);
+    } catch (error) {
+      status.textContent = `Could not draw the grove: ${error.message}`;
+      console.error(error);
+    }
+  </script>
+</body>
+</html>
