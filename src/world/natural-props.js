@@ -1,9 +1,15 @@
+import { hash2 } from '../core/rng.js';
+import { valueNoise } from '../core/noise.js';
+import { dg } from '../render/glyphs.js';
+import { ringGlyph, Sprite } from './prop-art.js';
 import { ASPECT } from './world.js';
 
 // Geometry is measured in physical row units, as in props.js. Random choices
 // happen before sampling, so supersampling and moving a prop never change it.
+// Wood and needles are sampled as materials (see prop-art.js); small plants
+// are composed glyph by glyph, a flower head with its eye layered over it.
 const clamp = (n) => Math.max(0, Math.min(1, n));
-const surface = (l, c) => ({ l: clamp(l), c });
+const shade = (c, k) => c.map((v) => v * k);
 
 function ellipse(px, py, cx, cy, rx, ry) {
   const nx = (px - cx) / rx;
@@ -18,20 +24,16 @@ function lineDistance(px, py, ax, ay, bx, by) {
   return { t, d: Math.hypot(px - ax - vx * t, py - ay - vy * t) };
 }
 
-function leafSample(px, py, leaf) {
-  const dx = px - leaf.x;
-  const dy = py - leaf.y;
-  const nx = (dx * leaf.cos + dy * leaf.sin) / leaf.rx;
-  const ny = (-dx * leaf.sin + dy * leaf.cos) / leaf.ry;
-  return nx * nx + ny * ny <= 1 ? ny : null;
-}
+const MOSS = [70, 118, 86];
+const FUNGUS = [168, 146, 108];
+const pickGlyph = (prefix, n, a, b, seed) => dg(`${prefix}.${Math.floor(hash2(a, b, seed) * n)}`);
 
 function makePine(x, y, rand, seed, bake) {
   const height = 27 + rand() * 7;
   const radius = 6.8 + rand() * 1.8;
   const tint = rand();
   const foliage = [34 + tint * 13, 103 + tint * 26, 76 + tint * 14];
-  const bark = [103, 74, 47];
+  const bark = [112, 82, 56];
   const canopy = height - 5;
   const layers = Array.from({ length: 5 }, (_, i) => ({
     top: -height + canopy * i * 0.16,
@@ -47,66 +49,96 @@ function makePine(x, y, rand, seed, bake) {
       if (py < layer.top || py > layer.bottom) continue;
       const t = (py - layer.top) / (layer.bottom - layer.top);
       const edge = layer.radius * t;
-      const jag = 0.13 * Math.sin(py * 3.2 + layer.phase);
+      const jag = 0.35 * Math.sin(py * 3.2 + layer.phase) + 0.25 * Math.sin(px * 2.3 + layer.phase);
       const nx = (px - layer.cx) / Math.max(0.1, edge);
-      if (Math.abs(px - layer.cx) > edge + jag) continue;
-      const needles = 0.045 * Math.sin(px * 8 + py * 2.7 + layer.phase);
-      const hem = t > 0.86 ? -0.17 : 0;
-      return surface(0.64 - nx * 0.19 - t * 0.15 + needles + hem, foliage);
+      if (Math.abs(px - layer.cx) > edge + jag * t) continue;
+      const hem = t > 0.84 ? -0.22 : 0;
+      return { m: 'needle', l: clamp(0.62 - nx * 0.25 - t * 0.2 + hem), c: foliage };
     }
     const trunkWidth = 0.68 + (py + 9) * 0.025;
     if (py >= -10 && Math.abs(px) <= trunkWidth) {
-      return surface(0.62 - px * 0.19 + 0.05 * Math.sin(px * 12), bark);
+      return { m: 'bark', l: clamp(0.62 - px / trunkWidth * 0.4), c: bark };
     }
     return null;
   };
   return {
     kind: 'pine', x, y, footW: 1.8, footH: 1.1,
-    cells: bake(Math.ceil((radius + 0.4) / ASPECT), -Math.ceil(height), 0, sample, seed),
+    cells: bake(Math.ceil((radius + 0.8) / ASPECT), -Math.ceil(height), 0, sample, seed,
+      { shadow: { rx: radius * 0.7, ry: 1.2, ox: 1.5 } }),
   };
 }
 
+// An old weathered stump: a sawn top with growth rings and drying checks,
+// furrowed bark carrying moss on its shaded side and a fungus bracket,
+// roots running into the ground.
 function makeStump(x, y, rand, seed, bake) {
   const radius = 2.4 + rand() * 1.1;
   const height = 4.5 + rand() * 1.9;
   const topY = -height + 1.05;
   const topRy = 1.15 + rand() * 0.3;
-  const phase = rand() * Math.PI * 2;
-  const bark = [115, 79, 48];
-  const cut = [194, 153, 92];
-  const roots = [-0.85, 0.85].map((side) => ({
-    ax: side * radius * 0.55, ay: -2.1,
-    bx: side * radius * 1.27, by: -0.35,
+  const pith = [(rand() - 0.5) * 0.4, (rand() - 0.5) * 0.3];
+  const bark = [118, 84, 54];
+  const cut = [190, 152, 98];
+  const checks = [rand() * Math.PI * 2, rand() * Math.PI * 2];
+  const fungus = { x: radius * (0.3 + rand() * 0.5), y: topY + 1.6 + rand() * (height - 3.2) };
+  const mossSide = 0.35 + rand() * 0.3;
+  const roots = [-0.85, 0.85, rand() < 0.5 ? -0.3 : 0.3].map((side) => ({
+    ax: side * radius * 0.55, ay: -1.9,
+    bx: side * radius * 1.35, by: -0.25,
   }));
   const sample = (px, py) => {
     if (py > 0) return null;
     const top = ellipse(px, py, -0.12, topY, radius, topRy);
     if (top.d2 <= 1) {
       const r = Math.sqrt(top.d2);
-      const ring = Math.sin(r * 27 + phase + top.nx * 0.6);
-      const edge = r > 0.86;
-      return surface(edge ? 0.41 : 0.77 - top.nx * 0.1 - top.ny * 0.1 + ring * 0.11, edge ? bark : cut);
+      if (r > 0.86) return { m: 'bark', l: 0.75 - top.nx * 0.2, c: bark };
+      const ux = top.nx - pith[0];
+      const uy = top.ny - pith[1];
+      const s = { m: 'cut', l: clamp(0.78 - top.nx * 0.12 - top.ny * 0.1), c: cut,
+        g: ringGlyph(-ux, -uy, seed, Math.floor(px * 2), Math.floor(py * 2)) };
+      const angle = Math.atan2(uy, ux);
+      for (const a of checks) {
+        const off = Math.abs(((angle - a + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+        if (off < 0.22 && r > 0.3) s.acc = { g: dg(`props.fissure.${Math.abs(Math.cos(a)) > 0.7 ? 0 : 2}.0`), c: [76, 52, 34] };
+      }
+      return s;
     }
     if (py >= topY && py <= -0.2) {
       const t = (py - topY) / -topY;
       const rx = radius * (0.92 + t * 0.07);
       if (Math.abs(px) <= rx) {
-        const furrow = Math.sin(px * 5.7 + 0.18 * Math.sin(py * 2) + phase);
-        return surface(0.55 - px / radius * 0.23 + furrow * 0.12, bark);
+        const s = { m: 'bark', l: clamp(0.62 - px / rx * 0.42), c: bark };
+        if (Math.hypot((px - fungus.x) * 0.8, py - fungus.y) < 0.75) {
+          s.acc = { g: dg(`props.fungus.${seed & 1 ? 1 : 2}`), c: FUNGUS };
+        } else if (px / rx > mossSide && valueNoise(px * 1.3, py * 0.8, seed + 3) < 0.55) {
+          s.acc = { g: pickGlyph('props.moss', 6, Math.floor(px * 2), Math.floor(py), seed), c: MOSS };
+        }
+        return s;
       }
     }
     for (const root of roots) {
       const line = lineDistance(px, py, root.ax, root.ay, root.bx, root.by);
-      if (line.d < 0.62 * (1 - line.t * 0.62)) return surface(0.42 - px / radius * 0.12, bark);
+      if (line.d < 0.62 * (1 - line.t * 0.62)) return { m: 'barkh', l: clamp(0.5 - px / radius * 0.18), c: bark };
     }
     return null;
   };
+  // Leaf litter and a toadstool or two at the foot.
+  const extras = [];
+  const w = Math.ceil(radius * 1.35 / ASPECT);
+  for (let i = 0; i < 3; i++) {
+    const dx = (rand() < 0.5 ? -1 : 1) * (w - Math.floor(rand() * 2));
+    extras.push({ dx, dy: rand() < 0.5 ? 0 : 1, g: dg(`leaflet.${Math.floor(rand() * 8)}`),
+      c: [128 + rand() * 40, 92 + rand() * 20, 52] });
+  }
   return {
     kind: 'stump', x, y, footW: radius / ASPECT, footH: 1.2,
-    cells: bake(Math.ceil(radius * 1.35 / ASPECT), -Math.ceil(height + topRy), 0, sample, seed),
+    cells: bake(w + 1, -Math.ceil(height + topRy), 0, sample, seed,
+      { extras, shadow: { rx: radius * 1.3, ry: 1, ox: radius * 0.35 } }),
   };
 }
 
+// A fallen log: horizontal bark with moss along its back, a sawn end
+// showing rings, a broken end, and a bracket fungus on its flank.
 function makeLog(x, y, rand, seed, bake) {
   const length = 10.5 + rand() * 4;
   const radius = 1.9 + rand() * 0.75;
@@ -114,182 +146,184 @@ function makeLog(x, y, rand, seed, bake) {
   const slope = (rand() - 0.5) * 0.1;
   const centerY = -radius - 0.65 - Math.abs(slope) * length / 2;
   const endX = length / 2;
-  const phase = rand() * Math.PI * 2;
-  const bark = [111, 78, 49];
-  const wood = [196, 156, 102];
-  const knotX = -length * (0.08 + rand() * 0.2);
+  const bark = [114, 82, 52];
+  const wood = [192, 154, 102];
+  const fungusX = -length * (0.1 + rand() * 0.3);
+  const mossStart = -endX + rand() * length * 0.4;
+  const mossEnd = mossStart + length * (0.3 + rand() * 0.4);
   const sample = (px, py) => {
     if (py > 0) return null;
     const localY = py - centerY - px * slope;
     const end = ellipse(px, localY, endX, 0, cutRx, radius);
     if (end.d2 <= 1) {
       const r = Math.sqrt(end.d2);
-      const ring = Math.sin(r * 25 + phase + end.ny * 0.4);
-      return surface(r > 0.85 ? 0.42 : 0.79 - end.nx * 0.14 - end.ny * 0.12 + ring * 0.11,
-        r > 0.85 ? bark : wood);
+      if (r > 0.85) return { m: 'bark', l: 0.45 - end.ny * 0.2, c: bark };
+      return { m: 'cut', l: clamp(0.8 - end.nx * 0.12 - end.ny * 0.12), c: wood,
+        g: ringGlyph(-end.nx, -end.ny, seed, Math.floor(px * 2), Math.floor(py * 2)) };
     }
     const left = ellipse(px, localY, -endX, 0, cutRx * 0.75, radius);
     if ((px < -endX || px > endX || Math.abs(localY) > radius) && !(px <= -endX && left.d2 <= 1)) return null;
     const ny = localY / radius;
-    const grain = Math.sin(localY * 8 + Math.sin(px * 0.8 + phase) * 0.65 + phase);
-    const knot = ellipse(px, localY, knotX, -0.15, 1.25, 0.6);
-    const knotShade = knot.d2 < 1 ? Math.sin(Math.sqrt(knot.d2) * 14) * 0.11 - 0.09 : 0;
-    return surface(0.61 - ny * 0.21 - px / length * 0.08 + grain * 0.095 + knotShade, bark);
+    const s = { m: 'barkh', l: clamp(0.66 - ny * 0.38 - px / length * 0.08), c: bark };
+    if (px < -endX + 0.3) s.m = 'char';
+    if (ny < -0.45 && px > mossStart && px < mossEnd && valueNoise(px * 1.1, py, seed + 7) < 0.65) {
+      s.acc = { g: pickGlyph('props.moss', 6, Math.floor(px * 2), Math.floor(py), seed), c: MOSS };
+    } else if (ny > -0.2 && ny < 0.5 && Math.abs(px - fungusX) < 0.9) {
+      s.acc = { g: dg('props.fungus.2'), c: FUNGUS };
+    }
+    return s;
   };
   return {
     kind: 'log', x, y, footW: (length / 2 + cutRx) / ASPECT, footH: 1.35,
-    cells: bake(Math.ceil((endX + cutRx) / ASPECT), -Math.ceil(radius * 2 + 1.5), 0, sample, seed),
+    cells: bake(Math.ceil((endX + cutRx) / ASPECT), -Math.ceil(radius * 2 + 1.5), 0, sample, seed,
+      { shadow: { rx: length / 2 + 1, ry: 1, ox: 0.8 } }),
   };
 }
 
-function makeFlowers(x, y, rand, seed, bake) {
-  const spread = 4.4 + rand() * 1.2;
-  const count = 5 + Math.floor(rand() * 3);
-  const palette = [[235, 99, 136], [245, 192, 70], [168, 120, 232], [121, 187, 245], [241, 221, 182]];
-  const paletteOffset = Math.floor(rand() * palette.length);
-  const flowers = [];
-  let height = 0;
+// Wild flowers in a loose patch of one or two kinds: stems with a leaf or
+// two, heads drawn as petals with a contrasting eye layered over them.
+const FLOWERS = [
+  { head: 'flower.ring5', eye: 'flower.eye', petal: [228, 104, 140], eyeC: [246, 210, 96] },
+  { head: 'flower.ring8', eye: 'flower.eye.big', petal: [236, 230, 212], eyeC: [240, 186, 64] },
+  { head: 'flower.ring6', eye: 'flower.eye', petal: [240, 196, 72], eyeC: [150, 92, 40] },
+  { head: 'flower.bell', eye: null, petal: [128, 148, 238] },
+  { head: 'flower.cup', eye: null, petal: [206, 90, 196] },
+  { head: 'flower.ring4', eye: 'flower.eye', petal: [170, 126, 232], eyeC: [250, 232, 150] },
+  { head: 'flower.small5', eye: 'flower.eye', petal: [244, 244, 236], eyeC: [236, 200, 90] },
+];
+
+function makeFlowers(x, y, rand) {
+  const spread = 4 + Math.floor(rand() * 4);
+  const count = 5 + Math.floor(rand() * 4);
+  const main = FLOWERS[Math.floor(rand() * FLOWERS.length)];
+  const second = FLOWERS[Math.floor(rand() * FLOWERS.length)];
+  const green = [70, 128, 66];
+  const sprite = new Sprite();
+  const heads = new Set();
   for (let i = 0; i < count; i++) {
-    const fx = (i / (count - 1) * 2 - 1) * spread + (rand() - 0.5) * 0.65;
-    const fy = -(4.2 + rand() * 3.5);
-    const size = 0.82 + rand() * 0.32;
-    const baseX = fx * 0.6;
-    const angle = rand() * Math.PI * 2;
-    const leaves = [-1, 1].map((side) => {
-      const a = side > 0 ? -0.55 : -2.55;
-      return { x: fx * 0.8 + side * 0.7, y: fy * 0.43 - 0.25,
-        rx: 1.15, ry: 0.37, cos: Math.cos(a), sin: Math.sin(a) };
-    });
-    flowers.push({ x: fx, y: fy, baseX, size, angle, leaves, color: palette[(paletteOffset + i) % palette.length] });
-    height = Math.max(height, -fy + size * 1.7);
+    let dx = Math.round((rand() * 2 - 1) * spread);
+    while (heads.has(dx)) dx += dx >= 0 ? 1 : -1;
+    heads.add(dx);
+    const h = 2 + Math.floor(rand() * 3);
+    const kind = rand() < 0.72 ? main : second;
+    const light = 0.82 + rand() * 0.3 - dx / spread * 0.06;
+    for (let dy = -1; dy > -h; dy--) {
+      sprite.put(dx, dy, dy === -1 ? dg(`stem.${Math.floor(rand() * 3)}`) : dg('props.strip.2.0'), shade(green, 0.7 + rand() * 0.2));
+      if (rand() < 0.4) sprite.layer(dx, dy, dg(`leaflet.${Math.floor(rand() * 8)}`), shade(green, 0.95 + rand() * 0.2));
+    }
+    sprite.put(dx, -h, dg(kind.head), shade(kind.petal, light));
+    if (kind.eye) sprite.layer(dx, -h, dg(kind.eye), kind.eyeC);
   }
-  const green = [64, 126, 61];
-  const sample = (px, py) => {
-    if (py > 0) return null;
-    for (const flower of flowers) {
-      const center = ellipse(px, py, flower.x, flower.y, flower.size * 0.36, flower.size * 0.36);
-      if (center.d2 <= 1) return surface(0.9 - center.ny * 0.06, [248, 209, 78]);
-      for (let p = 0; p < 5; p++) {
-        const a = flower.angle + p * Math.PI * 2 / 5;
-        const petal = ellipse(px, py, flower.x + Math.cos(a) * flower.size * 0.77,
-          flower.y + Math.sin(a) * flower.size * 0.77, flower.size * 0.65, flower.size * 0.6);
-        if (petal.d2 <= 1) return surface(0.8 - petal.nx * 0.1 - petal.ny * 0.12, flower.color);
-      }
-    }
-    for (const flower of flowers) {
-      for (const leaf of flower.leaves) {
-        const ny = leafSample(px, py, leaf);
-        if (ny !== null) return surface(0.65 - ny * 0.13, green);
-      }
-      const stem = lineDistance(px, py, flower.baseX, -0.1, flower.x, flower.y);
-      if (stem.d <= 0.25) return surface(0.65, green);
-    }
-    return null;
-  };
-  return {
-    kind: 'flowers', x, y, footW: spread * 0.65 / ASPECT, footH: 0.65,
-    cells: bake(Math.ceil((spread + 2.1) / ASPECT), -Math.ceil(height), 0, sample, seed),
-  };
+  // Leaves and clover low among the stems.
+  for (let dx = -spread - 1; dx <= spread + 1; dx++) {
+    if (rand() < 0.75) sprite.put(dx, 0, dg(rand() < 0.5 ? `tuft.${Math.floor(rand() * 4)}` : `clover.${Math.floor(rand() * 4)}`),
+      shade(green, 0.6 + rand() * 0.35));
+  }
+  return { kind: 'flowers', x, y, footW: spread * 0.65, footH: 0.65, cells: sprite.cells() };
 }
 
-function makeMushrooms(x, y, rand, seed, bake) {
-  const count = 3 + Math.floor(rand() * 2);
-  const mushrooms = [];
-  const capColors = [[196, 64, 45], [209, 123, 46], [154, 91, 65]];
-  const color = capColors[Math.floor(rand() * capColors.length)];
-  let height = 0;
-  let width = 0;
-  for (let i = 0; i < count; i++) {
-    const central = i === 1;
-    const mx = (i - (count - 1) / 2) * 2.5 + (rand() - 0.5) * 0.45;
-    const h = central ? 6.1 + rand() * 1.4 : 3.0 + rand() * 2.2;
-    const rx = central ? 2.2 + rand() * 0.55 : 1.35 + rand() * 0.55;
-    const ry = rx * (0.65 + rand() * 0.15);
-    const base = -h + ry;
-    const spots = Array.from({ length: 4 }, () => ({
-      x: mx + (rand() - 0.5) * rx * 1.35,
-      y: base - ry * (0.26 + rand() * 0.47),
-      r: 0.23 + rand() * 0.15,
-    }));
-    mushrooms.push({ x: mx, base, rx, ry, spots, h });
-    height = Math.max(height, h);
-    width = Math.max(width, Math.abs(mx) + rx);
-  }
-  // The shorter caps sit in front of the tall mushroom's stem.
-  mushrooms.sort((a, b) => a.h - b.h);
-  const sample = (px, py) => {
-    if (py > 0) return null;
-    for (const mushroom of mushrooms) {
-      const cap = ellipse(px, py, mushroom.x, mushroom.base, mushroom.rx, mushroom.ry);
-      if (py <= mushroom.base && cap.d2 <= 1) {
-        for (const spot of mushroom.spots) {
-          if (ellipse(px, py, spot.x, spot.y, spot.r, spot.r * 0.8).d2 <= 1) {
-            return surface(0.87, [237, 217, 169]);
-          }
-        }
-        return surface(0.75 - cap.nx * 0.2 - cap.ny * 0.11, color);
-      }
-      const rim = ellipse(px, py, mushroom.x, mushroom.base + 0.07, mushroom.rx, 0.37);
-      if (rim.d2 <= 1) return surface(0.63 - rim.nx * 0.12, [209, 178, 133]);
-      const stemTop = mushroom.base + 0.12;
-      const stemWidth = 0.36 + mushroom.rx * 0.11;
-      if (py >= stemTop && py <= 0 && Math.abs(px - mushroom.x) < stemWidth * (1 + py / stemTop * 0.18)) {
-        return surface(0.8 - (px - mushroom.x) / stemWidth * 0.19, [217, 194, 146]);
-      }
+// A cluster of toadstools: one or two tall ones with a cap spread over
+// three cells, and smaller buttons, cap and stem in their own colours.
+const CAPS = [
+  { c: [200, 58, 44], spots: [240, 232, 214] },
+  { c: [212, 128, 52], spots: [246, 214, 160] },
+  { c: [150, 96, 66], spots: null },
+  { c: [226, 196, 150], spots: null },
+];
+
+function makeMushrooms(x, y, rand) {
+  const cap = CAPS[Math.floor(rand() * CAPS.length)];
+  const stem = [222, 204, 164];
+  const sprite = new Sprite();
+  const big = 1 + (rand() < 0.4 ? 1 : 0);
+  const used = new Set();
+  let width = 2;
+  for (let i = 0; i < big; i++) {
+    const dx = i === 0 ? 0 : (rand() < 0.5 ? -4 : 4);
+    const h = 3 + Math.floor(rand() * 2) - i;
+    for (let k = -1; k <= 1; k++) {
+      sprite.put(dx + k, -h, dg(`props.cap.${k + 1}`), shade(cap.c, [1.12, 1, 0.74][k + 1]));
+      if (cap.spots) sprite.layer(dx + k, -h, dg(`props.capspots.${Math.floor(rand() * 4)}`), shade(cap.spots, [1, 0.95, 0.75][k + 1]));
+      used.add(dx + k);
     }
-    return null;
-  };
-  return {
-    kind: 'mushrooms', x, y, footW: width * 0.75 / ASPECT, footH: 0.8,
-    cells: bake(Math.ceil((width + 0.5) / ASPECT), -Math.ceil(height + 0.5), 0, sample, seed),
-  };
+    for (let dy = -h + 1; dy <= 0; dy++) sprite.put(dx, dy, dg(`props.stem.${dy === -h + 1 ? 1 : dy === 0 ? 0 : 2}`), stem);
+    width = Math.max(width, Math.abs(dx) + 2);
+  }
+  const buttons = 2 + Math.floor(rand() * 3);
+  for (let i = 0; i < buttons; i++) {
+    let dx = (rand() < 0.5 ? -1 : 1) * (2 + Math.floor(rand() * 3));
+    if (used.has(dx)) dx += dx > 0 ? 1 : -1;
+    if (used.has(dx)) continue;
+    used.add(dx);
+    width = Math.max(width, Math.abs(dx) + 1);
+    const light = 0.8 + rand() * 0.3;
+    if (rand() < 0.35) {
+      sprite.put(dx, 0, dg('mush.small'), shade(cap.c, light));
+      continue;
+    }
+    sprite.put(dx, -1, dg('mush.cap'), shade(cap.c, light));
+    if (cap.spots) sprite.layer(dx, -1, dg('mush.spots'), cap.spots);
+    sprite.put(dx, 0, dg('mush.stem'), shade(stem, 0.9));
+  }
+  // Moss and fallen leaves around the base.
+  for (let dx = -width; dx <= width; dx++) {
+    if (sprite.has(dx, 0)) sprite.layer(dx, 0, dg(`tuft.${Math.floor(rand() * 4)}`), [62, 108, 70]);
+    else if (rand() < 0.6) sprite.put(dx, 0, dg(rand() < 0.5 ? `moss.${Math.floor(rand() * 4)}` : `leaflet.${Math.floor(rand() * 8)}`),
+      rand() < 0.5 ? [64, 106, 78] : [138, 98, 58]);
+  }
+  return { kind: 'mushrooms', x, y, footW: width * 0.45, footH: 0.8, cells: sprite.cells() };
 }
 
-function makeReeds(x, y, rand, seed, bake) {
+// A clump of reeds: tall stalks, some topped with a brown cattail head,
+// and long leaves arching away from the clump.
+function makeReeds(x, y, rand) {
   const count = 7 + Math.floor(rand() * 3);
-  const reeds = [];
-  const leaves = [];
-  let height = 0;
-  let width = 0;
-  for (let i = 0; i < count; i++) {
-    const baseX = (rand() - 0.5) * 2.5;
-    const tipX = (i / (count - 1) * 2 - 1) * (2.6 + rand() * 1.1);
-    const h = 10.2 + rand() * 5.3;
-    const hasHead = i % 2 === 0;
-    const headLength = 1.5 + rand() * 0.8;
-    reeds.push({ baseX, tipX, h, hasHead, headLength });
-    height = Math.max(height, h + (hasHead ? headLength * 0.5 : 0));
-    const leafTipX = tipX + (tipX < 0 ? -1 : 1) * (1.8 + rand() * 1.4);
-    leaves.push({ ax: baseX, ay: -0.2, bx: leafTipX, by: -h * (0.52 + rand() * 0.27) });
-    width = Math.max(width, Math.abs(leafTipX), Math.abs(tipX) + 0.5);
-  }
   const green = [110, 141, 64];
   const straw = [164, 157, 75];
-  const heads = [130, 86, 45];
-  const sample = (px, py) => {
-    if (py > 0) return null;
-    for (const reed of reeds) {
-      if (reed.hasHead) {
-        const head = lineDistance(px, py, reed.tipX, -reed.h - reed.headLength * 0.45,
-          reed.tipX, -reed.h + reed.headLength * 0.55);
-        if (head.d < 0.38) return surface(0.63 - (px - reed.tipX) * 0.23 + 0.07 * Math.sin(py * 8), heads);
-      }
+  const heads = [126, 82, 44];
+  const sprite = new Sprite();
+  let width = 2;
+  const stalks = [];
+  for (let i = 0; i < count; i++) {
+    const baseX = Math.round((rand() - 0.5) * 4);
+    const lean = Math.round((i / (count - 1) * 2 - 1) * (1.5 + rand() * 2));
+    const h = 7 + Math.floor(rand() * 5);
+    stalks.push({ baseX, lean, h, head: i % 2 === 0 });
+  }
+  stalks.sort((a, b) => b.h - a.h);
+  for (const s of stalks) {
+    let prev = s.baseX;
+    for (let k = 0; k < s.h; k++) {
+      const x = s.baseX + Math.round(s.lean * (k / s.h) ** 1.5);
+      const g = x === prev ? dg('props.strip.2.0') : dg(x > prev ? 'props.strip.1.0' : 'props.strip.3.0');
+      const colour = k < s.h * 0.4 ? green : straw;
+      sprite.put(x, -k, g, shade(colour, 0.75 + k / s.h * 0.35));
+      prev = x;
+      width = Math.max(width, Math.abs(x) + 1);
     }
-    for (const leaf of leaves) {
-      const blade = lineDistance(px, py, leaf.ax, leaf.ay, leaf.bx, leaf.by);
-      const bladeWidth = 0.12 + 0.22 * Math.sin(blade.t * Math.PI);
-      if (blade.d < bladeWidth && blade.t < 0.985) return surface(0.65 + blade.t * 0.1, green);
+    const top = s.baseX + s.lean;
+    if (s.head) {
+      sprite.put(top, -s.h, dg('reed.head'), heads);
+      sprite.put(top, -s.h - 1, dg('stem.1'), shade(straw, 0.9));
+    } else {
+      sprite.put(top, -s.h, dg(`stem.${s.lean < 0 ? 0 : s.lean > 0 ? 2 : 1}`), shade(straw, 1.05));
     }
-    for (const reed of reeds) {
-      const stem = lineDistance(px, py, reed.baseX, -0.05, reed.tipX, -reed.h);
-      if (stem.d < 0.23) return surface(0.69, straw);
+  }
+  // Leaves arch out of the clump on both sides.
+  const leaves = 4 + Math.floor(rand() * 3);
+  for (let i = 0; i < leaves; i++) {
+    const side = i % 2 ? 1 : -1;
+    const reach = 2 + Math.floor(rand() * 3);
+    for (let k = 1; k <= reach; k++) {
+      const x = side * (k + 1);
+      const dy = -Math.round(k * 1.4 + rand());
+      const g = dg(`props.reedleaf.${side > 0 ? 1 : 0}`);
+      if (sprite.has(x, dy)) sprite.layer(x, dy, g, green);
+      else sprite.put(x, dy, g, shade(green, 0.8 + rand() * 0.25));
+      width = Math.max(width, Math.abs(x) + 1);
     }
-    return null;
-  };
-  return {
-    kind: 'reeds', x, y, footW: 2.5 / ASPECT, footH: 0.75,
-    cells: bake(Math.ceil((width + 0.5) / ASPECT), -Math.ceil(height + 0.5), 0, sample, seed),
-  };
+  }
+  return { kind: 'reeds', x, y, footW: 2.5 / ASPECT, footH: 0.75, cells: sprite.cells() };
 }
 
 const NATURAL_MAKERS = {

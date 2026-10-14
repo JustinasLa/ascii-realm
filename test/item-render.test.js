@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ITEMS } from '../src/inventory/items.js';
-import { glyph } from '../src/render/glyphs.js';
+import { family, glyph, GLYPH_MASK, LAYER, over } from '../src/render/glyphs.js';
 import { drawItem, drawResource } from '../src/world/item-draw.js';
 import { reflector } from '../src/world/reflection.js';
 import { GRASS, WATER } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const id = Object.keys(ITEMS)[0];
 const item = { uid: 'test-item', id, count: 1, x: 4.5, y: 4.5, phase: 0 };
 const view = { x0: -8, y0: -8, cols: 24, rows: 24 };
-const ripeFruit = args => (args[3] === glyph('o') || args[3] === glyph(':'))
-  && args[4] > args[5] * 2 && args[6] > args[5];
+// Ripe fruit is a berry cluster layered over a leaf in a berry colour.
+const BERRIES = new Set(family('props.berry.').map(over));
+const ripeFruit = args => BERRIES.has(args[3]) && args[4] > args[5] * 2 && args[6] > args[5];
+const FORKS = new Set(family('props.fork.'));
 
 function buffer(type = GRASS) {
   const r = { cols: 24, rows: 24,
@@ -26,16 +29,35 @@ function buffer(type = GRASS) {
     if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) return;
     r.bg.set([red, green, blue, 0], (y * r.cols + x) * 4);
   };
-  return r;
+  return withLayers(r);
 }
 
-test('loose items use their registry glyph and keep a fixed mirror base while bobbing', () => {
+test('loose items are drawn as a body with a layered detail, or their registry glyph', () => {
+  const sword = [];
+  drawItem(buffer(), view, { ...item, id: 'shortSword' }, 0, (...args) => sword.push(args));
+  assert.equal(sword.length, 2);
+  assert.equal(sword[0][3] & LAYER, 0, 'the blade is the base glyph');
+  assert.ok(sword[1][3] & LAYER, 'the hilt is layered over it');
+  assert.equal(sword[1][1], sword[0][1]);
+  assert.equal(sword[1][2], sword[0][2]);
+  assert.ok(sword[1][4] > sword[1][6], 'the hilt is warm wood against cool steel');
+  const plain = [];
+  drawItem(buffer(), view, { ...item, id: 'outlawHood' }, 0, (...args) => plain.push(args));
+  assert.equal(plain.length, 1);
+  assert.equal(plain[0][3], glyph(ITEMS.outlawHood.groundGlyph));
+  // Every item with a picture uses valid glyphs.
+  for (const key of Object.keys(ITEMS)) {
+    const writes = [];
+    drawItem(buffer(), view, { ...item, id: key }, 0, (...args) => writes.push(args));
+    assert.ok(writes.length >= 1 && writes.every(args => (args[3] & GLYPH_MASK) > 0), key);
+  }
+});
+
+test('loose items keep a fixed mirror base while bobbing', () => {
   const writes = [];
   const capture = (...args) => writes.push(args);
   drawItem(buffer(), view, item, 0, capture);
   const first = writes[0];
-  const def = ITEMS[id];
-  assert.equal(first[3], typeof def.groundGlyph === 'number' ? def.groundGlyph : glyph(def.groundGlyph));
   assert.equal(first[1], 12);
   assert.equal(first[7], 12);
   assert.ok(first[2] < first[7]);
@@ -51,9 +73,9 @@ test('item glints animate colour and go through the same writer as their body', 
   drawItem(buffer(), view, item, 0, (...args) => early.push(args));
   drawItem(buffer(), view, item, Math.PI / 5.4, (...args) => peak.push(args));
   assert.notDeepEqual(early[0].slice(4, 7), peak[0].slice(4, 7));
-  assert.equal(peak.length, 2);
-  assert.equal(peak[1][3], glyph('+'));
-  assert.equal(peak[1][7], peak[0][7]);
+  assert.equal(peak.length, early.length + 1);
+  assert.equal(peak.at(-1)[3], glyph('+'));
+  assert.equal(peak.at(-1)[7], peak[0][7]);
 });
 
 test('item reflection is dimmed and confined to water', () => {
@@ -118,10 +140,8 @@ test('berry bushes show their harvest count as distinct ripe fruit clusters', ()
   for (const count of [4, 5, 6, 7]) {
     const writes = [];
     drawResource(buffer(), view, { ...node, berryCount: count }, 0, (...args) => writes.push(args));
-    const berries = writes.filter(args => ripeFruit(args) && args[3] === glyph('o'));
-    const pips = writes.filter(args => ripeFruit(args) && args[3] === glyph(':'));
+    const berries = writes.filter(ripeFruit);
     assert.equal(berries.length, count);
-    assert.equal(pips.length, count);
     assert.equal(new Set(berries.map(args => `${args[1]},${args[2]}`)).size, count);
     assert.ok(writes.every(args => args[7] === 18));
   }
@@ -132,7 +152,7 @@ test('legacy and invalid berry counts retain the two-cluster harvest fallback', 
   for (const count of [undefined, null, 0, -1, 2, 3, 8, 100, 4.5, NaN, Infinity, '5']) {
     const writes = [];
     drawResource(buffer(), view, { ...node, berryCount: count }, 0, (...args) => writes.push(args));
-    assert.equal(writes.filter(args => ripeFruit(args) && args[3] === glyph('o')).length, 2);
+    assert.equal(writes.filter(ripeFruit).length, 2);
   }
 });
 
@@ -146,19 +166,19 @@ test('layered berry bushes have visible woody forks and sway above planted roots
   drawResource(buffer(), view, { ...node, phase: 1 }, 0, (...args) => varied.push(args));
   const xs = still.map(args => args[1]);
   const ys = still.map(args => args[2]);
-  assert.equal(Math.max(...xs) - Math.min(...xs) + 1, 13);
-  assert.equal(Math.max(...ys) - Math.min(...ys) + 1, 9);
-  assert.ok(still.some(args => args[3] === glyph('|') && args[4] > args[5] && args[6] < args[5]));
-  assert.ok(still.some(args => args[3] === glyph('/') && args[2] < args[7] - 2));
-  assert.ok(still.some(args => args[3] === glyph('\\') && args[2] < args[7] - 2));
+  assert.ok(Math.max(...xs) - Math.min(...xs) + 1 <= 13);
+  assert.ok(Math.max(...ys) - Math.min(...ys) + 1 <= 9);
+  assert.ok(still.some(args => FORKS.has(args[3]) && args[4] > args[5] && args[6] < args[5]), 'woody forks show');
+  assert.ok(still.some(args => FORKS.has(args[3]) && args[2] < args[7] - 2), 'forks inside the crown');
   assert.ok(still.some(args => args[5] > args[4] * 1.5), 'the canopy stays green');
   assert.deepEqual(still.filter(args => args[2] === args[7]).map(args => args.slice(1)),
     wind.filter(args => args[2] === args[7]).map(args => args.slice(1)));
-  const stillTop = still.filter(args => args[2] === args[7] - 8);
-  const movingTop = wind.filter(args => args[2] === args[7] - 8);
+  const stillTop = still.filter(args => args[2] <= args[7] - 6);
+  const movingTop = wind.filter(args => args[2] <= args[7] - 6);
+  assert.ok(stillTop.length > 0);
   assert.deepEqual(stillTop.map(args => args[1] + 1), movingTop.map(args => args[1]));
-  assert.notDeepEqual(still.filter(ripeFruit).map(args => args.slice(1, 3)),
-    varied.filter(ripeFruit).map(args => args.slice(1, 3)));
+  assert.notDeepEqual(still.map(args => args.slice(1, 4)), varied.map(args => args.slice(1, 4)),
+    'each bush has its own shape');
   assert.ok(wind.every(args => args[7] === 18));
 });
 

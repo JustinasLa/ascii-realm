@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
-import { GLYPHS } from '../src/render/glyphs.js';
+import { GLYPH_COUNT, GLYPH_MASK } from '../src/render/glyphs.js';
 import { DEADWOOD_CONDITIONS, DEADWOOD_REACH_X, DEADWOOD_REACH_Y,
   deadwoodInClearing, makeDeadwood } from '../src/world/deadwood.js';
 import { blocks, deadwoodConditionAt, drawProp, generateProps, nearWater } from '../src/world/props.js';
@@ -43,7 +43,7 @@ test('fallen, broken, cut and gnawed trees have distinct stable wood sprites', (
     for (const c of p.cells) {
       assert.equal(c.foliage, false);
       assert.equal(c.flex, 0);
-      assert.ok(c.g > 0 && c.g < [...GLYPHS].length);
+      assert.ok((c.g & GLYPH_MASK) > 0 && (c.g & GLYPH_MASK) < GLYPH_COUNT);
       assert.ok([c.r, c.gg, c.b].every(v => Number.isFinite(v) && v >= 0 && v <= 255));
       assert.ok(c.dx >= p.bounds.minX && c.dx <= p.bounds.maxX);
       assert.ok(c.dy >= p.bounds.minY && c.dy <= p.bounds.maxY);

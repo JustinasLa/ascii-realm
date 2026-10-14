@@ -2,15 +2,19 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
-import { GLYPHS, glyph } from '../src/render/glyphs.js';
+import { dg, GLYPH_COUNT, GLYPH_MASK, LAYER } from '../src/render/glyphs.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from '../src/world/leaves.js';
 import { blocks, drawProp, generateProps, nearWater, propInView, treeSpeciesAt } from '../src/world/props.js';
 import { reflector } from '../src/world/reflection.js';
-import { makeBush, makeTree, MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT, TREE_SPECIES } from '../src/world/trees.js';
+import { makeBush, makeTree, MAX_LITTER_DEPTH, MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT, TREE_SPECIES } from '../src/world/trees.js';
 import { treeWind, windGust } from '../src/world/wind.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
+const FALLING_LEAVES = new Set([...Array.from({ length: 8 }, (_, h) => dg(`tree.fall.${h}`)),
+  ...Array.from({ length: 4 }, (_, h) => dg(`tree.fall.edge.${h}`))]);
+const FALLING_PETALS = new Set(Array.from({ length: 4 }, (_, h) => dg(`tree.fall.petal.${h}`)));
 const EVERGREEN = new Set(['pine', 'spruce']);
 const VIEW = { x0: 0, y0: 0, cols: 640, rows: 640 };
 
@@ -18,8 +22,14 @@ function tree(species = 'oak', season = 'summer', x = 100.5, y = 300.5) {
   return makeTree(x, y, mulberry32(123456), { species, season, seed: 42 });
 }
 
+// A cell may carry a second glyph layered over it (a highlight, snow, fruit)
+// and the ground in front of a tree carries layered litter.
+const isLayer = (cell) => (cell.g & LAYER) !== 0;
+const baseCells = (prop) => prop.cells.filter((cell) => !isLayer(cell));
+const realGlyph = (g) => Number.isInteger(g) && (g & GLYPH_MASK) > 0 && (g & GLYPH_MASK) < GLYPH_COUNT;
+
 function shape(prop) {
-  return prop.cells.map(({ dx, dy, foliage }) => [dx, dy, foliage]);
+  return baseCells(prop).map(({ dx, dy, foliage }) => [dx, dy, foliage]);
 }
 
 function recordProp(prop, view = VIEW, t = 0, player = null) {
@@ -65,20 +75,36 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
     assert.equal(prop.species, species);
     assert.ok(prop.cells.length > 500 && prop.cells.length < 14000, species);
     assert.ok(prop.cells.some((cell) => cell.foliage), `${species} foliage`);
-    assert.ok(prop.cells.some((cell) => !cell.foliage && cell.dy >= -2), `${species} roots`);
+    assert.ok(prop.cells.some((cell) => !cell.foliage && !cell.litter && cell.dy >= -2), `${species} roots`);
     assert.ok(prop.footW > 0 && prop.footH > 0);
     assert.ok(prop.height >= 75 && prop.height <= MAX_TREE_HEIGHT, `${species} must tower over the 27-row player`);
     const occupied = new Set();
+    let previous = null;
     for (const cell of prop.cells) {
       assert.ok(Number.isInteger(cell.dx) && Number.isInteger(cell.dy));
-      assert.ok(Math.abs(cell.dx) <= MAX_TREE_HALF_WIDTH && cell.dy >= 1 - MAX_TREE_HEIGHT && cell.dy <= 0, species);
+      // Only litter lies on the ground in front of the base.
+      const lowest = cell.litter ? MAX_LITTER_DEPTH : 0;
+      assert.ok(Math.abs(cell.dx) <= MAX_TREE_HALF_WIDTH && cell.dy >= 1 - MAX_TREE_HEIGHT && cell.dy <= lowest, species);
       const location = `${cell.dx},${cell.dy}`;
-      assert.ok(!occupied.has(location), `${species} duplicated ${location}`);
-      occupied.add(location);
+      if (isLayer(cell)) {
+        // A layer stacks on the cell emitted just before it, moving with it.
+        if (!cell.litter) {
+          assert.ok(previous && !isLayer(previous) && previous.dx === cell.dx && previous.dy === cell.dy,
+            `${species} layer at ${location} follows its base`);
+          assert.equal(cell.flex, previous.flex);
+          assert.equal(cell.foliage, previous.foliage);
+          assert.equal(cell.br, undefined, 'a layer keeps its base cell background');
+        }
+        assert.ok((cell.rustle & LAYER) !== 0, 'a rustling layer stays a layer');
+      } else {
+        assert.ok(!occupied.has(location), `${species} duplicated ${location}`);
+        occupied.add(location);
+      }
+      previous = cell;
       assert.ok(cell.dx >= prop.bounds.minX && cell.dx <= prop.bounds.maxX);
       assert.ok(cell.dy >= prop.bounds.minY && cell.dy <= prop.bounds.maxY);
-      assert.ok(Number.isInteger(cell.g) && cell.g > 0 && cell.g < [...GLYPHS].length);
-      assert.ok(Number.isInteger(cell.rustle) && cell.rustle > 0 && cell.rustle < [...GLYPHS].length);
+      assert.ok(realGlyph(cell.g), `${species} glyph`);
+      assert.ok(realGlyph(cell.rustle), `${species} rustle glyph`);
       for (const color of [cell.r, cell.gg, cell.b]) {
         assert.ok(Number.isFinite(color) && color >= 0 && color <= 255, `${species} color`);
       }
@@ -87,6 +113,7 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
       if (!cell.foliage) assert.equal(cell.flex, 0, `${species} anchored wood`);
     }
     assert.equal(prop.top, Math.min(...prop.cells.map((cell) => cell.dy)));
+    assert.ok(prop.cells.some(isLayer), `${species} has layered detail`);
     assert.equal(prop.height, prop.bounds.maxY - prop.top + 1);
     silhouettes.add(JSON.stringify(shape(prop)));
   }
@@ -94,18 +121,18 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
 });
 
 test('row culling preserves complete seeded sprites across seasons and growth stages', () => {
-  // Fingerprints matching the original full-rectangle bake (with moonlit
-  // crowns), excluding the unused per-cell phase. Cover negative coordinates, thin/thick trunks, and both
-  // caller-supplied and fallback random streams.
+  // Fingerprints matching a full-rectangle bake (no row culling) of the
+  // detailed glyph trees. Cover negative coordinates, thin/thick trunks, and
+  // both caller-supplied and fallback random streams.
   const fixtures = [
     { seed: 1, x: -100.5, y: 300.5, randomSeed: 123456,
-      expected: 'ab0dcaa28f1781718a4ad5533dbe8a5a26a47b638226d234035c70e6df1b337f' },
+      expected: 'a92cc4e2848b43e6dc072c91255136a836268aed80204c1758750d9deb85b232' },
     { seed: 42, x: 100.5, y: -300.5, girth: 0.6, randomSeed: 42,
-      expected: '561e121313fe0b411adb60bf11f22f783571f39ab8e8827f731fc2b5a8ceddd7' },
+      expected: '008dd290c0ecc615ea11f9689e32c19d9dc556d735dd9de532aadb88e7340da8' },
     { seed: 9281, x: 63.5, y: 24.5, girth: 2, randomSeed: 9281,
-      expected: '00baef92f8c830a8f8852e7ee0b705e2275f90b5220c3e9e5c24e1f6a65c32b7' },
+      expected: '394d07425dab3e4ef76184ae5ca6b08593cb05d3e7ebd98689b55671b178bbc8' },
     { seed: 4294967295, x: -63.5, y: -24.5,
-      expected: '55e3af47370761b0aedd18ec84c67cef9e800cef43a01c67d26f9a1b7e30320d' },
+      expected: '48e0a0229f57326d088ce1f98c92a9a42f4f3bde53405cd0e8bafee4a0badfa2' },
   ];
   for (const { expected, randomSeed, ...options } of fixtures) {
     const digest = createHash('sha256');
@@ -125,7 +152,7 @@ test('row culling preserves complete seeded sprites across seasons and growth st
 test('seasonal palettes preserve leafy-season geometry and the winter ground anchor', () => {
   for (const species of TREE_SPECIES) {
     const summer = tree(species);
-    const summerWood = summer.cells.filter((cell) => !cell.foliage && cell.dy >= -3);
+    const summerWood = summer.cells.filter((cell) => !cell.foliage && !cell.litter && cell.dy >= -3);
     const palettes = new Set();
     for (const season of SEASONS) {
       const prop = tree(species, season);
@@ -137,10 +164,10 @@ test('seasonal palettes preserve leafy-season geometry and the winter ground anc
       if (season !== 'winter') {
         assert.deepEqual(shape(prop), shape(summer), `${species} ${season} shape`);
         assert.deepEqual(prop.bounds, summer.bounds);
-        const woodGeometry = (cells) => cells.filter((cell) => !cell.foliage)
+        const woodGeometry = (cells) => cells.filter((cell) => !cell.foliage && !cell.litter)
           .map(({ dx, dy, g, flex }) => [dx, dy, g, flex]);
         assert.deepEqual(woodGeometry(prop.cells), woodGeometry(summer.cells), `${species} ${season} bark geometry`);
-        assert.deepEqual(prop.cells.filter((cell) => !cell.foliage && cell.dy >= -3),
+        assert.deepEqual(prop.cells.filter((cell) => !cell.foliage && !cell.litter && cell.dy >= -3),
           summerWood, `${species} ${season} low-trunk color`);
       }
       for (const cell of summerWood) {
@@ -149,8 +176,8 @@ test('seasonal palettes preserve leafy-season geometry and the winter ground anc
       }
     }
     assert.equal(palettes.size, SEASONS.length, `${species} seasonal tint`);
-    const winterFoliage = tree(species, 'winter').cells.filter((cell) => cell.foliage).length;
-    const summerFoliage = summer.cells.filter((cell) => cell.foliage).length;
+    const winterFoliage = baseCells(tree(species, 'winter')).filter((cell) => cell.foliage).length;
+    const summerFoliage = baseCells(summer).filter((cell) => cell.foliage).length;
     assert.ok(EVERGREEN.has(species) ? winterFoliage >= summerFoliage * 0.9 : winterFoliage < summerFoliage * 0.5,
       `${species} winter foliage`);
   }
@@ -272,8 +299,8 @@ test('camera translation and reflection share the same animated source cells', (
   const t = 17.25;
   assert.deepEqual(worldCells(recordProp(prop, a, t), a, true),
     worldCells(recordProp(prop, b, t), b, true));
-  const r = { cols: a.cols, rows: a.rows,
-    mask: new Uint8Array(a.cols * a.rows).fill(WATER), fg: new Float64Array(a.cols * a.rows * 4) };
+  const r = withLayers({ cols: a.cols, rows: a.rows,
+    mask: new Uint8Array(a.cols * a.rows).fill(WATER), fg: new Float64Array(a.cols * a.rows * 4) });
   const sources = [];
   const mirror = reflector(t, a);
   drawProp(r, a, prop, (renderer, ...cell) => {
@@ -297,12 +324,13 @@ test('culling retains crowns below the viewport and reflections from trees above
   } }, crownView, prop, undefined, 5, null, 42);
   assert.ok(visible.length > 0, 'offscreen base still draws its crown');
 
-  const lakeView = { x0: bx - 32, y0: by + 1, cols: 64, rows: 40 };
+  // Below the litter lying in front of the trunk.
+  const lakeView = { x0: bx - 32, y0: by + prop.bounds.maxY + 1, cols: 64, rows: 40 };
   assert.equal(propInView(lakeView, prop), false);
   assert.equal(propInView(lakeView, prop, true), true);
-  const r = { cols: lakeView.cols, rows: lakeView.rows,
+  const r = withLayers({ cols: lakeView.cols, rows: lakeView.rows,
     mask: new Uint8Array(lakeView.cols * lakeView.rows).fill(WATER),
-    fg: new Float64Array(lakeView.cols * lakeView.rows * 4) };
+    fg: new Float64Array(lakeView.cols * lakeView.rows * 4) });
   drawProp(r, lakeView, prop, reflector(5, lakeView), 5, null, 42);
   assert.ok(r.fg.some((value, i) => i % 4 === 3 && value > 0), 'above-screen tree reflects into lake');
 });
@@ -314,7 +342,7 @@ test('clipping large reflected sprites preserves the uncropped water image', () 
     { x0: 130, y0: 360, cols: 64, rows: 80 },
     { x0: 38, y0: 300, cols: 64, rows: 80 },
   ]) {
-    const renderer = () => ({ cols: view.cols, rows: view.rows,
+    const renderer = () => withLayers({ cols: view.cols, rows: view.rows,
       mask: new Uint8Array(view.cols * view.rows).fill(WATER),
       fg: new Float64Array(view.cols * view.rows * 4) });
     const full = renderer();
@@ -359,13 +387,13 @@ test('moonlit crowns are paler on top and trunks stay warm in every growth stage
     const third = (bottom - top) / 3;
     assert.ok(mean(leaves.filter((c) => c.dy < top + third)) > mean(leaves.filter((c) => c.dy > bottom - third)) * 1.2,
       `${species} crown top is lit`);
-    const trunk = prop.cells.filter((c) => !c.foliage && c.dy > -6);
+    const trunk = baseCells(prop).filter((c) => !c.foliage && !c.litter && c.dy > -6);
     if (species !== 'birch') assert.ok(trunk.every((c) => c.r >= c.b), `${species} warm bark`);
     // Deeply shaded bark under a leafy cell must still choose a real glyph.
     for (let i = 0; i < 24; i++) {
       for (const growth of ['sapling', 'bush']) {
         const young = makeTree(i * 37.5, 300.5 + i, mulberry32(i + 1), { species, seed: 42, growth });
-        assert.ok(young.cells.every((c) => Number.isInteger(c.g) && c.g > 0 && c.g < [...GLYPHS].length),
+        assert.ok(young.cells.every((c) => realGlyph(c.g)),
           `${species} ${growth} ${i} glyphs`);
       }
     }
@@ -420,7 +448,8 @@ test('falling leaves are deterministic, capped, seasonal, and camera-stable', ()
           assert.ok(Number.isInteger(sx) && Number.isInteger(sy));
           assert.ok(sy >= Math.floor(prop.y) + prop.top && sy < Math.floor(prop.y), 'leaf stays above ground');
           assert.ok([cr, cg, cb].every((color) => Number.isFinite(color) && color >= 0 && color <= 255));
-          assert.equal(g, glyph(season === 'autumn' ? "'" : species === 'cherry' && season === 'spring' ? '*' : '.'));
+          const fall = species === 'cherry' && season === 'spring' ? FALLING_PETALS : FALLING_LEAVES;
+          assert.ok(fall.has(g), `${species} ${season} falling glyph`);
         }
       }
       if (season === 'winter' || EVERGREEN.has(species)) assert.equal(emitted, 0);

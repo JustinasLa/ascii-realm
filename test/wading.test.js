@@ -4,6 +4,7 @@ import { Player } from '../src/entities/player.js';
 import { dressFigure, drawFigure, drawShadow } from '../src/entities/figure.js';
 import { Splashes } from '../src/world/splashes.js';
 import { GRASS, MAX_WATER_DEPTH, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const dt = 1 / 60;
 const still = { x: 0, y: 0 };
@@ -131,7 +132,7 @@ test('spray falls back into secondary ripples, expires, and stays bounded during
 test('surface rings and knee waterlines stay clipped to water across a shore and view boundary', () => {
   const cols = 24;
   const rows = 16;
-  const r = { cols, rows, fg: new Uint8ClampedArray(cols * rows * 4), mask: new Uint8Array(cols * rows) };
+  const r = withLayers({ cols, rows, fg: new Uint8ClampedArray(cols * rows * 4), mask: new Uint8Array(cols * rows) });
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) r.mask[y * cols + x] = x < 12 ? WATER : GRASS;
   }
@@ -142,9 +143,12 @@ test('surface rings and knee waterlines stay clipped to water across a shore and
   splashes.drawSurface(r, view, 0.45);
   splashes.drawContacts(r, view, 0.45,
     [{ x: 11.5, y: 8.5 }, { x: -0.5, y: 0.5 }]);
-  assert.ok(r.fg.some((v) => v > 0), 'water shows visible crests');
+  assert.ok(r.ov.some((v) => v > 0), 'water shows visible crests, layered over the surface');
   for (let i = 0; i < r.mask.length; i++) {
-    if (r.mask[i] !== WATER) assert.deepEqual([...r.fg.slice(i * 4, i * 4 + 4)], [0, 0, 0, 0]);
+    if (r.mask[i] !== WATER) {
+      assert.deepEqual([...r.fg.slice(i * 4, i * 4 + 4)], [0, 0, 0, 0]);
+      assert.deepEqual([...r.ov.slice(i * 4, i * 4 + 4)], [0, 0, 0, 0]);
+    }
   }
 });
 

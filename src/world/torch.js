@@ -2,8 +2,9 @@ import { hash2 } from '../core/rng.js';
 import { SWORD_SIDE } from '../entities/combat.js';
 import { buildRig, SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
-import { glyph } from '../render/glyphs.js';
-import { drawFireLight } from './fire.js';
+import { dg, glyph, over } from '../render/glyphs.js';
+import { drawFireLight, flameCell } from './fire.js';
+import { subGlyph } from './glow.js';
 import { ASPECT, WATER } from './world.js';
 
 export const TORCH_LIGHT_RADIUS = 27;
@@ -12,7 +13,9 @@ const THROW_SPEED = 42;
 const THROW_LIFT = 16;
 const GRAVITY = 48;
 const SHAFT = 6;
-const FLAME = [...'^/\\*x%#'].map(glyph);
+const WRAP = dg('bark.1');
+const SMOULDER = dg('effects.coal.2');
+const EMBER = Array.from({ length: 9 }, (_, i) => dg(`effects.ember.${i}`));
 
 // Hand position in world-cell offsets, with height separate from the ground
 // position. The loaded model supplies the same coordinates as the fallback.
@@ -102,30 +105,43 @@ export class Torches {
       const cells = [];
       for (let i = -1; i <= SHAFT; i++) {
         const wrap = i >= SHAFT - 1;
-        cells.push({ dx: Math.round(dx * i), dy: Math.round(-torch.h + dy * i),
-          g: glyph(wrap ? '#' : stick), r: wrap ? 205 : 142, gg: wrap ? 142 : 82, b: wrap ? 62 : 32,
-          bg: [24, 14, 7] });
+        const at = { dx: Math.round(dx * i), dy: Math.round(-torch.h + dy * i) };
+        cells.push({ ...at, g: wrap ? WRAP : glyph(stick), r: wrap ? 150 : 142, gg: wrap ? 98 : 82,
+          b: wrap ? 52 : 32, bg: [24, 14, 7] });
+        // The pitch-soaked wrap smoulders under the flame.
+        const glow = 0.6 + 0.4 * Math.sin(time * 7 + i * 2 + torch.seed);
+        if (wrap) cells.push({ ...at, g: over(SMOULDER), r: 255 * glow, gg: 120 * glow, b: 30 * glow });
       }
       torch.flameX = dx * SHAFT;
       torch.flameH = torch.h - dy * SHAFT;
-      for (let h = 0; h < 6; h++) {
-        const u = h / 6;
-        const drift = Math.sin(time * 11 - h * 0.7 + torch.seed) * u * 1.2;
-        const width = (1 - u) * (2.2 + Math.sin(time * 8 + torch.seed) * 0.25);
+      // A single tongue of flame licking up from the wrap, swaying as it
+      // goes and leaning further near its tip.
+      const fx = Math.round(torch.flameX);
+      const fh = Math.round(torch.flameH);
+      const height = 6 + Math.sin(time * 9 + torch.seed) * 0.8;
+      const axis = (h) => Math.sin(time * 11 - h * 0.7 + torch.seed) * (h / height) * 1.2;
+      const frame = Math.floor(time * 15);
+      const heatAt = (h, x) => {
+        if (h < 0 || h >= height) return 0;
+        const width = (1 - h / height) ** 0.8 * (2.2 + Math.sin(time * 8 + torch.seed) * 0.25);
+        return (1 - Math.abs(x - axis(h)) / width) * (1 - h / height * 0.25);
+      };
+      for (let h = 0; h < Math.ceil(height); h++) {
         for (let x = -3; x <= 3; x++) {
-          const heat = 1 - Math.abs(x - drift) / width;
-          if (heat <= 0) continue;
-          const rnd = hash2(x, h, torch.seed + Math.floor(time * 15));
-          cells.push({ dx: Math.round(torch.flameX) + x, dy: -Math.round(torch.flameH) - h,
-            g: FLAME[Math.floor(rnd * FLAME.length)], r: 255, gg: 92 + heat * 145, b: 12 + heat ** 3 * 120,
-            bg: [heat * 56, heat * 20, heat * 3] });
+          const heat = heatAt(h, x);
+          if (heat <= 0.05) continue;
+          flameCell(cells, fx + x, -fh - h, heat, heatAt(h + 1, x), heatAt(h, x - 1), heatAt(h, x + 1),
+            axis(h) - x, axis(h + 1) - x, h + 1 >= height, hash2(x, h, torch.seed + frame), 1, 0.9);
         }
       }
-      for (let i = 0; i < 3; i++) {
-        const age = (time * 0.7 + i / 3) % 1;
-        cells.push({ dx: Math.round(torch.flameX + Math.sin(i * 7 + age * 4) * 2),
-          dy: -Math.round(torch.flameH + 5 + age * 7), g: glyph('.'),
-          r: 220 * (1 - age), gg: 130 * (1 - age), b: 25 * (1 - age) });
+      // Embers lift off the flame and wink out.
+      for (let i = 0; i < 4; i++) {
+        const age = (time * 0.7 + i / 4) % 1;
+        const x = torch.flameX + Math.sin(i * 7 + age * 4) * 2;
+        const y = -(torch.flameH + 5 + age * 8);
+        const fade = (1 - age) * (hash2(i, Math.floor(time * 8), torch.seed) < 0.2 ? 0.35 : 1);
+        cells.push({ dx: Math.floor(x + 0.5), dy: Math.floor(y), g: over(subGlyph(EMBER, x + 0.5, y)),
+          r: 240 * fade, gg: 140 * fade, b: 30 * fade });
       }
       torch.cells = cells;
     }

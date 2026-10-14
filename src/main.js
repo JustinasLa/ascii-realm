@@ -23,6 +23,7 @@ import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
 import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
+import { Ambience, lightsOf } from './world/ambience-fx.js';
 import { Dust } from './world/dust.js';
 import { Fires } from './world/fire.js';
 import { Fireflies } from './world/fireflies.js';
@@ -142,6 +143,7 @@ const collection = new Collection(world, inventory, groundItems, harvesting);
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
+const ambience = new Ambience();
 const dust = new Dust();
 const footprints = new Footprints();
 const grass = new Grass();
@@ -176,6 +178,7 @@ window.addEventListener('pageshow', (event) => {
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const debug = { player, camera, world, grass, splashes, weather, fires, torches, renderer, quality, inventory,
+  ambience, fireflies, dust, footprints,
   groundItems, harvesting, collection,
   audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 },
   pickup: (id, count = 1) => inventory.add(id, count) };
@@ -552,7 +555,7 @@ function frame(now) {
     splashes.react(world, e);
     if (e.type === 'step') {
       dust.burst(world, e.x, e.y, Math.round(1 + e.strength * 3), 2 + e.strength * 4);
-      footprints.add(world, e.x, e.y, time);
+      footprints.add(world, e.x, e.y, time, player.heading);
     }
     if (e.type === 'land') dust.burst(world, e.x, e.y, Math.round(6 + e.strength * 10), 5 + e.strength * 6);
     if (e.type === 'breath') dust.breath(e.x, e.y, e.h, e.dx, e.dy);
@@ -656,6 +659,7 @@ function frame(now) {
   const mirror = reflector(time, view);
   const visibleFires = fires.prepare(view, time);
   const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
+  ambience.update(dt, time, world, view, { lights: lightsOf(visibleFires, visibleTorches), wind: weather.wind });
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
   if (model) model.rasterise(view, player.x, player.y);
@@ -740,6 +744,7 @@ function frame(now) {
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
   splashes.drawSurface(renderer, view, time);
   weather.drawSurface(renderer, view, time);
+  ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
   splashes.drawContacts(renderer, view, time, contacts);
   fires.light(renderer, view, time, visibleFires);
@@ -761,6 +766,7 @@ function frame(now) {
   fires.drawParticles(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
+  ambience.draw(renderer, view, time);
   weather.draw(renderer, view);
   builder.drawPreview(view);
   if (debug.freeze) sound.pause();

@@ -1,10 +1,13 @@
 // Draws a grid of coloured glyphs with a single full-screen WebGL2 pass.
 //
-// The CPU fills two cell buffers each frame: `fg` (rgb + glyph index in alpha)
-// and `bg` (rgb). They are uploaded as textures and the fragment shader looks
-// up the glyph in the atlas for every pixel, so cost is independent of how
-// many characters are on screen.
+// The CPU fills three cell buffers each frame: `fg` (rgb + low byte of the
+// glyph), `ov` (the same for a second glyph layered over the first, like a
+// flower over grass) and `bg` (rgb + the high bits of both glyphs). They are
+// uploaded as textures and the fragment shader looks up the glyphs in the
+// atlas for every pixel, so cost is independent of how many characters are
+// on screen.
 
+import { GLYPH_MASK, LAYER } from './glyphs.js';
 import { NIGHT, VIGNETTE } from './palette.js';
 
 // An rgb triple as a GLSL vec3 literal.
@@ -19,6 +22,7 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uFg;
 uniform sampler2D uBg;
+uniform sampler2D uOv;
 uniform sampler2D uAtlas;
 uniform vec2 uView;
 uniform vec2 uCell;
@@ -29,6 +33,14 @@ uniform float uAtlasPad;
 uniform vec2 uAtlasSize;
 out vec4 outColor;
 
+float coverage(float g, vec2 local) {
+  vec2 gcell = vec2(mod(g, uAtlasCols.x), floor(g / uAtlasCols.x));
+  vec2 inner = uAtlasCell - 2.0 * uAtlasPad;
+  vec2 apx = gcell * uAtlasCell + uAtlasPad + local * inner;
+  float lod = clamp(log2(inner.y / uCell.y), 0.0, 2.5);
+  return textureLod(uAtlas, apx / uAtlasSize, lod).r;
+}
+
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uView.y - gl_FragCoord.y) + uOffset;
   vec2 cell = floor(p / uCell);
@@ -36,16 +48,16 @@ void main() {
   ivec2 ci = ivec2(cell);
 
   vec4 fg = texelFetch(uFg, ci, 0);
-  vec3 bg = texelFetch(uBg, ci, 0).rgb;
+  vec4 bg = texelFetch(uBg, ci, 0);
+  vec4 ov = texelFetch(uOv, ci, 0);
 
-  float g = floor(fg.a * 255.0 + 0.5);
-  vec2 gcell = vec2(mod(g, uAtlasCols.x), floor(g / uAtlasCols.x));
-  vec2 inner = uAtlasCell - 2.0 * uAtlasPad;
-  vec2 apx = gcell * uAtlasCell + uAtlasPad + local * inner;
-  float lod = clamp(log2(inner.y / uCell.y), 0.0, 2.5);
-  float a = textureLod(uAtlas, apx / uAtlasSize, lod).r;
+  // The background's alpha holds the high bits of both glyph indices.
+  float hi = floor(bg.a * 255.0 + 0.5);
+  float g = floor(fg.a * 255.0 + 0.5) + mod(hi, 16.0) * 256.0;
+  float og = floor(ov.a * 255.0 + 0.5) + floor(hi / 16.0) * 256.0;
 
-  vec3 color = mix(bg, fg.rgb, a);
+  vec3 color = mix(bg.rgb, fg.rgb, coverage(g, local));
+  if (og > 0.5) color = mix(color, ov.rgb, coverage(og, local));
 
   // Fade toward a deep navy at the corners so the eye settles on the middle
   // of the scene and the edges stay night rather than plain black.
@@ -100,7 +112,7 @@ export class AsciiRenderer {
     gl.useProgram(prog);
     this.prog = prog;
     this.u = {};
-    for (const name of ['uFg', 'uBg', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
+    for (const name of ['uFg', 'uBg', 'uOv', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
       'uAtlasCell', 'uAtlasPad', 'uAtlasSize']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
@@ -121,10 +133,12 @@ export class AsciiRenderer {
 
     this.fgTex = dataTexture(gl);
     this.bgTex = dataTexture(gl);
+    this.ovTex = dataTexture(gl);
 
     gl.uniform1i(this.u.uFg, 0);
     gl.uniform1i(this.u.uBg, 1);
     gl.uniform1i(this.u.uAtlas, 2);
+    gl.uniform1i(this.u.uOv, 3);
     gl.uniform2f(this.u.uAtlasCols, atlas.cols, atlas.rows);
     gl.uniform2f(this.u.uAtlasCell, atlas.cellW, atlas.cellH);
     gl.uniform1f(this.u.uAtlasPad, atlas.pad);
@@ -164,10 +178,11 @@ export class AsciiRenderer {
     this.rows = rows;
     this.fg = new Uint8ClampedArray(cols * rows * 4);
     this.bg = new Uint8ClampedArray(cols * rows * 4);
+    this.ov = new Uint8ClampedArray(cols * rows * 4);
     // Terrain type under each cell, so later passes know where water is.
     this.mask = new Uint8Array(cols * rows);
 
-    for (const tex of [this.fgTex, this.bgTex]) {
+    for (const tex of [this.fgTex, this.bgTex, this.ovTex]) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -175,22 +190,81 @@ export class AsciiRenderer {
   }
 
   clear(r = NIGHT[0], g = NIGHT[1], b = NIGHT[2]) {
-    const { fg, bg } = this;
+    const { fg, bg, ov } = this;
     fg.fill(0);
+    ov.fill(0);
     for (let i = 0; i < bg.length; i += 4) {
       bg[i] = r;
       bg[i + 1] = g;
       bg[i + 2] = b;
+      bg[i + 3] = 0;
     }
   }
 
+  // Replaces the cell's glyph, covering anything layered on it. A glyph
+  // flagged with LAYER is stacked on top instead (see layer).
   put(x, y, glyphIndex, r, g, b) {
     if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) return;
-    const i = (y * this.cols + x) * 4;
+    this.putAt(y * this.cols + x, glyphIndex, r, g, b);
+  }
+
+  putAt(cell, glyphIndex, r, g, b) {
+    if (glyphIndex & LAYER) {
+      this.layerAt(cell, glyphIndex, r, g, b);
+      return;
+    }
+    const i = cell * 4;
     this.fg[i] = r;
     this.fg[i + 1] = g;
     this.fg[i + 2] = b;
-    this.fg[i + 3] = glyphIndex;
+    this.fg[i + 3] = glyphIndex & 255;
+    this.bg[i + 3] = glyphIndex >> 8;
+    this.ov[i + 3] = 0;
+  }
+
+  // Stacks a glyph over the cell. A cell shows two glyphs at most: the one
+  // already layered there sinks to the base, so the latest two stay visible.
+  layer(x, y, glyphIndex, r, g, b) {
+    if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) return;
+    this.layerAt(y * this.cols + x, glyphIndex, r, g, b);
+  }
+
+  layerAt(cell, glyphIndex, r, g, b) {
+    const { fg, bg, ov } = this;
+    const i = cell * 4;
+    const glyphIndexOnly = glyphIndex & GLYPH_MASK;
+    const hi = bg[i + 3];
+    if (ov[i + 3] || hi >> 4) {
+      fg[i] = ov[i];
+      fg[i + 1] = ov[i + 1];
+      fg[i + 2] = ov[i + 2];
+      fg[i + 3] = ov[i + 3];
+      bg[i + 3] = (hi >> 4) | ((glyphIndexOnly >> 8) << 4);
+    } else {
+      bg[i + 3] = (hi & 15) | ((glyphIndexOnly >> 8) << 4);
+    }
+    ov[i] = r;
+    ov[i + 1] = g;
+    ov[i + 2] = b;
+    ov[i + 3] = glyphIndexOnly & 255;
+  }
+
+  // The base glyph of a cell, without anything layered over it.
+  glyphAt(cell) {
+    return this.fg[cell * 4 + 3] | ((this.bg[cell * 4 + 3] & 15) << 8);
+  }
+
+  // Swaps the base glyph, keeping its colour, and drops any layer over it.
+  setGlyph(cell, glyphIndex) {
+    const i = cell * 4;
+    this.fg[i + 3] = glyphIndex & 255;
+    this.bg[i + 3] = (glyphIndex & GLYPH_MASK) >> 8;
+    this.ov[i + 3] = 0;
+  }
+
+  // Whether a second glyph is layered over the cell's base glyph.
+  hasLayer(cell) {
+    return this.ov[cell * 4 + 3] !== 0 || this.bg[cell * 4 + 3] >> 4 !== 0;
   }
 
   putBg(x, y, r, g, b) {
@@ -213,6 +287,10 @@ export class AsciiRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.bgTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE,
       this.bg);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, this.ovTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE,
+      this.ov);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
 

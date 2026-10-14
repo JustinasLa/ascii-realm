@@ -1,5 +1,7 @@
 // Every character the game can draw, rasterised once into a single texture.
-// Glyphs are addressed by index so a cell can store its character in one byte.
+// Glyphs are addressed by index; a cell stores its glyph in twelve bits.
+
+import { PACKS } from './glyph-packs/index.js';
 
 const ASCII = Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)).join('');
 export const GLYPHS = ASCII + '≈·°';
@@ -25,9 +27,63 @@ const FLAT_BASE = SHORT_BASE + STROKE_STEPS * STROKE_STEPS;
 // Bold blossoms: a font's `*` and `o` are too faint to read at small cells.
 export const BLOSSOM = FLAT_BASE + FLAT_STEPS * FLAT_STEPS;
 export const BUD = BLOSSOM + 1;
-const GLYPH_COUNT = BUD + 1;
+const PACK_BASE = BUD + 1;
 const stepX = (i) => (i + 0.5) / STROKE_STEPS;
 const stepY = (i) => (i + 0.5) / FLAT_STEPS;
+
+// Detail glyphs come from packs (see glyph-packs/): each entry is drawn by
+// its own function and found again by name. An entry may name its mirror
+// image for reflections, or set `flip` to get an upside-down twin named
+// `${name}~` drawn for it automatically.
+const packed = [];
+const byName = new Map();
+function addPacked(entry) {
+  if (byName.has(entry.name)) throw new Error(`Duplicate glyph name: ${entry.name}`);
+  byName.set(entry.name, PACK_BASE + packed.length);
+  packed.push(entry);
+}
+for (const pack of PACKS) {
+  for (const entry of pack) {
+    if (!entry.flip) {
+      addPacked(entry);
+      continue;
+    }
+    const twin = `${entry.name}~`;
+    addPacked({ ...entry, mirror: twin });
+    addPacked({ name: twin, mirror: entry.name, draw: (ctx, w, h) => {
+      ctx.translate(0, h);
+      ctx.scale(1, -1);
+      entry.draw(ctx, w, h);
+    } });
+  }
+}
+export const GLYPH_COUNT = PACK_BASE + packed.length;
+
+// A cell holds a base glyph and may hold a second one layered over it, like
+// a flower over grass. Adding LAYER to a glyph asks any writer to stack it
+// on top of the cell instead of replacing what is there.
+export const GLYPH_BITS = 12;
+export const LAYER = 1 << GLYPH_BITS;
+export const GLYPH_MASK = LAYER - 1;
+export const over = (g) => g | LAYER;
+if (GLYPH_COUNT > LAYER) throw new Error('Too many glyphs for the cell format');
+
+// A detail glyph by name. Unknown names throw, so a typo fails loudly.
+export function dg(name) {
+  const g = byName.get(name);
+  if (g === undefined) throw new Error(`Unknown glyph: ${name}`);
+  return g;
+}
+
+export const hasGlyph = (name) => byName.has(name);
+
+// Every glyph whose name starts with the prefix, in pack order.
+export function family(prefix) {
+  const out = [];
+  for (const [name, g] of byName) if (name.startsWith(prefix)) out.push(g);
+  if (!out.length) throw new Error(`Unknown glyph family: ${prefix}`);
+  return out;
+}
 
 // bottom/top: 0..STROKE_STEPS-1 from the left edge of the cell.
 // tip: 0 for a joining stroke, 1 for a tip at the top, 2 for one mid-cell.
@@ -42,17 +98,29 @@ export function flatGlyph(left, right) {
 
 export const FLAT_GLYPHS = Array.from({ length: FLAT_STEPS * FLAT_STEPS }, (_, i) => FLAT_BASE + i);
 
-// A reflection turns an upright stroke upside down: its bottom and top swap.
-export const MIRRORED = Uint8Array.from({ length: GLYPH_COUNT }, (_, g) => {
-  if (g < STROKE_BASE || g >= FLAT_BASE) return g;
-  const i = (g - STROKE_BASE) % (STROKE_STEPS * STROKE_STEPS);
-  return STROKE_BASE + (i % STROKE_STEPS) * STROKE_STEPS + Math.floor(i / STROKE_STEPS);
-});
+// A reflection turns a glyph upside down: an upright stroke's bottom and top
+// swap, and a pack glyph names the glyph that is its own mirror image.
+export const MIRRORED = (() => {
+  const table = new Uint16Array(LAYER * 2);
+  for (let g = 0; g < table.length; g++) {
+    const base = g & GLYPH_MASK;
+    let m = base;
+    if (base >= STROKE_BASE && base < FLAT_BASE) {
+      const i = (base - STROKE_BASE) % (STROKE_STEPS * STROKE_STEPS);
+      m = STROKE_BASE + (i % STROKE_STEPS) * STROKE_STEPS + Math.floor(i / STROKE_STEPS);
+    } else if (base >= PACK_BASE && base < GLYPH_COUNT) {
+      const mirror = packed[base - PACK_BASE].mirror;
+      if (mirror) m = dg(mirror);
+    }
+    table[g] = m | (g & LAYER);
+  }
+  return table;
+})();
 
 // Atlas cells are padded so mipmapped sampling never bleeds a neighbour in.
-const ATLAS_COLS = 16;
-const INNER_W = 30;
-const INNER_H = 50;
+const ATLAS_COLS = 32;
+export const INNER_W = 30;
+export const INNER_H = 50;
 const PAD = 6;
 // Strokes fill the padding too, so mipmaps keep the joins between rows solid.
 const REACH = PAD;
@@ -136,6 +204,22 @@ function drawBlossoms(ctx, at) {
   });
 }
 
+// Pack glyphs draw in their own inner-cell coordinates, 0..INNER_W across
+// and 0..INNER_H down, in white; grey fills draw a glyph at partial strength.
+function drawPacks(ctx, at) {
+  packed.forEach((entry, k) => {
+    inCell(ctx, at, PACK_BASE + k, (ox, oy) => {
+      ctx.translate(ox, oy);
+      ctx.fillStyle = '#fff';
+      ctx.strokeStyle = '#fff';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = 4;
+      entry.draw(ctx, INNER_W, INNER_H);
+    });
+  });
+}
+
 export function buildAtlas(fontFamily) {
   const cellW = INNER_W + PAD * 2;
   const cellH = INNER_H + PAD * 2;
@@ -166,6 +250,7 @@ export function buildAtlas(fontFamily) {
   const at = (g) => [(g % ATLAS_COLS) * cellW + PAD, Math.floor(g / ATLAS_COLS) * cellH + PAD];
   drawStrokes(ctx, at);
   drawBlossoms(ctx, at);
+  drawPacks(ctx, at);
 
   return { canvas, cols: ATLAS_COLS, rows, cellW, cellH, pad: PAD };
 }

@@ -1,10 +1,14 @@
-import { glyph } from '../render/glyphs.js';
+import { family } from '../render/glyphs.js';
 import { TILT } from '../entities/rig.js';
+import { FLOATING } from './terrain/water.js';
 import { ASPECT, WATER } from './world.js';
 
-const RIPPLE = glyph('~');
-const DOT = glyph('.');
-const DROPS = [...".'`|"].map(glyph);
+// Pieces of a ring by the heading out from its middle, and spray from a
+// bead of water to a rising streak.
+const RING = family('water.ring.');
+const DROPS = family('water.drop.');
+const CREST = [155, 193, 218];
+const TAU = Math.PI * 2;
 const MAX_RINGS = 96;
 const MAX_DROPS = 240;
 const IMPACTS = {
@@ -118,19 +122,22 @@ export class Splashes {
         const sx = wx - view.x0;
         if (sx < 0 || sx >= r.cols) continue;
         const cell = sy * r.cols + sx;
-        if (r.mask[cell] !== WATER) continue;
+        // Rings pass beneath floating pads.
+        if (r.mask[cell] !== WATER || FLOATING[r.glyphAt(cell)]) continue;
         const dx = (wx + 0.5 - x) * ASPECT;
         const dy = (wy + 0.5 - y) / TILT;
         const distance = Math.hypot(dx, dy);
         if (Math.abs(distance - radius) > 0.48) continue;
-        // Thin, broken moonlit crests; blend with the existing reflections.
+        // Thin, broken moonlit crests drawn over whatever the water shows,
+        // each cell a piece of the ring curving the right way. On the
+        // squashed ring the outward normal tips toward the vertical.
         const shimmer = 0.8 + Math.sin(wx * 1.7 + wy * 2.3 + time * 4) * 0.2;
         const k = Math.min(1, light) * shimmer;
         const o = cell * 4;
-        r.fg[o] += (155 - r.fg[o]) * k;
-        r.fg[o + 1] += (193 - r.fg[o + 1]) * k;
-        r.fg[o + 2] += (218 - r.fg[o + 2]) * k;
-        r.fg[o + 3] = Math.abs(dy) > radius * 0.45 ? RIPPLE : DOT;
+        const a = Math.atan2(dy / TILT, dx);
+        const heading = ((Math.round(a / (TAU / 8)) % 8) + 8) % 8;
+        r.layerAt(cell, RING[heading], r.bg[o] + (CREST[0] - r.bg[o]) * k,
+          r.bg[o + 1] + (CREST[1] - r.bg[o + 1]) * k, r.bg[o + 2] + (CREST[2] - r.bg[o + 2]) * k);
       }
     }
   }

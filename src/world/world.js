@@ -54,6 +54,10 @@ export class World {
     this.addedProps = new Map();
     this.removedProps = new Set();
     this.addedPropChunks = new Map();
+    // Ground beneath solid props, where no grass grows: by chunk, each cell's
+    // own grass height and how many props cover it.
+    this.bareGround = new Map();
+    this.coveredChunks = new Set();
     this.propRenderW = 30;
     this.propRenderH = 50;
     this.propFootW = 10;
@@ -163,6 +167,7 @@ export class World {
         if (edit !== undefined) this.applyTerrain(chunk, ly * CHUNK + lx, edit);
       }
     }
+    for (const i of this.bareGround.get(chunkKey(cx, cy))?.keys() ?? []) grassHeight[i] = 0;
     chunk.blades = grassRoots(chunk, s, CHUNK);
     return chunk;
   }
@@ -237,6 +242,7 @@ export class World {
   addProp(prop) {
     if (this.addedProps.has(prop.id)) this.deleteProp(prop.id);
     this.addedProps.set(prop.id, prop);
+    this.coverGrass(prop, 1);
     for (const cell of prop.cells) {
       this.propRenderW = Math.max(this.propRenderW, Math.abs(cell.dx));
       this.propRenderH = Math.max(this.propRenderH, -cell.dy);
@@ -252,6 +258,7 @@ export class World {
     const prop = this.addedProps.get(id);
     if (!prop) return false;
     this.addedProps.delete(id);
+    this.coverGrass(prop, -1);
     const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
     const list = this.addedPropChunks.get(key);
     list.delete(id);
@@ -259,7 +266,42 @@ export class World {
     return true;
   }
 
+  // Nothing grows through a rock, a trunk or a crate: blades rooted inside a
+  // solid prop's footprint would be drawn over its base. Covering (+1) clears
+  // the grass there; uncovering (-1) lets it grow back once no prop is left.
+  coverGrass(prop, change) {
+    if (prop.chopped || prop.solid === false || (prop.kind === 'bush' && prop.solid !== true)) return;
+    const deadwood = prop.kind === 'deadwood';
+    const rx = Math.ceil(deadwood ? DEADWOOD_REACH_X : prop.footW ?? 0);
+    const ry = Math.ceil(deadwood ? DEADWOOD_REACH_Y : prop.footH ?? 0);
+    const x0 = Math.floor(prop.x);
+    const y0 = Math.floor(prop.y);
+    const changed = new Set();
+    for (let y = y0 - ry; y <= y0 + ry; y++) {
+      for (let x = x0 - rx; x <= x0 + rx; x++) {
+        if (!blocks(prop, x + 0.5, y + 0.5)) continue;
+        const { c, i } = this.locate(x, y);
+        const key = chunkKey(c.cx, c.cy);
+        let bare = this.bareGround.get(key);
+        if (!bare) this.bareGround.set(key, bare = new Map());
+        const cell = bare.get(i);
+        if (change > 0) {
+          if (cell) cell.count++;
+          else bare.set(i, { height: c.grassHeight[i], count: 1 });
+          if (c.grassHeight[i]) changed.add(c);
+          c.grassHeight[i] = 0;
+        } else if (cell && --cell.count <= 0) {
+          bare.delete(i);
+          if (c.type[i] === GRASS || c.type[i] === SHORE) c.grassHeight[i] = cell.height;
+          changed.add(c);
+        }
+      }
+    }
+    for (const c of changed) this.touched(c);
+  }
+
   clearScenery() {
+    for (const prop of this.addedProps.values()) this.coverGrass(prop, -1);
     for (const key of this.terrainEdits.keys()) {
       const [x, y] = key.split(',').map(Number);
       const { c, i } = this.locate(x, y);
@@ -331,7 +373,10 @@ export class World {
           prop.hits = hits;
           prop.chopped = hits >= TREE_HITS;
         }
+        // Grass is only cleared the first time; it stays bare after eviction.
+        if (!this.coveredChunks.has(chunkKey(cx, cy))) this.coverGrass(prop, 1);
       });
+      this.coveredChunks.add(chunkKey(cx, cy));
     }
     const added = this.addedPropChunks.get(chunkKey(cx, cy));
     if (!added && !this.removedProps.size) return c.props;

@@ -5,10 +5,11 @@ import { clumpAt, grassRoots } from '../src/world/grass-roots.js';
 import { hash2 } from '../src/core/rng.js';
 import { Player } from '../src/entities/player.js';
 import { SCALE, TILT, buildRig } from '../src/entities/rig.js';
-import { FLAT_GLYPHS, STROKE_STEPS, strokeGlyph } from '../src/render/glyphs.js';
+import { FLAT_GLYPHS, LAYER, STROKE_STEPS, strokeGlyph } from '../src/render/glyphs.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, CHUNK_SIZE, DIRT, GRASS, SHORE, STONE, WATER, World } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 // Terrain-only fixtures keep blade geometry and interaction tests independent
 // of the procedural biome layout.
@@ -53,7 +54,7 @@ function meadow(roots = null) {
 }
 
 function renderer(view, onPut = () => {}) {
-  return {
+  return withLayers({
     cols: view.cols,
     rows: view.rows,
     fg: new Float32Array(view.cols * view.rows * 4),
@@ -66,7 +67,7 @@ function renderer(view, onPut = () => {}) {
       onPut(x, y, g);
     },
     putBg() {},
-  };
+  });
 }
 
 function rowCells(grass, world, view, t, y) {
@@ -646,11 +647,11 @@ test('flowers bloom on meadow roots, sway with the wind and are pushed aside by 
   assert.ok(found, 'the seeded meadow has flowers');
   const view = { x0: found.x - 20, y0: found.y - 20, cols: 40, rows: 40 };
   const head = (grass, t) => rowCells(grass, world, view, t, found.y)
-    .find((c) => c.cr > 100 && c.cb > 100 && Math.abs(c.x - 20) < 10);
+    .find((c) => (c.g & LAYER) && Math.abs(c.x - 20) < 10);
   const positions = new Set();
   for (let t = 0; t < 12; t += 0.37) {
     const h = head(new Grass(), t);
-    assert.ok(h, `a pale flower head at t=${t.toFixed(2)}`);
+    assert.ok(h, `a flower head layered over the meadow at t=${t.toFixed(2)}`);
     positions.add(h.x);
   }
   assert.ok(positions.size > 1, 'the flower sways with its stem');

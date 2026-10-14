@@ -1,11 +1,12 @@
-import { fbm } from '../core/noise.js';
+import { fbm, valueNoise } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
-import { glyph } from '../render/glyphs.js';
-import { MOSS, STONE_LIT, STONE_MID } from '../render/palette.js';
+import { dg, LAYER, over } from '../render/glyphs.js';
+import { MOSS, STONE_MID } from '../render/palette.js';
 import { makeCampProp } from './camp-props.js';
 import { deadwoodBlocks, deadwoodInClearing, makeDeadwood } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
+import { bakeSurface, cellBounds, makeCell, ringGlyph } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
 import { makeBush, makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
@@ -13,85 +14,163 @@ import { ASPECT, GRASS, WATER } from './world.js';
 
 // Scenery props. Each prop is rasterised once, when its chunk is
 // generated, into a list of cells relative to its base (the point where it
-// touches the ground). Crowns animate without rebuilding their geometry.
+// touches the ground). A cell whose glyph carries the LAYER flag stacks on
+// the cell drawn just before it at the same place, so one spot can show a
+// texture with moss, a nail or a crack over it. Crowns animate without
+// rebuilding their geometry.
 
-const SUB_X = [0.25, 0.75];
-const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
+const LIGHT = (() => {
+  const v = [-0.5, -0.72, 0.48];
+  const n = Math.hypot(...v);
+  return v.map((x) => x / n);
+})();
+const STONE_GAP = [24, 22, 36];
 
-// Glyph families from sparse to dense. A cell picks a family by brightness
-// and a member by hash, which gives foliage its busy, leafy texture.
-const FAMILIES = ['.\'`', ':;-', '+=~ox', 'aedbqpu', 'Q0O8&$', '@#%WM'].map((f) => [...f].map(glyph));
-
-function bake(w, top, bottom, sample, seed) {
-  const cells = [];
-  for (let dy = top; dy <= bottom; dy++) {
-    for (let dx = -w; dx <= w; dx++) {
-      let hits = 0;
-      let lum = 0;
-      let cr = 0;
-      let cg = 0;
-      let cb = 0;
-      for (const oy of SUB_Y) {
-        for (const ox of SUB_X) {
-          const s = sample((dx + ox - 0.5) * ASPECT, dy + oy - 1);
-          if (!s) continue;
-          hits++;
-          lum += s.l;
-          cr += s.c[0] * s.l;
-          cg += s.c[1] * s.l;
-          cb += s.c[2] * s.l;
-        }
-      }
-      if (hits < 2) continue;
-      const b = Math.max(0, Math.min(0.999, lum / hits));
-      const fam = FAMILIES[Math.floor(b * FAMILIES.length)];
-      const k = 1.3 / hits;
-      // A fully covered cell also darkens the ground behind it, so the rock
-      // reads as one solid form rather than glyphs scattered on the grass.
-      const solid = hits === SUB_X.length * SUB_Y.length;
-      cells.push({
-        dx,
-        dy,
-        g: fam[Math.floor(hash2(dx, dy, seed) * fam.length)],
-        r: cr * k,
-        gg: cg * k,
-        b: cb * k,
-        br: solid ? cr * k * 0.16 : undefined,
-        bgG: solid ? cg * k * 0.16 : undefined,
-        bb: solid ? cb * k * 0.18 : undefined,
-      });
-    }
-  }
-  return cells;
+// Bakes a sampled prop into base and layered cells (see prop-art.js).
+function bake(w, top, bottom, sample, seed, options) {
+  return bakeSurface(w, top, bottom, sample, seed, options);
 }
 
-function makeRock(x, y, rand, seed = x * 17 + y) {
+// A boulder seen from above and in front: an irregular outline over a dome
+// cut into flat facets, each lit by the moon at its own angle. Cracks,
+// moss on the upturned faces, lichen rosettes and a scatter of pebbles at
+// the foot are decided once, so the rock never shimmers.
+function boulder(rand, seed, { rx, ry, sides, roundness, stone, mossCoverage, grit = 0.5 }) {
+  const offset = rand() * Math.PI * 2;
+  const corners = Array.from({ length: sides }, (_, i) => {
+    const angle = offset + i * Math.PI * 2 / sides + (rand() - 0.5) * 0.4;
+    const radius = roundness + rand() * (1 - roundness);
+    return [Math.cos(angle) * rx * radius, -ry + Math.sin(angle) * ry * radius];
+  });
+  const bottom = Math.max(...corners.map((c) => c[1]));
+  for (const c of corners) c[1] -= bottom;
+  // The dome's normal over the outline's ellipse; up the screen is up.
+  const dome = (u, v) => {
+    const z = Math.sqrt(Math.max(0.04, 1 - u * u - v * v));
+    const n = [u, v * 0.85 - 0.35, z];
+    const k = Math.hypot(...n);
+    return n.map((x) => x / k);
+  };
+  const facetCount = 5 + Math.floor(rand() * 4);
+  const facets = Array.from({ length: facetCount }, () => {
+    const a = rand() * Math.PI * 2;
+    const d = Math.sqrt(rand()) * 0.85;
+    const u = Math.cos(a) * d;
+    const v = Math.sin(a) * d;
+    const n = dome(u, v).map((x) => x + (rand() - 0.5) * 0.32);
+    const k = Math.hypot(...n);
+    const lit = Math.max(0, (n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]) / k);
+    return { u, v, lit, up: n[1] / k };
+  });
+  const cracks = Array.from({ length: rand() < 0.75 ? 1 + Math.floor(rand() * 2) : 0 }, () => {
+    const pts = [];
+    let u = (rand() - 0.5) * 1.2;
+    let v = -0.9;
+    while (v < 1) {
+      pts.push([u * rx, -ry + v * ry - bottom]);
+      u += (rand() - 0.5) * 0.5;
+      v += 0.35 + rand() * 0.2;
+    }
+    return pts;
+  });
+  const inside = (px, py) => {
+    let hit = false;
+    for (let i = 0, j = sides - 1; i < sides; j = i++) {
+      const a = corners[i];
+      const b = corners[j];
+      if ((a[1] > py) !== (b[1] > py) && px < (b[0] - a[0]) * (py - a[1]) / (b[1] - a[1]) + a[0]) hit = !hit;
+    }
+    return hit;
+  };
+  const fissures = [0, 1, 2, 3].map((a) => [0, 1].map((v) => dg(`props.fissure.${a}.${v}`)));
+  const mossGlyphs = [0, 1, 2, 3, 4, 5].map((i) => dg(`props.moss.${i}`));
+  const ridges = [0, 1, 2, 3].map((a) => dg(`props.ridge.${a}`));
+  const lichenGlyphs = [0, 1, 2, 3].map((i) => dg(`props.lichen.${i}`));
+  const lichen = rand() < 0.5 ? [168, 170, 122] : [176, 128, 82];
+  const sample = (px, py) => {
+    if (py > 0 || !inside(px, py)) return null;
+    const u = px / rx;
+    const v = (py + ry + bottom) / ry;
+    // Nearest facet, measured on the dome.
+    let best = facets[0];
+    let next = facets[1];
+    let bestD = Infinity;
+    let nextD = Infinity;
+    for (const f of facets) {
+      const d = (u - f.u) ** 2 + (v - f.v) ** 2 * 1.4;
+      if (d < bestD) { nextD = bestD; next = best; bestD = d; best = f; } else if (d < nextD) { nextD = d; next = f; }
+    }
+    const n = dome(u, v);
+    const smooth = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
+    const grain = (hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 17) - 0.5) * 0.08;
+    const l = Math.max(0, Math.min(1, (best.lit * 0.55 + smooth * 0.55 - 0.5) * 1.5 + 0.48 + grain));
+    const s = { m: 'stone', l, c: stone };
+    for (const pts of cracks) {
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1];
+        const [bx, by] = pts[i];
+        const vx = bx - ax;
+        const vy = by - ay;
+        const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)));
+        if (Math.hypot(px - ax - vx * t, py - ay - vy * t) < 0.32) {
+          const a = (Math.round(-Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 4;
+          s.acc = { g: fissures[a][i % 2], c: STONE_GAP };
+          return s;
+        }
+      }
+    }
+    const patch = valueNoise(px * 0.7, py * 0.9, seed + 29);
+    // Where two facets meet: the distance to the bisector between them.
+    const gx = (next.u - best.u) * rx;
+    const gy = (next.v - best.v) * ry;
+    const gap = (nextD - bestD) * rx / (2 * Math.hypot(next.u - best.u, (next.v - best.v) * 1.4) || 1);
+    const ridgeEdge = gap < 0.2 && best.lit - next.lit > 0.16 && v < 0.6;
+    if (best.up < -0.2 && v < 0.35 && patch < mossCoverage) {
+      const deep = 0.7 + patch * 0.5;
+      s.acc = { g: mossGlyphs[Math.floor(hash2(Math.floor(px * 3), Math.floor(py), seed) * 6)],
+        c: [MOSS[0] * deep * (0.7 + l * 0.6), MOSS[1] * deep * (0.7 + l * 0.6), MOSS[2] * deep * (0.6 + l * 0.5)] };
+    } else if (ridgeEdge) {
+      const a = (Math.round(-Math.atan2(gx, -gy) / (Math.PI / 4)) + 8) % 4;
+      s.acc = { g: ridges[a], c: stone.map((x) => x * (0.85 + l * 0.55)) };
+    } else if (hash2(Math.floor(px * 1.7), Math.floor(py), seed + 41) < 0.05 * grit + (l > 0.5 ? 0.03 : 0)) {
+      s.acc = { g: lichenGlyphs[Math.floor(hash2(Math.floor(px), Math.floor(py), seed + 43) * 4)],
+        c: lichen.map((x) => x * (0.55 + l * 0.5)) };
+    }
+    return s;
+  };
+  // Pebbles and grit around the foot, on the ground beside the rock.
+  const extras = [];
+  const half = Math.ceil(rx / ASPECT);
+  const count = 2 + Math.floor(rand() * 4);
+  for (let i = 0; i < count; i++) {
+    const side = rand() < 0.5 ? -1 : 1;
+    const dx = side * (Math.floor(half * (0.55 + rand() * 0.5)) + 1);
+    const dy = rand() < 0.6 ? 0 : 1;
+    const light = 0.55 + rand() * 0.35;
+    const name = rand() < 0.6 ? `pebble.${Math.floor(rand() * 8)}` : `gravel.${Math.floor(rand() * 8)}`;
+    extras.push({ dx, dy, g: dg(name), c: stone.map((x) => x * light) });
+  }
+  return { sample, w: Math.ceil(rx / ASPECT) + 1, top: -Math.ceil(ry * 2) - 1, extras,
+    shadow: { rx: rx * 1.15, ry: Math.max(1, ry * 0.25), ox: rx * 0.25 } };
+}
+
+function bakeBoulder(rock, seed, bakeFn) {
+  return bakeFn(rock.w, rock.top, 0, rock.sample, seed, { shadow: rock.shadow, extras: rock.extras });
+}
+
+function makeRock(x, y, rand, seed = x * 17 + y, bakeFn = bake) {
   const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.65 + rand() * 0.2);
-  const sample = (px, py) => {
-    const nx = px / rx;
-    const ny = (py + ry) / ry;
-    const d2 = nx * nx + ny * ny;
-    if (d2 > 1 || py > 0) return null;
-    // The moonlit crown of the boulder is pale lavender, its flanks drop
-    // into blue-grey shadow.
-    const l = 0.5 - nx * 0.3 - ny * 0.45;
-    return { l, c: ny < -0.3 && rand() < 0.4 ? MOSS : l > 0.6 ? STONE_LIT : STONE_MID };
-  };
-  const w = Math.ceil(rx / ASPECT) + 1;
-  return {
-    kind: 'rock',
-    x,
-    y,
-    footW: rx / ASPECT,
-    footH: 1.4,
-    bounds: { minX: -w, maxX: w, minY: -Math.ceil(ry * 2), maxY: 0 },
-    cells: bake(w, -Math.ceil(ry * 2), 0, sample, seed),
-  };
+  const lavender = rand();
+  const stone = STONE_MID.map((v, i) => v * (0.92 + lavender * 0.2) + [8, 5, -6][i] * (1 - lavender));
+  const rock = boulder(rand, seed, { rx, ry, sides: 7 + Math.floor(rand() * 3), roundness: 0.66, stone,
+    mossCoverage: 0.25 + rand() * 0.35 });
+  const cells = bakeBoulder(rock, seed, bakeFn);
+  return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4, bounds: cellBounds(cells), cells };
 }
 
 // The builder's original broadleaf, kept so saved scenes look the same.
-function makeBuilderTree(x, y, rand, seed = x * 31 + y) {
+function makeBuilderTree(x, y, rand, seed = x * 31 + y, bakeFn = bake) {
   const height = 30 + rand() * 12;
   const radius = 8 + rand() * 3.5;
   const blobs = [{ x: 0, y: -height, r: radius }];
@@ -106,7 +185,7 @@ function makeBuilderTree(x, y, rand, seed = x * 31 + y) {
   }
   const tint = rand();
   const leaf = [40 + tint * 20, 100 + tint * 30, 80 - tint * 20];
-  const bark = [70, 56, 44];
+  const bark = [96, 74, 56];
   const trunkTop = -height + radius * 0.5;
 
   const sample = (px, py) => {
@@ -117,12 +196,13 @@ function makeBuilderTree(x, y, rand, seed = x * 31 + y) {
       const ny = (py - bl.y) / (bl.r * 0.85);
       const d2 = nx * nx + ny * ny;
       if (d2 > 1) continue;
-      const l = 0.55 - nx * 0.3 - ny * 0.35 + (1 - d2) * 0.15;
-      if (!best || l > best.l) best = { l, c: leaf };
+      const l = 0.5 - nx * 0.3 - ny * 0.35 + (1 - d2) * 0.12;
+      if (!best || l > best.l) best = { m: 'leaf', l: Math.max(0, Math.min(1, l)), c: leaf };
     }
     if (best) return best;
-    if (py > trunkTop && py < 0.2 && Math.abs(px) < 1.4 + (py / -height) * -0.5) {
-      return { l: 0.6 - px * 0.4, c: bark };
+    const half = 1.4 + (py / -height) * -0.5;
+    if (py > trunkTop && py < 0.2 && Math.abs(px) < half) {
+      return { m: 'bark', l: Math.max(0, Math.min(1, 0.55 - px / half * 0.35)), c: bark };
     }
     return null;
   };
@@ -136,52 +216,29 @@ function makeBuilderTree(x, y, rand, seed = x * 31 + y) {
     y,
     footW: 2.4,
     footH: 1.2,
-    bounds: { minX: -w, maxX: w, minY: top, maxY: 0 },
-    get cells() { return cells ??= bake(w, top, 0, sample, seed); },
+    bounds: { minX: -w - 2, maxX: w + 2, minY: top, maxY: 2 },
+    get cells() {
+      return cells ??= bakeFn(w, top, 0, sample, seed, { shadow: { rx: 4, ry: 1.3, ox: 1.2 } });
+    },
     // Replaced cells (e.g. a rescaled builder prop) bring their own extent.
     set cells(value) { cells = value; this.bounds = null; },
   };
 }
 
-// Hand-placed boulders have irregular outlines and distinct mineral/moss
-// patches. Procedural rocks above keep the original seeded landscape intact.
-function makeSceneryRock(x, y, rand, seed) {
+// Hand-placed boulders take one of several minerals and more varied
+// outlines than the boulders scattered over the procedural landscape.
+function makeSceneryRock(x, y, rand, seed, bakeFn = bake) {
   const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.55 + rand() * 0.3);
   const count = 7 + Math.floor(rand() * 4);
-  const offset = rand() * Math.PI * 2;
-  const corners = Array.from({ length: count }, (_, i) => {
-    const angle = offset + i * Math.PI * 2 / count;
-    const radius = 0.76 + rand() * 0.24;
-    return { x: Math.cos(angle) * rx * radius, y: -ry + Math.sin(angle) * ry * radius };
-  });
-  const bottom = Math.max(...corners.map((corner) => corner.y));
-  for (const corner of corners) corner.y -= bottom;
   const colors = [[109, 122, 139], [145, 127, 106], [135, 137, 143], [122, 136, 119]];
   const stone = colors[Math.floor(rand() * colors.length)];
   const mossCoverage = rand() * 0.65;
-  const facets = Array.from({ length: count }, () => (rand() - 0.5) * 0.15);
-  const sample = (px, py) => {
-    let inside = false;
-    for (let i = 0, j = count - 1; i < count; j = i++) {
-      const a = corners[i], b = corners[j];
-      if ((a.y > py) !== (b.y > py)
-        && px < (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x) inside = !inside;
-    }
-    if (!inside) return null;
-    const nx = px / rx, ny = (py + ry + bottom) / ry;
-    const angle = (Math.atan2(ny, nx) - offset + Math.PI * 4) % (Math.PI * 2);
-    const facet = facets[Math.floor(angle / (Math.PI * 2) * count)];
-    const grain = (hash2(Math.floor(px * 3), Math.floor(py * 3), seed + 17) - 0.5) * 0.08;
-    const moss = ny < 0.2 && hash2(Math.floor(px * 0.9), Math.floor(py * 0.8), seed + 29) < mossCoverage;
-    return { l: 0.59 - nx * 0.26 - ny * 0.3 + facet + grain,
-      c: moss ? [68, 99 + mossCoverage * 20, 62] : stone };
-  };
-  return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4,
-    cells: bake(Math.ceil(rx / ASPECT) + 1, -Math.ceil(ry * 2), 0, sample, seed) };
+  const rock = boulder(rand, seed, { rx, ry, sides: count - 1, roundness: 0.6, stone, mossCoverage, grit: 1 });
+  return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4, cells: bakeBoulder(rock, seed, bakeFn) };
 }
 
-function makeBuilderBush(x, y, rand, seed) {
+function makeBuilderBush(x, y, rand, seed, bakeFn = bake) {
   const radius = 3.5 + rand() * 2;
   const height = 4 + rand() * 2;
   const tint = rand();
@@ -199,8 +256,8 @@ function makeBuilderBush(x, y, rand, seed) {
       const ny = (py - blob.y) / blob.ry;
       const d2 = nx * nx + ny * ny;
       if (d2 > 1) continue;
-      const l = 0.55 - nx * 0.22 - ny * 0.28 + (1 - d2) * 0.12;
-      if (!best || l > best.l) best = { l, c: leaf };
+      const l = 0.5 - nx * 0.22 - ny * 0.28 + (1 - d2) * 0.12;
+      if (!best || l > best.l) best = { m: 'leaf', l: Math.max(0, Math.min(1, l)), c: leaf };
     }
     return best;
   };
@@ -210,23 +267,27 @@ function makeBuilderBush(x, y, rand, seed) {
     y,
     footW: radius * 0.75 / ASPECT,
     footH: 1.5,
-    cells: bake(Math.ceil(radius * 1.2 / ASPECT), -Math.ceil(height * 1.5), 0, sample, seed),
+    cells: bakeFn(Math.ceil(radius * 1.2 / ASPECT), -Math.ceil(height * 1.5), 0, sample, seed,
+      { shadow: { rx: radius, ry: 1.2, ox: radius * 0.2 } }),
   };
 }
 
 // Resample the baked image onto the destination grid. Each destination is
 // visited once, so shrinking cannot stack cells and enlarging fills the image
-// instead of leaving gaps between its original cells. The ground anchor stays
-// at (0, 0), just as it does for procedural props.
-function scaleCells(cells, scaleX, scaleY = scaleX, mirror = false) {
-  if (scaleX === 1 && scaleY === 1 && !mirror) return cells;
+// instead of leaving gaps between its original cells. A spot's layered cells
+// travel with its base cell. The ground anchor stays at (0, 0), just as it
+// does for procedural props.
+function scaleCells(cells, scaleX, scaleY = scaleX) {
+  if (scaleX === 1 && scaleY === 1) return cells;
   const source = new Map();
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
   let maxY = -Infinity;
   for (const cell of cells) {
-    source.set(`${cell.dx},${cell.dy}`, cell);
+    const key = `${cell.dx},${cell.dy}`;
+    if (!source.has(key)) source.set(key, []);
+    source.get(key).push(cell);
     minX = Math.min(minX, cell.dx);
     maxX = Math.max(maxX, cell.dx);
     minY = Math.min(minY, cell.dy);
@@ -235,11 +296,25 @@ function scaleCells(cells, scaleX, scaleY = scaleX, mirror = false) {
   const scaled = [];
   for (let dy = Math.ceil((minY - 0.5) * scaleY); dy <= Math.floor((maxY + 0.5) * scaleY); dy++) {
     for (let dx = Math.ceil((minX - 0.5) * scaleX); dx <= Math.floor((maxX + 0.5) * scaleX); dx++) {
-      const cell = source.get(`${Math.round(dx / scaleX)},${Math.round(dy / scaleY)}`);
-      if (cell) scaled.push({ ...cell, dx: mirror ? -dx : dx, dy });
+      const group = source.get(`${Math.round(dx / scaleX)},${Math.round(dy / scaleY)}`);
+      if (group) for (const c of group) scaled.push(makeCell(dx, dy, c.g, c.r, c.gg, c.b, c.br, c.bgG, c.bb));
     }
   }
   return scaled;
+}
+
+// A bake that draws the prop at a different size by sampling its shape
+// through a stretch, so textures and outlines stay one cell fine.
+function scaledBaker(sx, sy, used) {
+  if (sx === 1 && sy === 1) return (...args) => { used.baked = true; return bake(...args); };
+  return (w, top, bottom, sample, seed, options = {}) => {
+    used.baked = true;
+    const shadow = options.shadow && { ...options.shadow, rx: options.shadow.rx * sx,
+      ry: options.shadow.ry * sy, ox: (options.shadow.ox ?? options.shadow.rx * 0.25) * sx };
+    const extras = options.extras?.map((e) => ({ ...e, dx: Math.round(e.dx * sx), dy: Math.round(e.dy * sy) }));
+    return bake(Math.ceil(w * sx) + 1, Math.floor(top * sy) - 1, bottom,
+      (px, py) => sample(px / sx, py / sy), seed, { ...options, shadow, extras });
+  };
 }
 
 // Builder props use their own seed so moving an item does not change its
@@ -262,35 +337,41 @@ export function createProp(kind, x, y, options = {}) {
   }
   if (variant !== 0 && variant !== 1) throw new RangeError('Unknown scenery variation version');
   const rand = mulberry32(seed);
-  const make = { tree: makeBuilderTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBuilderBush }[kind];
-  const prop = make ? make(x, y, rand, seed)
-    : makeNaturalProp(kind, x, y, rand, seed, bake) ?? makeCampProp(kind, x, y, rand, seed, bake);
-  if (!prop) throw new TypeError(`Scenery prop has no factory: ${kind}`);
+  // Variation is decided first so the prop can be drawn at its final size.
+  let width = 1;
+  let height = 1;
+  let brightness = 1;
+  let warmth = 0;
   if (variant === 1) {
     const variation = mulberry32((seed >>> 0) ^ 0xa341316c);
-    const width = 0.9 + variation() * 0.22;
-    const height = 0.9 + variation() * 0.2;
-    const mirrored = variation() < 0.5;
-    const brightness = 0.92 + variation() * 0.18;
-    const warmth = (variation() - 0.5) * 16;
+    width = 0.9 + variation() * 0.22;
+    height = 0.9 + variation() * 0.2;
+    // Props are no longer mirrored: their light must keep coming from the
+    // moon in the upper left. The draw is kept so the stream stays put.
+    variation();
+    brightness = 0.92 + variation() * 0.18;
+    warmth = (variation() - 0.5) * 16;
+  }
+  const used = { baked: false };
+  const bakeFn = scaledBaker(width * scale, height * scale, used);
+  const make = { tree: makeBuilderTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBuilderBush }[kind];
+  const prop = make ? make(x, y, rand, seed, bakeFn)
+    : makeNaturalProp(kind, x, y, rand, seed, bakeFn) ?? makeCampProp(kind, x, y, rand, seed, bakeFn);
+  if (!prop) throw new TypeError(`Scenery prop has no factory: ${kind}`);
+  let cells = prop.cells;
+  // Props composed glyph by glyph are resampled instead.
+  if (!used.baked) cells = scaleCells(cells, width * scale, height * scale);
+  if (variant === 1) {
     const shade = (value, offset = 0) => Math.max(0, Math.min(255, value * brightness + offset));
-    prop.cells = scaleCells(prop.cells, width, height, mirrored).map((cell) => ({ ...cell,
-      r: shade(cell.r, warmth), gg: shade(cell.gg), b: shade(cell.b, -warmth) }));
-    prop.footW *= width;
-    prop.footH *= height;
+    cells = cells.map((c) => makeCell(c.dx, c.dy, c.g, shade(c.r, warmth), shade(c.gg), shade(c.b, -warmth), c.br, c.bgG, c.bb));
   }
-  prop.cells = scaleCells(prop.cells, scale);
-  // Culling must see the scaled, mirrored image rather than the original.
-  let minX = 0, maxX = 0, minY = 0, maxY = 0;
-  for (const cell of prop.cells) {
-    minX = Math.min(minX, cell.dx);
-    maxX = Math.max(maxX, cell.dx);
-    minY = Math.min(minY, cell.dy);
-    maxY = Math.max(maxY, cell.dy);
-  }
-  prop.bounds = { minX, maxX, minY, maxY };
+  prop.cells = cells;
+  prop.footW *= width;
+  prop.footH *= height;
   prop.footW *= scale;
   prop.footH *= scale;
+  // Culling must see the final image rather than the original.
+  prop.bounds = cellBounds(prop.cells);
   prop.scale = scale;
   prop.seed = seed;
   prop.solid = definition.solid;
@@ -396,16 +477,60 @@ export function generateProps(world, cx, cy, size) {
   return props;
 }
 
-// What is left of a felled tree.
-const STUMP = [
-  { dx: -1, dy: -2, g: glyph('_'), r: 139, gg: 103, b: 62 },
-  { dx: 0, dy: -2, g: glyph('='), r: 166, gg: 124, b: 76 },
-  { dx: 1, dy: -2, g: glyph('_'), r: 122, gg: 85, b: 50 },
-  { dx: -1, dy: -1, g: glyph('|'), r: 112, gg: 77, b: 47 },
-  { dx: 0, dy: -1, g: glyph('#'), r: 99, gg: 69, b: 44 },
-  { dx: 1, dy: -1, g: glyph('|'), r: 78, gg: 54, b: 35 },
-  { dx: 0, dy: 0, g: glyph('w'), r: 88, gg: 62, b: 40 },
-];
+// What is left of a felled tree: a sawn top showing its growth rings,
+// a collar of bark, flared roots and fresh chips on the ground around it.
+// Three rows at most, baked once per tree.
+const stumps = new WeakMap();
+const CUT_WOOD = [204, 166, 112];
+const STUMP_BARK = { birch: [190, 192, 188], cherry: [128, 84, 74], acacia: [134, 108, 82],
+  pine: [120, 86, 62], spruce: [108, 80, 60], willow: [118, 104, 82] };
+
+function stumpCells(prop) {
+  let cells = stumps.get(prop);
+  if (cells) return cells;
+  cells = [];
+  const seed = Math.floor((prop.x * 31 + prop.y * 17) * 7) | 0;
+  const half = Math.max(1, Math.min(3, Math.round((prop.footW ?? 2) * 0.75)));
+  const bark = STUMP_BARK[prop.species] ?? [128, 92, 62];
+  const birch = prop.species === 'birch';
+  const put = (dx, dy, g, c, k = 1, back = 0) => cells.push(makeCell(dx, dy, g, c[0] * k, c[1] * k, c[2] * k,
+    back ? c[0] * back : undefined, back ? c[1] * back : undefined, back ? c[2] * back + 2 : undefined));
+  // The sawn face, with rings around a pith a little off centre.
+  for (let dx = -half; dx <= half; dx++) {
+    const edge = Math.abs(dx) === half;
+    if (edge) {
+      put(dx, -2, dg(`props.cut.s.${dx < 0 ? 1 : 3}.2`), CUT_WOOD, dx < 0 ? 1 : 0.7);
+      continue;
+    }
+    const g = ringGlyph(-dx / half, 0.25, seed, dx, -2);
+    put(dx, -2, g, CUT_WOOD, 1.02 - (dx + half) / (half * 2) * 0.22, 0.45);
+  }
+  // A crack across the face.
+  if (half > 1) cells.push(makeCell(Math.round(hash2(seed, 1, 3) * 2 - 1), -2, over(dg('props.fissure.2.0')), 70, 48, 34));
+  // The bark collar, lit on the left.
+  for (let dx = -half; dx <= half; dx++) {
+    const t = (dx + half) / (half * 2);
+    const g = birch ? dg(`props.birch.${(dx + 4) % 4}`) : dg(`props.bark.${Math.max(0, 3 - Math.round(t * 3))}.${(dx + 8) % 4}`);
+    put(dx, -1, g, bark, 1.15 - t * 0.55, 0.28);
+  }
+  // Moss or a fungus bracket on the shaded side of older stumps.
+  if (hash2(seed, 2, 5) < 0.5) cells.push(makeCell(half, -1, over(dg(`props.fungus.${seed & 1}`)), 168, 146, 108));
+  // Roots flare into the ground.
+  for (let dx = -half - 1; dx <= half + 1; dx++) {
+    const outer = Math.abs(dx) > half;
+    const t = (dx + half + 1) / (half * 2 + 2);
+    if (outer) put(dx, 0, dg(`props.cut.r.${dx < 0 ? 7 : 5}.0`), bark, 0.95 - t * 0.4);
+    else put(dx, 0, dg(`props.barkh.${dx < 0 ? 2 : 1}.${(dx + 8) % 4}`), bark, 0.9 - t * 0.45, 0.25);
+  }
+  // Chips thrown about by the axe.
+  for (let k = 0; k < 4; k++) {
+    const dx = (k % 2 ? 1 : -1) * (half + 2 + Math.floor(hash2(seed, k, 9) * 3));
+    const dy = -Math.floor(hash2(seed, k, 11) * 2);
+    cells.push(makeCell(dx, dy, over(dg(`props.chips.${k}`)), 200, 166, 112));
+  }
+  stumps.set(prop, cells);
+  return cells;
+}
 
 export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
   const direct = write === putCell;
@@ -413,7 +538,7 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
   if (prop.chopped) {
-    for (const c of STUMP) write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by);
+    for (const c of stumpCells(prop)) write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
     return;
   }
   const tree = prop.kind === 'tree' || prop.kind === 'bush';
@@ -426,24 +551,48 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   // Stable local dither lets it show through nearby leaves without changing
   // the renderer's glyph index channel or punching holes in solid wood.
   const reveal = player && prop.y > player.y ? player.foliageBounds : null;
-  for (const c of prop.cells) {
+  // A layered cell follows the base cell before it at the same spot: it
+  // sways with it and is hidden with it.
+  let lastDx = 0;
+  let lastDy = 0;
+  let lastShift = 0;
+  let lastHidden = true;
+  const cells = prop.cells;
+  for (let i = 0; i < cells.length; i++) {
+    const c = cells[i];
+    let shift = 0;
+    if (c.g >= LAYER && c.dx === lastDx && c.dy === lastDy) {
+      if (lastHidden) continue;
+      shift = lastShift;
+    } else {
+      lastDx = c.dx;
+      lastDy = c.dy;
+      lastHidden = true;
+      if (c.foliage) shift = Math.round(sway * c.flex);
+      lastShift = shift;
+    }
     const sy = by + c.dy;
     // Reject invisible rows before calculating foliage lighting or texture.
     // Reflections need source rows above the view, measured about the base.
     if (direct && (sy < 0 || sy >= view.rows)) continue;
     if (reflected && (by - c.dy + 1 < 0 || by - c.dy + 1 >= view.rows)) continue;
-    const dx = c.dx + (c.foliage ? Math.round(sway * c.flex) : 0);
+    const dx = c.dx + shift;
     const sx = bx + dx;
     if ((direct || reflected) && (sx < -1 || sx >= view.cols + 1)) continue;
-    if (c.foliage && reveal) {
+    if (c.foliage && reveal && c.g < LAYER) {
       const nx = (Math.floor(prop.x) + dx - reveal.x) / reveal.rx;
       const ny = (Math.floor(prop.y) + c.dy - reveal.y) / reveal.ry;
       const d2 = nx * nx + ny * ny;
       if (d2 < 1 && hash2(c.dx, c.dy, prop.textureSeed) < (1 - d2) * 0.93) continue;
     }
-    const flutter = c.foliage ? sin * c.phaseCos + cos * c.phaseSin : 0;
-    const light = c.foliage ? 1 + flutter * 0.035 + sheen : 1;
-    const ch = c.foliage && flutter > 0.94 && gust > 0.58 ? c.rustle : c.g;
+    if (c.g < LAYER) lastHidden = false;
+    if (!c.foliage) {
+      write(r, sx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
+      continue;
+    }
+    const flutter = sin * c.phaseCos + cos * c.phaseSin;
+    const light = 1 + flutter * 0.035 + sheen;
+    const ch = flutter > 0.94 && gust > 0.58 && c.rustle !== undefined ? c.rustle | (c.g & LAYER) : c.g;
     write(r, sx, sy, ch, c.r * light, c.gg * light, c.b * light, by, c.br, c.bgG, c.bb);
   }
 }

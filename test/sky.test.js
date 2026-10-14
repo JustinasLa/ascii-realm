@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { hash2 } from '../src/core/rng.js';
-import { glyph } from '../src/render/glyphs.js';
-import { drawSkyReflection } from '../src/world/sky.js';
+import { drawSkyReflection, starAt } from '../src/world/sky.js';
 import { ASPECT, GRASS, WATER } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 function renderer(cellH, dpr = 1) {
   const cellW = cellH * ASPECT * dpr;
@@ -11,22 +11,25 @@ function renderer(cellH, dpr = 1) {
   const canvas = { width: 600 * dpr, height: 360 * dpr };
   const cols = Math.ceil(canvas.width / cellW) + 1;
   const rows = Math.ceil(canvas.height / cellH) + 1;
-  return {
+  return withLayers({
     canvas, cols, rows, cellW, cellH, dpr,
     fg: new Uint8ClampedArray(cols * rows * 4),
     mask: new Uint8Array(cols * rows).fill(GRASS),
-  };
+  });
 }
 
 function star(gx, gy, dpr) {
-  const h = hash2(gx, gy, 4242);
-  assert.ok(h >= 0.92, 'the chosen grid square contains a star');
+  const found = starAt(gx, gy);
+  assert.ok(found, 'the chosen grid square contains a star');
   return {
     x: (gx + hash2(gx, gy, 4243)) * 26 * dpr,
     y: (gy + hash2(gx, gy, 4244)) * 26 * dpr,
-    glyph: glyph([...'.\'+*'][Math.floor(h * 1e5) % 4]),
+    glyph: found.glyph,
   };
 }
+
+// Stars are layered over the water's own surface marks.
+const layered = (r, i) => r.ov[i * 4 + 3] | ((r.bg[i * 4 + 3] >> 4) << 8);
 
 function starCell(r, view, s) {
   const y = Math.floor((s.y + view.offY) / r.cellH);
@@ -46,7 +49,7 @@ test('stars near grid boundaries remain visible through scrolling, zoom and pixe
           const { index } = starCell(r, view, s);
           r.mask[index] = WATER;
           drawSkyReflection(r, view, 0);
-          assert.equal(r.fg[index * 4 + 3], s.glyph,
+          assert.equal(layered(r, index), s.glyph,
             `star ${gx},${gy}; cell height ${cellH}; DPR ${dpr}; offset ${fx},${fy}`);
         }
       }
@@ -67,9 +70,10 @@ test('a star exactly on a cell boundary is drawn only in the cell containing it'
     for (let sx = x - 2; sx <= x + 2; sx++) r.mask[sy * r.cols + sx] = WATER;
   }
   drawSkyReflection(r, view, 0);
-  assert.equal(r.fg[index * 4 + 3], s.glyph);
-  const drawn = Array.from(r.fg).filter((value, i) => i % 4 === 3 && value !== 0);
-  assert.equal(drawn.length, 1);
+  assert.equal(layered(r, index), s.glyph);
+  let drawn = 0;
+  for (let i = 0; i < r.cols * r.rows; i++) if (r.glyphAt(i) || layered(r, i)) drawn++;
+  assert.equal(drawn, 1);
 });
 
 test('sky reflections leave land unchanged', () => {

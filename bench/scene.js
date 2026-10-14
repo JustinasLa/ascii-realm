@@ -19,7 +19,8 @@ export async function createScene(root = new URL('../', import.meta.url), option
   const r = Object.assign(Object.create(AsciiRenderer.prototype), {
     cols, rows, cellW: cell * worldModule.ASPECT, cellH: cell, dpr: 1,
     canvas: { width, height }, fg: new Uint8ClampedArray(cols * rows * 4),
-    bg: new Uint8ClampedArray(cols * rows * 4), mask: new Uint8Array(cols * rows),
+    bg: new Uint8ClampedArray(cols * rows * 4), ov: new Uint8ClampedArray(cols * rows * 4),
+    mask: new Uint8Array(cols * rows),
   });
   let time = 0;
   const move = { x: 0, y: 0 };

@@ -6,6 +6,7 @@ import { AsciiRenderer } from '../src/render/renderer.js';
 import { Splashes } from '../src/world/splashes.js';
 import { WeatherEffects, WEATHER_EFFECTS } from '../src/world/weather.js';
 import { GRASS, WATER } from '../src/world/world.js';
+import { withLayers } from './helpers/renderer.js';
 
 const view = { x0: -40, y0: -30, cols: 100, rows: 70 };
 const lake = { typeAt: () => WATER };
@@ -26,9 +27,9 @@ function advance(weather, settings, world = lake, frames = 120, area = view) {
 
 function buffer(area = view) {
   const { cols, rows } = area;
-  return { cols, rows, fg: new Uint8ClampedArray(cols * rows * 4),
+  return withLayers({ cols, rows, fg: new Uint8ClampedArray(cols * rows * 4),
     bg: new Uint8ClampedArray(cols * rows * 4), mask: new Uint8Array(cols * rows).fill(WATER),
-    put: AsciiRenderer.prototype.put };
+    put: AsciiRenderer.prototype.put });
 }
 
 test('every selectable weather has matching visual effects that render without changing terrain masks', () => {
@@ -139,9 +140,13 @@ test('weather rings remain anchored in world space and clip to the lake across a
   const ring = { ...weather.splashes.rings[0] };
   weather.drawSurface(r, { ...area, x0: 1 }, 0.3);
   assert.deepEqual(weather.splashes.rings[0], ring, 'drawing from a shifted camera never moves the ring');
-  assert.ok(r.fg.some(value => value > 0));
+  // Ring crests are layered over the water.
+  assert.ok(r.ov.some(value => value > 0));
   for (let i = 0; i < r.mask.length; i++) {
-    if (r.mask[i] !== WATER) assert.ok(r.fg.slice(i * 4, i * 4 + 4).every(value => value === 0));
+    if (r.mask[i] !== WATER) {
+      assert.ok(r.fg.slice(i * 4, i * 4 + 4).every(value => value === 0));
+      assert.ok(r.ov.slice(i * 4, i * 4 + 4).every(value => value === 0));
+    }
   }
 });
 

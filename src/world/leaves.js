@@ -1,10 +1,23 @@
 import { hash2 } from '../core/rng.js';
-import { glyph } from '../render/glyphs.js';
+import { dg } from '../render/glyphs.js';
 import { treeWind, windGust } from './wind.js';
 
-const LEAF = glyph('.');
-const AUTUMN_LEAF = glyph("'");
-const BLOSSOM = glyph('*');
+// A falling leaf tumbles: it turns through eight headings and, twice a
+// turn, is seen edge-on as a thin sliver. Petals spin flatter and faster.
+const LEAF = Array.from({ length: 8 }, (_, h) => dg(`tree.fall.${h}`));
+const EDGE = Array.from({ length: 4 }, (_, h) => dg(`tree.fall.edge.${h}`));
+const PETAL = Array.from({ length: 4 }, (_, h) => dg(`tree.fall.petal.${h}`));
+// Autumn leaves fall in the colours of the turning crowns.
+const AUTUMN = [[218, 164, 65], [214, 112, 46], [188, 70, 44], [226, 196, 84]];
+
+export function fallingGlyph(age, spin, blossom) {
+  const turn = age * spin;
+  if (blossom) return PETAL[((Math.floor(turn * 4) % 4) + 4) % 4];
+  const step = ((Math.floor(turn * 8) % 8) + 8) % 8;
+  // Edge-on for a moment as the leaf flips over.
+  if (step % 4 === 1 && (turn * 8) % 1 < 0.5) return EDGE[(step >> 1) & 3];
+  return LEAF[step];
+}
 // Eight seconds of gust drift, flutter, and the displaced birth cell.
 export const MAX_LEAF_DRIFT = 14;
 
@@ -77,11 +90,13 @@ export function drawLeaves(r, view, props, t, seed = 1) {
       const fade = Math.min(1, (1 - progress) * 4);
       if (fade < 0.04) continue;
       const light = fade * (0.85 + Math.sin(age * 2.5 + flutter) * 0.1);
-      const color = prop.leafColor;
-      const cr = blossom ? 244 : autumn ? 218 : color ? color[0] : 86;
-      const cg = blossom ? 163 : autumn ? 164 : color ? color[1] : 132;
-      const cb = blossom ? 190 : autumn ? 65 : color ? color[2] : 73;
-      r.put(sx, sy, blossom ? BLOSSOM : autumn ? AUTUMN_LEAF : LEAF,
+      const color = autumn ? AUTUMN[Math.floor(hash2(bx, by, cycleSeed + 6) * AUTUMN.length)] : prop.leafColor;
+      const cr = blossom ? 244 : color ? color[0] : 86;
+      const cg = blossom ? 178 : color ? color[1] : 132;
+      const cb = blossom ? 204 : color ? color[2] : 73;
+      // Each leaf spins at its own rate, one way or the other.
+      const spin = (hash2(bx, by, cycleSeed + 7) - 0.5) * 1.6;
+      r.put(sx, sy, fallingGlyph(age, spin + Math.sign(spin) * 0.35, blossom),
         cr * light, cg * light, cb * light);
     }
   }
