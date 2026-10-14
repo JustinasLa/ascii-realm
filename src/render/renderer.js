@@ -131,7 +131,16 @@ export class AsciiRenderer {
 
     this.atlasTex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, atlas.canvas);
+    // Coverage is monochrome and the shader reads only red. R8 retains
+    // every coverage value and mip level using one quarter of RGBA's VRAM.
+    const width = atlas.canvas.width;
+    const height = atlas.canvas.height;
+    const rgba = atlas.canvas.getContext('2d').getImageData(0, 0, width, height).data;
+    const coverage = new Uint8Array(width * height);
+    for (let i = 0; i < coverage.length; i++) coverage[i] = rgba[i * 4];
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, width, height, 0, gl.RED, gl.UNSIGNED_BYTE, coverage);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
     gl.generateMipmap(gl.TEXTURE_2D);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);

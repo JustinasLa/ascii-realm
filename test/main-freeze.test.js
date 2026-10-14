@@ -36,6 +36,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
     update: () => { modelUpdates++; },
     rasterise: noop,
+    renderPose: noop,
     cells: [],
     waterContacts: () => [],
     torchPose: () => null,

@@ -43,6 +43,25 @@ const CRATERS = [
 // Stars are scattered on a fixed grid of screen pixels for the same reason.
 const STAR_GRID = 26;
 const STAR_TINTS = [STARLIGHT, [232, 214, 184], [168, 196, 255], STARLIGHT, STARLIGHT];
+const starGrids = new WeakMap();
+
+function starsOf(r, grid) {
+  const pad = Math.ceil(Math.max(r.cellW, r.cellH) / grid) + 2;
+  const cols = Math.ceil(r.canvas.width / grid) + pad * 2 + 1;
+  const rows = Math.ceil(r.canvas.height / grid) + pad * 2 + 1;
+  let cached = starGrids.get(r);
+  if (cached?.cols === cols && cached.rows === rows && cached.pad === pad) return cached;
+  const cells = new Array(cols * rows);
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const gx = x - pad, gy = y - pad;
+    const star = starAt(gx, gy);
+    cells[y * cols + x] = star && { ...star,
+      x: gx + hash2(gx, gy, 4243), y: gy + hash2(gx, gy, 4244) };
+  }
+  cached = { cells, cols, rows, pad };
+  starGrids.set(r, cached);
+  return cached;
+}
 
 // Which star glyph and colour a sky grid square holds, if it holds one.
 export function starAt(gx, gy) {
@@ -63,6 +82,8 @@ export function drawSkyReflection(r, view, t) {
   const moonY = r.canvas.height * MOON_Y;
   const moonR = MOON_R * r.dpr;
   const grid = STAR_GRID * r.dpr;
+  // Screen-anchored star positions do not change while the lake moves.
+  const stars = starsOf(r, grid);
   const x0 = view.x0 ?? 0;
   const glitterTick = Math.floor(t * 5);
   for (let sy = 0; sy < rows; sy++) {
@@ -98,10 +119,10 @@ export function drawSkyReflection(r, view, t) {
       let found = false;
       for (let gy = gy0; gy <= gy1 && !found; gy++) {
         for (let gx = gx0; gx <= gx1; gx++) {
-          const star = starAt(gx, gy);
+          const star = stars.cells[(gy + stars.pad) * stars.cols + gx + stars.pad];
           if (!star) continue;
-          const starX = (gx + hash2(gx, gy, 4243)) * grid;
-          const starY = (gy + hash2(gx, gy, 4244)) * grid;
+          const starX = star.x * grid;
+          const starY = star.y * grid;
           // Half-open bounds assign a star on an edge to exactly one cell.
           if (starX < left || starX >= right || starY < top || starY >= bottom) continue;
           const { h, tint } = star;

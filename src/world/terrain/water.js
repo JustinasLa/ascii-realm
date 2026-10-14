@@ -14,7 +14,7 @@
 // decided once per chunk (see statics) and the per-frame work is one value
 // noise lookup and a few sines per cell.
 
-import { fbm, valueNoise } from '../../core/noise.js';
+import { fbm, valueNoise, valueNoiseRow } from '../../core/noise.js';
 import { hash2 } from '../../core/rng.js';
 import { GLYPH_COUNT, dg, family } from '../../render/glyphs.js';
 import { FOAM } from '../../render/palette.js';
@@ -339,6 +339,9 @@ function placeRise(s, i, wx, wy, seed, rises) {
   }
 }
 
+let swellRow;
+let swellY, swellTime, swellSeed;
+
 export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   const s = statics(chunk, seed);
   if (t !== clock) tick(t);
@@ -364,7 +367,11 @@ export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   // Broad swell: long horizontal bands that drift slowly, plus a diagonal
   // roll; wind adds a quicker chop in gusty patches.
   const drift = xs * 0.09 + t * (0.25 + wind * 0.4);
-  let v = valueNoise(drift, wy * 0.7 - t * 0.05, seed + 300) +
+  if (swellY !== wy || swellTime !== t || swellSeed !== seed) {
+    swellY = wy; swellTime = t; swellSeed = seed;
+    swellRow = valueNoiseRow(wy * 0.7 - t * 0.05, seed + 300);
+  }
+  let v = swellRow(drift) +
     (ph[p8] * turn[1] + ph[p8 + 1] * turn[0]) * 0.12;
   if (wind > 0.02) v += wind * Math.sin(xs * 0.7 + wy * 0.9 + t * 2.7) * 0.14;
   // Fine wavelets over the swell, in [-1, 1].

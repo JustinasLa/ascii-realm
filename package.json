@@ -6,6 +6,7 @@
     "start": "node server/index.js",
     "test": "node --test",
     "bench": "node bench/run.mjs",
+    "bench:low-end": "node bench/low-end.cjs",
     "test:browser": "node bench/browser.cjs"
   },
   "engines": {

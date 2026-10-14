@@ -1,4 +1,4 @@
-import { valueNoise } from '../core/noise.js';
+import { valueNoise, valueNoiseRow } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
@@ -108,11 +108,8 @@ const ripple = (p) => {
 
 const step = (v, steps) => v <= 0 ? 0 : v >= 1 ? steps - 1 : (v * steps) | 0;
 
-function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase = 0, thin = false) {
-  // Firm contact lays even the tallest stalk right on the ground. Ease out
-  // of the flat pose only as pressure recovers, rather than leaving little
-  // upright stems in the fresh footprint.
-  const flat = press > 0 ? 1 - (1 - Math.min(1, press)) ** 3 : 0;
+function drawBlade(r, view, write, x, y, height, lean, flat, light, tone, phase = 0, thin = false) {
+  // `flat` is the already eased contact pressure shared by the whole tuft.
   // A blade swings about its root, so a strong lean lowers it rather than
   // stretching it sideways, and pressure swings it the rest of the way down.
   const side = lean < 0 ? -1 : 1;
@@ -278,9 +275,11 @@ function drawFern(r, view, paint, x, y, height, lean, flat, light, variation) {
 // field with a quicker ripple running through them, so waves of bending
 // (and of light caught by the bent blades) sweep visibly over the meadow.
 // Upper segments of a rooted blade follow the same gust as its base.
-export function grassWind(x, y, t, seed, rnd) {
+export function grassWind(x, y, t, seed, rnd, rowNoise) {
   const nx = x * ASPECT;
-  const n = Math.max(0, Math.min(1, (valueNoise(nx * 0.025 - t * 0.3, y * 0.045 + t * 0.03, seed + 900) - 0.5) / 0.3));
+  const sample = rowNoise ? rowNoise(nx * 0.025 - t * 0.3) :
+    valueNoise(nx * 0.025 - t * 0.3, y * 0.045 + t * 0.03, seed + 900);
+  const n = Math.max(0, Math.min(1, (sample - 0.5) / 0.3));
   const gust = n * n * (3 - 2 * n);
   const wave = ripple(nx * 0.025 + y * 0.011 - t * 0.33);
   return 0.25 + wave * 0.25 + gust * (2.6 + wave * 0.8) + ripple(t * 0.41 + rnd * 6.4) * 0.12;
@@ -586,6 +585,7 @@ export class Grass {
     };
     const left = view.x0 - SIDE_PAD;
     const right = view.x0 + view.cols + SIDE_PAD;
+    const windNoise = valueNoiseRow(y * 0.045 + t * 0.03, world.seed + 900);
     for (let cx = Math.floor(left / CHUNK_SIZE); cx <= Math.floor((right - 1) / CHUNK_SIZE); cx++) {
       const chunk = world.chunk(cx, cy);
       const row = y - cy * CHUNK_SIZE;
@@ -614,9 +614,9 @@ export class Grass {
         if (write.visible ? !write.visible(r, x - view.x0 - span, base - MAX_GRASS_HEIGHT,
           x - view.x0 + span, base, base) : x - view.x0 + span < 0 || x - view.x0 - span >= view.cols ||
           base - Math.ceil(height * BLADE_LENGTH * 1.08) - 1 >= view.rows) continue;
-        const bend = field.lean[fi];
-        const wind = grassWind(x, y, t, world.seed, rnd);
         const variation = blades ? blades.variations[root] : hash2(x, y, world.seed + 1217);
+        const bend = field.lean[fi];
+        const wind = grassWind(x, y, t, world.seed, rnd, windNoise);
         // Each blade has its own resting angle, so neighbours cross and fan.
         const jitter = (rnd * 7919) % 1;
         // Few stand quite upright; most lean ten to thirty degrees.
@@ -654,7 +654,7 @@ export class Grass {
         // tip, and whatever flowers on it, stay on top.
         if ((style === 1 || jitter > 0.5) && !write.visible && !flower) {
           const fan = Math.max(-7, Math.min(7, lean + (variation < 0.5 ? 4 : -4) * (1 - press * 0.7)));
-          drawBlade(r, view, paint, x, y, Math.max(2, length * (0.75 + jitter * 0.2)), fan, bent, light * 0.85,
+          drawBlade(r, view, paint, x, y, Math.max(2, length * (0.75 + jitter * 0.2)), fan, flat, light * 0.85,
             tone, (jitter - 0.5) * 0.4);
         }
         if (flower) {
@@ -662,9 +662,9 @@ export class Grass {
           STALK[0] = tone[0] * 0.95 + 6;
           STALK[1] = tone[1] * 0.85;
           STALK[2] = tone[2] * 0.6;
-          drawBlade(r, view, paint, x, y, length, lean, bent, light, STALK, (variation - 0.5) * 0.4, true);
+          drawBlade(r, view, paint, x, y, length, lean, flat, light, STALK, (variation - 0.5) * 0.4, true);
         } else {
-          drawBlade(r, view, paint, x, y, length, lean, bent, light, tone, (variation - 0.5) * 0.4);
+          drawBlade(r, view, paint, x, y, length, lean, flat, light, tone, (variation - 0.5) * 0.4);
         }
         if (flower) {
           const glow = (0.78 + chunk.shade[i] * 0.35 + variation * 0.2) * (1 - sink * 0.45) * (1 - flat * 0.4);
