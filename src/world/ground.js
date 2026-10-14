@@ -1,4 +1,5 @@
-import { CHUNK_SIZE } from './world.js';
+import { NIGHT } from '../render/palette.js';
+import { CHUNK_SIZE, GRASS } from './world.js';
 import { TERRAIN_SHADERS } from './terrain/index.js';
 
 // Static terrain is shaded once per chunk, including the expensive stone
@@ -49,9 +50,11 @@ export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false
         for (let i = 0; i < count; i++) {
           const o = (sy * r.cols + sx + i) * 4;
           r.fg[o + 3] = 0;
+          r.ov[o + 3] = 0;
           r.bg[o] = NIGHT[0];
           r.bg[o + 1] = NIGHT[1];
           r.bg[o + 2] = NIGHT[2];
+          r.bg[o + 3] = 0;
           r.mask[sy * r.cols + sx + i] = GRASS;
         }
         sx += count;

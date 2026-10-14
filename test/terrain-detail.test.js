@@ -85,3 +85,20 @@ test('stone slabs are textured surfaces with dark joints rather than letters', (
   assert.ok(joints > stone * 0.05, 'joints run between the slabs');
   assert.ok(layered > stone * 0.1, 'lips, grit, moss and lichen are layered over the rock');
 });
+
+test('ground not generated yet is drawn as bare night, clearing any glyph layered there', async () => {
+  const { drawGround } = await import('../src/world/ground.js');
+  const { withLayers } = await import('./helpers/renderer.js');
+  const { dg, over } = await import('../src/render/glyphs.js');
+  const world = new World(1);
+  const view = { x0: 100000, y0: 100000, cols: 4, rows: 2 };
+  const r = withLayers({ cols: 4, rows: 2, mask: new Uint8Array(8) });
+  r.put(1, 1, dg('crack.3'), 9, 9, 9);
+  r.put(1, 1, over(dg('flower.ring5')), 9, 9, 9);
+  drawGround(r, world, view, 0, null, 0, true);
+  assert.ok(!world.loaded(Math.floor(100000 / CHUNK_SIZE), Math.floor(100000 / CHUNK_SIZE)));
+  for (let cell = 0; cell < 8; cell++) {
+    assert.equal(r.glyphAt(cell), 0);
+    assert.equal(r.hasLayer(cell), false);
+  }
+});
