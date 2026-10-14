@@ -64,7 +64,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
           resolve({ fps: 1000 / (times.reduce((a,b)=>a+b,0) / times.length),
             intervalP95: times[Math.floor(times.length*.95)],
             cpuMedian: work[Math.floor(work.length*.5)], cpuP95: work[Math.floor(work.length*.95)],
-            cellLimit: game.quality.limit, cells: game.renderer.cols * game.renderer.rows });
+            pixelScale: game.quality.scale, cells: game.renderer.cols * game.renderer.rows });
         }
         requestAnimationFrame(collect);
       }));

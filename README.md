@@ -167,8 +167,10 @@ shared online lobby.
   enabled.
 - **Phone controls and performance.** A touch stick for walking/running, separate
   jump and sword buttons, and zoom controls in portrait or landscape. Rendering
-  targets 60 fps, caps backing resolution, and adjusts the visible cell count
-  under sustained load. Hidden tabs stop drawing and distant chunks are evicted.
+  targets 60 fps, caps backing resolution, and lowers that resolution under
+  sustained load without changing your zoom. Zoom far out for an overview of
+  the land: cells shrink to dots of colour, meadows and trees are drawn without
+  their animation, and newly seen ground fills in over a few frames. Hidden tabs stop drawing and distant chunks are evicted.
 - **Multiplayer lobbies.** Create a lobby and share its six-character code;
   friends enter the code to join the same seeded world. Movement, jumps, swings,
   gear, weapons, nameplates and reflections are visible to everyone, and each
