@@ -46,11 +46,11 @@ try {
   throw error;
 }
 const mobile = matchMedia('(any-pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
-const quality = new FrameQuality(mobile);
+const quality = new FrameQuality();
 
 function resize() {
   const { dpr, cell } = renderSize(window.innerWidth, window.innerHeight,
-    window.devicePixelRatio, cellH, mobile, quality.limit);
+    window.devicePixelRatio, cellH, mobile, quality.scale);
   renderer.resize(window.innerWidth, window.innerHeight, dpr, cell * ASPECT, cell);
 }
 window.addEventListener('resize', resize);
@@ -58,7 +58,7 @@ resize();
 
 // Zoom is multiplicative so each notch feels the same at any scale.
 function zoomBy(factor) {
-  // Start from the displayed scale when an automatic budget has enlarged
+  // Start from the displayed scale when a very large screen has enlarged
   // the cells; otherwise several taps would be swallowed below that floor.
   const displayed = renderer.cellH / renderer.dpr;
   if (displayed > cellH + 0.001) {

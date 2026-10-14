@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { FrameClock, FrameQuality, renderSize } from '../src/render/budget.js';
+import { CELL_CEILING, FrameClock, FrameQuality, renderSize } from '../src/render/budget.js';
 
 test('DPR-3 phones retain their world scale with one quarter of the pixels', () => {
   for (const [w, h] of [[390, 844], [844, 390], [360, 640]]) {
@@ -11,28 +11,47 @@ test('DPR-3 phones retain their world scale with one quarter of the pixels', () 
   }
 });
 
-test('large screens and zoom-out respect both CPU and GPU budgets', () => {
-  for (const [w, h] of [[3840, 2160], [7680, 4320], [800, 1280], [12000, 200]]) {
-    const size = renderSize(w, h, 3, 6, true, 3500);
-    const cells = (Math.ceil(w / (size.cell * 0.6)) + 1) * (Math.ceil(h / size.cell) + 1);
-    assert.ok(cells <= 3500, `${cells} cells`);
-    assert.ok(w * h * size.dpr ** 2 <= 1_200_001);
+test('the requested zoom is kept on ordinary screens at every zoom level', () => {
+  const cases = [[1920, 1080, false, 6], [1366, 768, false, 6], [390, 844, true, 6], [2560, 1440, false, 8]];
+  for (const [w, h, mobile, smallest] of cases) {
+    for (const cell of [smallest, 8, 12, 24]) {
+      assert.equal(renderSize(w, h, 1, cell, mobile).cell, cell, `${w}x${h} at ${cell}px`);
+      assert.equal(renderSize(w, h, 1, cell, mobile, 0.3).cell, cell, 'load lowers resolution, not zoom');
+    }
   }
 });
 
-test('sustained overload reduces detail, isolated spikes do not, recovery is slow', () => {
-  const quality = new FrameQuality(true);
+test('lowered resolution never shrinks glyphs below what the renderer can draw', () => {
+  for (const [w, h] of [[3840, 2160], [2560, 1440], [1920, 1080]]) {
+    const size = renderSize(w, h, 2, 8, false, 0.3);
+    assert.ok(size.cell * 0.6 * size.dpr >= 2 - 1e-9 && size.cell * size.dpr >= 3 - 1e-9);
+  }
+});
+
+test('huge screens respect the hard cell ceiling and the pixel budget', () => {
+  for (const [w, h] of [[3840, 2160], [7680, 4320], [800, 1280], [12000, 200]]) {
+    for (const mobile of [true, false]) {
+      const size = renderSize(w, h, 3, 6, mobile, 0.5);
+      const cells = (Math.ceil(w / (size.cell * 0.6)) + 1) * (Math.ceil(h / size.cell) + 1);
+      assert.ok(cells <= (mobile ? CELL_CEILING.mobile : CELL_CEILING.desktop), `${cells} cells`);
+      assert.ok(w * h * size.dpr ** 2 <= (mobile ? 1_200_000 : 2_500_000) * 0.5 + 1);
+    }
+  }
+});
+
+test('sustained overload lowers resolution, isolated spikes do not, recovery is slow', () => {
+  const quality = new FrameQuality();
   for (let i = 0; i < 60; i++) quality.sample(i === 20 ? 100 : 4, 1 / 60);
-  assert.equal(quality.limit, 14000);
+  assert.equal(quality.scale, 1);
   for (let i = 0; i < 240; i++) quality.sample(25, 1 / 60);
-  const reduced = quality.limit;
-  assert.ok(reduced < 14000);
+  const reduced = quality.scale;
+  assert.ok(reduced < 1);
   for (let i = 0; i < 30; i++) quality.sample(2, 1 / 60);
-  assert.equal(quality.limit, reduced);
+  assert.equal(quality.scale, reduced);
   for (let i = 0; i < 600; i++) quality.sample(2, 1 / 60);
-  assert.ok(quality.limit > reduced);
+  assert.ok(quality.scale > reduced);
   for (let i = 0; i < 6000; i++) quality.sample(50, 1 / 60);
-  assert.equal(quality.limit, 3500);
+  assert.equal(quality.scale, 0.3);
 });
 
 test('60/90/120/144Hz screens run about 60 frames and preserve simulation time', () => {

@@ -130,8 +130,8 @@ For now it is a single outlaw exploring procedurally generated terrain.
   enabled.
 - **Phone controls and performance.** A touch stick for walking/running, separate
   jump and sword buttons, and zoom controls in portrait or landscape. Rendering
-  targets 60 fps, caps backing resolution, and adjusts the visible cell count
-  under sustained load. Hidden tabs stop drawing and distant chunks are evicted.
+  targets 60 fps, caps backing resolution, and lowers that resolution under
+  sustained load without changing your zoom. Hidden tabs stop drawing and distant chunks are evicted.
 
 ## Running
 
