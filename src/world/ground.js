@@ -34,7 +34,7 @@ const WAVE_DOT = glyph('·');
 
 // Fills the grid with the terrain under the camera. Writes straight into the
 // renderer's buffers because this runs for every visible cell every frame.
-export function drawGround(r, world, view, t, bend) {
+export function drawGround(r, world, view, t, bend, wind = 0) {
   const { fg, bg, cols } = r;
   let chunk = null;
   let ccx = 0;
@@ -69,6 +69,7 @@ export function drawGround(r, world, view, t, bend) {
         // own phase so neighbours never move in lockstep.
         const gust = grassGust(world, wx, wy, t);
         let lean = (gust - 0.42) * 2.4 + Math.sin(t * 2.6 + rnd * 40) * 0.25;
+        lean += wind * (0.8 + gust * 1.5);
         // Blades near the wanderer's feet are pushed aside.
         const pdx = (wx + 0.5 - bend.x) * ASPECT;
         const pdy = wy + 0.5 - bend.y;
@@ -97,7 +98,8 @@ export function drawGround(r, world, view, t, bend) {
         bb = 6;
         const burnt = (chunk.burnt?.[i] ?? 0) / 255;
         if (burnt > 0) {
-          // Ash fades into browned stubble at the edge of a ground fire.
+          // A charcoal and ash centre fades into short, browned grass at
+          // the ragged edge. Dew and flowers disappear with the blades.
           const family = burnt > 0.6 ? ASH : STUBBLE;
           ch = family[Math.floor(rnd * family.length)];
           const ash = 0.7 + rnd * 0.3;
@@ -113,7 +115,8 @@ export function drawGround(r, world, view, t, bend) {
         // by a gentle swell.
         const depth = Math.min(1, (WATER_LEVEL - chunk.elev[i]) * 12);
         const v = valueNoise(wx * ASPECT * 0.09 + t * 0.25, wy * 0.7 - t * 0.05, world.seed + 300) +
-          Math.sin(wx * ASPECT * 0.4 + wy * 1.3 + t * 1.2) * 0.12;
+          Math.sin(wx * ASPECT * 0.4 + wy * 1.3 + t * 1.2) * 0.12 +
+          wind * Math.sin(wx * ASPECT * 0.7 + wy * 0.9 + t * 2.7) * 0.14;
         if (v > 0.74) ch = WAVE_HI;
         else if (v > 0.63) ch = WAVE_MID;
         else if (v > 0.53) ch = WAVE_LO;

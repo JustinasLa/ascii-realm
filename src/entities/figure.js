@@ -1,9 +1,9 @@
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
-import { ASPECT } from '../world/world.js';
+import { ASPECT, WATER } from '../world/world.js';
 import { SWORD_SIDE } from './combat.js';
 import { MATERIALS } from './materials.js';
-import { add, buildRig, cross, lerp3, mul, project, rotY, SCALE, sub } from './rig.js';
+import { add, buildRig, cross, lerp3, mul, project, rotY, SCALE, sub, TILT } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
 
 // The outlaw is not a hand-drawn sprite. Its skeleton (see rig.js) is posed
@@ -331,6 +331,7 @@ export function drawShadow(r, view, x, y, air = 0) {
     for (let cx = fx - 9; cx <= fx + 9; cx++) {
       const sx = cx - view.x0;
       if (sx < 0 || sx >= view.cols) continue;
+      if (r.mask[sy * cols + sx] === WATER) continue;
       const dx = ((cx + 0.5 - x) * ASPECT) / (4.4 * size);
       const dy = (cy + 0.5 - y) / (1.8 * size);
       const d = dx * dx + dy * dy;
@@ -348,7 +349,10 @@ export function drawShadow(r, view, x, y, air = 0) {
 // Poses and dresses the figure: the list of shapes to draw, back to front.
 // Built once a frame and shared by the figure and its reflection.
 export function dressFigure(state) {
-  return dress(buildRig(state), state.cape);
+  const depth = state.waterDepth ?? 0;
+  if (depth <= 0) return dress(buildRig(state), state.cape);
+  const cape = state.cape?.pts ? { pts: state.cape.pts.map((p) => [p[0], p[1] - depth, p[2]]) } : null;
+  return dress(buildRig({ ...state, air: state.air - depth }), cape);
 }
 
 // Rasterises the dressed figure with its feet at world position
@@ -391,6 +395,9 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write) {
         const p = parts[i];
         if (px < p.x0 || px > p.x1 || py < p.y0 || py > p.y1) continue;
         if (!p.test(px, py, SAMPLE)) continue;
+        // Invert the projection at this part's depth to discard samples
+        // below the surface, including the fallback figure before GLB load.
+        if (state.waterDepth > 0.001 && py > p.z * TILT * SCALE) continue;
         hitPart[k] = i;
         hitLum[k] = 0.62 - 0.3 * SAMPLE.nx - 0.2 * SAMPLE.ny;
         hitU[k] = SAMPLE.u;

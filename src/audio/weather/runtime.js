@@ -17,9 +17,10 @@ function range(value, fallback, minimum = 0.05) {
 // The manager supplies one shared budget so fading selections cannot multiply
 // the maximum number of short voices.
 export class WeatherGroup {
-  constructor(engine, definition, { random = Math.random, budget, intensity = 0.6 } = {}) {
+  constructor(engine, definition, { random = Math.random, budget, intensity = 0.6, onLightning } = {}) {
     this.engine = engine;
     this.definition = definition;
+    this.onLightning = onLightning;
     this.context = engine.context;
     this.random = () => {
       try { return bounded(random(), 0.5, 0, 0.999999999); } catch { return 0.5; }
@@ -248,6 +249,11 @@ export class WeatherGroup {
           water: this._water, rainfall: this.rainfall });
       } catch { continue; }
       if (!Array.isArray(cues)) continue;
+      if (event.definition.lightning && cues.length > 0) {
+        const recorded = this.onLightning?.({ strength: this._intensity,
+          distant: this.definition.id === 'distant-thunder', bearing: cues[0].pan ?? 0 });
+        if (recorded === true) continue;
+      }
       for (const [layer, cue] of cues.slice(0, 16).entries()) this._play(varySound(variant, cue, layer), now);
     }
     this._lastNow = now;

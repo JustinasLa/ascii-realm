@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Fires, FIRE_GROW_SECONDS, MAX_FIRES, STRONG_WIND, firePulse } from '../src/world/fire.js';
+import { Fires, FIRE_GROW_SECONDS, MAX_FIRES, MAX_FIRE_PARTICLES, STRONG_WIND, firePulse } from '../src/world/fire.js';
 import { grassGust } from '../src/audio/environment.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
@@ -208,6 +208,93 @@ function grassWorld() {
   }
   return world;
 }
+
+test('sword reactions follow reach and heading, while spins reach all directions', () => {
+  const world = dryWorld();
+  const fires = new Fires({ windAt: () => 0.3, random: () => 0.5 });
+  const fire = fires.add(world, 0.5, 0.5);
+  fires.update(20, 20, world);
+  const swing = { type: 'swing', x: -14.5, y: 0.5, strength: 1, move: 'a' };
+  assert.equal(fires.react(world, swing, { heading: -Math.PI / 2 }), false);
+  assert.equal(fires.react(world, { ...swing, x: -100 }, { heading: Math.PI / 2 }), false);
+  assert.equal(fires.react(world, swing, { heading: Math.PI / 2 }), true);
+  assert.ok(fire.flare > 0 && fire.leanX > 0 && fires.particles.length > 0);
+  assert.equal(fires.events[0].cause, 'swing');
+  assert.equal(fires.react(world, { ...swing, move: 'spin' }, { heading: -Math.PI / 2 }), true);
+  assert.equal(fires.react(world, { type: 'breath', x: 0, y: 0 }), false);
+  assert.equal(fires.react(world, { ...swing, x: NaN }), false);
+  fires.update(3, 23, world);
+  assert.ok(fire.flare < 0.001 && Math.abs(fire.leanX) < 0.001);
+  assert.equal(fire.intensity, 1, 'an undisturbed fire settles back into its normal burn');
+});
+
+test('running across a fire scatters more embers than walking and detects skipped footfalls', () => {
+  const cross = run => {
+    const world = dryWorld();
+    const fires = new Fires({ windAt: () => 0.3, random: () => 0.5 });
+    const fire = fires.add(world, 0.5, 0.5);
+    fires.update(20, 20, world);
+    const player = { x: 30, y: 0.5, air: 0, run, speed: run ? 5 : 1, runSpeed: 5 };
+    assert.equal(fires.pass(world, player, -30, 0.5), true, 'the path hits despite both endpoints lying outside');
+    assert.equal(fires.pass(world, player, -30, 0.5), false, 'contacts share a cooldown');
+    assert.equal(fires.pass(world, { ...player, air: 0.3 }, -30, 0.5), false);
+    assert.equal(fires.pass(world, player, -30, 0.5, 0.3), false);
+    assert.equal(fires.pass(world, player, player.x, player.y), false, 'standing still does not stomp');
+    return { particles: fires.particles.length, smother: fire.smother };
+  };
+  const walk = cross(0);
+  const run = cross(1);
+  assert.ok(run.particles > walk.particles);
+  assert.ok(run.smother > walk.smother);
+});
+
+test('footsteps stir only the hearth and do not repeat through overlapping body contacts', () => {
+  const world = dryWorld();
+  const fires = new Fires({ windAt: () => 0.3 });
+  const fire = fires.add(world, 0.5, 0.5);
+  fires.update(20, 20, world);
+  assert.equal(fires.react(world, { type: 'step', x: 8.5, y: 0.5, strength: 0.3 }), false);
+  assert.equal(fires.react(world, { type: 'step', x: 0.5, y: 3, strength: 0.3 }), false);
+  assert.equal(fires.react(world, { type: 'step', x: 0.5, y: 0.5, strength: 0.3 }, {air: 0.2}), false);
+  assert.equal(fires.react(world, { type: 'step', x: 0.5, y: 0.5, strength: 0.3 }), true);
+  assert.equal(fires.react(world, { type: 'skid', x: 0.5, y: 0.5, strength: 1 }), false);
+  assert.equal(fires.events.length, 1);
+  fires.update(0.3, 20.3, world);
+  assert.equal(fires.react(world, { type: 'skid', x: 0.5, y: 0.5, strength: 1 }), true);
+  assert.ok(fire.smother > 0);
+});
+
+test('heavy landings smother weak fires, and sword impacts can extinguish a full blaze', () => {
+  const world = grassWorld();
+  const fires = new Fires({ windAt: () => 0.3 });
+  const weak = fires.add(world, 0.5, 0.5);
+  assert.equal(fires.react(world, { type: 'land', x: weak.x, y: weak.y, strength: 1 }), true);
+  assert.equal(fires.list.length, 0);
+  assert.equal(fires.events[0].extinguished, true);
+  assert.ok(fires.particles.length > 0, 'coals linger after the live fire disappears');
+  const { c, i } = world.locate(0, 0);
+  assert.equal(c.burnt[i], 255);
+  const full = fires.add(world, 0.5, 0.5);
+  fires.update(20, 20, world);
+  assert.equal(fires.react(world, { type: 'slam', x: full.x, y: full.y, strength: 1 }), true);
+  assert.equal(fires.list.length, 0);
+  assert.equal(fires.events.at(-1).extinguished, true);
+});
+
+test('reaction particles and notices stay bounded, render at clipped edges and expire', () => {
+  const world = dryWorld();
+  const fires = new Fires({ windAt: () => 0.3 });
+  for (let hit = 0; hit < 500; hit++) {
+    if (!fires.list.length) fires.add(world, 0.5, 0.5);
+    fires.react(world, { type: 'slam', x: 0.5, y: 0.5, strength: 1 });
+  }
+  assert.ok(fires.particles.length > 0 && fires.particles.length <= MAX_FIRE_PARTICLES);
+  assert.ok(fires.events.length <= 64);
+  const r = buffer();
+  fires.drawParticles(r, { ...view, x0: 0, y0: 0 });
+  fires.update(3, 3, world);
+  assert.equal(fires.particles.length, 0);
+});
 
 test('extinguishing leaves burnt terrain at the fire, and rebuilding preserves it', () => {
   const world = grassWorld();

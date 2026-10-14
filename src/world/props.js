@@ -2,9 +2,12 @@ import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
+import { makeCampProp } from './camp-props.js';
+import { makeNaturalProp } from './natural-props.js';
+import { propDefinition } from './prop-catalog.js';
 import { ASPECT, GRASS } from './world.js';
 
-// Trees and boulders. Each prop is rasterised once, when its chunk is
+// Scenery props. Each prop is rasterised once, when its chunk is
 // generated, into a list of cells relative to its base (the point where it
 // touches the ground). Drawing is then just copying those cells.
 
@@ -52,7 +55,7 @@ function bake(w, top, bottom, sample, seed) {
   return cells;
 }
 
-function makeTree(x, y, rand) {
+function makeTree(x, y, rand, seed = x * 31 + y) {
   const height = 30 + rand() * 12;
   const radius = 8 + rand() * 3.5;
   const blobs = [{ x: 0, y: -height, r: radius }];
@@ -95,11 +98,11 @@ function makeTree(x, y, rand) {
     y,
     footW: 2.4,
     footH: 1.2,
-    cells: bake(w, -Math.ceil(height + radius), 0, sample, x * 31 + y),
+    cells: bake(w, -Math.ceil(height + radius), 0, sample, seed),
   };
 }
 
-function makeRock(x, y, rand) {
+function makeRock(x, y, rand, seed = x * 17 + y) {
   const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.65 + rand() * 0.2);
   const stone = [118, 120, 124];
@@ -119,8 +122,154 @@ function makeRock(x, y, rand) {
     y,
     footW: rx / ASPECT,
     footH: 1.4,
-    cells: bake(w, -Math.ceil(ry * 2), 0, sample, x * 17 + y),
+    cells: bake(w, -Math.ceil(ry * 2), 0, sample, seed),
   };
+}
+
+// Hand-placed boulders have irregular outlines and distinct mineral/moss
+// patches. Procedural rocks above keep the original seeded landscape intact.
+function makeSceneryRock(x, y, rand, seed) {
+  const rx = 2.6 + rand() * 3.2;
+  const ry = rx * (0.55 + rand() * 0.3);
+  const count = 7 + Math.floor(rand() * 4);
+  const offset = rand() * Math.PI * 2;
+  const corners = Array.from({ length: count }, (_, i) => {
+    const angle = offset + i * Math.PI * 2 / count;
+    const radius = 0.76 + rand() * 0.24;
+    return { x: Math.cos(angle) * rx * radius, y: -ry + Math.sin(angle) * ry * radius };
+  });
+  const bottom = Math.max(...corners.map((corner) => corner.y));
+  for (const corner of corners) corner.y -= bottom;
+  const colors = [[109, 122, 139], [145, 127, 106], [135, 137, 143], [122, 136, 119]];
+  const stone = colors[Math.floor(rand() * colors.length)];
+  const mossCoverage = rand() * 0.65;
+  const facets = Array.from({ length: count }, () => (rand() - 0.5) * 0.15);
+  const sample = (px, py) => {
+    let inside = false;
+    for (let i = 0, j = count - 1; i < count; j = i++) {
+      const a = corners[i], b = corners[j];
+      if ((a.y > py) !== (b.y > py)
+        && px < (b.x - a.x) * (py - a.y) / (b.y - a.y) + a.x) inside = !inside;
+    }
+    if (!inside) return null;
+    const nx = px / rx, ny = (py + ry + bottom) / ry;
+    const angle = (Math.atan2(ny, nx) - offset + Math.PI * 4) % (Math.PI * 2);
+    const facet = facets[Math.floor(angle / (Math.PI * 2) * count)];
+    const grain = (hash2(Math.floor(px * 3), Math.floor(py * 3), seed + 17) - 0.5) * 0.08;
+    const moss = ny < 0.2 && hash2(Math.floor(px * 0.9), Math.floor(py * 0.8), seed + 29) < mossCoverage;
+    return { l: 0.59 - nx * 0.26 - ny * 0.3 + facet + grain,
+      c: moss ? [68, 99 + mossCoverage * 20, 62] : stone };
+  };
+  return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4,
+    cells: bake(Math.ceil(rx / ASPECT) + 1, -Math.ceil(ry * 2), 0, sample, seed) };
+}
+
+function makeBush(x, y, rand, seed) {
+  const radius = 3.5 + rand() * 2;
+  const height = 4 + rand() * 2;
+  const tint = rand();
+  const leaf = [48 + tint * 20, 106 + tint * 30, 62 - tint * 12];
+  const blobs = [
+    { x: -radius * 0.45, y: -height * 0.5, rx: radius * 0.7, ry: height * 0.6 },
+    { x: radius * 0.45, y: -height * 0.45, rx: radius * 0.65, ry: height * 0.55 },
+    { x: 0, y: -height * 0.75, rx: radius * 0.75, ry: height * 0.65 },
+  ];
+  const sample = (px, py) => {
+    if (py > 0) return null;
+    let best = null;
+    for (const blob of blobs) {
+      const nx = (px - blob.x) / blob.rx;
+      const ny = (py - blob.y) / blob.ry;
+      const d2 = nx * nx + ny * ny;
+      if (d2 > 1) continue;
+      const l = 0.55 - nx * 0.22 - ny * 0.28 + (1 - d2) * 0.12;
+      if (!best || l > best.l) best = { l, c: leaf };
+    }
+    return best;
+  };
+  return {
+    kind: 'bush',
+    x,
+    y,
+    footW: radius * 0.75 / ASPECT,
+    footH: 1.5,
+    cells: bake(Math.ceil(radius * 1.2 / ASPECT), -Math.ceil(height * 1.5), 0, sample, seed),
+  };
+}
+
+// Resample the baked image onto the destination grid. Each destination is
+// visited once, so shrinking cannot stack cells and enlarging fills the image
+// instead of leaving gaps between its original cells. The ground anchor stays
+// at (0, 0), just as it does for procedural props.
+function scaleCells(cells, scaleX, scaleY = scaleX, mirror = false) {
+  if (scaleX === 1 && scaleY === 1 && !mirror) return cells;
+  const source = new Map();
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const cell of cells) {
+    source.set(`${cell.dx},${cell.dy}`, cell);
+    minX = Math.min(minX, cell.dx);
+    maxX = Math.max(maxX, cell.dx);
+    minY = Math.min(minY, cell.dy);
+    maxY = Math.max(maxY, cell.dy);
+  }
+  const scaled = [];
+  for (let dy = Math.ceil((minY - 0.5) * scaleY); dy <= Math.floor((maxY + 0.5) * scaleY); dy++) {
+    for (let dx = Math.ceil((minX - 0.5) * scaleX); dx <= Math.floor((maxX + 0.5) * scaleX); dx++) {
+      const cell = source.get(`${Math.round(dx / scaleX)},${Math.round(dy / scaleY)}`);
+      if (cell) scaled.push({ ...cell, dx: mirror ? -dx : dx, dy });
+    }
+  }
+  return scaled;
+}
+
+// Builder props use their own seed so moving an item does not change its
+// appearance. Keep generateProps below on its original random stream.
+export function createProp(kind, x, y, options = {}) {
+  const definition = propDefinition(kind);
+  if (!definition) throw new TypeError(`Unknown scenery prop: ${kind}`);
+  if (typeof x !== 'number' || !Number.isFinite(x) || typeof y !== 'number' || !Number.isFinite(y)) {
+    throw new TypeError('Scenery prop coordinates must be finite numbers');
+  }
+  if (!options || typeof options !== 'object' || Array.isArray(options)) {
+    throw new TypeError('Scenery prop options must be an object');
+  }
+  const { scale = 1, seed = 1, variant = 1 } = options;
+  if (typeof scale !== 'number' || !Number.isFinite(scale) || scale < 0.25 || scale > 3) {
+    throw new RangeError('Scenery prop scale must be a number between 0.25 and 3');
+  }
+  if (typeof seed !== 'number' || !Number.isFinite(seed)) {
+    throw new TypeError('Scenery prop seed must be a finite number');
+  }
+  if (variant !== 0 && variant !== 1) throw new RangeError('Unknown scenery variation version');
+  const rand = mulberry32(seed);
+  const make = { tree: makeTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBush }[kind];
+  const prop = make ? make(x, y, rand, seed)
+    : makeNaturalProp(kind, x, y, rand, seed, bake) ?? makeCampProp(kind, x, y, rand, seed, bake);
+  if (!prop) throw new TypeError(`Scenery prop has no factory: ${kind}`);
+  if (variant === 1) {
+    const variation = mulberry32((seed >>> 0) ^ 0xa341316c);
+    const width = 0.9 + variation() * 0.22;
+    const height = 0.9 + variation() * 0.2;
+    const mirrored = variation() < 0.5;
+    const brightness = 0.92 + variation() * 0.18;
+    const warmth = (variation() - 0.5) * 16;
+    const shade = (value, offset = 0) => Math.max(0, Math.min(255, value * brightness + offset));
+    prop.cells = scaleCells(prop.cells, width, height, mirrored).map((cell) => ({ ...cell,
+      r: shade(cell.r, warmth), gg: shade(cell.gg), b: shade(cell.b, -warmth) }));
+    prop.footW *= width;
+    prop.footH *= height;
+  }
+  prop.cells = scaleCells(prop.cells, scale);
+  prop.footW *= scale;
+  prop.footH *= scale;
+  prop.scale = scale;
+  prop.seed = seed;
+  prop.solid = definition.solid;
+  prop.variant = variant;
+  return prop;
 }
 
 // Scatters props over a chunk on a jittered grid. Forest density comes from
@@ -159,6 +308,7 @@ export function drawProp(r, view, prop, write = putCell) {
 }
 
 export function blocks(prop, x, y) {
+  if (prop.solid === false) return false;
   const dx = (x - prop.x) / prop.footW;
   const dy = (y - prop.y) / prop.footH;
   return dx * dx + dy * dy < 1;

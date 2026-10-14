@@ -75,8 +75,11 @@ export class Torches {
         torch.age += step;
         if (step < landingTime - 1e-8) continue;
         const wet = world.typeAt(torch.x, torch.y) === WATER;
+        const before = fires.list.length;
         const fire = wet ? null : fires.ignite(world, torch.x, torch.y);
-        impacts.push({ type: wet ? 'water' : fire ? 'lit' : 'blocked', x: torch.x, y: torch.y, fire });
+        // Landing beside a fire that is already burning adds no new one.
+        const type = wet ? 'water' : !fire ? 'blocked' : fires.list.length > before ? 'lit' : 'fed';
+        impacts.push({ type, x: torch.x, y: torch.y, fire });
         this.list.splice(index, 1);
         break;
       }

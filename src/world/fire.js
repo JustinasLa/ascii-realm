@@ -3,6 +3,7 @@ import { firePulse } from '../core/fire.js';
 export { firePulse } from '../core/fire.js';
 import { grassGust } from '../audio/environment.js';
 import { hash2 } from '../core/rng.js';
+import { SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT, WATER } from './world.js';
@@ -16,6 +17,18 @@ export const FIRE_GROW_SECONDS = 20;
 export const STRONG_WIND = 0.8;
 const WIND_OUT_SECONDS = 1.6;
 const START_INTENSITY = 0.18;
+export const MAX_FIRE_PARTICLES = 240;
+const CONTACTS = {
+  step: { reach: 0, force: 0.55, damage: 0.12 },
+  pass: { reach: 0, force: 0.8, damage: 0.22 },
+  skid: { reach: 1, force: 0.9, damage: 0.28 },
+  jump: { reach: 1, force: 0.55, damage: 0.06 },
+  land: { reach: 2, force: 1.3, damage: 0.7 },
+  swing: { reach: SCALE * 1.1, force: 0.9, damage: 0.14 },
+  slam: { reach: 3, force: 1.5, damage: 0.8 },
+  whirl: { reach: SCALE * 1.3, force: 1.25, damage: 0.25 },
+};
+
 function growthAt(age) {
   const progress = Math.min(1, age / FIRE_GROW_SECONDS);
   return START_INTENSITY + (1 - START_INTENSITY) * progress * progress * (3 - 2 * progress);
@@ -67,10 +80,13 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
 }
 
 export class Fires {
-  constructor({ windAt = grassGust } = {}) {
+  constructor({ windAt = grassGust, random = Math.random } = {}) {
     this.list = [];
     this.nextId = 1;
     this.windAt = windAt;
+    this.random = random;
+    this.particles = [];
+    this.events = [];
   }
 
   canPlace(world, x, y) {
@@ -93,7 +109,7 @@ export class Fires {
   }
 
   // A thrown torch ignites its landing spot without building a stone ring.
-  // Near an existing fire it joins that fire instead of stacking flames.
+  // Near an existing fire it feeds that fire instead of stacking flames.
   ignite(world, x, y) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
     x = Math.floor(x) + 0.5;
@@ -111,7 +127,8 @@ export class Fires {
     const base = hearth(seed);
     const fire = { id: this.nextId++, x, y, seed, kind,
       hearth: kind === 'campfire' ? base : base.filter(c => Math.abs(c.dx) <= 3 && Math.abs(c.dy) <= 1), cells: [],
-      age: 0, intensity: START_INTENSITY, windStress: 0, gust: 0.42 };
+      age: 0, intensity: START_INTENSITY, windStress: 0, gust: 0.42,
+      flare: 0, leanX: 0, leanY: 0, smother: 0, nextContact: 0 };
     this.list.push(fire);
     return fire;
   }
@@ -135,15 +152,110 @@ export class Fires {
     return true;
   }
 
+  // Sweep movement between frames, so a fast run cannot skip a small fire.
+  pass(world, player, fromX, fromY, fromAir = 0) {
+    if (player.air > 0.05 || fromAir > 0.05) return false;
+    const dx = (player.x - fromX) * ASPECT;
+    const dy = (player.y - fromY) / TILT;
+    const distance2 = dx * dx + dy * dy;
+    if (!Number.isFinite(distance2) || distance2 < 0.001) return false;
+    let touched = false;
+    for (const fire of [...this.list]) {
+      const t = Math.max(0, Math.min(1, ((fire.x - fromX) * ASPECT * dx + (fire.y - fromY) / TILT * dy) / distance2));
+      const point = { x: fromX + (player.x - fromX) * t, y: fromY + (player.y - fromY) * t };
+      const strength = 0.25 + Math.min(1, Math.max(player.run ?? 0, (player.speed ?? 0) / (player.runSpeed || 5))) * 0.75;
+      touched = this.react(world, { type: 'pass', ...point, strength, dx, dy }, player, fire) || touched;
+    }
+    return touched;
+  }
+
+  react(world, event, player = {}, onlyFire = null) {
+    const contact = CONTACTS[event.type];
+    if (!contact || ![event.x, event.y].every(Number.isFinite) || event.strength === 0) return false;
+    const heading = Number.isFinite(player.heading) ? player.heading : 0;
+    const weight = Number.isFinite(event.strength) ? Math.max(0, Math.min(1.5, event.strength)) : 1;
+    const foot = ['step', 'pass', 'skid'].includes(event.type);
+    if (foot && player.air > 0.05) return false;
+    let reacted = false;
+    for (const fire of onlyFire ? [onlyFire] : [...this.list]) {
+      if (!this.list.includes(fire) || (foot && fire.age < fire.nextContact)) continue;
+      const dx = (fire.x - event.x) * ASPECT;
+      const dy = (fire.y - event.y) / TILT;
+      const distance = Math.hypot(dx, dy);
+      const radius = (fire.kind === 'ground' ? 2.5 : 4.5) + contact.reach;
+      if (distance > radius) continue;
+      const spin = event.type === 'whirl' || event.move === 'spin';
+      if (event.type === 'swing' && !spin) {
+        const forward = dx * Math.sin(heading) + dy * Math.cos(heading);
+        if (forward < -1.5) continue;
+        if (event.move === 'thrust' && Math.abs(dx * Math.cos(heading) - dy * Math.sin(heading)) > 5) continue;
+      }
+      const power = contact.force * (0.35 + weight * 0.65) * (0.35 + 0.65 * (1 - distance / radius));
+      let pushX = Number.isFinite(event.dx) ? event.dx : Math.sin(heading);
+      let pushY = Number.isFinite(event.dy) ? event.dy : Math.cos(heading);
+      if (spin || event.type === 'land' || event.type === 'slam') {
+        pushX = distance > 0.1 ? dx / distance : Math.sin(heading);
+        pushY = distance > 0.1 ? dy / distance : Math.cos(heading);
+      }
+      const length = Math.hypot(pushX, pushY) || 1;
+      pushX /= length;
+      pushY /= length;
+      fire.leanX = Math.max(-3.5, Math.min(3.5, fire.leanX + pushX * power * 3));
+      fire.leanY = Math.max(-3.5, Math.min(3.5, fire.leanY + pushY * power * 3));
+      fire.flare = Math.min(1, fire.flare + power * 0.8);
+      this.burst(fire, power, pushX, pushY);
+      fire.smother = Math.min(1, fire.smother + contact.damage * power / (0.45 + fire.intensity * 0.55));
+      if (foot) fire.nextContact = fire.age + 0.22;
+      const out = fire.smother >= 1;
+      if (out) this.extinguish(world, fire);
+      else fire.intensity = growthAt(fire.age) * Math.max(0, 1 - fire.windStress) * (1 - fire.smother);
+      this.events.push({ type: 'fire-stir', x: fire.x, y: fire.y, strength: Math.min(1.5, power),
+        cause: event.type, extinguished: out });
+      if (this.events.length > 64) this.events.shift();
+      reacted = true;
+    }
+    return reacted;
+  }
+
+  burst(fire, strength, dx, dy) {
+    for (let i = 0; i < Math.round(7 + strength * 15); i++) {
+      const angle = this.random() * Math.PI * 2;
+      const speed = (2 + this.random() * 6) * strength;
+      const ash = this.random() < 0.25;
+      const life = (ash ? 1.2 : 0.6) + this.random() * 0.6;
+      this.particles.push({ x: fire.x, y: fire.y, h: 0.5,
+        vx: (dx * speed * 1.7 + Math.cos(angle) * speed) / ASPECT,
+        vy: (dy * speed * 1.7 + Math.sin(angle) * speed) * TILT,
+        vh: 4 + this.random() * 6 + strength * 4,
+        life, max: life, ash, g: ash ? SMOKE[Math.floor(this.random() * SMOKE.length)] : EMBER[Math.floor(this.random() * EMBER.length)] });
+    }
+    if (this.particles.length > MAX_FIRE_PARTICLES) this.particles.splice(0, this.particles.length - MAX_FIRE_PARTICLES);
+  }
+
   update(dt, time, world, weatherWind = 0) {
     const extinguished = [];
     if (!Number.isFinite(dt) || dt <= 0 || !Number.isFinite(time)) return extinguished;
+    const drag = Math.exp(-3 * dt);
+    for (const p of this.particles) {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.h = Math.max(0, p.h + p.vh * dt);
+      p.vh -= (p.ash ? 8 : 22) * dt;
+      p.vx *= drag;
+      p.vy *= drag;
+      p.life -= dt;
+    }
+    this.particles = this.particles.filter(p => p.life > 0);
     // Update all fires, including those beyond the camera. Wind damage is
     // accumulated over time, so a single gust cannot instantly erase a fire.
     for (let index = this.list.length - 1; index >= 0; index--) {
       const fire = this.list[index];
       fire.age += dt;
       const growth = growthAt(fire.age);
+      fire.flare *= Math.exp(-6 * dt);
+      fire.leanX *= Math.exp(-5 * dt);
+      fire.leanY *= Math.exp(-5 * dt);
+      fire.smother = Math.max(0, fire.smother - dt * 0.22);
       const gust = this.windAt(world, fire.x, fire.y, time);
       const localWind = Number.isFinite(gust) ? Math.max(0, Math.min(1, gust)) : 0;
       const stormWind = Number.isFinite(weatherWind) ? Math.min(1, Math.abs(weatherWind)) : 0;
@@ -155,7 +267,7 @@ export class Fires {
       } else {
         fire.windStress = Math.max(0, fire.windStress - dt / 2);
       }
-      fire.intensity = growth * Math.max(0, 1 - fire.windStress);
+      fire.intensity = growth * Math.max(0, 1 - fire.windStress) * (1 - fire.smother);
       if (fire.windStress >= 1) {
         this.extinguish(world, fire);
         extinguished.push(fire);
@@ -200,18 +312,18 @@ export class Fires {
     for (const fire of visible) {
       const cells = [...fire.hearth];
       const strength = fire.intensity;
-      const size = 0.3 + strength * 0.7;
-      const brightness = 0.25 + Math.sqrt(strength) * 0.75;
+      const size = (0.3 + strength * 0.7) * (1 + fire.flare * 0.25);
+      const brightness = Math.min(1.15, 0.25 + Math.sqrt(strength) * 0.75 + fire.flare * 0.2);
       const wind = (fire.gust - 0.42) * 2.4;
-      for (let h = 0; h < 15; h++) {
-        for (let dx = -9; dx <= 9; dx++) {
+      for (let h = 0; h < 18; h++) {
+        for (let dx = -13; dx <= 13; dx++) {
           let heat = 0;
           for (let tongue = -1; tongue <= 1; tongue++) {
             const height = (9 + (tongue === 0 ? 3 : 0) + Math.sin(time * 4.5 + tongue * 2 + fire.seed) * 1.8) * size;
             if (h >= height) continue;
             const u = h / height;
             const center = (tongue * 2.8 + Math.sin(time * 6 - h * 0.6 + tongue * 3 + fire.seed) * (0.4 + u)) * size
-              + wind * u * 3 * size;
+              + wind * u * 3 * size + fire.leanX * u / ASPECT;
             const width = (1 - u) ** 0.7 * (2.7 + Math.sin(time * 8 + h + tongue) * 0.35) * size;
             const core = 1 - Math.abs(dx - center) / width;
             if (core <= 0) continue;
@@ -222,7 +334,7 @@ export class Fires {
           const family = FLAME[Math.min(3, Math.floor(heat * 4.5))];
           const rnd = hash2(dx, h, fire.seed + Math.floor(time * 12));
           const hot = Math.min(1, heat / 0.8);
-          cells.push({ dx, dy: -h - 2, g: family[Math.floor(rnd * family.length)],
+          cells.push({ dx, dy: -h - 2 + Math.round(fire.leanY * h / 15 * TILT), g: family[Math.floor(rnd * family.length)],
             r: (225 + hot * 30) * brightness, gg: (55 + hot * 184) * brightness, b: (6 + hot ** 3 * 137) * brightness,
             bg: [hot * 62 * strength, hot * 22 * strength, hot * 3 * strength] });
         }
@@ -252,7 +364,7 @@ export class Fires {
         const phase = hash2(i, 1, fire.seed);
         const age = (time / 4.8 + phase) % 1;
         const h = 4 + fire.intensity * 7 + age * (10 + fire.intensity * 12);
-        const drift = (fire.gust - 0.42) * age * 12 + Math.sin(i + age * 3) * age * 4;
+        const drift = (fire.gust - 0.42) * age * 12 + Math.sin(i + age * 3) * age * 4 + fire.leanX * age / ASPECT;
         const sy = by - Math.floor(h);
         const alpha = Math.sin(age * Math.PI) * 0.2 * fire.intensity * Math.min(1, fire.age / 3);
         for (let dx = -1; dx <= 1; dx++) {
@@ -278,6 +390,15 @@ export class Fires {
     for (const fire of visible) {
       const radius = LIGHT_RADIUS * (0.45 + 0.55 * Math.sqrt(fire.intensity));
       drawFireLight(r, view, time, fire, radius);
+    }
+  }
+
+  drawParticles(r, view) {
+    for (const p of this.particles) {
+      const sx = Math.floor(p.x) - view.x0;
+      const sy = Math.floor(p.y - p.h) - view.y0;
+      const fade = Math.max(0, p.life / p.max);
+      r.put(sx, sy, p.g, (p.ash ? 135 : 255) * fade, (p.ash ? 112 : 175) * fade, (p.ash ? 90 : 45) * fade);
     }
   }
 }

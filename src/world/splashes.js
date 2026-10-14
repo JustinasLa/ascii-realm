@@ -7,9 +7,16 @@ const DOT = glyph('.');
 const DROPS = [...".'`|"].map(glyph);
 const MAX_RINGS = 96;
 const MAX_DROPS = 240;
-const IMPACTS = { land: 2.4 };
+const IMPACTS = {
+  step: 1,
+  jump: 1.25,
+  land: 2.4,
+  skid: 0.45,
+  slam: 2.8,
+  whirl: 2,
+};
 
-// Water impacts from thrown torches: surface rings and ballistic droplets.
+// Footfall-driven water: expanding surface rings and ballistic droplets.
 // All positions stay in world cells, so camera movement and zoom do not
 // drag an old splash along with the character.
 export class Splashes {
@@ -32,7 +39,7 @@ export class Splashes {
     const weight = Math.max(0, Math.min(1.5, event.strength ?? 0.5));
     const strength = impact * (0.4 + weight * 0.6);
     this.ring(event.x, event.y, strength);
-    this.ring(event.x, event.y, strength * 0.55, 0.12);
+    if (event.type !== 'skid') this.ring(event.x, event.y, strength * 0.55, 0.12);
     const count = Math.round((5 + weight * 7) * impact);
     for (let i = 0; i < count; i++) {
       const angle = Math.random() * Math.PI * 2;
@@ -47,6 +54,33 @@ export class Splashes {
         age: 0,
         life: 0.8,
         glint: 0.7 + Math.random() * 0.3,
+      });
+    }
+    if (this.drops.length > MAX_DROPS) this.drops.splice(0, this.drops.length - MAX_DROPS);
+    return true;
+  }
+
+  // Small weather impacts use the same water-clipped rings as footsteps.
+  // Snow melts quietly; rain and ice throw up a brief crown of droplets.
+  precipitate(world, x, y, strength, kind = 'rain', random = Math.random) {
+    if (!(strength > 0) || world.typeAt(x, y) !== WATER) return false;
+    const weight = Math.min(1, strength);
+    this.ring(x, y, 0.25 + weight * 0.7, 0, true);
+    const ring = this.rings[this.rings.length - 1];
+    ring.radius = 0.3;
+    ring.life = 0.6 + weight * 0.35;
+    ring.speed = 1.5 + weight * 2;
+    const count = kind === 'snow' ? 0 : kind === 'hail' ? 3 : weight > 0.6 ? 2 : 1;
+    for (let i = 0; i < count; i++) {
+      const angle = random() * Math.PI * 2;
+      const speed = 0.7 + random() * 1.2;
+      this.drops.push({
+        x, y, h: 0.1,
+        vx: Math.cos(angle) * speed / ASPECT,
+        vy: Math.sin(angle) * speed * TILT,
+        vh: 2.5 + weight * 3 + random(),
+        age: 0, life: 0.6,
+        glint: 0.6 + weight * 0.4,
       });
     }
     if (this.drops.length > MAX_DROPS) this.drops.splice(0, this.drops.length - MAX_DROPS);
@@ -101,7 +135,8 @@ export class Splashes {
     }
   }
 
-  // Surface rings remain confined to water at the shoreline.
+  // Draw after the reflections and before the figure, so ripples pass
+  // behind the legs and remain confined to the water at the shoreline.
   drawSurface(r, view, time) {
     for (const p of this.rings) {
       if (p.age < 0) continue;
@@ -110,7 +145,15 @@ export class Splashes {
     }
   }
 
-  // Spray rises above the landing spot, then falls back into the water.
+  // A thin crest in front of each submerged leg hides the hard cut at the
+  // surface. Unlike the spray, these quiet waterlines remain when standing.
+  drawContacts(r, view, time, contacts) {
+    for (const p of contacts) {
+      this.drawRing(r, view, p.x, p.y, 1.1 + Math.sin(time * 3) * 0.12, 0.55, time);
+    }
+  }
+
+  // Spray rises in front of the feet, then falls back into the water.
   drawSpray(r, view) {
     for (const p of this.drops) {
       const k = p.glint * (1 - p.age / p.life * 0.55);

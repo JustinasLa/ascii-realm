@@ -90,6 +90,22 @@ test('throwing leaves the hand immediately, flies forward, and ignites exactly o
   assert.equal(fires.list.length, 1);
 });
 
+test('a second torch landing on the same fire reports feeding it, not a new fire', () => {
+  const world = dryWorld();
+  const fires = new Fires({ windAt: () => 0 });
+  const torches = new Torches();
+  const player = new Player(0, 0);
+  player.heading = Math.PI / 2;
+  torches.throw(player, { x: 0, y: 0, h: 12 });
+  assert.equal(torches.update(2, world, fires)[0].type, 'lit');
+  torches.toggle(player);
+  torches.throw(player, { x: 0, y: 0, h: 12 });
+  const [impact] = torches.update(2, world, fires);
+  assert.equal(impact.type, 'fed');
+  assert.equal(impact.fire, fires.list[0]);
+  assert.equal(fires.list.length, 1);
+});
+
 test('landing in water extinguishes the torch, while flying over water can reach dry ground', () => {
   for (const landsInWater of [true, false]) {
     const world = dryWorld({ typeAt: x => landsInWater || (x > 10 && x < 30) ? WATER : GRASS,

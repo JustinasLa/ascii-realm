@@ -17,6 +17,7 @@ export default {
   },
   events: [
     {
+      lightning: true,
       interval: [19, 46],
       firstDelay: [6, 15],
       create({ now, intensity, random }) {
