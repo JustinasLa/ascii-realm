@@ -9,11 +9,21 @@ import { ASPECT, GRASS, WATER } from '../src/world/world.js';
 const noop = () => {};
 
 // Run the real frame loop and player state with browser, rendering and audio I/O stubbed.
+// A stand-in for systems these tests don't exercise: every method is a no-op
+// returning an empty list.
+const inert = () => class {
+  constructor() {
+    this.list = [];
+    this.events = [];
+    return new Proxy(this, { get: (target, key) => key in target ? target[key] : () => [] });
+  }
+};
+
 async function loadGame(move = { x: 0, y: 0 }) {
   const taps = new Set();
   const canvas = new EventTarget();
   const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
-  const hint = { classList: { add: noop } };
+  const hint = { classList: { add: noop, remove: noop } };
   let nextFrame;
   let now = 0;
   let bladeSamples = 0;
@@ -59,6 +69,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Fireflies: class { constructor() { this.list = []; } update() {} draw() {} },
     Dust: class { update() {} draw() {} burst() {} sparks() {} },
     Footprints: class { draw() {} },
+    Fires: inert(),
+    fireWeatherWind: () => 0,
     Splashes: class {
       react() {} update() {} precipitate() {}
       drawSurface() {} drawContacts() {} drawSpray() {}

@@ -9,7 +9,7 @@
   </head>
   <body>
     <canvas id="screen" tabindex="0" aria-label="Game scene. Press B to build scenery."></canvas>
-    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump (twice for a trick) &middot; J / click — strike (hold to spin) &middot; F — draw or sheathe &middot; M — mute &middot; scroll — zoom &middot; B — scenery builder</div>
+    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump (twice for a trick) &middot; J / click — strike (hold to spin) &middot; F — draw or sheathe &middot; C — campfire &middot; M — mute &middot; scroll — zoom &middot; B — scenery builder</div>
     <div id="builder-banner" hidden>SCENERY BUILDER <span>Press B to play</span></div>
     <div id="builder-cursor" aria-hidden="true" hidden></div>
     <div id="panel-dock">
@@ -89,6 +89,7 @@
       </div>
     </details>
     </div>
+    <div id="fire-status" role="status" aria-live="polite"></div>
     <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
     <script type="module" src="src/main.js"></script>
   </body>

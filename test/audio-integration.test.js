@@ -15,7 +15,7 @@ test('suspended game audio clears persistent voices even without another animati
 
 test('locked event playback never queries terrain or allocates audio', () => {
   const audio = new GameAudio({ typeAt() { assert.fail('locked sound should not sample terrain'); } }, { context: null });
-  for (const type of ['step', 'jump', 'land', 'skid', 'draw', 'sheathe', 'swing', 'slam', 'whirl']) {
+  for (const type of ['step', 'jump', 'land', 'skid', 'draw', 'sheathe', 'swing', 'slam', 'whirl', 'fire-stir']) {
     audio.play({ type, x: 0, y: 0 });
   }
 });

@@ -365,3 +365,22 @@ body {
   border: 1px solid #63785c;
   font: inherit;
 }
+
+#fire-status {
+  position: fixed;
+  bottom: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100vw - 48px);
+  padding: 8px 12px;
+  color: #efd3a1;
+  background: rgba(12, 9, 6, 0.85);
+  border: 1px solid rgba(225, 158, 75, 0.25);
+  font: 12px "Cascadia Mono", Consolas, Menlo, monospace;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+#fire-status.visible { opacity: 1; }
