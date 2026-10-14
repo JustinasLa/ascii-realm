@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../src/entities/player.js';
+import { Inventory } from '../src/inventory/inventory.js';
+import { ITEMS } from '../src/inventory/items.js';
 import { buildRig } from '../src/entities/rig.js';
 import { FrameClock, FrameQuality, renderSize } from '../src/render/budget.js';
 import { ASPECT, GRASS, WATER } from '../src/world/world.js';
@@ -57,6 +59,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
     requestAnimationFrame: callback => { nextFrame = callback; },
     isDown: () => false,
     isControlTarget: () => false,
+    clearInput: noop, isGameplayBlocked: () => false, setGameplayBlocked: noop,
+    Inventory, ITEMS, Hud: inert(), InventoryScreen: inert(),
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
     Player, ASPECT, GRASS,

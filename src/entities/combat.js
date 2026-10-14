@@ -156,7 +156,16 @@ export class Combat {
   // Swing (drawing the sword first if needed), or queue the next swing of
   // the combo if one is already under way. `ctx` says whether the warrior
   // is sprinting or in the air, which picks a different attack.
+  // Whether a press now would start or queue an attack, so stamina is only
+  // spent on presses that do something.
+  get canAcceptAttack() {
+    if (!this.move) return true;
+    if (this.queued) return false;
+    return SWINGS.includes(this.move) || this.move === 'draw';
+  }
+
   attack(ctx = {}) {
+    if (!this.canAcceptAttack) return false;
     if (!this.move) {
       if (ctx.air) {
         // No time to draw properly mid-air: the sword is simply in hand.
@@ -171,10 +180,28 @@ export class Combat {
       } else {
         this.start(this.calm < 0.6 && this.lastSwing ? NEXT[this.lastSwing]() : 'a');
       }
-      return;
+      return true;
     }
     if (SWINGS.includes(this.move)) this.queued = NEXT[this.move]();
     else if (this.move === 'draw') this.queued ??= ctx.running ? 'thrust' : 'a';
+    return true;
+  }
+
+  // Taking the weapon away also cancels any accepted follow-up, charge or
+  // impact still to come.
+  cancel() {
+    this.move = null;
+    this.step = 0;
+    this.t = 0;
+    this.queued = null;
+    this.lastSwing = '';
+    this.calm = 0;
+    this.charge = 0;
+    this.spin = 0;
+    this.trailing = false;
+    this.inHand = false;
+    this.active = 0;
+    this.events.length = 0;
   }
 
   toggle() {

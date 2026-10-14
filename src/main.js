@@ -1,4 +1,4 @@
-import { isControlTarget, isDown, moveAxis, wasTapped } from './core/input.js';
+import { clearInput, isControlTarget, isDown, isGameplayBlocked, moveAxis, setGameplayBlocked, wasTapped } from './core/input.js';
 import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
 import { bindAudioControls } from './audio/controls.js';
@@ -6,9 +6,13 @@ import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { Player } from './entities/player.js';
+import { Inventory } from './inventory/inventory.js';
+import { ITEMS } from './inventory/items.js';
 import { putCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { Hud } from './ui/hud.js';
+import { InventoryScreen } from './ui/inventory.js';
 import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
@@ -99,6 +103,8 @@ const name = (params.get('name') || 'Kael').slice(0, 24);
 const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: mobile ? 64 : 128 });
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
+const inventory = new Inventory();
+player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
@@ -134,14 +140,58 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, grass, splashes, weather, fires, torches, renderer, quality,
-  audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
+const debug = { player, camera, world, grass, splashes, weather, fires, torches, renderer, quality, inventory,
+  audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 },
+  pickup: (id, count = 1) => inventory.add(id, count) };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
 const fireStatus = document.getElementById('fire-status');
 const carriedItem = document.getElementById('carried-item');
+
+// The status frames, quick slots and the inventory screen.
+const hud = new Hud({
+  player, inventory, name, debug: params.has('debug'),
+  onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
+  onInventory: () => inventoryScreen.toggle(),
+});
+hud.attachNote(carriedItem);
+const inventoryScreen = new InventoryScreen({
+  inventory, player, name,
+  onToggle: (open) => {
+    setGameplayBlocked(open);
+    clearInput();
+    clicked = false;
+    mouseHeld = false;
+    if (!open) canvas.focus({ preventScroll: true });
+  },
+  onNotify: (message, kind = 'info') => hud.notify(message, kind),
+});
+debug.hud = hud;
+debug.inventoryScreen = inventoryScreen;
+let swordEquipped = inventory.equipment.mainHand?.id === 'shortSword';
+
+// Choosing a quick slot that holds gear puts it on.
+function selectHotbar(index) {
+  if (!inventory.selectHotbar(index)) return;
+  const selected = inventory.getHotbar();
+  if (selected?.item.equipmentSlot && selected.source === 'inventory') {
+    if (inventory.equip(selected.index)) hud.notify(`Equipped ${selected.item.name}`, 'equipment');
+    else hud.notify('Make room in your bag to equip this item.', 'info');
+  }
+}
+
+function useHotbar() {
+  const selected = inventory.getHotbar();
+  if (!selected) return;
+  if (selected.item.use) {
+    if (inventory.useSelected(player.vitals)) hud.notify(`Used ${selected.item.name}`, 'use');
+    else hud.notify('That item is not needed yet.', 'info');
+  } else if (selected.item.equipmentSlot) {
+    selectHotbar(inventory.selectedHotbar);
+  }
+}
 const fireMessages = {
   lit: 'Campfire lit. Press C nearby to put it out.',
   out: 'Fire extinguished.',
@@ -176,7 +226,7 @@ let clicked = false;
 let mouseHeld = false;
 // Touches use the on-screen buttons instead.
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || e.pointerType === 'touch' || builder.enabled) return;
+  if (e.button !== 0 || e.pointerType === 'touch' || builder.enabled || isGameplayBlocked()) return;
   clicked = true;
   mouseHeld = true;
 });
@@ -283,6 +333,14 @@ function frame(now) {
   time += dt;
   updateZoom(dt);
 
+  for (let index = 0; index < 9; index++) {
+    if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`)) selectHotbar(index);
+  }
+  if (wasTapped('KeyQ')) useHotbar();
+  // Taking the sword off puts it away at once, even mid-swing.
+  const armed = inventory.equipment.mainHand?.id === 'shortSword';
+  if (swordEquipped && !armed) player.cancelWeapon();
+  swordEquipped = armed;
   const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
   const jump = wasTapped('Space');
   const attack = wasTapped('KeyJ') || clicked;
@@ -292,8 +350,8 @@ function frame(now) {
   const campfire = wasTapped('KeyC');
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
-    if (attack) player.attack();
-    if (sword) player.toggleSword();
+    if (attack && armed) player.attack();
+    if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
@@ -308,7 +366,7 @@ function frame(now) {
   const held = isDown('KeyJ') || mouseHeld;
   const fromX = player.x, fromY = player.y, fromAir = player.air;
   const paused = debug.freeze || builder.enabled || playerDt === 0;
-  if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
+  if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held, dt);
   if (model) {
     if (!paused) model.update(playerDt, player);
     // The sword's trail follows the blade of the 3D character.
@@ -325,6 +383,7 @@ function frame(now) {
   if (!paused) grass.update(world, player, time);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
+    if (e.type === 'damage') hud.damage(e.amount, e.x, e.y);
     if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
     splashes.react(world, e);
@@ -347,6 +406,10 @@ function frame(now) {
     }
   }
   player.events.length = 0;
+  for (const event of inventory.events) {
+    if (event.type === 'pickup') hud.notify(`+${event.count} ${ITEMS[event.id].name}`, 'pickup');
+  }
+  inventory.events.length = 0;
   dust.update(dt);
   splashes.update(dt);
   if (!debug.freeze) {
@@ -478,6 +541,8 @@ function frame(now) {
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
+  hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
+  inventoryScreen.update();
   const workMs = performance.now() - started;
   if (quality.sample(workMs, dt)) resize();
   debug.metrics.frames++;

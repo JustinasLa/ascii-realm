@@ -7,6 +7,7 @@ import { JUMPS as KINDS } from './player.js';
 import { captureClip } from './retarget.js';
 import { SCALE, TILT } from './rig.js';
 import { footPlants } from './footfalls.js';
+import { Gear } from './gear.js';
 
 // The player as a real rigged 3D character playing professionally animated
 // clips (Quaternius' Universal Animation Library, CC0), drawn every frame
@@ -219,6 +220,7 @@ export class ModelFigure {
       // darker still.
       const joint = o.material?.name === 'M_Joints';
       o.material = new THREE.MeshLambertMaterial({ color: joint ? 0x2a2622 : 0x5d5048 });
+      o.material.userData.joint = joint;
     });
     this.scene.add(this.model);
     this.bones = {};
@@ -227,6 +229,9 @@ export class ModelFigure {
     });
 
     this.sword = this.makeSword();
+    // Clothing painted by body region and gear on the bones, set up while
+    // the skeleton is still in its rest pose.
+    this.gear = new Gear(this.model, this.bones);
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
     this.legs = ['L', 'R'].map((side) => ({
       thigh: this.bones[bone(`DEF-thigh.${side}`)],
@@ -432,7 +437,8 @@ export class ModelFigure {
     for (const k in this.held) this.actions[k].time = this.held[k];
     this.mixer.update(0);
 
-    this.sword.visible = cb.inHand;
+    this.gear.apply(p.equipment);
+    this.sword.visible = cb.inHand && (p.equipment === undefined || p.equipment?.mainHand?.id === 'shortSword');
     this.turned = this.spinTurn(p);
     this.model.rotation.y = p.heading + (cb.spin ?? 0) + this.turned;
     // Keep the stride on the ground. The run clip throws the body well clear
