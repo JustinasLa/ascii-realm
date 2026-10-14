@@ -5,7 +5,6 @@ const MAX_TOASTS = 5;
 const TOAST_LIFETIME = 4;
 const MAX_DAMAGE = 16;
 const DAMAGE_LIFETIME = 1.1;
-const DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -92,13 +91,7 @@ export class Hud {
     this.status = status;
     const framesNode = this.frames;
 
-    const compass = element('section', 'hud-compass hud-panel');
-    attribute(compass, 'aria-label', 'Compass');
-    this.compassTape = element('pre', 'hud-compass-tape');
-    attribute(this.compassTape, 'aria-hidden', 'true');
-    this.compassDirection = element('div', 'hud-compass-direction');
-    compass.append(element('span', 'hud-compass-marker', 'v'), this.compassTape, this.compassDirection);
-    this.element.append(framesNode, compass);
+    this.element.append(framesNode);
 
     if (debug) {
       this.coordinates = element('div', 'hud-coordinates');
@@ -205,17 +198,6 @@ export class Hud {
     const weight = Number.isFinite(this.inventory.weight) ? this.inventory.weight : 0;
     text(this.load, `Bag ${number(weight)}/${number(this.inventory.capacity ?? 0)} kg`);
     this.updateHotbar();
-
-    // The model faces south at zero; positive radians turn toward east.
-    const heading = Number.isFinite(this.player.heading) ? this.player.heading : 0;
-    const bearing = ((180 - heading * 180 / Math.PI) % 360 + 360) % 360;
-    const direction = Math.round(bearing / 45) % DIRECTIONS.length;
-    const around = [-2, -1, 0, 1, 2].map((offset) => {
-      const label = DIRECTIONS[(direction + offset + DIRECTIONS.length) % DIRECTIONS.length];
-      return offset === 0 ? `[${label}]` : label;
-    });
-    text(this.compassTape, around.map((label) => label.replace(/[\[\]]/g, '').padStart(3).padEnd(5)).join(' '));
-    text(this.compassDirection, `${DIRECTIONS[direction]}  ${Math.round(bearing) % 360}\u00b0`);
 
     if (this.coordinates) {
       const x = Number.isFinite(this.player.x) ? number(this.player.x) : '--';

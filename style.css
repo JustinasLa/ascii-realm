@@ -51,11 +51,7 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-party { display: flex; flex-direction: column; gap: 6px; }
 .hud-party:empty { display: none; }
 .hud-party-tab { align-self: flex-start; padding: 1px 6px; background: var(--surface); border: 1px solid var(--frame); font-size: 11px; }
-.hud-compass { top: max(12px, env(safe-area-inset-top)); left: 50%; width: 206px; padding: 4px 8px 5px; transform: translateX(-50%); text-align: center; background: var(--surface); border: 1px solid var(--frame); }
-.hud-compass-marker { display: block; font-size: 9px; line-height: 8px; }
-.hud-compass-tape { color: var(--muted); font-size: 10px; line-height: 16px; }
-.hud-compass-direction { font-size: 10px; }
-.hud-coordinates { position: absolute; top: 70px; left: 50%; transform: translateX(-50%); padding: 2px 6px; color: var(--muted); background: var(--surface); font-size: 10px; font-variant-numeric: tabular-nums; }
+.hud-coordinates { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 2px 6px; color: var(--muted); background: var(--surface); font-size: 10px; font-variant-numeric: tabular-nums; }
 
 /* Quick slots form one framed instrument with a shared caption. */
 .hud-hotbar-wrap { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-template-columns: auto 54px; gap: 6px 8px; padding: 6px 8px 8px; background: var(--surface); border: 1px solid var(--frame); }
@@ -249,8 +245,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   .zoom-controls { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: flex; gap: 4px; }
   #touch-controls .zoom-controls button { font-size: 18px; }
   #panel-dock { top: calc(max(12px, env(safe-area-inset-top)) + 52px); max-height: calc(100dvh - 208px); }
-  .hud-compass { width: 172px; }
-  .hud-compass-tape { font-size: 8px; }
   .hud-hotbar-wrap { bottom: max(132px, calc(env(safe-area-inset-bottom) + 132px)); }
   .hud-prompt { bottom: max(236px, calc(env(safe-area-inset-bottom) + 236px)); }
   #fire-status { bottom: max(272px, calc(env(safe-area-inset-bottom) + 272px)); }
@@ -258,12 +252,7 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   #panel-dock summary { min-height: 32px; padding-top: 8px; padding-bottom: 8px; }
 }
 @media (max-width: 680px) {
-  .hud-compass { top: 144px; left: 12px; width: 144px; transform: none; }
-  .hud-compass-tape { font-size: 7px; }
-  .hud-compass-marker { font-size: 8px; line-height: 6px; }
-  .hud-compass-direction { font-size: 9px; }
-  .hud-coordinates { top: 196px; left: 12px; transform: none; }
-  .hud:has(.hud-member) .hud-compass { display: none; }
+  .hud-coordinates { top: 144px; left: 12px; transform: none; }
   .hud:has(.hud-member) .hud-coordinates { display: none; }
   .hud-party { width: min(190px, calc(100vw - 192px)); }
   .hud-member .hud-vital { grid-template-columns: 18px 1fr; }
@@ -319,8 +308,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 }
 @media (max-width: 360px) {
   .hud-frames { left: 8px; width: 232px; }
-  .hud-compass { left: 8px; width: 128px; }
-  .hud-compass-tape { font-size: 6.5px; }
   .zoom-controls { flex-direction: column; }
   .hud-hotbar-wrap { width: calc(100% - 24px); }
   .hud-inventory-button { width: calc((100% - 28px) / 5); }
@@ -342,7 +329,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 }
 /* On short, narrow landscapes, the two-row bar fits between the touch pads. */
 @media (max-height: 540px) and (min-width: 521px) and (max-width: 780px) {
-  .hud-compass { display: none; }
   .hud-coordinates { top: 144px; left: 12px; transform: none; }
   .hud-frames { max-height: calc(100dvh - 172px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); }
   .hud-party { width: 190px; }

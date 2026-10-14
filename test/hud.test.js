@@ -91,15 +91,10 @@ test('HUD hotbar reflects equipment, selection, and consumed quick-item counts',
   assert.equal(inventoryOpened, 1);
 });
 
-test('HUD compass follows heading and coordinates are available only in debug mode', (t) => {
+test('HUD has no compass and coordinates are available only in debug mode', (t) => {
   const { document, player, hud } = mount(t);
   assert.equal(byClass(document.body, 'hud-coordinates').length, 0);
-  const compass = byClass(document.body, 'hud-compass-direction')[0];
-  for (const [heading, direction] of [[0, 'S'], [Math.PI / 2, 'E'], [Math.PI, 'N'], [-Math.PI / 2, 'W']]) {
-    player.heading = heading;
-    hud.update(0, view);
-    assert.match(compass.textContent, new RegExp(`\\b${direction}\\b`));
-  }
+  assert.equal(byClass(document.body, 'hud-compass').length, 0);
   hud.destroy();
   const debugHud = new Hud({ player, inventory: new Inventory(), name: 'Kael', debug: true });
   t.after(() => debugHud.destroy());
