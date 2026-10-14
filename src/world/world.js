@@ -38,6 +38,8 @@ export class World {
     this.clock = 0;
     this.chunks = new Map();
     this.terrainEdits = new Map();
+    // How many edited cells each chunk holds, so budgets need no full scan.
+    this.editChunks = new Map();
     // Scorch maps by chunk, kept here so they outlive chunk eviction.
     this.burns = new Map();
     this.addedProps = new Map();
@@ -170,8 +172,19 @@ export class World {
   setTerrain(x, y, type) {
     const { c, i } = this.locate(x, y);
     const key = cellKey(x, y);
-    if (type === c.baseType[i]) this.terrainEdits.delete(key);
-    else this.terrainEdits.set(key, type);
+    const had = this.terrainEdits.has(key);
+    const chunk = chunkKey(c.cx, c.cy);
+    if (type === c.baseType[i]) {
+      if (had) {
+        this.terrainEdits.delete(key);
+        const left = this.editChunks.get(chunk) - 1;
+        if (left > 0) this.editChunks.set(chunk, left);
+        else this.editChunks.delete(chunk);
+      }
+    } else {
+      this.terrainEdits.set(key, type);
+      if (!had) this.editChunks.set(chunk, (this.editChunks.get(chunk) ?? 0) + 1);
+    }
     this.applyTerrain(c, i, type);
     this.touched(c);
   }
@@ -237,6 +250,7 @@ export class World {
       this.touched(c);
     }
     this.terrainEdits.clear();
+    this.editChunks.clear();
     this.addedProps.clear();
     this.addedPropChunks.clear();
     this.removedProps.clear();
