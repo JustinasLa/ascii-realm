@@ -26,13 +26,36 @@ test('a longer stride when running', () => {
   assert.ok(strideCycle(1) > strideCycle(0));
 });
 
-test('feet rest on the ground through the whole walk and run cycle', () => {
-  for (const run of [0, 1]) {
-    for (let phase = 0; phase < Math.PI * 2; phase += 0.1) {
-      const rig = buildRig(pose({ phase, walk: 1, run }));
-      assert.ok(Math.abs(groundGap(rig)) < 1e-9, `run=${run} phase=${phase.toFixed(1)}`);
-    }
+test('walking, a foot is always down, and both at each change of step', () => {
+  let both = false;
+  for (let phase = 0; phase < Math.PI * 2; phase += 0.05) {
+    const rig = buildRig(pose({ phase, walk: 1 }));
+    assert.ok(rig.grounded >= 1, `phase=${phase.toFixed(2)} airborne`);
+    both ||= rig.grounded === 2;
+    // Whatever part of a planted foot bears the weight is on the ground.
+    for (const l of rig.legs) if (l.contact) assert.ok(Math.abs(l.contact[1]) < 0.02, `contact at ${l.contact[1]}`);
   }
+  assert.ok(both, 'never in double support');
+});
+
+test('running, the feet take turns and both leave the ground between steps', () => {
+  let flight = false;
+  for (let phase = 0; phase < Math.PI * 2; phase += 0.05) {
+    const rig = buildRig(pose({ phase, walk: 1, run: 1 }));
+    assert.ok(rig.grounded <= 1, `phase=${phase.toFixed(2)} both feet down`);
+    flight ||= rig.grounded === 0;
+  }
+  assert.ok(flight, 'never airborne');
+});
+
+test('a walking foot lands heel first and pushes off from its toes', () => {
+  // Just after touching down the toes are still up; just before lifting
+  // off the heel is well clear of the ground.
+  const at = (phase) => buildRig(pose({ phase, walk: 1 })).legs.find((l) => l.s > 0);
+  const land = at(Math.PI / 2 + 0.05);
+  assert.ok(land.toe[1] > land.ankle[1] - 0.015 + 0.02, 'toes not raised on landing');
+  const lift = at(Math.PI / 2 + 0.6 * Math.PI * 2 - 0.05);
+  assert.ok(lift.ankle[1] > 0.12, `heel not raised at push-off: ${lift.ankle[1]}`);
 });
 
 test('the knee touches down when kneeling', () => {

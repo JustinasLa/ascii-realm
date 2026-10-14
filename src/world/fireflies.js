@@ -6,6 +6,8 @@ const BODY = [glyph('.'), glyph('*'), glyph('o')];
 // How many fireflies per screen cell, so the meadow looks equally busy at
 // every zoom level.
 const DENSITY = 1 / 260;
+const SPAWN_RETRY = 1;
+const RETRY_DISTANCE = 8;
 
 // Little lights that wander over the meadow around the camera and pulse on
 // and off. Each one also tints the cells around it to fake a glow.
@@ -16,22 +18,32 @@ export class Fireflies {
 
   update(dt, t, world, cx, cy, halfW, halfH) {
     const count = Math.round(4 * halfW * halfH * DENSITY);
-    while (this.list.length < count) this.list.push(this.spawn(world, cx, cy, halfW, halfH));
+    while (this.list.length < count) this.list.push(this.spawn(world, cx, cy, halfW, halfH, t));
     if (this.list.length > count) this.list.length = count;
     for (let i = 0; i < this.list.length; i++) {
       const f = this.list[i];
+      if (f.retryAt !== undefined) {
+        // Keep failed slots dormant on barren terrain, but retry sooner when
+        // the camera has moved far enough to reveal a new patch of ground.
+        const dx = (cx - f.x) * ASPECT;
+        const dy = cy - f.y;
+        if (t >= f.retryAt || dx * dx + dy * dy >= RETRY_DISTANCE * RETRY_DISTANCE) {
+          this.list[i] = this.spawn(world, cx, cy, halfW, halfH, t);
+        }
+        continue;
+      }
       // Drift along a slowly changing noise field, each on its own track.
       const ax = valueNoise(f.seed, t * 0.25, 11) - 0.5;
       const ay = valueNoise(f.seed + 50, t * 0.25, 12) - 0.5;
       f.x += (ax * 6 * dt) / ASPECT;
       f.y += ay * 6 * dt;
       if (Math.abs(f.x - cx) > halfW * 1.3 || Math.abs(f.y - cy) > halfH * 1.3) {
-        this.list[i] = this.spawn(world, cx, cy, halfW, halfH);
+        this.list[i] = this.spawn(world, cx, cy, halfW, halfH, t);
       }
     }
   }
 
-  spawn(world, cx, cy, halfW, halfH) {
+  spawn(world, cx, cy, halfW, halfH, t) {
     for (let tries = 0; tries < 8; tries++) {
       const x = cx + (Math.random() * 2 - 1) * halfW;
       const y = cy + (Math.random() * 2 - 1) * halfH;
@@ -39,12 +51,13 @@ export class Fireflies {
         return { x, y, seed: Math.random() * 1000, phase: Math.random() * Math.PI * 2 };
       }
     }
-    return { x: cx, y: cy - halfH * 2, seed: Math.random() * 1000, phase: 0 };
+    return { x: cx, y: cy, retryAt: t + SPAWN_RETRY };
   }
 
   draw(r, view, t) {
     const { fg, bg, cols } = r;
     for (const f of this.list) {
+      if (f.retryAt !== undefined) continue;
       const pulse = Math.max(0, Math.sin(t * 1.4 + f.phase));
       const b = pulse * pulse;
       if (b < 0.05) continue;

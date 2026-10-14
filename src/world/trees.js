@@ -285,6 +285,43 @@ function grow(shape, growth, rand) {
   return shape;
 }
 
+// Keep only geometry that can touch this row. These bounds include the
+// maximum noisy leaf edge and strand bend, so sampling and cell order stay
+// unchanged while the empty space beside a tall trunk is skipped.
+function geometryAtRow(shape, y) {
+  const row = { blobs: [], tiers: [], strands: [], wood: [], left: Infinity, right: -Infinity };
+  const include = (parts, part, left, right) => {
+    parts.push(part);
+    row.left = Math.min(row.left, left);
+    row.right = Math.max(row.right, right);
+  };
+  for (const b of shape.blobs) {
+    const ny = Math.max(0, b.y - y, y - 1 - b.y) / b.ry;
+    // The sampler's squared radius is at most 0.86 + 0.24 + 0.065.
+    const reach2 = 1.17 - ny * ny;
+    if (reach2 < 0) continue;
+    const reach = b.rx * Math.sqrt(reach2);
+    include(row.blobs, b, b.x - reach, b.x + reach);
+  }
+  for (const t of shape.tiers) {
+    if (t.y > y || t.y + t.depth < y - 1) continue;
+    const v = Math.min(1, (y - t.y) / t.depth);
+    // Both noisy width factors are bounded by 1.08 * 1.04 < 1.13.
+    const reach = t.width * (0.04 + v * 0.96) * 1.13;
+    include(row.tiers, t, t.x - reach, t.x + reach);
+  }
+  for (const s of shape.strands) {
+    if (s.y > y || s.y + s.length < y - 1) continue;
+    include(row.strands, s, s.x + Math.min(0, s.bend) - s.radius - 0.24,
+      s.x + Math.max(0, s.bend) + s.radius + 0.24);
+  }
+  for (const s of shape.wood) {
+    if (s.minY > y || s.maxY < y - 1) continue;
+    include(row.wood, s, s.minX, s.maxX);
+  }
+  return row;
+}
+
 function makeSampler(shape, species, season, palette, seed) {
   const winter = season === 'winter';
   const evergreen = EVERGREEN.has(species);
@@ -302,13 +339,15 @@ function makeSampler(shape, species, season, palette, seed) {
     crownBottom = Math.max(crownBottom, t.y + t.depth);
   }
   const crownSpan = Math.max(1, crownBottom - crownTop);
-  return (px, py) => {
+  // Each row passes only the geometry that can touch it; the crown's
+  // lighting above still comes from the whole tree.
+  return (px, py, row = shape) => {
     let leaf = null;
     const grain = hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 41);
     const clump = valueNoise(px * 0.24, py * 0.2, seed + 89);
     const height = clamp(1 - (py - crownTop) / crownSpan);
 
-    for (const b of shape.blobs) {
+    for (const b of row.blobs) {
       const nx = (px - b.x) / b.rx;
       const ny = (py - b.y) / b.ry;
       const d = nx * nx + ny * ny;
@@ -321,7 +360,7 @@ function makeSampler(shape, species, season, palette, seed) {
       if (!leaf || depth > leaf.depth) leaf = { light, depth, edge: d > 0.79,
         rim: nx < -0.45 && ny < 0.35 && d > 0.77, snow: false, layer: b.layer, strand: false };
     }
-    for (const t of shape.tiers) {
+    for (const t of row.tiers) {
       const v = (py - t.y) / t.depth;
       if (v < 0 || v > 1) continue;
       const half = t.width * (0.04 + v * 0.96) * (0.86 + clump * 0.22);
@@ -332,7 +371,7 @@ function makeSampler(shape, species, season, palette, seed) {
       const snow = winter && (v < 0.21 || edge > 0.86 || (v > 0.92 && grain > 0.53));
       if (!leaf || t.layer > leaf.depth) leaf = { light, depth: t.layer, edge: edge > 0.85, rim: nx < -0.5, snow, layer: t.layer, strand: false };
     }
-    for (const s of shape.strands) {
+    for (const s of row.strands) {
       const v = (py - s.y) / s.length;
       if (v < 0 || v > 1) continue;
       const curve = s.x + s.bend * v * v + Math.sin(v * 5 + s.layer * 1.7) * 0.24;
@@ -345,7 +384,7 @@ function makeSampler(shape, species, season, palette, seed) {
     let wood = null;
     let nearTwig = false;
     if (!leaf || (winter && !evergreen)) {
-      for (const s of shape.wood) {
+      for (const s of row.wood) {
         if (px < s.minX || px > s.maxX || py < s.minY || py > s.maxY) continue;
         const hit = segmentDistance(px, py, s);
         if (hit.distance < 1.5) nearTwig = true;
@@ -434,7 +473,10 @@ function bake(sample, seed, species, shape) {
   const rustles = [...RUSTLE_GLYPHS].map(glyph);
   const bounds = { minX: MAX_TREE_HALF_WIDTH, minY: 0, maxX: -MAX_TREE_HALF_WIDTH, maxY: 1 - MAX_TREE_HEIGHT };
   for (let dy = minY; dy <= 0; dy++) {
-    for (let dx = minX; dx <= maxX; dx++) {
+    const row = geometryAtRow(shape, dy);
+    const rowMinX = Math.max(minX, Math.floor(row.left / ASPECT - 1));
+    const rowMaxX = Math.min(maxX, Math.ceil(row.right / ASPECT + 1));
+    for (let dx = rowMinX; dx <= rowMaxX; dx++) {
       let hits = 0;
       let foliageHits = 0;
       let red = 0;
@@ -446,7 +488,7 @@ function bake(sample, seed, species, shape) {
       let woodDetail = null;
       for (const oy of SUB_Y) {
         for (const ox of SUB_X) {
-          const s = sample((dx + ox) * ASPECT, dy + oy);
+          const s = sample((dx + ox) * ASPECT, dy + oy, row);
           if (!s) continue;
           hits++;
           if (s.foliage) foliageHits++;
@@ -490,7 +532,6 @@ function bake(sample, seed, species, shape) {
         bb: hits >= 5 ? Math.round(blue / hits * 0.17) : undefined,
         foliage,
         flex,
-        phase,
         phaseSin: Math.sin(phase),
         phaseCos: Math.cos(phase),
         rustle: foliage ? rustles[Math.floor(hash2(dx, dy, seed + 103) * rustles.length)] : g,

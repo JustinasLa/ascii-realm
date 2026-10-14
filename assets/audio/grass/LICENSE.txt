@@ -1,0 +1,39 @@
+Grass footsteps for ASCII Realm
+
+"Walking on grass.wav" by gabytoledosci
+Published July 26, 2017; described by the author as a short stroll on grass.
+
+License: Creative Commons CC0 1.0 Universal
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Source and CC0 declaration:
+https://freesound.org/people/gabytoledosci/sounds/398266/
+
+Source used: the author's publicly accessible high-quality preview
+https://cdn.freesound.org/previews/398/398266_7618848-hq.mp3
+Source SHA-256:
+b77093f7e063128f2f1866c64b58bed7c007c63313330eea900145cbe2aeee9a
+Decoded recording: 48 kHz stereo, 29.604 seconds.
+
+Exact excerpts from the decoded recording (seconds):
+grass-L1.wav   2.28-2.60
+grass-R1.wav   4.29-4.61
+grass-L2.wav   8.45-8.77
+grass-R2.wav   9.52-9.84
+grass-L3.wav   10.86-11.18
+grass-R3.wav   27.68-28.00
+
+Adaptation:
+- Decode/downmix to mono at 48000 Hz with ffmpeg.
+- Filter the full recording with a third-order 450-3800 Hz Butterworth
+  bandpass (scipy.signal.butter(..., output='sos') and sosfiltfilt).
+- Extract the six 320ms windows above, preserving their recorded envelopes.
+- Apply squared-sine boundary fades: 16ms in and 40ms out.
+- Balance each excerpt toward RMS 0.038, with amplification capped at 12x.
+- Restrain isolated peaks with 0.24 * tanh(signal / 0.24).
+- Resample with scipy.signal.resample_poly(147, 320) and export mono
+  16-bit PCM at 22050 Hz. Playback adds short boundary fades only.
+
+All grass movement and foot contact in these files comes from this recording.
+No kitchen leaf rustles, carpet contacts or generated noise are mixed in.
+Files named L/R are variation identifiers; original foot sides are not annotated.

@@ -78,11 +78,17 @@ function dataTexture(gl) {
 
 export class AsciiRenderer {
   constructor(canvas, atlas) {
-    const gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+    const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false });
     if (!gl) throw new Error('WebGL2 is not available');
     this.gl = gl;
     this.canvas = canvas;
     this.atlas = atlas;
+    this.restore();
+  }
+
+  restore() {
+    const gl = this.gl;
+    const atlas = this.atlas;
 
     const prog = gl.createProgram();
     gl.attachShader(prog, compile(gl, gl.VERTEX_SHADER, VERT));
@@ -126,6 +132,7 @@ export class AsciiRenderer {
 
     this.cols = 0;
     this.rows = 0;
+    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
 
   // Cell size is given in CSS pixels and may be fractional: rounding it to
@@ -142,8 +149,13 @@ export class AsciiRenderer {
       gl.viewport(0, 0, w, h);
     }
     this.dpr = dpr;
-    this.cellW = Math.max(2, cellW * dpr);
-    this.cellH = Math.max(3, cellH * dpr);
+    const deviceW = cellW * dpr;
+    const deviceH = cellH * dpr;
+    // Browser zoom can lower DPR below one. Enlarge both dimensions together
+    // when enforcing the minimum so the world keeps its aspect ratio.
+    const scale = Math.max(1, 2 / deviceW, 3 / deviceH);
+    this.cellW = deviceW * scale;
+    this.cellH = deviceH * scale;
     // One spare row and column so sub-cell scrolling never exposes a gap.
     const cols = Math.ceil(w / this.cellW) + 1;
     const rows = Math.ceil(h / this.cellH) + 1;
@@ -156,6 +168,7 @@ export class AsciiRenderer {
     this.mask = new Uint8Array(cols * rows);
 
     for (const tex of [this.fgTex, this.bgTex]) {
+      gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
     }

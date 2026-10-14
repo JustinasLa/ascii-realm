@@ -1,7 +1,8 @@
-import { fbm } from '../core/noise.js';
+import { fbm, valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { blocks, generateProps } from './props.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
+import { grassRoots } from './grass-roots.js';
 
 export const WATER = 0;
 export const SHORE = 1;
@@ -15,23 +16,60 @@ export const ASPECT = 6 / 10;
 
 const CHUNK = 64;
 export const WATER_LEVEL = 0.4;
+// All lakes are fordable: even their lowest beds are only knee deep.
+export const MAX_WATER_DEPTH = 0.42;
 const SHORE_LEVEL = 0.415;
 const STONE_LEVEL = 0.7;
+const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78];
+const cellKey = (x, y) => `${x},${y}`;
+const chunkKey = (cx, cy) => `${cx},${cy}`;
+const smoothRange = (a, b, x) => {
+  const u = Math.max(0, Math.min(1, (x - a) / (b - a)));
+  return u * u * (3 - 2 * u);
+};
 
 export class World {
-  constructor(seed = 1, { season = 'summer' } = {}) {
+  constructor(seed = 1, options = {}) {
+    // A bare number is the chunk cache size.
+    const { season = 'summer', maxChunks = 128 } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
     this.season = ['spring', 'summer', 'autumn', 'winter'].includes(season) ? season : 'summer';
+    this.maxChunks = Math.max(16, Math.floor(maxChunks));
+    this.clock = 0;
     this.chunks = new Map();
+    this.terrainEdits = new Map();
+    // Scorch maps by chunk, kept here so they outlive chunk eviction.
+    this.burns = new Map();
+    this.addedProps = new Map();
+    this.removedProps = new Set();
+    this.addedPropChunks = new Map();
+    this.propRenderW = 30;
+    this.propRenderH = 50;
+    this.propFootW = 10;
+    this.propFootH = 2;
     this.spawn = this.findSpawn();
   }
 
   chunk(cx, cy) {
-    const key = (cx + 32768) * 65536 + (cy + 32768);
+    const key = chunkKey(cx, cy);
     let c = this.chunks.get(key);
     if (!c) {
+      if (this.chunks.size >= this.maxChunks) {
+        let oldestKey;
+        let oldest = Infinity;
+        for (const [k, chunk] of this.chunks) {
+          if (chunk.used < oldest) { oldest = chunk.used; oldestKey = k; }
+        }
+        this.chunks.delete(oldestKey);
+      }
       c = this.generate(cx, cy);
       this.chunks.set(key, c);
+    }
+    c.used = ++this.clock;
+    // Edits and burns mark the grass for regrowing once, not per cell.
+    if (c.stale) {
+      c.blades = grassRoots(c, this.seed, CHUNK);
+      c.stale = false;
     }
     return c;
   }
@@ -42,6 +80,9 @@ export class World {
     const elev = new Float32Array(n);
     const shade = new Float32Array(n);
     const rnd = new Float32Array(n);
+    const grassHeight = new Float32Array(n);
+    const grassDensity = new Float32Array(n);
+    const grassStyle = new Uint8Array(n);
     const s = this.seed;
 
     for (let ly = 0; ly < CHUNK; ly++) {
@@ -64,9 +105,47 @@ export class World {
         elev[i] = e;
         shade[i] = fbm(nx * 0.05, y * 0.05, s + 31, 3);
         rnd[i] = hash2(x, y, s + 5);
+        if (t === GRASS || t === SHORE) {
+          // Blend the verge into the meadow instead of cutting out a lawn
+          // at one noise threshold. Fractional heights are dithered per root
+          // when drawn, so even the cell grid has no hard height bands.
+          const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
+          const wet = 1 - smoothRange(0.41, 0.45, e);
+          const lush = smoothRange(0.35, 0.68, meadow);
+          let reed = false;
+          if (t === GRASS) {
+            const verge = smoothRange(0.009, 0.035, path);
+            const fieldHeight = 2.6 + lush * 1.3;
+            const bank = wet * smoothRange(0.35, 0.6, meadow);
+            const target = fieldHeight + (4.7 - fieldHeight) * bank;
+            grassHeight[i] = 2 + (target - 2) * verge;
+            grassDensity[i] = 0.22 + verge * (0.035 + lush * 0.025);
+            reed = wet > 0.5 && meadow > 0.48 && verge > 0.3;
+          } else if (meadow > 0.43) {
+            grassHeight[i] = 3.3 + lush * 1.3;
+            grassDensity[i] = 0.15 + lush * 0.06;
+            reed = true;
+          }
+          const species = valueNoise(nx * 0.012, y * 0.012, s + 1801);
+          const edge = (hash2(x, y, s + 1802) - 0.5) * 0.7;
+          grassStyle[i] = reed ? 5 : Math.max(0, Math.min(4, Math.floor(species * 5 + edge)));
+        }
       }
     }
-    return { cx, cy, type, elev, shade, rnd, props: null };
+    const baseType = type.slice();
+    const baseElev = elev.slice();
+    const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
+      baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0 };
+    // Ground rendering reads these arrays directly, so overrides must live in
+    // the chunk as well as in the editor's portable scene description.
+    for (let ly = 0; ly < CHUNK; ly++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        const edit = this.terrainEdits.get(cellKey(cx * CHUNK + lx, cy * CHUNK + ly));
+        if (edit !== undefined) this.applyTerrain(chunk, ly * CHUNK + lx, edit);
+      }
+    }
+    chunk.blades = grassRoots(chunk, s, CHUNK);
+    return chunk;
   }
 
   // Returns the chunk and index for a cell; callers read whichever arrays
@@ -83,29 +162,175 @@ export class World {
     return c.type[i];
   }
 
+  originalTypeAt(x, y) {
+    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
+    return c.baseType[i];
+  }
+
+  setTerrain(x, y, type) {
+    const { c, i } = this.locate(x, y);
+    const key = cellKey(x, y);
+    if (type === c.baseType[i]) this.terrainEdits.delete(key);
+    else this.terrainEdits.set(key, type);
+    this.applyTerrain(c, i, type);
+    this.touched(c);
+  }
+
+  // Sets one cell's terrain and the grass growing on it. Painted meadow
+  // gets a plain verge-height lawn; restoring a cell restores its own grass.
+  applyTerrain(c, i, type) {
+    const base = type === c.baseType[i];
+    c.type[i] = type;
+    c.elev[i] = base ? c.baseElev[i] : EDIT_ELEVATION[type];
+    c.baseGrass ??= { height: c.grassHeight.slice(), density: c.grassDensity.slice(),
+      style: c.grassStyle.slice() };
+    const g = c.baseGrass;
+    if (base) {
+      c.grassHeight[i] = g.height[i];
+      c.grassDensity[i] = g.density[i];
+      c.grassStyle[i] = g.style[i];
+    } else if (type === GRASS) {
+      c.grassHeight[i] = 2.6;
+      c.grassDensity[i] = 0.22;
+      c.grassStyle[i] = 0;
+    } else {
+      c.grassHeight[i] = 0;
+    }
+  }
+
+  // Reshades a chunk's ground and regrows its grass after a change.
+  touched(c) {
+    c.version = (c.version ?? 0) + 1;
+    c.stale = true;
+  }
+
+  addProp(prop) {
+    if (this.addedProps.has(prop.id)) this.deleteProp(prop.id);
+    this.addedProps.set(prop.id, prop);
+    for (const cell of prop.cells) {
+      this.propRenderW = Math.max(this.propRenderW, Math.abs(cell.dx));
+      this.propRenderH = Math.max(this.propRenderH, -cell.dy);
+    }
+    this.propFootW = Math.max(this.propFootW, prop.footW);
+    this.propFootH = Math.max(this.propFootH, prop.footH);
+    const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
+    if (!this.addedPropChunks.has(key)) this.addedPropChunks.set(key, new Map());
+    this.addedPropChunks.get(key).set(prop.id, prop);
+  }
+
+  deleteProp(id) {
+    const prop = this.addedProps.get(id);
+    if (!prop) return false;
+    this.addedProps.delete(id);
+    const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
+    const list = this.addedPropChunks.get(key);
+    list.delete(id);
+    if (!list.size) this.addedPropChunks.delete(key);
+    return true;
+  }
+
+  clearScenery() {
+    for (const key of this.terrainEdits.keys()) {
+      const [x, y] = key.split(',').map(Number);
+      const { c, i } = this.locate(x, y);
+      this.applyTerrain(c, i, c.baseType[i]);
+      this.touched(c);
+    }
+    this.terrainEdits.clear();
+    this.addedProps.clear();
+    this.addedPropChunks.clear();
+    this.removedProps.clear();
+    this.propRenderW = 30;
+    this.propRenderH = 50;
+    this.propFootW = 10;
+    this.propFootH = 2;
+  }
+
+  // Metres below the surface, rising gently from the bank and capped at
+  // the knee regardless of how low the terrain noise goes.
+  waterDepthAt(x, y) {
+    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
+    if (c.type[i] !== WATER) return 0;
+    return Math.min(MAX_WATER_DEPTH, Math.max(0, (WATER_LEVEL - c.elev[i]) / 0.065) * MAX_WATER_DEPTH);
+  }
+
+  // Scorched grass belongs to the terrain, so it survives leaving the view.
+  // Only affected chunks allocate a burn map; overlapping fires deepen it.
+  burnGrass(x, y) {
+    const bx = Math.floor(x);
+    const by = Math.floor(y);
+    for (let dy = -5; dy <= 5; dy++) {
+      for (let dx = -11; dx <= 11; dx++) {
+        const wx = bx + dx;
+        const wy = by + dy;
+        const distance = Math.hypot(dx / 11, dy / 4.8);
+        const edge = 0.88 + hash2(wx, wy, this.seed + 919) * 0.18;
+        if (distance >= edge) continue;
+        const { c, i } = this.locate(wx, wy);
+        if (c.type[i] !== GRASS) continue;
+        if (!c.burnt) {
+          c.burnt = new Uint8Array(CHUNK * CHUNK);
+          this.burns.set(chunkKey(c.cx, c.cy), c.burnt);
+        }
+        const strength = Math.round(Math.min(1, (edge - distance) * 2.3) * 255);
+        c.burnt[i] = Math.max(c.burnt[i], strength);
+        this.touched(c);
+      }
+    }
+  }
+
   // Props are generated on first request rather than with the terrain,
   // because placing them needs the spawn point, which needs terrain first.
   propsOf(cx, cy) {
     const c = this.chunk(cx, cy);
-    if (!c.props) c.props = generateProps(this, cx, cy, CHUNK);
-    return c.props;
+    if (!c.props) {
+      // Procedural scenery belongs to the original seeded landscape, even if
+      // a brush changed this chunk before its props were first requested.
+      const original = {
+        seed: this.seed,
+        season: this.season,
+        spawn: this.spawn,
+        typeAt: (x, y) => this.originalTypeAt(x, y),
+      };
+      c.props = generateProps(original, cx, cy, CHUNK);
+      c.props.forEach((prop, i) => { prop.id = `p:${cx}:${cy}:${i}`; });
+    }
+    const added = this.addedPropChunks.get(chunkKey(cx, cy));
+    if (!added && !this.removedProps.size) return c.props;
+    const props = c.props.filter((prop) => !this.removedProps.has(prop.id));
+    if (added) props.push(...added.values());
+    return props;
   }
 
   // Every prop whose base lies in the chunks touching the given cell range.
   propsIn(x0, y0, x1, y1) {
     const out = [];
     for (let cy = Math.floor(y0 / CHUNK); cy <= Math.floor(y1 / CHUNK); cy++) {
-      for (let cx = Math.floor(x0 / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
+      // The jittered final procedural grid column can put bases up to 11
+      // cells into the next chunk; its props still belong to the source chunk.
+      for (let cx = Math.floor((x0 - 11) / CHUNK); cx <= Math.floor(x1 / CHUNK); cx++) {
         for (const p of this.propsOf(cx, cy)) out.push(p);
       }
     }
     return out;
   }
 
+  // A tall prop can reach the viewport directly from below, or reflect into
+  // water from above. Include both silhouettes plus the horizontal ripple.
+  propsInView(view) {
+    return this.propsIn(view.x0 - this.propRenderW - 2,
+      view.y0 - Math.max(view.rows, this.propRenderH) - 1,
+      view.x0 + view.cols + this.propRenderW + 2,
+      view.y0 + view.rows + this.propRenderH);
+  }
+
   isWalkable(x, y) {
-    if (this.typeAt(x, y) === WATER) return false;
-    for (const p of this.propsIn(x - DEADWOOD_REACH_X, y - DEADWOOD_REACH_Y,
-      x + DEADWOOD_REACH_X, y + DEADWOOD_REACH_Y)) {
+    // A large prop may straddle a chunk edge while its base lies outside the
+    // old fixed query radius, and fallen trunks reach far along the ground.
+    // Include every possible collision footprint.
+    const width = Math.max(this.propFootW, DEADWOOD_REACH_X);
+    const height = Math.max(this.propFootH, DEADWOOD_REACH_Y);
+    for (const p of this.propsIn(x - width, y - height, x + width, y + height)) {
       if (blocks(p, x, y)) return false;
     }
     return true;

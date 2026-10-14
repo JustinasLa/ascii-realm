@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "bench": "node bench/run.mjs",
+    "test:browser": "node bench/browser.cjs"
   }
 }

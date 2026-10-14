@@ -1,0 +1,15 @@
+Recorded thunder for ASCII Realm
+
+"Rain + Long Thunder" by WuxiaScrub (October 1, 2021)
+https://opengameart.org/content/rain-long-thunder
+Source file: https://opengameart.org/sites/default/files/rain-thunder.ogg
+
+License: Creative Commons CC0 1.0 Universal
+https://creativecommons.org/publicdomain/zero/1.0/
+The author's attribution notice says to use as desired without credit.
+
+thunder.wav is a 9.5-second excerpt beginning at 21.38 seconds, covering the
+recorded thunderclap and rolling tail. Converted to mono 24,000 Hz, 16-bit PCM;
+a second-order 35 Hz high-pass removes subsonic rumble, DC is removed, peak is
+balanced to 0.80, and a 4 ms entry fade and 1.8-second cosine-squared exit fade
+avoid cut clicks. No generated noise or oscillators are added.
