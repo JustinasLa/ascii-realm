@@ -9,7 +9,7 @@
   </head>
   <body>
     <canvas id="screen" tabindex="0" aria-label="Game scene. Press B to build scenery."></canvas>
-    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump (twice for a trick) &middot; J / click — strike (hold to spin) &middot; F — draw or sheathe &middot; C — campfire &middot; M — mute &middot; scroll — zoom &middot; B — scenery builder</div>
+    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump (twice for a trick) &middot; J / click — strike (hold to spin) &middot; F — draw or sheathe &middot; C — campfire &middot; L — lightning &middot; M — mute &middot; scroll — zoom &middot; B — scenery builder</div>
     <div id="builder-banner" hidden>SCENERY BUILDER <span>Press B to play</span></div>
     <div id="builder-cursor" aria-hidden="true" hidden></div>
     <div id="panel-dock">
@@ -82,10 +82,11 @@
       <button id="audio-skip" type="button">Skip song (N)</button>
       <button id="grass-preview" type="button">Preview grass footsteps</button>
       <div class="weather-controls">
-        <label for="audio-weather">Weather sound</label>
-        <select id="audio-weather" aria-label="Weather sound"><option value="clear">Clear</option></select>
+        <label for="audio-weather">Weather</label>
+        <select id="audio-weather" aria-label="Weather"><option value="clear">Clear</option></select>
         <label>Intensity <input id="weather-intensity" type="range" min="0" max="100" aria-label="Weather intensity" /><output></output></label>
         <p id="weather-description"></p>
+        <button id="lightning-test" type="button">Summon lightning (L)</button>
       </div>
     </details>
     </div>

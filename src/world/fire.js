@@ -53,7 +53,8 @@ function hearth(seed) {
   return cells;
 }
 
-// Distances are in row units so warm light stays round despite narrow cells.
+// Warm light is also used by carried and flying torches. Distances are in
+// row units so the glow stays round despite the narrow character cells.
 export function drawFireLight(r, view, time, source, radius, height = 2) {
   const bx = source.x - view.x0;
   const by = source.y - height - view.y0;
@@ -104,13 +105,28 @@ export class Fires {
     x = Math.floor(x) + 0.5;
     y = Math.floor(y) + 0.5;
     if (this.list.length >= MAX_FIRES || !this.canPlace(world, x, y)) return null;
-    return this.create(world, x, y);
+    return this.create(world, x, y, 'campfire');
   }
 
-  create(world, x, y) {
+  // A thrown torch ignites its landing spot without building a stone ring.
+  // Near an existing fire it feeds that fire instead of stacking flames.
+  ignite(world, x, y) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    x = Math.floor(x) + 0.5;
+    y = Math.floor(y) + 0.5;
+    if (world.typeAt(x, y) === WATER || !world.isWalkable(x, y)) return null;
+    const nearby = this.nearest(x, y, 7);
+    if (nearby) return nearby;
+    if (this.list.length >= MAX_FIRES) return null;
+    world.burnGrass(x, y);
+    return this.create(world, x, y, 'ground');
+  }
+
+  create(world, x, y, kind) {
     const seed = Math.floor(hash2(x, y, world.seed + 910) * 0x7fffffff);
-    const fire = { id: this.nextId++, x, y, seed,
-      hearth: hearth(seed), cells: [],
+    const base = hearth(seed);
+    const fire = { id: this.nextId++, x, y, seed, kind,
+      hearth: kind === 'campfire' ? base : base.filter(c => Math.abs(c.dx) <= 3 && Math.abs(c.dy) <= 1), cells: [],
       age: 0, intensity: START_INTENSITY, windStress: 0, gust: 0.42,
       flare: 0, leanX: 0, leanY: 0, smother: 0, nextContact: 0 };
     this.list.push(fire);
@@ -166,7 +182,7 @@ export class Fires {
       const dx = (fire.x - event.x) * ASPECT;
       const dy = (fire.y - event.y) / TILT;
       const distance = Math.hypot(dx, dy);
-      const radius = 4.5 + contact.reach;
+      const radius = (fire.kind === 'ground' ? 2.5 : 4.5) + contact.reach;
       if (distance > radius) continue;
       const spin = event.type === 'whirl' || event.move === 'spin';
       if (event.type === 'swing' && !spin) {

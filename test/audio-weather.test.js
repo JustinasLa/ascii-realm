@@ -783,3 +783,36 @@ test('surface rain clears stale water across pause and context changes and skips
   assertDisposed(audio);
   assertDisposed(replacement);
 });
+
+test('audible thunder triggers one matching bolt, while zero intensity and clock gaps trigger none', () => {
+  for (const id of ['thunderstorm', 'distant-thunder']) {
+    const audio = fakeAudio();
+    const weather = new WeatherAudio(audio.engine, { storage: null, random: () => 0.5 });
+    const strikes = [];
+    weather.onLightning = event => strikes.push(event);
+    weather.setPreset(id);
+    weather.setIntensity(0.4);
+    weather.update();
+    assert.equal(weather.drivesLightning, true);
+    weather._active.events[0].next = audio.context.currentTime;
+    weather.update();
+    assert.equal(strikes.length, 1);
+    assert.equal(strikes[0].strength, 0.4);
+    assert.equal(strikes[0].distant, id === 'distant-thunder');
+    assert.ok(Number.isFinite(strikes[0].bearing));
+    assert.ok(weather._active.voices.length > 0, 'the bolt and rumble share this event');
+    weather.setIntensity(0);
+    weather._active.events[0].next = audio.context.currentTime;
+    weather.update();
+    assert.equal(strikes.length, 1);
+    weather.setIntensity(0.4);
+    weather._active.events[0].next = audio.context.currentTime;
+    audio.context.currentTime += 10;
+    weather.update();
+    assert.equal(strikes.length, 1, 'missed thunder never replays a stale bolt');
+    weather.pause();
+    assert.equal(weather.drivesLightning, false);
+    weather.dispose();
+    assertDisposed(audio);
+  }
+});

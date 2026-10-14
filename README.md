@@ -85,10 +85,19 @@ For now it is a single outlaw exploring procedurally generated terrain.
   impacts. Sound starts on your first key press or click;
   the Audio panel shows the current song, lets you skip, and saves mute and
   master, music, effects, sword, ambience and weather levels. See [audio notes](docs/audio.md).
-- **Weather sounds.** Choose from 17 soundscapes, including rain, thunder,
-  hail, snow, wind, sandstorms and coastal storms, with a separate intensity
-  control and smooth transitions. Clear is the default; your selection is saved.
-  These choices control the audio atmosphere.
+- **Weather.** Choose from 17 weather presets with matching sound and ASCII
+  effects: slanted rain, falling snow and hail, blowing leaves and sand,
+  drifting fog and branching lightning bolts. Storm strikes flash twice,
+  light the ground, reflect in lakes and throw up spray on water. Thunder
+  follows the same strike when sound is enabled. Press `L`, or use the Audio
+  panel's Summon lightning button, to strike beside the player in any weather.
+  Ground strikes ignite a fire on open, dry terrain. The flames grow after the
+  bolt fades and leave a scorched patch; lake strikes make spray instead.
+  Intensity controls particle density, wind, haze and water impacts. Rain and
+  ice throw up lake spray and spreading rings; snow leaves small melt ripples.
+  Gusts bend grass and roughen the water. Clear is the default; selection and
+  intensity are saved. Effects also work with sound muted or before audio is
+  enabled.
 
 ## Running
 
@@ -121,7 +130,8 @@ npm test
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
 | Audio panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
-| Audio panel's Weather sound / Intensity | Choose Clear or one of 17 weather soundscapes and adjust its intensity |
+| Audio panel's Weather / Intensity | Choose Clear or one of 17 weather presets and adjust sound and visual intensity |
+| `L` / Audio panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
 | `B` | Enter the Scenery builder, or return to play and close its panel |

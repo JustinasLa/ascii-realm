@@ -23,7 +23,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
   const taps = new Set();
   const canvas = new EventTarget();
   const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
-  const hint = { classList: { add: noop, remove: noop } };
+  const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
   let now = 0;
   let bladeSamples = 0;
@@ -70,6 +70,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Dust: class { update() {} draw() {} burst() {} sparks() {} },
     Footprints: class { draw() {} },
     Fires: inert(),
+    WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
     fireWeatherWind: () => 0,
     Splashes: class {
       react() {} update() {} precipitate() {}
@@ -89,7 +90,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
       drawPreview() {}
     },
     GameAudio: class {
-      constructor() { this.music = { update: noop }; this.engine = { setListener: noop }; }
+      constructor() { this.music = { update: noop }; this.engine = { setListener: noop }; this.weather = {}; }
       play() {}
       pause() {}
       update() {}

@@ -11,7 +11,6 @@ import { AsciiRenderer } from './render/renderer.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
 import { Fires } from './world/fire.js';
-import { fireWeatherWind } from './world/fire-wind.js';
 import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
@@ -19,6 +18,7 @@ import { drawProp } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { Splashes } from './world/splashes.js';
+import { WeatherEffects } from './world/weather.js';
 import { ASPECT, GRASS, WATER, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
@@ -81,7 +81,13 @@ const footprints = new Footprints();
 const splashes = new Splashes();
 const fires = new Fires();
 fires.addStarter(world);
+const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y) });
 const sound = new GameAudio(world);
+sound.weather.onLightning = event => weather.strike(world, camera.view(renderer), event);
+let summonLightning = false;
+const lightningButton = document.getElementById('lightning-test');
+const requestLightning = () => { summonLightning = true; };
+lightningButton.addEventListener('click', requestLightning);
 sound.music.update({ night: 1 });
 const unbindAudio = bindAudioControls(sound.engine, sound.music, sound.weather, () => sound.pause());
 sound.engine.setListener(camera.x, camera.y);
@@ -91,6 +97,7 @@ window.addEventListener('pagehide', (event) => {
     void sound.engine.suspend();
   } else {
     unbindAudio();
+    lightningButton.removeEventListener('click', requestLightning);
     void sound.dispose();
   }
 });
@@ -100,7 +107,7 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, splashes, fires, renderer, audio: sound.engine, sound, freeze: false };
+const debug = { player, camera, world, splashes, weather, fires, renderer, audio: sound.engine, sound, freeze: false };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
@@ -260,7 +267,13 @@ function frame(now) {
   else camera.follow(player.x, player.y - 11, dt);
 
   const view = camera.view(renderer);
-  const blownOut = debug.freeze ? [] : fires.update(dt, time, world, fireWeatherWind(sound.weather, time));
+  weather.update(dt, time, world, view, sound.weather);
+  if (wasTapped('KeyL') || summonLightning) {
+    const bolt = weather.summon(world, view, player);
+    if (bolt) sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+    summonLightning = false;
+  }
+  const blownOut = debug.freeze ? [] : fires.update(dt, time, world, weather.wind);
   for (const reaction of fires.events) {
     sound.play(reaction);
     if (reaction.extinguished) fireNotice('The impact smothered the fire.');
@@ -269,7 +282,7 @@ function frame(now) {
   if (blownOut.some(fire => Math.hypot((fire.x - player.x) * ASPECT, fire.y - player.y) < 35)) {
     fireNotice('Strong wind put out the campfire.');
   }
-  drawGround(renderer, world, view, time, player);
+  drawGround(renderer, world, view, time, player, weather.wind);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
@@ -292,6 +305,7 @@ function frame(now) {
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
   splashes.drawSurface(renderer, view, time);
+  weather.drawSurface(renderer, view, time);
 
   // Painter's order: whatever stands further down the screen is in front.
   const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(renderer, view, p) }));
@@ -304,6 +318,7 @@ function frame(now) {
   for (const d of drawables) d.draw();
   splashes.drawContacts(renderer, view, time, contacts);
   fires.light(renderer, view, time, visibleFires);
+  weather.drawAtmosphere(renderer, view, time);
 
   drawTrail(renderer, view, player.trail, player.time);
   if (model) drawName(model.top);
@@ -313,6 +328,7 @@ function frame(now) {
   fires.drawParticles(renderer, view);
   fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
+  weather.draw(renderer, view);
   builder.drawPreview(view);
   if (debug.freeze) sound.pause();
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
