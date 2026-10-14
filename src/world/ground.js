@@ -1,5 +1,5 @@
 import { NIGHT } from '../render/palette.js';
-import { CHUNK_SIZE, GRASS } from './world.js';
+import { CHUNK_SIZE, GRASS, WATER } from './world.js';
 import { atCell } from './terrain/cell.js';
 import { TERRAIN_SHADERS } from './terrain/index.js';
 
@@ -8,6 +8,9 @@ import { TERRAIN_SHADERS } from './terrain/index.js';
 // reshaded each frame; row copies restore the ground before sprites draw,
 // without retaining any of their pixels in the cache.
 const terrain = new WeakMap();
+// The ground is a backdrop: its characters are dimmed so rocks, trees and
+// people stand out on it. Water keeps its own moonlit swell.
+const GROUND_DIM = 0.7;
 
 function groundOf(chunk, seed) {
   // Burns and scenery edits bump the chunk's version to reshade it.
@@ -26,6 +29,12 @@ function groundOf(chunk, seed) {
       const shader = TERRAIN_SHADERS[chunk.type[i]];
       atCell(wx, wy);
       shader.shade(out, i * 4, chunk, i, wx, wy, seed, 0);
+      if (chunk.type[i] !== WATER) {
+        for (let k = i * 4; k < i * 4 + 3; k++) {
+          out.fg[k] *= GROUND_DIM;
+          out.ov[k] *= GROUND_DIM;
+        }
+      }
       if (shader.animated(chunk, i, wx, wy, seed)) row.push(x);
     }
     animated.push(Uint8Array.from(row));

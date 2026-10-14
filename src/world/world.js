@@ -18,6 +18,8 @@ export const ASPECT = 6 / 10;
 const CHUNK = 64;
 // Blows needed to fell a tree.
 export const TREE_HITS = 3;
+// Rows of bare ground kept in front of a rock so grass cannot hide its face.
+const ROCK_APRON = 4;
 export const WATER_LEVEL = 0.4;
 // All lakes are fordable: even their lowest beds are only knee deep.
 export const MAX_WATER_DEPTH = 0.42;
@@ -272,29 +274,35 @@ export class World {
   // Nothing grows through a rock, a trunk or a crate: blades rooted inside a
   // solid prop's footprint would be drawn over its base. Covering (+1) clears
   // the grass there; uncovering (-1) lets it grow back once no prop is left.
+  // A rock also keeps an apron of bare ground in front of it, so tall grass
+  // rooted just below it cannot grow up over its face and hide it.
   coverGrass(prop, change) {
     if (prop.chopped || prop.solid === false || (prop.kind === 'bush' && prop.solid !== true)) return;
     const deadwood = prop.kind === 'deadwood';
-    const rx = Math.ceil(deadwood ? DEADWOOD_REACH_X : prop.footW ?? 0);
+    const rock = prop.kind === 'rock';
+    const rx = Math.ceil(deadwood ? DEADWOOD_REACH_X : (prop.footW ?? 0) + (rock ? 1 : 0));
     const ry = Math.ceil(deadwood ? DEADWOOD_REACH_Y : prop.footH ?? 0);
     const x0 = Math.floor(prop.x);
     const y0 = Math.floor(prop.y);
+    const below = rock ? ROCK_APRON : 0;
+    const bare = (x, y) => blocks(prop, x, y) || (rock && y > prop.y && y < prop.y + ROCK_APRON
+      && Math.abs(x - prop.x) < prop.footW + 1);
     const changed = new Set();
-    for (let y = y0 - ry; y <= y0 + ry; y++) {
+    for (let y = y0 - ry; y <= y0 + ry + below; y++) {
       for (let x = x0 - rx; x <= x0 + rx; x++) {
-        if (!blocks(prop, x + 0.5, y + 0.5)) continue;
+        if (!bare(x + 0.5, y + 0.5)) continue;
         const { c, i } = this.locate(x, y);
         const key = chunkKey(c.cx, c.cy);
-        let bare = this.bareGround.get(key);
-        if (!bare) this.bareGround.set(key, bare = new Map());
-        const cell = bare.get(i);
+        let cleared = this.bareGround.get(key);
+        if (!cleared) this.bareGround.set(key, cleared = new Map());
+        const cell = cleared.get(i);
         if (change > 0) {
           if (cell) cell.count++;
-          else bare.set(i, { height: c.grassHeight[i], count: 1 });
+          else cleared.set(i, { height: c.grassHeight[i], count: 1 });
           if (c.grassHeight[i]) changed.add(c);
           c.grassHeight[i] = 0;
         } else if (cell && --cell.count <= 0) {
-          bare.delete(i);
+          cleared.delete(i);
           if (c.type[i] === GRASS || c.type[i] === SHORE) c.grassHeight[i] = cell.height;
           changed.add(c);
         }

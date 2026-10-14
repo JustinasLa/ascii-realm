@@ -12,13 +12,15 @@
 import { glyph, GLYPH_MASK } from '../../render/glyphs.js';
 
 const levels = (...sets) => sets.map((s) => [...s].map(glyph));
-const FILL = levels('.', '.:', ':-', '-=+', 'co', 'aeu', 'O0Q', '8&$', '#@M');
+// The ground is a backdrop: it stops at light letters and leaves the heavy
+// characters (O0Q, 8&$, #@M) to rocks, trees and the people on it.
+const FILL = levels('.', '.:', ':-', '-=+', 'co', 'aeu');
 // Ground at least this bright (luma 0..255) is drawn as a filled surface.
 const FILL_FROM = 34;
 const FILL_TO = 150;
 // Characters cover a fraction of their cell, so they carry a brighter
 // colour than the fill they stand for.
-const INK = 1.55;
+const INK = 0.9;
 const SUBTLE = 1.5;
 
 const luma = (r, g, b) => r * 0.3 + g * 0.59 + b * 0.11;
@@ -82,7 +84,7 @@ export function emit(out, o, g, r, gg, b, br, bgG, bb, og = 0, or = 0, ogG = 0, 
 // A surface whose texture glyph carries its lit colour (rock, a packed
 // path): the texture becomes a character weighted by that colour, unless
 // a brighter mark is layered on it (moss, a pebble, a glint of mica).
-const SURFACE = levels(' ', '.', '.:', ':-', '=+', 'oc', 'aeu', 'O0Q', '8&$', '#@M');
+const SURFACE = levels(' ', '.', '.:', ':-', '=+', 'oc', 'aeu');
 const SURFACE_FROM = 22;
 const SURFACE_TO = 128;
 
@@ -95,7 +97,7 @@ export function surface(out, o, r, gg, b, br, bgG, bb, og = 0, or = 0, ogG = 0, 
   const v = Math.max(0, Math.min(0.999, (lit - SURFACE_FROM) / (SURFACE_TO - SURFACE_FROM)));
   const level = SURFACE[Math.floor(v * SURFACE.length)];
   const h = Math.imul(place ^ o, 0x9e3779b1) >>> 0;
-  emit(out, o, level[(h >>> 7) % level.length], r * 1.25, gg * 1.25, b * 1.25, 0, 0, 0);
+  emit(out, o, level[(h >>> 7) % level.length], r * 0.9, gg * 0.9, b * 0.9, 0, 0, 0);
   out.bg[o] = br;
   out.bg[o + 1] = bgG;
   out.bg[o + 2] = bb;
