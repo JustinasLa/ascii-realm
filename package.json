@@ -3,8 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "node server/index.js",
     "test": "node --test",
     "bench": "node bench/run.mjs",
     "test:browser": "node bench/browser.cjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
   }
 }

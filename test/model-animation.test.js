@@ -29,6 +29,8 @@ function moduleURL(path) {
 moduleURL('../vendor/three/utils/BufferGeometryUtils.js');
 const { GLTFLoader } = await import(moduleURL('../vendor/three/loaders/GLTFLoader.js'));
 moduleURL('../src/entities/retarget.js');
+moduleURL('../src/entities/gear.js');
+moduleURL('../src/entities/armory.js');
 const { ModelFigure } = await import(moduleURL('../src/entities/model.js'));
 
 async function figure() {
@@ -69,4 +71,54 @@ test('standing jump anticipation restarts after idle and on a later jump', async
     tick();
     assert.ok(Math.abs(action.time - before - dt) < 1e-6, 'anticipation advances without resetting every frame');
   }
+});
+
+test('worn gear shows on the 3D character and coming off reveals what is underneath', async () => {
+  const model = await figure();
+  const player = new Player(0, 0);
+  const equipment = { helm: { id: 'outlawHood', count: 1 }, chest: { id: 'leatherJerkin', count: 1 },
+    legs: { id: 'ridingBoots', count: 1 }, hands: { id: 'leatherBracers', count: 1 },
+    cape: { id: 'travelCloak', count: 1 }, mainHand: { id: 'shortSword', count: 1 }, offHand: null };
+  player.equipment = equipment;
+  const step = () => model.update(1 / 60, player);
+  const colors = () => model.gear.painted.map(({ mesh }) => [...mesh.geometry.attributes.color.array]);
+  step();
+  assert.equal(model.gear.hood.visible, true);
+  assert.equal(model.gear.hair.visible, false);
+  assert.equal(model.gear.cloak.visible, true);
+  assert.equal(model.gear.buckler.visible, false);
+  const dressed = colors();
+  assert.ok(dressed.length > 0 && dressed.every((c) => c.some((v) => v > 0)), 'the body is painted');
+
+  player.equipment = { ...equipment, helm: null, cape: null, chest: null, offHand: { id: 'woodenBuckler', count: 1 } };
+  step();
+  assert.equal(model.gear.hood.visible, false);
+  assert.equal(model.gear.hair.visible, true);
+  assert.equal(model.gear.cloak.visible, false);
+  assert.equal(model.gear.buckler.visible, true);
+  assert.notDeepEqual(colors(), dressed, 'the linen shirt shows without the jerkin');
+
+  player.equipment = equipment;
+  step();
+  assert.deepEqual(colors(), dressed, 'putting everything back restores the same look');
+});
+
+test('weapons ride in the hand when drawn and on the back or hip when put away', async () => {
+  const model = await figure();
+  const player = new Player(0, 0);
+  player.equipment = { mainHand: { id: 'spear', count: 1 } };
+  model.update(1 / 60, player);
+  assert.equal(model.armory.held, null, 'a sheathed spear is not in hand');
+  assert.equal(model.armory.active.parent, model.armory.back);
+  player.combat.inHand = true;
+  model.update(1 / 60, player);
+  assert.equal(model.armory.held, model.armory.active);
+  assert.ok(model.swordLine(), 'a drawn spear leaves a trail');
+  player.equipment = { mainHand: { id: 'dagger', count: 1 } };
+  player.combat.inHand = false;
+  model.update(1 / 60, player);
+  assert.equal(model.armory.active.parent, model.armory.hip);
+  player.equipment = { mainHand: null };
+  model.update(1 / 60, player);
+  assert.equal(model.armory.active, null);
 });

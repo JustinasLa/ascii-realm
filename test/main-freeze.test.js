@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../src/entities/player.js';
+import { Inventory } from '../src/inventory/inventory.js';
+import { ITEMS } from '../src/inventory/items.js';
 import { buildRig } from '../src/entities/rig.js';
 import { FrameClock, FrameQuality, renderSize } from '../src/render/budget.js';
 import { ASPECT, GRASS, WATER } from '../src/world/world.js';
@@ -22,7 +24,7 @@ const inert = () => class {
 
 async function loadGame(move = { x: 0, y: 0 }) {
   const taps = new Set();
-  const canvas = new EventTarget();
+  const canvas = Object.assign(new EventTarget(), { classList: { add: noop, remove: noop, toggle: noop } });
   const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
@@ -46,7 +48,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
   const source = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), {
     console, URLSearchParams, window,
-    document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop },
+    document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop,
+      createElement: () => ({ classList: { add: noop, remove: noop }, hidden: false, textContent: '' }) },
     matchMedia: () => ({ matches: false }), innerWidth: 800, innerHeight: 600,
     cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: noop,
     Grass: inert(),
@@ -57,6 +60,10 @@ async function loadGame(move = { x: 0, y: 0 }) {
     requestAnimationFrame: callback => { nextFrame = callback; },
     isDown: () => false,
     isControlTarget: () => false,
+    clearInput: noop, isGameplayBlocked: () => false, setGameplayBlocked: noop,
+    Inventory, ITEMS, Hud: inert(), InventoryScreen: inert(),
+    GroundItems: inert(), Harvesting: inert(), Collection: inert(), drawItem: noop, drawResource: noop,
+    Projectiles: inert(), screenToWorld: () => null, isBow: () => false, isThrown: () => false, SCALE: 13, TILT: 0.5,
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
     Player, ASPECT, GRASS, CHUNK_SIZE: 64,
@@ -106,6 +113,10 @@ async function loadGame(move = { x: 0, y: 0 }) {
       update() {}
     },
     bindAudioControls: () => Object.assign(() => {}, { updateSong: noop }),
+    cleanName: (value) => String(value), PLAYER_COLORS: [[1, 2, 3]], playerState: () => ({}),
+    MultiplayerClient: class { constructor() { this.players = []; this.room = null; } leave() {} },
+    RemotePlayers: class { sync() {} update() {} visible() { return []; } },
+    bindMultiplayerControls: noop,
   });
   await Promise.resolve();
   return {

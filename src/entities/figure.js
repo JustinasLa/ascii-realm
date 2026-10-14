@@ -43,7 +43,7 @@ class Dresser {
   }
 
   add(shape, mat, z) {
-    shape.mat = MATERIALS[mat];
+    shape.mat = typeof mat === 'string' ? MATERIALS[mat] : mat;
     shape.z = z;
     this.parts.push(shape);
     return shape;
@@ -84,48 +84,128 @@ const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 // Dresses the posed skeleton, back to front: a lean, hooded outlaw in
 // forest green and worn leather, a longbow and quiver on the back and a
 // short sword at the hip.
-function dress(rig, capeSim) {
+// `equipment` is the inventory's worn gear, slot by slot; without one the
+// outlaw is fully dressed. Each missing piece reveals what is underneath.
+function dress(rig, capeSim, equipment, weapon = null) {
   const d = new Dresser();
-  if (capeSim?.pts) cloak(d, rig, capeSim.pts);
+  const wearing = (slot) => equipment === undefined || Boolean(equipment?.[slot]);
+  if (wearing('cape') && capeSim?.pts) cloak(d, rig, capeSim.pts);
 
   for (const l of rig.legs) {
-    // Hose, then tall soft boots turned down in a cuff below the knee.
     d.limb(l.hip, l.knee, 0.074, 0.058, 'hose');
     d.limb(l.knee, l.ankle, 0.056, 0.048, 'hose');
-    const top = lerp3(l.knee, l.ankle, 0.3);
-    d.limb(top, l.ankle, 0.062, 0.054, 'boot', 0.005);
-    d.limb(top, lerp3(l.knee, l.ankle, 0.42), 0.07, 0.066, 'leather', 0.01);
-    d.limb(l.ankle, l.toe, 0.056, 0.042, 'boot', 0.01);
+    if (wearing('legs')) {
+      // Tall soft boots turned down in a cuff below the knee.
+      const top = lerp3(l.knee, l.ankle, 0.3);
+      d.limb(top, l.ankle, 0.062, 0.054, 'boot', 0.005);
+      d.limb(top, lerp3(l.knee, l.ankle, 0.42), 0.07, 0.066, 'leather', 0.01);
+      d.limb(l.ankle, l.toe, 0.056, 0.042, 'boot', 0.01);
+    } else {
+      // Low turnshoes.
+      d.limb(lerp3(l.knee, l.ankle, 0.85), l.ankle, 0.05, 0.05, 'leather', 0.005);
+      d.limb(l.ankle, l.toe, 0.05, 0.038, 'leather', 0.01);
+    }
   }
 
   quiverAndBow(d, rig);
-  tunic(d, rig);
-  sword(d, rig);
+  tunic(d, rig, wearing('chest'));
+  if (equipment === undefined || equipment?.mainHand?.id === 'shortSword') sword(d, rig);
+  else if (weapon && rig.sword) heldWeapon(d, rig.sword, weapon);
 
   for (const a of rig.arms) {
-    // Loose sleeves, a leather bracer on each forearm and gloved hands.
-    d.limb(a.shoulder, a.elbow, 0.062, 0.054, 'sleeve');
-    d.limb(a.elbow, a.wrist, 0.05, 0.046, 'sleeve');
-    d.limb(lerp3(a.elbow, a.wrist, 0.3), a.wrist, 0.054, 0.05, 'bracer', 0.01);
-    d.limb(a.wrist, a.hand, 0.046, 0.042, 'leather', 0.015);
+    // Loose sleeves, then bracers and gloves or bare forearms and hands.
+    d.limb(a.shoulder, a.elbow, 0.062, 0.054, wearing('chest') ? 'sleeve' : 'linen');
+    d.limb(a.elbow, a.wrist, 0.05, 0.046, wearing('chest') ? 'sleeve' : 'linen');
+    if (wearing('hands')) {
+      d.limb(lerp3(a.elbow, a.wrist, 0.3), a.wrist, 0.054, 0.05, 'bracer', 0.01);
+      d.limb(a.wrist, a.hand, 0.046, 0.042, 'leather', 0.015);
+    } else {
+      d.limb(a.wrist, a.hand, 0.042, 0.038, 'skin', 0.015);
+    }
   }
+  if (equipment?.offHand?.id === 'woodenBuckler') buckler(d, rig);
 
-  hood(d, rig);
+  if (wearing('helm')) hood(d, rig);
+  else bareHead(d, rig);
 
   return d.sorted();
+}
+
+// Weapon sprite materials, by the names weapons.js uses. Metal takes the
+// colour of the weapon's material tier.
+const WEAPON_MAT = { blade: 'blade', darkPlate: 'iron', trim: 'iron', leather: 'leather', wood: 'wood',
+  string: 'feather', arrow: 'wood', cloth: 'leather' };
+const tinted = new Map();
+function weaponMat(weapon, name) {
+  const base = MATERIALS[WEAPON_MAT[name] ?? 'iron'] ?? MATERIALS.iron;
+  if (name !== 'blade' && name !== 'darkPlate' || !weapon.materialColor) return base;
+  const key = `${name}:${weapon.materialColor.join()}`;
+  if (!tinted.has(key)) {
+    const color = name === 'darkPlate' ? weapon.materialColor.map((c) => c * 0.4) : weapon.materialColor;
+    tinted.set(key, { ...base, color });
+  }
+  return tinted.get(key);
+}
+
+const unit = (v) => mul(v, 1 / (Math.hypot(...v) || 1));
+
+// Any weapon other than the short sword, drawn from its sprite parts along
+// the blade in hand: x across the blade, y from guard to tip.
+function heldWeapon(d, sw, weapon) {
+  const blade = unit(sub(sw.tip, sw.guard));
+  const side = unit(sub(sw.barA, sw.barB));
+  const normal = unit(cross(side, blade));
+  const at = (p) => add(add(add(sw.guard, mul(side, p[0])), mul(blade, p[1])), mul(normal, p[2] ?? 0));
+  for (const part of weapon.spriteParts ?? []) {
+    const mat = weaponMat(weapon, part.material);
+    let shape = null;
+    if (part.shape === 'limb') shape = d.limb(at(part.a), at(part.b), part.ra, part.rb ?? part.ra, mat, 0.03);
+    else if (part.shape === 'blob') shape = d.blob(at(part.c), part.rx, part.ry, mat, 0.03);
+    else if (part.shape === 'panel') {
+      const p = part.points.map(at);
+      shape = d.panel(p[0], p[1], p[2], p[3], mat, 0.03);
+    }
+    if (shape && part.glyph) shape.glyph = glyph(part.glyph);
+  }
+}
+
+// A small round buckler strapped to the forearm opposite the sword.
+function buckler(d, rig) {
+  const arm = rig.arms.find((a) => a.s !== SWORD_SIDE);
+  const center = add(lerp3(arm.elbow, arm.wrist, 0.7), rotY([0, 0, 0.07], rig.heading));
+  d.blob(center, across(rig, 0.13, 0.04), 0.13, 'iron', 0.025);
+  d.blob(center, across(rig, 0.115, 0.032), 0.115, 'wood', 0.026);
+  d.blob(center, across(rig, 0.03, 0.02), 0.03, 'iron', 0.027);
+}
+
+// With the hood down: cropped dark hair over a weathered face.
+function bareHead(d, rig) {
+  const h = rig.headAt;
+  const head = h([0, 0, 0]);
+  const z = project(head)[2];
+  const front = (p) => (project(p)[2] > z ? 0.3 : -0.3);
+  d.limb(rig.neck, head, 0.05, 0.06, 'skin');
+  d.blob(head, 0.12, 0.145, 'skin');
+  d.blob(h([0, 0.05, -0.02]), 0.125, 0.11, 'hair', 0.01);
+  if (rig.eyes > 0.05) {
+    for (const s of [-1, 1]) {
+      const eye = h([s * 0.04, -0.01, 0.115]);
+      d.blob(eye, 0.016, 0.009 * rig.eyes, 'void', front(eye));
+    }
+  }
 }
 
 // A green tunic belted at the waist under a laced leather jerkin, its skirt
 // hanging to mid-thigh front and back where the knees push it aside, and a
 // pouch on the belt.
-function tunic(d, rig) {
+function tunic(d, rig, jerkin = true) {
   const at = rig.at;
   const w = (a, b) => across(rig, a, b);
   // Bits on the front vanish when the outlaw turns away, and vice versa.
   const front = (p) => (project(p)[2] > project(rig.waist)[2] ? 0.15 : -0.15);
 
-  d.limb(rig.pelvis, rig.chest, w(0.14, 0.11), w(0.15, 0.105), 'tunic');
-  d.limb(at([0, 0.12, 0.01]), at([0, 0.4, 0.01]), w(0.15, 0.115), w(0.165, 0.115), 'jerkin', 0.02);
+  d.limb(rig.pelvis, rig.chest, w(0.14, 0.11), w(0.15, 0.105), jerkin ? 'tunic' : 'linen');
+  if (jerkin) d.limb(at([0, 0.12, 0.01]), at([0, 0.4, 0.01]), w(0.15, 0.115), w(0.165, 0.115), 'jerkin', 0.02);
   d.limb(at([0, 0.01, 0]), at([0, 0.05, 0]), w(0.15, 0.115), w(0.15, 0.115), 'leather', 0.025);
   const buckle = at([0, 0.03, 0.13]);
   d.blob(buckle, 0.026, 0.024, 'iron', front(buckle));
@@ -136,7 +216,7 @@ function tunic(d, rig) {
     const z = side * 0.12;
     const push = side > 0 ? rig.kneeFwd : -rig.kneeBack;
     d.panel(at([-0.11, 0.0, z]), at([0.11, 0.0, z]), at([0.13, -0.3, z + push * 0.55]),
-      at([-0.13, -0.3, z + push * 0.55]), 'tunic', side * 0.03);
+      at([-0.13, -0.3, z + push * 0.55]), jerkin ? 'tunic' : 'linen', side * 0.03);
   }
 }
 
@@ -350,9 +430,9 @@ export function drawShadow(r, view, x, y, air = 0) {
 // Built once a frame and shared by the figure and its reflection.
 export function dressFigure(state) {
   const depth = state.waterDepth ?? 0;
-  if (depth <= 0) return dress(buildRig(state), state.cape);
+  if (depth <= 0) return dress(buildRig(state), state.cape, state.equipment, state.weapon);
   const cape = state.cape?.pts ? { pts: state.cape.pts.map((p) => [p[0], p[1] - depth, p[2]]) } : null;
-  return dress(buildRig({ ...state, air: state.air - depth }), cape);
+  return dress(buildRig({ ...state, air: state.air - depth }), cape, state.equipment, state.weapon);
 }
 
 // One reusable raster for the current pose. Both painter passes replay the
@@ -485,7 +565,7 @@ function shadeCell(r, sx, sy, cx, cy, state, parts, base, write, count) {
     const p = parts[claim];
     const [cr, cg, cbl] = p.mat.color;
     const l = p.mat.emissive ? 1 : 0.55 + 0.45 * Math.max(0, Math.min(1, claimLum));
-    write(r, sx, sy, p.mat.tex ? p.mat.tex() : p.bar, cr * l, cg * l, cbl * l, base, 6, 10, 14);
+    write(r, sx, sy, p.glyph ?? (p.mat.tex ? p.mat.tex() : p.bar), cr * l, cg * l, cbl * l, base, 6, 10, 14);
     return;
   }
   if (hits < 3) return;
@@ -597,13 +677,13 @@ export const TRAIL_SECONDS = TRAIL_LIFE;
 
 // The warrior's name floating above the helm, as in an online RPG. `top` is
 // the highest point of the dressed figure, in rows above the feet.
-export function drawNameTag(r, view, state, parts, name) {
+export function drawNameTag(r, view, state, parts, name, color = [212, 218, 228]) {
   let top = 0;
   for (const p of parts) top = Math.min(top, p.y0);
   const sy = Math.floor(state.y + top - 2) - view.y0;
   const sx = Math.floor(state.x - name.length / 2) - view.x0;
   for (let i = 0; i < name.length; i++) {
-    r.put(sx + i, sy, glyph(name[i]), 212, 218, 228);
+    r.put(sx + i, sy, glyph(name[i]), ...color);
     r.putBg(sx + i, sy, 8, 10, 14);
   }
 }

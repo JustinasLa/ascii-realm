@@ -1,14 +1,26 @@
-import { isControlTarget, isDown, moveAxis, wasTapped } from './core/input.js';
+import { screenToWorld } from './core/aim.js';
+import { clearInput, isControlTarget, isDown, isGameplayBlocked, moveAxis, setGameplayBlocked, wasTapped } from './core/input.js';
 import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
 import { bindAudioControls } from './audio/controls.js';
 import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
+import { isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
+import { SCALE, TILT } from './entities/rig.js';
+import { Collection } from './inventory/collection.js';
+import { Inventory } from './inventory/inventory.js';
+import { ITEMS } from './inventory/items.js';
+import { MultiplayerClient } from './multiplayer/client.js';
+import { bindMultiplayerControls } from './multiplayer/controls.js';
+import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
+import { RemotePlayers } from './multiplayer/remote-players.js';
 import { putCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { Hud } from './ui/hud.js';
+import { InventoryScreen } from './ui/inventory.js';
 import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
 import { Dust } from './world/dust.js';
@@ -17,7 +29,11 @@ import { Fireflies } from './world/fireflies.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
+import { Harvesting } from './world/harvesting.js';
+import { drawItem, drawResource } from './world/item-draw.js';
+import { GroundItems } from './world/items.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
+import { Projectiles } from './world/projectiles.js';
 import { drawProp, propInView } from './world/props.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
@@ -106,7 +122,7 @@ const params = new URLSearchParams(location.search);
 const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
-const name = (params.get('name') || 'Kael').slice(0, 24);
+let name = cleanName(params.get('name') || 'Kael');
 const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks });
 // Keep every chunk a zoomed-out view touches, including the tallest trees
 // above and below it, or chunks would be rebuilt every frame.
@@ -119,6 +135,12 @@ fitChunks = () => {
 fitChunks();
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
+const inventory = new Inventory();
+// Loose items and plants in the world, and gathering them into the satchel.
+const groundItems = new GroundItems(world);
+const harvesting = new Harvesting(world, groundItems);
+const collection = new Collection(world, inventory, groundItems, harvesting);
+player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
 const dust = new Dust();
@@ -154,14 +176,157 @@ window.addEventListener('pageshow', (event) => {
 
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
-const debug = { player, camera, world, grass, splashes, weather, fires, torches, renderer, quality,
-  audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
+const debug = { player, camera, world, grass, splashes, weather, fires, torches, renderer, quality, inventory,
+  groundItems, harvesting, collection,
+  audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 },
+  pickup: (id, count = 1) => inventory.add(id, count) };
 if (params.has('debug')) window.game = debug;
 
 // Fade the controls hint once the player has started walking about.
 const hint = document.getElementById('hint');
 const fireStatus = document.getElementById('fire-status');
 const carriedItem = document.getElementById('carried-item');
+
+// The status frames, quick slots and the inventory screen.
+const hud = new Hud({
+  player, inventory, name, debug: params.has('debug'),
+  onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
+  onInventory: () => inventoryScreen.toggle(),
+});
+hud.attachNote(carriedItem);
+const inventoryScreen = new InventoryScreen({
+  inventory, player, name,
+  onToggle: (open) => {
+    setGameplayBlocked(open);
+    clearInput();
+    clicked = false;
+    mouseHeld = false;
+    if (!open) canvas.focus({ preventScroll: true });
+  },
+  onNotify: (message, kind = 'info') => hud.notify(message, kind),
+  onDrop: (index) => collection.drop(player, index),
+});
+debug.hud = hud;
+debug.inventoryScreen = inventoryScreen;
+
+// Friends in a lobby share the world's seed and see one another walk about.
+// Joining a lobby on another seed reloads the page into that world.
+const remotePlayers = new RemotePlayers();
+const multiplayer = new MultiplayerClient({
+  getState: () => playerState(player),
+  onJoin: (lobby) => {
+    if (lobby.seed !== seed) {
+      const url = new URL(location.href);
+      url.searchParams.set('seed', lobby.seed);
+      url.searchParams.set('room', lobby.code);
+      try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
+      multiplayer.leave(false);
+      location.replace(url);
+      return;
+    }
+    // Meet friends where they are, unless this is the lobby's first player.
+    if (lobby.self && multiplayer.players.some((member) => member.id !== lobby.id)) {
+      player.x = lobby.self.x;
+      player.y = lobby.self.y;
+      camera.x = player.x;
+      camera.y = player.y - 11;
+    }
+  },
+  onSnapshot: (members, selfId) => remotePlayers.sync(members, selfId),
+});
+debug.multiplayer = multiplayer;
+debug.remotePlayers = remotePlayers;
+bindMultiplayerControls(multiplayer, {
+  name, seed: () => seed,
+  onName: (value) => { name = value; hud.setName(value); },
+  onDone: () => canvas.focus({ preventScroll: true }),
+});
+window.addEventListener('pagehide', () => multiplayer.leave(false));
+window.addEventListener('pageshow', (event) => { if (event.persisted) multiplayer.leave(); });
+const colorOf = (index) => PLAYER_COLORS[index % PLAYER_COLORS.length];
+// Arrows, spears and javelins in flight or lying where they landed.
+const projectiles = new Projectiles();
+debug.projectiles = projectiles;
+// How many arrows are left, or of the weapon being thrown.
+const ammoNote = document.createElement('div');
+hud.attachNote(ammoNote);
+const weaponKeyOf = (stack) => stack ? `${stack.id}:${stack.material ?? ''}` : '';
+let lastWeapon = weaponKeyOf(inventory.equipment.mainHand);
+// The pointer over the scene and the last frame drawn, for aiming.
+let pointer = null;
+let lastFrame = null;
+canvas.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch') pointer = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('pointerleave', () => { pointer = null; });
+
+const carriedCount = (id) => inventory.slots.reduce((n, s) => n + (s?.id === id ? s.count : 0), 0)
+  + (inventory.equipment.mainHand?.id === id ? 1 : 0);
+
+// Where a shot or throw would land: the cursor, or a point straight ahead
+// within the weapon's range when aiming from the keyboard.
+function aimPoint(weapon, draw) {
+  const range = (weapon.projectileRange ?? 8) * (0.4 + 0.6 * draw);
+  const cursor = pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
+  let mx = cursor ? (cursor.x - player.x) * ASPECT / SCALE : Math.sin(player.heading) * range;
+  let mz = cursor ? (cursor.y - player.y) / (SCALE * TILT) : Math.cos(player.heading) * range;
+  const distance = Math.hypot(mx, mz);
+  if (distance > range) {
+    mx *= range / distance;
+    mz *= range / distance;
+  }
+  return { x: player.x + mx * SCALE / ASPECT, y: player.y + mz * SCALE * TILT };
+}
+
+// Lets fly an arrow, or throws the spear or javelin in hand.
+function fireRanged(release, weapon) {
+  const kind = isBow(weapon) ? 'arrow' : weapon.type;
+  const arrows = inventory.slots.findIndex((stack) => stack?.id === 'arrow');
+  if (kind === 'arrow' && arrows < 0) {
+    hud.notify('Out of arrows.', 'info');
+    return;
+  }
+  if (!player.vitals.spendStamina(player.feel.stamina)) {
+    hud.notify(kind === 'arrow' ? 'Too tired to draw the bow.' : 'Too tired to throw.', 'info');
+    return;
+  }
+  const shot = projectiles.launch({
+    x: player.x, y: player.y, h: SCALE * 1.1, aimTarget: aimPoint(weapon, release.draw),
+    projectile: { kind }, weapon: weapon.id, material: weapon.material,
+    strength: release.draw, damage: weapon.damage,
+  });
+  if (!shot) return;
+  if (kind === 'arrow') inventory.remove(arrows, 1);
+  else {
+    // The thrown weapon leaves the hand; another of the same is taken up.
+    const thrown = inventory.equipment.mainHand;
+    inventory.equipment.mainHand = null;
+    const next = inventory.slots.findIndex((stack) => stack?.id === thrown.id);
+    if (next >= 0) inventory.equip(next);
+  }
+  sound.play({ type: 'swing', move: 'thrust', speed: 1.2, x: player.x, y: player.y });
+}
+
+// Choosing a quick slot that holds gear puts it on.
+function selectHotbar(index) {
+  if (!inventory.selectHotbar(index)) return;
+  const selected = inventory.getHotbar();
+  if (selected?.item.equipmentSlot && selected.source === 'inventory') {
+    if (inventory.equip(selected.index)) hud.notify(`Equipped ${selected.item.name}`, 'equipment');
+    else hud.notify('Make room in your bag to equip this item.', 'info');
+  }
+}
+
+function useHotbar() {
+  const selected = inventory.getHotbar();
+  if (!selected) return;
+  if (selected.item.use) {
+    if (inventory.useSelected(player.vitals)) hud.notify(`Used ${selected.item.name}`, 'use');
+    else hud.notify('That item is not needed yet.', 'info');
+  } else if (selected.item.equipmentSlot) {
+    selectHotbar(inventory.selectedHotbar);
+  }
+}
 const fireMessages = {
   lit: 'Campfire lit. Press C nearby to put it out.',
   out: 'Fire extinguished.',
@@ -196,7 +361,7 @@ let clicked = false;
 let mouseHeld = false;
 // Touches use the on-screen buttons instead.
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || e.pointerType === 'touch' || builder.enabled) return;
+  if (e.button !== 0 || e.pointerType === 'touch' || builder.enabled || isGameplayBlocked()) return;
   clicked = true;
   mouseHeld = true;
 });
@@ -249,13 +414,13 @@ ModelFigure.load('assets/ual1.glb')
 
 // The name floating above the character's head; `top` is the highest row
 // the character covers.
-function drawName(top) {
+function drawName(top, color = [212, 218, 228]) {
   if (top === null || top === undefined) return;
   const view = camera.view(renderer);
   const sy = top - 2 - view.y0;
   const sx = Math.floor(player.x - name.length / 2) - view.x0;
   for (let i = 0; i < name.length; i++) {
-    renderer.put(sx + i, sy, glyph(name[i]), 212, 218, 228);
+    renderer.put(sx + i, sy, glyph(name[i]), ...color);
     renderer.putBg(sx + i, sy, 8, 10, 14);
   }
 }
@@ -303,6 +468,25 @@ function frame(now) {
   time += dt;
   updateZoom(dt);
 
+  for (let index = 0; index < 9; index++) {
+    if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`)) selectHotbar(index);
+  }
+  if (wasTapped('KeyQ')) useHotbar();
+  // Changing or taking off the weapon puts the last one away at once.
+  const weapon = player.weapon;
+  const hand = inventory.equipment.mainHand;
+  const weaponKey = weaponKeyOf(hand);
+  if (weaponKey !== lastWeapon) {
+    player.cancelWeapon();
+    player.ranged.reset();
+    lastWeapon = weaponKey;
+  }
+  const armed = Boolean(weapon);
+  const ranged = isBow(weapon) || isThrown(weapon);
+  canvas.classList.toggle('projectile-aiming', ranged);
+  const ammo = isBow(weapon) ? `Arrows ${carriedCount('arrow')}` : isThrown(weapon) ? `${ITEMS[hand.id].name} ×${carriedCount(hand.id)}` : '';
+  if (ammoNote.textContent !== ammo) ammoNote.textContent = ammo;
+  ammoNote.hidden = !ammo;
   const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
   const jump = wasTapped('Space');
   const attack = wasTapped('KeyJ') || clicked;
@@ -310,13 +494,18 @@ function frame(now) {
   const torchKey = wasTapped('KeyT');
   const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
+  const gather = wasTapped('KeyE');
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
-    if (attack) player.attack();
-    if (sword) player.toggleSword();
+    if (attack && armed && !ranged) player.attack();
+    if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
+    if (gather) {
+      const result = collection.interact(player);
+      if (result?.message && result.status !== 'picked') hud.notify(result.message, result.ok ? 'pickup' : 'info');
+    }
   }
   const itemHint = player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
   if (carriedItem.textContent !== itemHint) carriedItem.textContent = itemHint;
@@ -328,7 +517,13 @@ function frame(now) {
   const held = isDown('KeyJ') || mouseHeld;
   const fromX = player.x, fromY = player.y, fromAir = player.air;
   const paused = debug.freeze || builder.enabled || playerDt === 0;
-  if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
+  // A bow draws while the attack is held and shoots on release; a spear or
+  // javelin jabs on a tap and is thrown after a longer hold.
+  const release = player.ranged.update(dt, ranged && held && !builder.enabled && !debug.freeze, weapon);
+  player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw) : null;
+  if (release?.action === 'jab') player.attack();
+  else if (release) fireRanged(release, weapon);
+  if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held, dt);
   if (model) {
     if (!paused) model.update(playerDt, player);
     // The sword's trail follows the blade of the 3D character.
@@ -343,8 +538,14 @@ function frame(now) {
     }
   }
   if (!paused) grass.update(world, player, time);
+  remotePlayers.update(dt, now);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
+    if (e.type === 'damage') hud.damage(e.amount, e.x, e.y);
+    // Each cut can fell a tree a blow at a time or mow tall grass.
+    if (e.type === 'strike' && !paused) {
+      for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
+    }
     if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
     splashes.react(world, e);
@@ -367,6 +568,36 @@ function frame(now) {
     }
   }
   player.events.length = 0;
+  if (!debug.freeze) collection.update(dt, player, { blocked: paused || isGameplayBlocked() });
+  for (const event of collection.events) {
+    if (event.type !== 'pickup') continue;
+    player.animatePickup();
+    sound.play({ ...event, x: player.x, y: player.y });
+  }
+  collection.events.length = 0;
+  hud.setPrompt(builder.enabled || isGameplayBlocked() ? '' : collection.prompt(player));
+  for (const event of inventory.events) {
+    if (event.type === 'pickup') hud.notify(`+${event.count} ${ITEMS[event.id].name}`, 'pickup');
+  }
+  inventory.events.length = 0;
+  if (!paused) {
+    projectiles.update(dt, world);
+    for (const impact of projectiles.events) sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
+    projectiles.events.length = 0;
+    // Walking over a landed arrow or spear picks it up again.
+    if (player.air === 0) {
+      for (const shaft of projectiles.collectNear(player.x, player.y, 0.75, { x: fromX, y: fromY })) {
+        const id = shaft.kind === 'arrow' ? 'arrow' : shaft.kind;
+        if (!inventory.add(id, 1, { material: shaft.material })) {
+          projectiles.landed.push(shaft);
+          continue;
+        }
+        if (id !== 'arrow' && !inventory.equipment.mainHand) {
+          inventory.equip(inventory.slots.findIndex((stack) => stack?.id === id));
+        }
+      }
+    }
+  }
   dust.update(dt);
   splashes.update(dt);
   if (!debug.freeze) {
@@ -413,6 +644,11 @@ function frame(now) {
   }
   footprints.draw(renderer, view, time);
   drawShadow(renderer, view, player.x, player.y, player.air);
+  const peers = remotePlayers.visible(view);
+  for (const peer of peers) {
+    drawShadow(renderer, view, peer.player.x, peer.player.y, peer.player.air);
+    peer.figure = dressFigure(peer.player);
+  }
 
   // Props up to a screen above the view can still be reflected into it, and
   // the tallest trees reach into it from far below.
@@ -467,6 +703,23 @@ function frame(now) {
     reflections.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch, mirror) });
     drawables.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch) });
   }
+  // Loose items bob on the ground; bushes can reach in from below the view
+  // or reflect from above it. Far out they are smaller than a dot.
+  const visibleItems = far ? [] : groundItems.in(view.x0 - 3, view.y0 - 4, view.x0 + view.cols + 3,
+    view.y0 + view.rows + 3, wide);
+  const plants = far ? [] : harvesting.resourcesIn(view.x0 - 9, view.y0 - 12, view.x0 + view.cols + 9,
+    view.y0 + view.rows + 12, wide);
+  for (const item of visibleItems) {
+    reflections.push({ y: item.y, draw: () => drawItem(renderer, view, item, time, mirror) });
+    drawables.push({ y: item.y, draw: () => drawItem(renderer, view, item, time) });
+  }
+  for (const node of plants) {
+    reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
+    drawables.push({ y: node.y, draw: () => drawResource(renderer, view, node, time) });
+  }
+  for (const shaft of projectiles.landedDrawables()) {
+    drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
+  }
   const carried = visibleTorches.filter((torch) => torch.carried);
   reflections.push({ y: player.y, draw: () => {
     if (model) model.draw(renderer, mirror);
@@ -478,6 +731,11 @@ function frame(now) {
     else drawFigure(renderer, view, player, figure);
     for (const torch of carried) torches.draw(renderer, view, torch);
   } });
+  // Friends are drawn as the shape-built outlaw in their own gear.
+  for (const peer of peers) {
+    reflections.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure, mirror) });
+    drawables.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure) });
+  }
   reflections.sort((a, b) => a.y - b.y);
   drawables.sort((a, b) => a.y - b.y);
   if (!far) grass.drawReflections(renderer, world, view, time, mirror, reflections);
@@ -492,9 +750,16 @@ function frame(now) {
   torches.light(renderer, view, time, visibleTorches);
   weather.drawAtmosphere(renderer, view, time);
 
+  projectiles.drawFlying(renderer, view);
   drawTrail(renderer, view, player.trail, player.time);
-  if (model) drawName(model.top);
-  else drawNameTag(renderer, view, player, figure, name);
+  const self = multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
+  const ownColor = self ? colorOf(self.color) : undefined;
+  if (model) drawName(model.top, ownColor);
+  else drawNameTag(renderer, view, player, figure, name, ownColor);
+  for (const peer of peers) {
+    drawTrail(renderer, view, peer.player.trail, peer.trailTime);
+    drawNameTag(renderer, view, peer.player, peer.figure, peer.name, colorOf(peer.color));
+  }
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
@@ -508,6 +773,14 @@ function frame(now) {
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   renderer.draw(view.offX, view.offY);
+  lastFrame = { width: canvas.width, height: canvas.height, cellW: renderer.cellW, cellH: renderer.cellH, view };
+  hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)
+    .map((member) => ({ id: member.id, name: member.name, health: member.state.health,
+      maxHealth: player.vitals.maxHealth, stamina: member.state.stamina, maxStamina: player.vitals.maxStamina,
+      note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
+        (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
+  hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
+  inventoryScreen.update();
   const workMs = performance.now() - started;
   if (quality.sample(workMs, dt)) resize();
   debug.metrics.frames++;

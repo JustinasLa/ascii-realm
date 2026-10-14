@@ -10,7 +10,9 @@
   </head>
   <body>
     <canvas id="screen" tabindex="0" aria-label="Game scene. Press B to build scenery."></canvas>
-    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump (twice for a trick) &middot; J / click — strike (hold to spin) &middot; F — draw or sheathe &middot; C — campfire &middot; L — lightning &middot; M — mute &middot; scroll — zoom &middot; B — scenery builder</div>
+    <div id="hud-root"></div>
+    <div id="inventory-root"></div>
+    <div id="hint">WASD — walk &middot; Shift — run &middot; Space — jump (twice for a trick) &middot; J / click — strike (hold to spin, draw or throw) &middot; F — draw or sheathe &middot; C — campfire &middot; L — lightning &middot; 1–9 — quick slots &middot; Q — use &middot; E — gather &middot; I — inventory &middot; M — mute &middot; scroll — zoom &middot; B — scenery builder</div>
     <div id="touch-controls" aria-label="Game controls">
       <div id="move-pad" aria-label="Drag to walk. Push to the edge to run." role="group">
         <span id="move-stick"></span>
@@ -79,6 +81,40 @@
         <p class="builder-controls">Click or drag to paint. Click to place props. WASD pans; Shift pans faster. Enter applies the tool at the view centre. B returns to play. Ctrl+Z / Ctrl+Y undo/redo.</p>
         <output id="builder-status" role="status" aria-live="polite">Ready to build.</output>
       </div>
+    </details>
+    <details id="multiplayer-controls" data-game-ui>
+      <summary id="multiplayer-summary">Multiplayer · Solo</summary>
+      <p id="multiplayer-status" role="status" aria-live="polite">Play solo, create a lobby, or join with a code.</p>
+      <form id="lobby-form">
+        <label for="lobby-name">Your name</label>
+        <input id="lobby-name" type="text" maxlength="24" autocomplete="nickname" placeholder="Kael" />
+        <label for="lobby-code">Lobby code</label>
+        <input id="lobby-code" type="text" maxlength="6" minlength="6" pattern="[A-Za-z0-9]{6}" required
+          autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB7K2D"
+          title="Enter the six letters and numbers shared by your friend" />
+        <div class="lobby-actions">
+          <button id="lobby-create" type="button">Create lobby</button>
+          <button id="lobby-join" type="submit">Join lobby</button>
+        </div>
+        <details class="lobby-server-settings">
+          <summary>Lobby server</summary>
+          <label for="lobby-server">Server address</label>
+          <input id="lobby-server" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="Same as this website" />
+          <p>Use the same server as your friends.</p>
+        </details>
+      </form>
+      <div id="lobby-session" hidden>
+        <p class="lobby-label">Share this lobby code</p>
+        <output id="lobby-room-code" aria-label="Your lobby code"></output>
+        <div class="lobby-actions">
+          <button id="lobby-copy-code" type="button">Copy code</button>
+          <button id="lobby-copy-invite" type="button">Copy invite</button>
+        </div>
+        <input id="lobby-share" type="text" aria-label="Select and copy this invitation" readonly hidden />
+        <p class="lobby-label">Players</p>
+        <ul id="lobby-players" aria-label="Players in your lobby"></ul>
+      </div>
+      <button id="lobby-leave" type="button" hidden>Leave lobby</button>
     </details>
     <details id="audio-controls">
       <summary>Audio</summary>

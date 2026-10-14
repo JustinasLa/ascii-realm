@@ -7,6 +7,12 @@ import { JUMPS as KINDS } from './player.js';
 import { captureClip } from './retarget.js';
 import { SCALE, TILT } from './rig.js';
 import { footPlants } from './footfalls.js';
+import { Armory } from './armory.js';
+import { Gear } from './gear.js';
+import { heldWeapon } from './loadout.js';
+import { getWeapon } from './weapons.js';
+
+const SHORT_SWORD = getWeapon('sword-shield', 'iron');
 
 // The player as a real rigged 3D character playing professionally animated
 // clips (Quaternius' Universal Animation Library, CC0), drawn every frame
@@ -53,6 +59,8 @@ const CLIPS = {
   jumpLoop: 'Jump_Loop',
   jumpLand: 'Jump_Land',
   rest: 'Fixing_Kneeling',
+  pickup: 'PickUp_Table',
+  aim: 'Pistol_Aim_Neutral',
 };
 
 // Jumps played from motion capture (see jumps.js). Those off one foot can be
@@ -219,6 +227,7 @@ export class ModelFigure {
       // darker still.
       const joint = o.material?.name === 'M_Joints';
       o.material = new THREE.MeshLambertMaterial({ color: joint ? 0x2a2622 : 0x5d5048 });
+      o.material.userData.joint = joint;
     });
     this.scene.add(this.model);
     this.bones = {};
@@ -226,7 +235,11 @@ export class ModelFigure {
       if (o.isBone) this.bones[o.name] = o;
     });
 
-    this.sword = this.makeSword();
+    // Weapons in hand, across the back or at the hip.
+    this.armory = new Armory(this.model, this.bones);
+    // Clothing painted by body region and gear on the bones, set up while
+    // the skeleton is still in its rest pose.
+    this.gear = new Gear(this.model, this.bones);
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
     this.legs = ['L', 'R'].map((side) => ({
       thigh: this.bones[bone(`DEF-thigh.${side}`)],
@@ -267,7 +280,7 @@ export class ModelFigure {
       a.setEffectiveWeight(0);
       this.actions[key] = a;
     }
-    for (const k of ['attack', 'jumpStart', 'jumpLand', ...captured]) {
+    for (const k of ['attack', 'jumpStart', 'jumpLand', 'pickup', ...captured]) {
       this.actions[k].setLoop(THREE.LoopOnce, 1);
       this.actions[k].clampWhenFinished = true;
     }
@@ -291,26 +304,6 @@ export class ModelFigure {
     this.turned = 0;
     this.turnLeft = 0;
     this.cells = [];
-  }
-
-  // A plain short sword, held in the right hand when drawn.
-  makeSword() {
-    const g = new THREE.Group();
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.7, 0.012), new THREE.MeshBasicMaterial({ color: 0xd8e0f0 }));
-    blade.position.y = 0.42;
-    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.025, 0.03), new THREE.MeshLambertMaterial({ color: 0x8a8a90 }));
-    guard.position.y = 0.07;
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.03), new THREE.MeshLambertMaterial({ color: 0x3a2a1e }));
-    g.add(blade, guard, grip);
-    g.userData.tip = new THREE.Vector3(0, 0.77, 0);
-    g.userData.base = new THREE.Vector3(0, 0.08, 0);
-    g.visible = false;
-    const hand = this.bones[bone('DEF-hand.R')];
-    hand.add(g);
-    // Point the blade out along the fingers, held in a fist.
-    g.rotation.set(0, 0, 0);
-    g.position.set(0, 0.08, 0.02);
-    return g;
   }
 
   // Plays a locomotion clip on its own through one loop and finds how fast
@@ -399,6 +392,13 @@ export class ModelFigure {
       for (const k in w) w[k] *= 1 - p.kneel;
       w.rest = p.kneel;
     }
+    // Taking aim with a bow or a throw raises the arms toward the target,
+    // less so while on the move.
+    if (p.ranged?.aiming) {
+      const k = 1 - moving * 0.6;
+      for (const key in w) w[key] *= 1 - k;
+      w.aim = k;
+    }
     this.held = {};
     this.jumping(p, w);
 
@@ -409,6 +409,11 @@ export class ModelFigure {
       this.start('attack', rate);
     }
     this.lastMove = cb.move;
+    // Stooping to gather something plays once per pickup.
+    const picking = p.pickupTime >= 0;
+    if (picking && !this.picking && !swing) this.start('pickup', 1.3);
+    else if (!picking && this.picking && this.oneShot?.key === 'pickup') this.oneShot = null;
+    this.picking = picking;
     if (this.oneShot) {
       this.oneShot.t += dt;
       const left = (this.oneShot.until - this.oneShot.from) / this.oneShot.rate - this.oneShot.t;
@@ -432,7 +437,9 @@ export class ModelFigure {
     for (const k in this.held) this.actions[k].time = this.held[k];
     this.mixer.update(0);
 
-    this.sword.visible = cb.inHand;
+    this.gear.apply(p.equipment);
+    const weapon = p.equipment === undefined ? SHORT_SWORD : heldWeapon(p.equipment);
+    this.armory.update(weapon, cb.inHand || Boolean(p.ranged?.aiming));
     this.turned = this.spinTurn(p);
     this.model.rotation.y = p.heading + (cb.spin ?? 0) + this.turned;
     // Keep the stride on the ground. The run clip throws the body well clear
@@ -633,9 +640,10 @@ export class ModelFigure {
 
   // The sword's base and tip on screen, in cells from the feet, if drawn.
   swordLine() {
-    if (!this.sword.visible) return null;
-    const base = this.sword.localToWorld(this.sword.userData.base.clone());
-    const tip = this.sword.localToWorld(this.sword.userData.tip.clone());
+    const held = this.armory.held;
+    if (!held || held.userData.tip.y <= held.userData.base.y) return null;
+    const base = held.localToWorld(held.userData.base.clone());
+    const tip = held.localToWorld(held.userData.tip.clone());
     return { base: this.toScreen(base), tip: this.toScreen(tip) };
   }
 

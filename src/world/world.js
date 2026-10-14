@@ -1,5 +1,6 @@
 import { fbm, valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
+import { rockTypeAt } from './geology.js';
 import { blocks, generateProps } from './props.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
@@ -15,6 +16,8 @@ export const STONE = 4;
 export const ASPECT = 6 / 10;
 
 const CHUNK = 64;
+// Blows needed to fell a tree.
+export const TREE_HITS = 3;
 export const WATER_LEVEL = 0.4;
 // All lakes are fordable: even their lowest beds are only knee deep.
 export const MAX_WATER_DEPTH = 0.42;
@@ -38,6 +41,12 @@ export class World {
     this.clock = 0;
     this.chunks = new Map();
     this.terrainEdits = new Map();
+    // Changes the player makes to the land, kept here so they outlive chunk
+    // eviction: hits on trees by prop id, loose items of chunks whose items
+    // changed, and gathered plants.
+    this.treeHits = new Map();
+    this.loot = new Map();
+    this.gathered = new Set();
     // How many edited cells each chunk holds, so budgets need no full scan.
     this.editChunks = new Map();
     // Scorch maps by chunk, kept here so they outlive chunk eviction.
@@ -315,13 +324,34 @@ export class World {
         typeAt: (x, y) => this.originalTypeAt(x, y),
       };
       c.props = generateProps(original, cx, cy, CHUNK);
-      c.props.forEach((prop, i) => { prop.id = `p:${cx}:${cy}:${i}`; });
+      c.props.forEach((prop, i) => {
+        prop.id = `p:${cx}:${cy}:${i}`;
+        const hits = this.treeHits.get(prop.id);
+        if (hits) {
+          prop.hits = hits;
+          prop.chopped = hits >= TREE_HITS;
+        }
+      });
     }
     const added = this.addedPropChunks.get(chunkKey(cx, cy));
     if (!added && !this.removedProps.size) return c.props;
     const props = c.props.filter((prop) => !this.removedProps.has(prop.id));
     if (added) props.push(...added.values());
     return props;
+  }
+
+  // A blow on a tree, worth `power` hits; enough of them fell it. Returns
+  // the hits so far.
+  hitTree(prop, power = 1) {
+    prop.hits = Math.min(TREE_HITS, (prop.hits ?? 0) + Math.max(1, Math.floor(power) || 1));
+    prop.chopped = prop.hits >= TREE_HITS;
+    if (prop.id) this.treeHits.set(prop.id, prop.hits);
+    return prop.hits;
+  }
+
+  // The local surface layer determines which loose stones are scattered here.
+  rockTypeAt(x, y) {
+    return rockTypeAt(this, x, y);
   }
 
   // Every prop whose base lies in the chunks touching the given cell range.

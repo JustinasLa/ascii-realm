@@ -94,6 +94,9 @@ export const MATERIALS = {
   lining: { color: [34, 32, 38], tex: wool },
   hose: { color: [72, 72, 82], tex: fitted },
   sleeve: { color: [92, 74, 60], tex: fitted },
+  // The undyed linen shirt beneath the tunic, and cropped hair.
+  linen: { color: [150, 142, 124], tex: fitted },
+  hair: { color: [52, 40, 32], tex: wool },
   // Worn leather.
   leather: { color: [86, 60, 42], tex: leather },
   jerkin: { color: [108, 78, 52], tex: jerkin },

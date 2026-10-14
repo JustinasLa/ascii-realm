@@ -9,7 +9,8 @@ player is a hooded outlaw drawn from hundreds of shaded characters.
 
 ![An armoured warrior mid-swing on a moonlit lakeshore, reflected in the water](docs/screenshot.png)
 
-For now it is a single outlaw exploring procedurally generated terrain.
+Explore procedurally generated terrain solo, or with up to eight friends in a
+shared online lobby.
 
 ## Features
 
@@ -80,6 +81,42 @@ For now it is a single outlaw exploring procedurally generated terrain.
 - **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
+- **Status frames and quick slots.** A party-style frame in the top-left
+  corner shows the outlaw's name, segmented HP and stamina bars, the satchel's
+  weight and what is in the free hand. Running and sword strikes spend
+  stamina, which recovers after a short rest. A compass and nine quick slots
+  sit at the edges of the screen.
+- **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
+  paper doll drawn with the outlaw's own glyphs, item details and a 40 kg
+  carrying limit. The hood, jerkin, boots, bracers, cloak, short sword and
+  buckler each show on the 3D character and come off to reveal what is
+  underneath. Assign items to quick slots and use the starter draughts,
+  tonics and bandages to restore health or stamina. Opening the inventory
+  blocks movement and attacks while the world keeps running.
+
+![Inventory with the outlaw's gear, a satchel and selected item details](docs/inventory.png)
+
+- **Weapons.** Nine weapons in iron by default, each a satchel item that shows
+  on the 3D character, in hand or slung across the back or at the hip: short
+  sword, greatsword, battle axe, war hammer, spear, dagger, quarterstaff,
+  javelin and yew longbow. Heavier weapons swing more slowly and cost more
+  stamina; spears reach further; an axe fells a tree in one blow and a
+  greatsword or hammer in two. Hold the attack to draw the bow and release to
+  shoot at the cursor (or straight ahead from the keyboard), using arrows from
+  the satchel; tap with a spear or javelin to jab, or hold and release to throw
+  it. Arrows and thrown weapons stay where they land until you walk over them,
+  and the next spear or javelin in the satchel is taken up after a throw. The
+  satchel holds 60 kg and starts with every weapon and 30 arrows to try.
+- **Gathering.** Loose resources bob and glint above the ground and reflect in
+  water: granite, basalt or limestone stones to match the local rock layer,
+  sticks under trees, flint, berries, mushrooms, reeds and clay by the shore.
+  Walk over items to pick them up; nearby loot drifts toward you, and `E` picks
+  up or gathers from a berry bush or tall grass. Three sword blows fell any tree
+  for logs, leaving a stump, and cuts through tall grass give straw and fibre.
+  Standing still, the outlaw stoops to grab what is picked up. A full satchel
+  leaves the rest on the ground, and `X` in the inventory drops an item.
+  Felled trees, gathered plants and moved items stay that way for the session,
+  even after the land has been unloaded and generated again.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,
@@ -134,17 +171,55 @@ For now it is a single outlaw exploring procedurally generated terrain.
   sustained load without changing your zoom. Zoom far out for an overview of
   the land: cells shrink to dots of colour, meadows and trees are drawn without
   their animation, and newly seen ground fills in over a few frames. Hidden tabs stop drawing and distant chunks are evicted.
+- **Multiplayer lobbies.** Create a lobby and share its six-character code;
+  friends enter the code to join the same seeded world. Movement, jumps, swings,
+  gear, weapons, nameplates and reflections are visible to everyone, and each
+  friend's health and stamina appear in the party frames under your own. Players
+  have distinct nameplate colours, and brief connection drops reconnect
+  automatically. The lobby keeps working when its creator leaves.
 
 ## Running
 
-No build step. Serve the folder with any static file server and open it:
+No build step. For solo and multiplayer, install Node 22+ and run:
+
+```sh
+npm ci
+npm start
+# then open http://localhost:8000
+```
+
+Open **Multiplayer**, enter your name and click **Create lobby**. Share the code
+shown in the panel. Friends open the same website, enter the code and click
+**Join lobby**. **Copy invite** shares a link that joins that lobby. Joining a
+lobby on another world seed reloads the page into that world. **Leave lobby**
+returns to solo exploration.
+
+The server listens on all interfaces so other devices on your network can open
+`http://<your-computer's-LAN-IP>:8000`. Set `PORT` or `HOST` to change the binding.
+Lobby codes belong to one server: friends must connect to the same server.
+
+For friends over the internet, deploy `npm start` on a Node host with WebSocket
+support and an HTTPS reverse proxy that forwards `/multiplayer` upgrades. The
+server serves both the game and the lobbies; `/health` is a health-check endpoint.
+No database is needed. Lobbies are held in memory and disappear when the last
+player leaves, after a 30-second reconnect grace for unexpected disconnects, or
+when the server restarts. Use one server process. Each address may hold 16
+connections and create 6 lobbies a minute.
+
+The game can also run solo on any static file server:
 
 ```sh
 python -m http.server 8000
 # then open http://localhost:8000
 ```
 
-A browser with WebGL2 is required.
+A browser with WebGL2 is required. Static hosting (including GitHub Pages) cannot
+run the lobby server. To use a separately hosted server, expand **Lobby server**
+in the panel and enter its HTTPS or WSS address, for example
+`https://lobby.example.com` or `wss://lobby.example.com/multiplayer`. Invite links
+include that address; an invite naming another server fills in the panel but
+waits for you to press **Join lobby**. You can also use the `?room=ABC234` and
+`?server=...` URL parameters.
 
 To play this checkout on a phone on the same Wi-Fi, open
 `http://<computer-LAN-IP>:8000` on the phone after starting the server.
@@ -166,7 +241,8 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
 | `Space` | Jump; again in the air for a trick (a barrel roll when running) |
-| `J` / left click | Strike: repeat for a combo, sprint for a thrust, jump for a plunge |
+| `J` / left click | Strike with the equipped weapon: repeat for a combo, sprint for a thrust, jump for a plunge; cuts fell trees and mow tall grass |
+| Hold `J` / left button | Draw the bow, or ready a spear or javelin throw; release to shoot or throw at the cursor |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | `T` | Stow the torch or draw a fresh lit torch |
@@ -179,6 +255,16 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `L` / Audio panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
+| `1`–`9` | Select a quick slot; gear in it is equipped |
+| `Q` | Use the selected quick-slot item |
+| `E` | Pick up a nearby item or gather from a berry bush or tall grass |
+| `I` / `Tab` | Open or close the inventory (`Escape` also closes it) |
+| `G`, with inventory open | Switch between the satchel and equipment |
+| Arrow keys, with inventory open | Move through items in the selected pane |
+| `Enter`, with inventory open | Use or equip a satchel item, or take off selected gear |
+| `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
+| `X`, with inventory open | Drop one of the selected satchel item |
+| `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
 
 ## Scenery builder
@@ -218,12 +304,24 @@ fingers and reset when a touch is cancelled or the page is backgrounded.
 src/
   main.js            game loop and wiring
   core/              input, hashing, noise
+  multiplayer/       lobby client, controls, snapshot validation and interpolation
   editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
+  inventory/         items, satchel, equipment, quick slots and carry weight
   render/            glyph atlas, WebGL renderer, cell writers
+  ui/                status frames, inventory panel, item art and notifications
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
 ```
+
+`server/` contains the HTTP/WebSocket server and in-memory lobby lifecycle.
+The server owns lobby membership, IDs, colours and world seeds; each player
+simulates their own movement and sends bounded pose snapshots at 20 Hz.
+Other players interpolate snapshots 100 ms behind and are drawn as the
+shape-built outlaw in their own gear. This is cooperative exploration with
+cosmetic sword play; it does not add PvP damage, shared loot or competitive
+movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
+the browser uses its native WebSocket API.
 
 ## Credits
 

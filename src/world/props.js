@@ -396,12 +396,27 @@ export function generateProps(world, cx, cy, size) {
   return props;
 }
 
+// What is left of a felled tree.
+const STUMP = [
+  { dx: -1, dy: -2, g: glyph('_'), r: 139, gg: 103, b: 62 },
+  { dx: 0, dy: -2, g: glyph('='), r: 166, gg: 124, b: 76 },
+  { dx: 1, dy: -2, g: glyph('_'), r: 122, gg: 85, b: 50 },
+  { dx: -1, dy: -1, g: glyph('|'), r: 112, gg: 77, b: 47 },
+  { dx: 0, dy: -1, g: glyph('#'), r: 99, gg: 69, b: 44 },
+  { dx: 1, dy: -1, g: glyph('|'), r: 78, gg: 54, b: 35 },
+  { dx: 0, dy: 0, g: glyph('w'), r: 88, gg: 62, b: 40 },
+];
+
 // A `t` of null draws the prop still, for views too far out to see it sway.
 export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
   const direct = write === putCell;
   if (direct && !propInView(view, prop)) return;
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
+  if (prop.chopped) {
+    for (const c of STUMP) write(r, bx + c.dx, by + c.dy, c.g, c.r, c.gg, c.b, by);
+    return;
+  }
   const tree = t !== null && (prop.kind === 'tree' || prop.kind === 'bush');
   const sway = tree ? treeWind(prop, t, seed) : 0;
   const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
@@ -435,6 +450,7 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
 }
 
 export function blocks(prop, x, y) {
+  if (prop.chopped) return false;
   if (prop.solid === false) return false;
   // Wild shrubs are soft; a builder bush is placed as an obstacle.
   if (prop.kind === 'bush' && prop.solid !== true) return false;

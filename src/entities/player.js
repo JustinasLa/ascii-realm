@@ -2,6 +2,9 @@ import { ASPECT, MAX_WATER_DEPTH } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
+import { ATTACK_STAMINA_COST, SPRINT_RECOVERY_STAMINA, Vitals } from './vitals.js';
+import { heldWeapon, weaponFeel } from './loadout.js';
+import { Ranged } from './ranged.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
 // SCALE row units, but a metre up or down the screen is foreshortened by
@@ -18,6 +21,8 @@ const GRIP = 11;
 const SPRINT_GRIP = 5;
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
+// Seconds to stoop, grab something from the ground and stand again.
+const PICKUP_TIME = 0.62;
 // The kinds of jump: seconds spent gathering before leaving the ground, how
 // fast the body leaves it (metres per second up), and any push forwards.
 //   stand  - a jump on the spot
@@ -76,6 +81,12 @@ export class Player {
     this.walkSpeed = WALK_SPEED;
     this.runSpeed = RUN_SPEED;
     this.combat = new Combat();
+    this.vitals = new Vitals();
+    // Drawing a bow or readying a throw, and the ground point aimed at.
+    this.ranged = new Ranged();
+    this.aimTarget = null;
+    // Out of breath: no sprinting until a useful reserve has come back.
+    this.sprintExhausted = false;
     // A lit torch occupies the free hand; T stows it or draws a fresh one.
     this.torch = true;
     // Recent blade positions in world cells, for the swing trail.
@@ -93,6 +104,10 @@ export class Player {
     this.reach = 0;
     this.windUp = -1;
     this.landed = 0;
+    // A brief crouch and off-hand grab, separate from the jump's crouch.
+    this.pickupTime = -1;
+    this.pickupPose = 0;
+    this.moving = false;
     // The jump under way (see JUMPS), seconds since leaving the ground and
     // how long the flight will last; the trick done in the air, if any, with
     // its own clock and flight; and what was last landed, how long ago.
@@ -152,12 +167,76 @@ export class Player {
     this.bobV = 0;
   }
 
+  // Collection never locks the controls. Repeated pickups finish the
+  // current grab instead of keeping the outlaw crouched indefinitely.
+  animatePickup() {
+    if (this.pickupTime >= 0 || this.moving || this.air > 0 || this.windUp >= 0 || this.combat.busy) return false;
+    this.pickupTime = 0;
+    this.idle = 0;
+    return true;
+  }
+
+  cancelPickup() {
+    this.pickupTime = -1;
+    this.pickupPose = 0;
+  }
+
+  updatePickup(dt, moving) {
+    if (moving || this.air > 0 || this.windUp >= 0 || this.combat.busy) {
+      this.cancelPickup();
+      return;
+    }
+    if (this.pickupTime < 0) return;
+    this.pickupTime += dt;
+    if (this.pickupTime >= PICKUP_TIME) {
+      this.cancelPickup();
+      return;
+    }
+    // Bend down, briefly hold the grab, then stand back up. Smoothstep
+    // makes the ends of each movement settle without a visible jolt.
+    const t = Math.max(0, Math.min(1, this.pickupTime / 0.2, (PICKUP_TIME - this.pickupTime) / 0.32));
+    this.pickupPose = t * t * (3 - 2 * t);
+  }
+
   // The attack depends on what the warrior is doing at the time.
+  // The equipped weapon and how it changes the swings.
+  get weapon() {
+    return heldWeapon(this.equipment);
+  }
+
+  get feel() {
+    return weaponFeel(this.weapon);
+  }
+
   attack() {
-    this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
+    this.cancelPickup();
+    const cost = this.equipment === undefined ? ATTACK_STAMINA_COST : this.feel.stamina;
+    if (!this.combat.canAcceptAttack || !this.vitals.spendStamina(cost)) return false;
+    return this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
+  }
+
+  takeDamage(amount) {
+    const applied = this.vitals.takeDamage(amount);
+    if (applied > 0) this.events.push({ type: 'damage', amount: applied, x: this.x, y: this.y });
+    return applied;
+  }
+
+  heal(amount) {
+    return this.vitals.heal(amount);
+  }
+
+  restoreStamina(amount) {
+    return this.vitals.restoreStamina(amount);
+  }
+
+  // Unequipping the weapon puts it away at once, mid-swing or not.
+  cancelWeapon() {
+    this.combat.cancel();
+    this.trail.length = 0;
   }
 
   toggleSword() {
+    this.cancelPickup();
     this.combat.toggle();
   }
 
@@ -165,6 +244,7 @@ export class Player {
   // of jump depends on the pace: on the spot, walking or running, and on
   // the spot, how many have been made in a row.
   jump() {
+    this.cancelPickup();
     if (this.windUp >= 0) {
       // Pressed twice in quick succession: the trick follows as soon as the
       // feet are off the ground.
@@ -254,12 +334,21 @@ export class Player {
   }
 
   // `held`: whether the attack button is still down, to charge a spin.
-  update(dt, world, move, running, held = false) {
+  // `resourceDt` is real time for stamina, unaffected by hit stop.
+  update(dt, world, move, running, held = false, resourceDt = dt) {
     this.time += dt;
+    // Wait for a useful reserve after exhaustion rather than alternating
+    // between a frame of sprinting and a frame of recovery.
+    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
+    else if (this.vitals.stamina >= Math.min(SPRINT_RECOVERY_STAMINA, this.vitals.maxStamina)) {
+      this.sprintExhausted = false;
+    }
+    running = running && !this.sprintExhausted;
     const fromX = this.x;
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
+    this.moving = moving;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
     const depth = world.waterDepthAt?.(this.x, this.y) ?? 0;
     this.waterDepth += (depth - this.waterDepth) * ease(12);
@@ -320,6 +409,8 @@ export class Player {
     // always matches the speed and stops when the way is blocked.
     const metres = Math.hypot(((this.x - fromX) * ASPECT) / SCALE, (this.y - fromY) / toRows);
     const going = moving && metres > 0.15 * dt;
+    this.vitals.update(resourceDt, moving && running && metres > 0);
+    if (this.vitals.stamina <= 0) this.sprintExhausted = true;
 
     // A lunge carries the warrior on along their heading, fading fast.
     if (this.surge > 0.05) {
@@ -364,12 +455,19 @@ export class Player {
     }
 
     if (!moving) this.bank += -this.bank * ease(8);
+    // Taking aim, the outlaw turns to face the point aimed at.
+    if (this.ranged.aiming && this.aimTarget) {
+      const ax = (this.aimTarget.x - this.x) / toCols;
+      const az = (this.aimTarget.y - this.y) / toRows;
+      if (Math.hypot(ax, az) > 0.05) this.heading += angleTo(this.heading, Math.atan2(ax, az)) * ease(14);
+    }
 
     // Ease the stride in and out so starting and stopping is not abrupt.
     // Critically damped springs: they ease in as well as out, so neither
     // setting off nor pulling up jolts the limbs in the first frame.
     [this.walk, this.walkV] = spring(this.walk, this.walkV, going ? 1 : 0, 11, dt);
-    [this.run, this.runV] = spring(this.run, this.runV, moving && running ? 1 : 0, 6, dt);
+    // Pressing on against a wall is not running.
+    [this.run, this.runV] = spring(this.run, this.runV, going && running ? 1 : 0, 6, dt);
     this.walk = Math.max(0, Math.min(1, this.walk));
     this.run = Math.max(0, Math.min(1, this.run));
     // The walk cycle is not reset on stopping: its effect fades out with
@@ -379,7 +477,7 @@ export class Player {
 
     // After standing a while the warrior glances around, scanning one side
     // then the other, with the occasional downward look.
-    this.idle = moving || this.air > 0 || held ? 0 : this.idle + dt;
+    this.idle = moving || this.air > 0 || held || this.pickupTime >= 0 ? 0 : this.idle + dt;
     // Left alone long enough with the sword away, the warrior kneels to
     // rest, and springs up again the moment there is something to do.
     const rest = this.idle > 12 && this.waterDepth < 0.01 && !this.torch && !this.combat.inHand && !this.combat.busy;
@@ -409,16 +507,18 @@ export class Player {
     const cb = this.combat;
     if (cb.move === 'plunge' && cb.step >= 1 && this.air > 0) this.vy -= 30 * dt;
 
-    cb.update(dt, { moving, running: moving && this.run > 0.5, air: this.air > 0, held });
+    const feel = this.feel;
+    // Heavier weapons swing more slowly, lighter ones faster.
+    cb.update(dt * feel.tempo, { moving, running: moving && this.run > 0.5, air: this.air > 0, held });
     for (const e of cb.events) {
-      if (e.type === 'slam') {
+      if (e.type === 'slam' || e.type === 'strike') {
         // The blade lands a stride ahead, in the direction faced.
         const reach = 0.95 * SCALE;
         this.events.push({
-          type: 'slam',
+          ...e,
           x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
           y: this.y + Math.cos(this.heading) * reach * TILT,
-          strength: e.strength,
+          strength: e.strength ?? 1,
         });
       } else if (e.type === 'lunge') {
         this.surge = e.speed;
@@ -428,8 +528,22 @@ export class Player {
       } else {
         this.events.push({ ...e, x: this.x, y: this.y, strength: e.strength ?? 1 });
       }
+      if (e.type === 'swing') {
+        // Each cut reaches a stride ahead, where it can fell trees and
+        // mow grass.
+        const reach = feel.reach * SCALE;
+        this.events.push({
+          type: 'strike',
+          swing: e.move,
+          chop: feel.chop,
+          x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
+          y: this.y + Math.cos(this.heading) * reach * TILT,
+          strength: 1,
+        });
+      }
     }
     cb.events.length = 0;
+    this.updatePickup(dt, moving);
 
     this.pinFeet();
 
