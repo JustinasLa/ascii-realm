@@ -11,11 +11,16 @@ burned ground interrupting the chain. Trees and resource clumps are single
 fuel objects, connected through their ground footprints. A nearby object
 across an empty gap is never ignited by proximity or flying embers.
 
-Each burning cell has a short life, each hop loses heat, and one incident
-visits at most 384 fuel nodes. The visible fronts share the existing 24-fire
-render budget. Wind and player contact can extinguish the incident before
-it consumes all its fuel. When the connected fuel is exhausted, its flames
-disappear automatically.
+Each burning cell has a short life. Fresh grass sustains the advancing
+front until its entire connected clump is consumed, including clumps
+larger than 384 cells. Visible fringe blades join the front too, so no green
+edge is left behind. Gaps and barriers still stop it. Heat is lost when
+crossing into or out of wood and other objects, with at most 384 such
+objects per incident. Processing is limited to 256 events per frame;
+unfinished work carries into later frames instead of leaving part of a
+clump unburned. The visible fronts share the existing 24-fire render budget.
+Wind and player contact can extinguish the incident before it consumes all
+its fuel. When the connected fuel is exhausted, its flames disappear.
 
 Burned grass leaves exact, persistent ash marks. Trees darken while burning
 and leave charred stumps when consumed, with no surviving canopy or blocking
