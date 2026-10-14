@@ -803,3 +803,5 @@ kbd { color: var(--ink); font-size: 10px; font-weight: 400; }
 .hud-party-tab { align-self: flex-start; padding: 0 6px; color: #e3e8e4; background: rgba(6, 9, 10, 0.84); border: 1px solid #c3ccc6; font: 11px/1.5 var(--font); }
 /* The controls hint sits above the quick slots. */
 #hint { bottom: 104px; }
+.hud-frames .hud-status { position: static; width: auto; }
+.hud-frame-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
