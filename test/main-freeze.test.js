@@ -84,6 +84,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Fireflies: class { constructor() { this.list = []; } update() {} draw() {} },
     Dust: class { update() {} draw() {} burst() {} sparks() {} },
     Footprints: class { draw() {} },
+    Ambience: class { update() {} drawMist() {} draw() {} }, lightsOf: () => [],
     Fires: inert(),
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },

@@ -5,13 +5,35 @@ import { grassGust } from '../audio/environment.js';
 import { hash2 } from '../core/rng.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
-import { glyph } from '../render/glyphs.js';
+import { dg, over } from '../render/glyphs.js';
+import { BODY_SIDES, FLAME_STEPS, LICKS } from '../render/glyph-packs/effects.js';
+import { softLayer, subGlyph, veil } from './glow.js';
 import { ASPECT, WATER } from './world.js';
 
-const FLAME = ['.,^', '^/\\vx', '*ox%', '#@&'].map(s => [...s].map(glyph));
-const EMBER = [...".*+'"].map(glyph);
-const SMOKE = [...'.:~'].map(glyph);
+const names = (prefix, n) => Array.from({ length: n }, (_, i) => dg(`${prefix}.${i}`));
+const pairs = (prefix) => Array.from({ length: FLAME_STEPS * FLAME_STEPS },
+  (_, i) => dg(`${prefix}.${Math.floor(i / FLAME_STEPS)}${i % FLAME_STEPS}`));
+const STROKE = pairs('effects.flame.s');
+const TIP = pairs('effects.flame.tip');
+const CORE = names('effects.flame.core', 3);
+const LICK = names('effects.flame.lick', LICKS);
+const BODY = [0, 1, 2].map((v) => BODY_SIDES.map((side) => dg(`effects.flame.body.${v}${side}`)));
+const EMBER = names('effects.ember', 9);
+const SPARK = names('effects.spark', 8);
+const SMOKE = names('effects.smoke', 6);
+const COAL = names('effects.coal', 4);
+const LOG = names('effects.log', 4);
+const LOG_GLOW = names('effects.logglow', 4);
+const STONE = names('effects.stone', 4);
+const ASH = names('speck', 16);
+// Flung ash and burst embers keep to plain specks and embers.
+const ASH_FLAKE = names('speck', 4);
 const LIGHT_RADIUS = 23;
+// The grid the flames are measured on: rows above the hearth, and columns
+// either side of the middle.
+const FLAME_H = 18;
+const FLAME_X = 13;
+const FLAME_W = FLAME_X * 2 + 1;
 export const MAX_FIRES = 24;
 export const FIRE_GROW_SECONDS = 20;
 export const STRONG_WIND = 0.8;
@@ -42,15 +64,63 @@ function hearth(seed) {
       if (d > 1) continue;
       const rnd = hash2(dx, dy, seed);
       const stone = d > 0.58;
-      const log = !stone && (Math.abs(dy - dx * 0.22) < 0.55 || Math.abs(dy + dx * 0.22) < 0.55);
+      // Two logs cross in the middle, one falling and one rising to the right.
+      const falling = Math.abs(dy - dx * 0.22) < 0.55;
+      const rising = Math.abs(dy + dx * 0.22) < 0.55;
+      const log = !stone && (falling || rising);
       const shade = 0.7 + rnd * 0.3 - dy * 0.08;
-      cells.push({ dx, dy, g: glyph(stone ? 'oO@'[Math.floor(rnd * 3)] : log ? '=x'[dx & 1] : '.,'[dx & 1]),
-        r: (stone ? 105 : log ? 94 : 54) * shade,
-        gg: (stone ? 96 : log ? 48 : 28) * shade,
-        b: (stone ? 84 : log ? 20 : 12) * shade, bg: [15, 10, 7] });
+      const v = Math.floor(rnd * 4);
+      const g = stone ? STONE[v] : log ? LOG[(falling ? 1 : 0) + (v & 2)] : ASH[Math.floor(rnd * 16)];
+      const cell = { dx, dy, g, stone,
+        r: (stone ? 112 : log ? 88 : 70) * shade,
+        gg: (stone ? 102 : log ? 56 : 52) * shade,
+        b: (stone ? 92 : log ? 34 : 44) * shade, bg: stone ? [20, 15, 11] : [24, 13, 7] };
+      cells.push(cell);
+      // Charred logs glow along their cracks, and coals smoulder in the ash
+      // around them; both pulse with the fire in prepare().
+      if (log) cells.push({ dx, dy, g: over(LOG_GLOW[(falling ? 1 : 0) + (v & 2)]), glow: 0.75, seed: rnd });
+      else if (!stone && d < 0.5) cells.push({ dx, dy, g: over(COAL[v]), glow: 1, seed: rnd });
     }
   }
   return cells;
+}
+
+// The glyphs for one cell of flame. heat: 0..1 at the cell, with the heat
+// of the cells above, left and right of it; off, offTop: where the
+// tongue's axis crosses the cell's bottom and top edges, in columns from
+// the cell's centre; top: the tongue ends in this cell. Inside the fire a
+// continuous glowing body carries a white heart or a bright spine; where
+// the heat above runs out it breaks into tongues, and the cooler fringe
+// into loose licks over whatever stands behind.
+const step = (off) => Math.max(0, Math.min(FLAME_STEPS - 1, Math.floor((off + 0.5) * FLAME_STEPS)));
+export function flameCell(cells, dx, dy, heat, up, left, right, off, offTop, top, rnd, brightness, glow = 1) {
+  const hot = Math.min(1, heat / 0.8);
+  const r = (190 + hot * 65) * brightness;
+  const g = (34 + hot * hot * 196) * brightness;
+  const b = (4 + hot ** 4 * 120) * brightness;
+  const axis = Math.abs(off) < 0.5 || Math.abs(offTop) < 0.5;
+  const pair = step(off) * FLAME_STEPS + step(offTop);
+  const light = Math.min(1.15, brightness * 1.08);
+  const lick = LICK[Math.floor(rnd * 97) % LICK.length];
+  if (top && axis && heat < 0.45) {
+    cells.push({ dx, dy, g: over(TIP[pair]), r, gg: g + 25, b });
+  } else if (heat >= 0.4) {
+    const bg = [hot * 70 * glow, hot * 26 * glow, hot * 4 * glow];
+    // Body where the fire goes on above; a tongue where it gives out.
+    const side = left < 0.3 && right >= 0.3 ? 1 : right < 0.3 && left >= 0.3 ? 2 : 0;
+    const base = up >= 0.3 ? BODY[Math.floor(rnd * 3)][side] : lick;
+    cells.push({ dx, dy, g: base, r, gg: g * 0.84, b: b * 0.6, bg });
+    if (heat >= 0.78) {
+      cells.push({ dx, dy, g: over(CORE[Math.floor(rnd * 7) % 3]), r: 255 * light, gg: 244 * light, b: 196 * light });
+    } else if (axis) {
+      cells.push({ dx, dy, g: over(top ? TIP[pair] : STROKE[pair]), r: 255 * light,
+        gg: (150 + hot * 95) * light, b: (30 + hot * 70) * light });
+    }
+  } else if (axis && heat >= 0.25) {
+    cells.push({ dx, dy, g: over(STROKE[pair]), r, gg: g, b });
+  } else if (heat >= 0.2 || rnd < 0.5) {
+    cells.push({ dx, dy, g: over(lick), r: r * 0.95, gg: g * 0.8, b });
+  }
 }
 
 // Warm light is also used by carried and flying torches. Distances are in
@@ -230,7 +300,7 @@ export class Fires {
         vx: (dx * speed * 1.7 + Math.cos(angle) * speed) / ASPECT,
         vy: (dy * speed * 1.7 + Math.sin(angle) * speed) * TILT,
         vh: 4 + this.random() * 6 + strength * 4,
-        life, max: life, ash, g: ash ? SMOKE[Math.floor(this.random() * SMOKE.length)] : EMBER[Math.floor(this.random() * EMBER.length)] });
+        life, max: life, ash, g: ash ? ASH_FLAKE[Math.floor(this.random() * ASH_FLAKE.length)] : null });
     }
     if (this.particles.length > MAX_FIRE_PARTICLES) this.particles.splice(0, this.particles.length - MAX_FIRE_PARTICLES);
   }
@@ -313,45 +383,100 @@ export class Fires {
     const visible = this.list.filter(f => f.x >= view.x0 - 40 && f.x <= view.x0 + view.cols + 40
       && f.y >= view.y0 - LIGHT_RADIUS && f.y <= view.y0 + view.rows + 32);
     for (const fire of visible) {
-      const cells = [...fire.hearth];
       const strength = fire.intensity;
+      const cells = [];
+      // The hearth: stones, logs and ash, with the cracks in the logs and
+      // the coals breathing brighter and dimmer on their own slow rhythms.
+      const ember = Math.min(1, 0.35 + strength * 0.8);
+      for (const c of fire.hearth) {
+        if (!c.glow) { cells.push(c); continue; }
+        const pulse = 0.55 + 0.45 * valueNoise(time * 1.7 + c.seed * 40, c.dx * 0.6 + c.dy, fire.seed);
+        const k = pulse * ember * c.glow;
+        cells.push({ dx: c.dx, dy: c.dy, g: c.g, r: 90 + 165 * k, gg: 24 + 112 * k * k, b: 8 + 30 * k * k * k });
+      }
       const size = (0.3 + strength * 0.7) * (1 + fire.flare * 0.25);
       const brightness = Math.min(1.15, 0.25 + Math.sqrt(strength) * 0.75 + fire.flare * 0.2);
       const wind = (fire.gust - 0.42) * 2.4;
-      for (let h = 0; h < 18; h++) {
-        for (let dx = -13; dx <= 13; dx++) {
+      const frame = Math.floor(time * 12);
+      // Each of three tongues sways and stretches; axisAt gives its centre
+      // line at height h.
+      const tongues = [-1, 0, 1].map((tongue) => ({
+        tongue,
+        height: (9 + (tongue === 0 ? 3 : 0) + Math.sin(time * 4.5 + tongue * 2 + fire.seed) * 1.8) * size,
+      }));
+      const axisAt = (t, h) => {
+        const u = h / t.height;
+        return (t.tongue * 2.8 + Math.sin(time * 6 - h * 0.6 + t.tongue * 3 + fire.seed) * (0.4 + u)) * size
+          + wind * u * 3 * size + fire.leanX * u / ASPECT;
+      };
+      // Measure the heat over the whole flame first, so each cell can see
+      // whether the fire goes on above and beside it.
+      const heats = this._heat ??= new Float32Array(FLAME_W * FLAME_H);
+      const owner = this._owner ??= new Array(FLAME_W * FLAME_H);
+      for (let h = 0; h < FLAME_H; h++) {
+        for (let dx = -FLAME_X; dx <= FLAME_X; dx++) {
           let heat = 0;
-          for (let tongue = -1; tongue <= 1; tongue++) {
-            const height = (9 + (tongue === 0 ? 3 : 0) + Math.sin(time * 4.5 + tongue * 2 + fire.seed) * 1.8) * size;
-            if (h >= height) continue;
-            const u = h / height;
-            const center = (tongue * 2.8 + Math.sin(time * 6 - h * 0.6 + tongue * 3 + fire.seed) * (0.4 + u)) * size
-              + wind * u * 3 * size + fire.leanX * u / ASPECT;
-            const width = (1 - u) ** 0.7 * (2.7 + Math.sin(time * 8 + h + tongue) * 0.35) * size;
+          let best = null;
+          for (const t of tongues) {
+            if (h >= t.height) continue;
+            const u = h / t.height;
+            const center = axisAt(t, h);
+            const width = (1 - u) ** 0.7 * (2.7 + Math.sin(time * 8 + h + t.tongue) * 0.35) * size;
             const core = 1 - Math.abs(dx - center) / width;
             if (core <= 0) continue;
             const turbulence = valueNoise(dx * 0.7, h * 0.5 - time * 7, fire.seed);
-            heat = Math.max(heat, core * (0.9 - u * 0.3) + turbulence * 0.25 - 0.13);
+            const value = core * (0.9 - u * 0.3) + turbulence * 0.25 - 0.13;
+            if (value > heat) { heat = value; best = t; }
           }
+          const i = h * FLAME_W + dx + FLAME_X;
+          heats[i] = heat;
+          owner[i] = best;
+        }
+      }
+      const heatAt = (h, dx) => (h < 0 || h >= FLAME_H || dx < -FLAME_X || dx > FLAME_X ? 0
+        : heats[h * FLAME_W + dx + FLAME_X]);
+      for (let h = 0; h < FLAME_H; h++) {
+        for (let dx = -FLAME_X; dx <= FLAME_X; dx++) {
+          const i = h * FLAME_W + dx + FLAME_X;
+          const heat = heats[i];
           if (heat < 0.09) continue;
-          const family = FLAME[Math.min(3, Math.floor(heat * 4.5))];
-          const rnd = hash2(dx, h, fire.seed + Math.floor(time * 12));
-          const hot = Math.min(1, heat / 0.8);
-          cells.push({ dx, dy: -h - 2 + Math.round(fire.leanY * h / 15 * TILT), g: family[Math.floor(rnd * family.length)],
-            r: (225 + hot * 30) * brightness, gg: (55 + hot * 184) * brightness, b: (6 + hot ** 3 * 137) * brightness,
-            bg: [hot * 62 * strength, hot * 22 * strength, hot * 3 * strength] });
+          const best = owner[i];
+          const off = axisAt(best, h) - dx;
+          const offTop = axisAt(best, h + 1) - dx;
+          const rnd = hash2(dx, h, fire.seed + frame);
+          flameCell(cells, dx, -h - 2 + Math.round(fire.leanY * h / 15 * TILT), heat,
+            heatAt(h + 1, dx), heatAt(h, dx - 1), heatAt(h, dx + 1), off, offTop,
+            h + 1 >= best.height, rnd, brightness, strength);
         }
       }
       // The front stones sit in front of the burning logs.
-      cells.push(...fire.hearth.filter(c => c.dy >= 1));
+      cells.push(...fire.hearth.filter(c => c.dy >= 1 && c.stone));
+      // Embers ride the updraft, wink as they tumble and redden as they cool.
       for (let i = 0; i < Math.ceil(16 * strength); i++) {
         const phase = hash2(i, 0, fire.seed);
         const age = (time / (1.4 + phase * 1.6) + phase) % 1;
         const h = age * (14 + phase * 13) * size;
-        const dx = Math.sin(i * 12.3 + h * 0.18) * (1 + age * 4) + wind * h * 0.3;
-        const fade = Math.sin(age * Math.PI) ** 0.6 * brightness;
-        cells.push({ dx: Math.round(dx), dy: -Math.floor(h) - 3,
-          g: EMBER[Math.floor(phase * EMBER.length)], r: 255 * fade, gg: (125 + phase * 100) * fade, b: 30 * fade });
+        const x = Math.sin(i * 12.3 + h * 0.18) * (1 + age * 4) + wind * h * 0.3;
+        const wink = hash2(i, Math.floor(time * 9 + phase * 7), fire.seed) < 0.22 ? 0.3 : 1;
+        const fade = Math.sin(age * Math.PI) ** 0.6 * brightness * wink;
+        const y = -h - 3;
+        cells.push({ dx: Math.floor(x + 0.5), dy: Math.floor(y), g: over(subGlyph(EMBER, x + 0.5, y)),
+          r: 255 * fade, gg: (150 + phase * 90) * (1 - age * 0.6) * fade, b: (50 - age * 40) * fade });
+      }
+      // Now and then a knot pops and throws a spark out in a quick arc.
+      for (let i = 0; i < Math.ceil(5 * strength); i++) {
+        const phase = hash2(i, 7, fire.seed);
+        const period = 1.6 + phase * 2.4;
+        const t = ((time + phase * 13) % period) * 1.7;
+        if (t > 0.45) continue;
+        const vx = (hash2(i, Math.floor((time + phase * 13) / period), fire.seed) - 0.5) * 34;
+        const vy = -22 - phase * 14;
+        const x = vx * t;
+        const y = -4 + vy * t + 46 * t * t;
+        const heading = Math.round(Math.atan2(vy + 92 * t, vx * ASPECT) / (Math.PI * 2) * 8 + 8) % 8;
+        const fade = (1 - t / 0.45) * brightness;
+        cells.push({ dx: Math.round(x), dy: Math.floor(y), g: over(SPARK[heading]),
+          r: 255 * fade, gg: 225 * fade, b: 140 * fade });
       }
       fire.cells = cells;
     }
@@ -361,27 +486,43 @@ export class Fires {
   draw(r, view, fire, time, write = putCell) {
     const bx = Math.floor(fire.x) - view.x0;
     const by = Math.floor(fire.y) - view.y0;
-    // Translucent wisps rise and broaden, leaving bright objects visible.
-    if (write === putCell) {
-      for (let i = 0; i < 14; i++) {
+    // Smoke billows up in soft puffs that swell, cool and drift with the
+    // wind: warm where the fire lights them from below, grey above, with a
+    // moonlit upper left. The scene shows through the thin parts.
+    if (write === putCell && r.ov) {
+      const settle = fire.intensity * Math.min(1, fire.age / 3);
+      for (let i = 0; i < 12; i++) {
         const phase = hash2(i, 1, fire.seed);
-        const age = (time / 4.8 + phase) % 1;
-        const h = 4 + fire.intensity * 7 + age * (10 + fire.intensity * 12);
-        const drift = (fire.gust - 0.42) * age * 12 + Math.sin(i + age * 3) * age * 4 + fire.leanX * age / ASPECT;
-        const sy = by - Math.floor(h);
-        const alpha = Math.sin(age * Math.PI) * 0.2 * fire.intensity * Math.min(1, fire.age / 3);
-        for (let dx = -1; dx <= 1; dx++) {
-          const sx = bx + Math.round(drift) + dx;
-          if (sx < 0 || sy < 0 || sx >= r.cols || sy >= r.rows) continue;
-          const o = (sy * r.cols + sx) * 4;
-          const k = alpha / (1 + Math.abs(dx));
-          for (let channel = 0; channel < 3; channel++) {
-            const color = [112, 106, 100][channel];
-            r.fg[o + channel] += (color - r.fg[o + channel]) * k;
-            r.ov[o + channel] += (color - r.ov[o + channel]) * k;
-            r.bg[o + channel] += (color * 0.3 - r.bg[o + channel]) * k;
+        const age = (time / 5.2 + phase) % 1;
+        const alpha = Math.sin(age * Math.PI) ** 0.8 * 0.42 * settle;
+        if (alpha < 0.02) continue;
+        const h = 5 + fire.intensity * 7 + age * (12 + fire.intensity * 14);
+        const drift = (fire.gust - 0.42) * age * 14 + Math.sin(i * 1.7 + age * 3) * age * 4 + fire.leanX * age / ASPECT;
+        const cx = bx + 0.5 + drift;
+        const cy = by + 0.5 - h;
+        const rx = (0.9 + age * 3.4) / ASPECT;
+        const ry = 0.7 + age * 1.9;
+        const warm = Math.max(0, 1 - age * 1.8);
+        const sr = 112 + warm * 40;
+        const sg = 106 + warm * 8;
+        const sb = 104 - warm * 22;
+        for (let y = Math.max(0, Math.floor(cy - ry)); y <= Math.min(r.rows - 1, Math.ceil(cy + ry)); y++) {
+          for (let x = Math.max(0, Math.floor(cx - rx)); x <= Math.min(r.cols - 1, Math.ceil(cx + rx)); x++) {
+            const nx = (x + 0.5 - cx) / rx;
+            const ny = (y + 0.5 - cy) / ry;
+            const d = nx * nx + ny * ny;
+            if (d >= 1) continue;
+            const k = alpha * (1 - d);
+            const lit = nx + ny < -0.5 ? 18 : 0;
+            const cell = y * r.cols + x;
+            const o = cell * 4;
+            veil(r, o, k * 0.45, sr + lit, sg + lit, sb + lit, 0.3);
+            if (k < 0.07) continue;
+            const v = (k > 0.2 ? 2 : k > 0.12 ? 1 : 0) + 3 * (hash2(x + view.x0, i, fire.seed) < 0.5 ? 0 : 1);
+            const m = Math.min(1, k * 2.4);
+            softLayer(r, cell, SMOKE[v], r.bg[o] + (sr + lit - r.bg[o]) * m,
+              r.bg[o + 1] + (sg + lit - r.bg[o + 1]) * m, r.bg[o + 2] + (sb + lit - r.bg[o + 2]) * m);
           }
-          if (r.fg[o] < 130 && Math.abs(dx) < 1) r.setGlyph(o / 4, SMOKE[Math.floor(phase * SMOKE.length)]);
         }
       }
     }
@@ -399,10 +540,12 @@ export class Fires {
 
   drawParticles(r, view) {
     for (const p of this.particles) {
+      const y = p.y - p.h;
       const sx = Math.floor(p.x) - view.x0;
-      const sy = Math.floor(p.y - p.h) - view.y0;
+      const sy = Math.floor(y) - view.y0;
       const fade = Math.max(0, p.life / p.max);
-      r.put(sx, sy, p.g, (p.ash ? 135 : 255) * fade, (p.ash ? 112 : 175) * fade, (p.ash ? 90 : 45) * fade);
+      if (p.ash) r.layer(sx, sy, p.g, 135 * fade, 112 * fade, 90 * fade);
+      else r.layer(sx, sy, subGlyph(EMBER, p.x, y), 255 * fade, (120 + 80 * fade) * fade, 40 * fade);
     }
   }
 }

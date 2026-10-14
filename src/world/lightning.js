@@ -1,11 +1,11 @@
-import { glyph } from '../render/glyphs.js';
+import { dg } from '../render/glyphs.js';
+import { halo } from './glow.js';
 import { reflector } from './reflection.js';
 import { Splashes } from './splashes.js';
 import { ASPECT, WATER } from './world.js';
 
 export const MAX_BOLTS = 4;
 const LIFE = 2.2;
-const SPARK = glyph('*');
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
 // A return stroke and a weaker second pulse illuminate the same fixed path.
@@ -16,19 +16,47 @@ export function lightningPulse(age) {
   return 0.68 * Math.exp(-Math.max(0, age - 0.23) * 9);
 }
 
+const STEPS = 5;
+const BOLT = Array.from({ length: STEPS * STEPS }, (_, i) => dg(`effects.bolt.${Math.floor(i / STEPS)}${i % STEPS}`));
+const FLAT = Array.from({ length: 9 }, (_, i) => dg(`effects.boltflat.${Math.floor(i / 3)}${i % 3}`));
+const GLOW = dg('effects.halo.4');
+const STAR = dg('sparkle.0');
+const at = (frac, n) => Math.max(0, Math.min(n - 1, Math.floor(frac * n)));
+
+// Rasterises a jagged path into cells of drawn bolt strokes. Each row the
+// path crosses gets a stroke from where it enters the bottom of a cell to
+// where it leaves the top, so the cells join into one continuous channel;
+// where it runs sideways faster than a column per row, level strokes carry
+// it across. `branch` is 0 for the main channel, then 1, 2 for forks.
 function trace(path, branch, cells) {
   for (let i = 1; i < path.length; i++) {
     const a = path[i - 1];
     const b = path[i];
-    const dx = b.x - a.x;
     const dy = b.y - a.y;
-    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy))));
-    const ch = Math.abs(dx) < Math.abs(dy) * 0.4 ? '|'
-      : Math.abs(dy) < Math.abs(dx) * 0.3 ? '-' : dx * dy < 0 ? '/' : '\\';
-    for (let j = 0; j <= steps; j++) {
-      const x = Math.floor(a.x + dx * j / steps);
-      const y = Math.floor(a.y + dy * j / steps);
-      cells.set(`${x},${y}`, { x, y, g: glyph(ch), branch });
+    if (dy <= 0) continue;
+    const xAt = (y) => a.x + (b.x - a.x) * (y - a.y) / dy;
+    for (let row = Math.floor(a.y); row <= Math.floor(b.y - 1e-9); row++) {
+      const top = Math.max(a.y, row);
+      const bottom = Math.min(b.y, row + 1);
+      const xTop = xAt(top);
+      const xBottom = xAt(bottom);
+      const c0 = Math.floor(Math.min(xTop, xBottom));
+      const c1 = Math.floor(Math.max(xTop, xBottom));
+      if (c0 === c1) {
+        const g = BOLT[at(xBottom - c0, STEPS) * STEPS + at(xTop - c0, STEPS)];
+        cells.set(`${c0},${row}`, { x: c0, y: row, g, branch: branch > 0, depth: branch });
+        continue;
+      }
+      // Level strokes: the path's height at each column edge, top to bottom.
+      const yAt = (x) => top + (bottom - top) * (x - xTop) / (xBottom - xTop);
+      const xMin = Math.min(xTop, xBottom);
+      const xMax = Math.max(xTop, xBottom);
+      for (let c = c0; c <= c1; c++) {
+        const left = yAt(Math.max(c, xMin));
+        const right = yAt(Math.min(c + 1, xMax));
+        const g = FLAT[at(Math.min(1, Math.max(0, left - row)), 3) * 3 + at(Math.min(1, Math.max(0, right - row)), 3)];
+        cells.set(`${c},${row}`, { x: c, y: row, g, branch: branch > 0, depth: branch });
+      }
     }
   }
 }
@@ -68,19 +96,26 @@ export class Lightning {
     }
     const cells = new Map();
     const branches = distant ? 1 : 3;
+    // Forks leave the channel and wander down and away; the nearer ones
+    // split again into finer twigs of light.
+    const fork = (root, direction, run, fall, depth) => {
+      const points = [root];
+      const n = depth === 1 ? 5 : 3;
+      for (let j = 1; j <= n; j++) {
+        points.push({ x: root.x + direction * run * j / n + (random() - 0.5) * 3 / depth,
+          y: root.y + fall * j / n });
+      }
+      trace(points, depth, cells);
+      if (depth === 1 && !distant) {
+        const twig = points[1 + Math.floor(random() * (n - 1))];
+        fork(twig, random() < 0.6 ? direction : -direction, run * 0.5, fall * 0.5, 2);
+      }
+    };
     for (let i = 0; i < branches; i++) {
       const root = path[Math.floor(segments * (0.25 + i * 0.18))];
-      const direction = random() < 0.5 ? -1 : 1;
-      const run = (5 + random() * 8) / ASPECT;
-      const fall = 6 + random() * 8;
-      const fork = [root];
-      for (let j = 1; j <= 5; j++) {
-        fork.push({ x: root.x + direction * run * j / 5 + (random() - 0.5) * 3,
-          y: root.y + fall * j / 5 });
-      }
-      trace(fork, true, cells);
+      fork(root, random() < 0.5 ? -1 : 1, (5 + random() * 8) / ASPECT, 6 + random() * 8, 1);
     }
-    trace(path, false, cells);
+    trace(path, 0, cells);
     const bolt = { x, y, height, strength: Math.min(1, strength), distant, manual, age: 0,
       cells: [...cells.values()], splashes: new Splashes(), fire: null };
     // Distant flashes stay in the sky. Nearby lake strikes throw up a plume.
@@ -156,27 +191,30 @@ export class Lightning {
         const sx = c.x - view.x0;
         const sy = c.y - view.y0;
         if (sx < 0 || sy < 0 || sx >= r.cols || sy >= r.rows) continue;
-        const k = pulse * (c.branch ? 0.55 : 1);
+        const k = pulse * (c.depth === 2 ? 0.38 : c.branch ? 0.6 : 1);
         for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -2; dx <= 2; dx++) {
             const x = sx + dx;
             const y = sy + dy;
             if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) continue;
-            const halo = k / (1 + dx * dx * 0.7 + dy * dy * 2);
+            const glow = k / (1 + dx * dx * 0.7 + dy * dy * 2);
             const o = (y * r.cols + x) * 4;
-            r.bg[o] += 14 * halo;
-            r.bg[o + 1] += 30 * halo;
-            r.bg[o + 2] += 55 * halo;
+            r.bg[o] += 14 * glow;
+            r.bg[o + 1] += 30 * glow;
+            r.bg[o + 2] += 55 * glow;
           }
         }
-        r.put(sx, sy, c.g, 220 * k, 240 * k, 255 * k);
+        // A soft violet-blue glow under a white-hot core.
+        const o = (sy * r.cols + sx) * 4;
+        r.put(sx, sy, GLOW, r.bg[o] + 90 * k, r.bg[o + 1] + 120 * k, r.bg[o + 2] + 200 * k);
+        r.layer(sx, sy, c.g, 220 * k + 35, 240 * k + 15, 255 * k);
       }
       if (!bolt.distant && bolt.age < 0.3) {
+        // The strike point flares in a starburst and a halo of light.
         const sx = Math.floor(bolt.x) - view.x0;
         const sy = Math.floor(bolt.y) - view.y0;
-        r.put(sx, sy, SPARK, 235 * pulse, 245 * pulse, 255 * pulse);
-        r.put(sx - 1, sy, glyph('-'), 185 * pulse, 218 * pulse, 255 * pulse);
-        r.put(sx + 1, sy, glyph('-'), 185 * pulse, 218 * pulse, 255 * pulse);
+        if (r.layer && r.ov) halo(r, sx, sy, pulse * 1.2, 120, 160, 230);
+        r.put(sx, sy, STAR, 235 * pulse, 245 * pulse, 255 * pulse);
       }
     }
   }
