@@ -12,7 +12,7 @@ test('DPR-3 phones retain their world scale with one quarter of the pixels', () 
 });
 
 test('the requested zoom is kept on ordinary screens at every zoom level', () => {
-  const cases = [[1920, 1080, false, 6], [1366, 768, false, 6], [390, 844, true, 6], [2560, 1440, false, 8]];
+  const cases = [[1920, 1080, false, 4.5], [1366, 768, false, 4.5], [390, 844, true, 6], [2560, 1440, false, 4.5]];
   for (const [w, h, mobile, smallest] of cases) {
     for (const cell of [smallest, 8, 12, 24]) {
       assert.equal(renderSize(w, h, 1, cell, mobile).cell, cell, `${w}x${h} at ${cell}px`);
@@ -28,10 +28,10 @@ test('lowered resolution never shrinks glyphs below what the renderer can draw',
   }
 });
 
-test('the furthest zoom keeps one device pixel per cell under load', () => {
-  const size = renderSize(1600, 900, 1, 1.2, false, 0.3);
-  assert.equal(size.cell, 1.2);
-  assert.ok(size.cell * size.dpr >= 1 - 1e-9);
+test('the furthest zoom keeps legible glyphs under load', () => {
+  const size = renderSize(1600, 900, 1, 4.5, false, 0.3);
+  assert.equal(size.cell, 4.5);
+  assert.ok(size.cell * 0.6 * size.dpr >= 2 - 1e-9 && size.cell * size.dpr >= 3 - 1e-9);
 });
 
 test('huge screens respect the hard cell ceiling and the pixel budget', () => {
@@ -43,8 +43,7 @@ test('huge screens respect the hard cell ceiling and the pixel budget', () => {
       // Within the pixel budget, unless that would make readable glyphs
       // smaller than the renderer can draw them.
       const budget = Math.sqrt((mobile ? 1_200_000 : 2_500_000) * 0.5 / (w * h));
-      const legible = size.cell >= 3 ? Math.max(2 / (size.cell * 0.6), 3 / size.cell)
-        : Math.max(1 / size.cell, 0.6 / (size.cell * 0.6));
+      const legible = Math.max(2 / (size.cell * 0.6), 3 / size.cell);
       assert.ok(size.dpr <= Math.max(budget, legible) + 1e-9);
     }
   }

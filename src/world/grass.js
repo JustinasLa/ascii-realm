@@ -32,7 +32,7 @@ const MATTED = [flatGlyph(2, 2), flatGlyph(1, 2), flatGlyph(2, 1)];
 // Night greens against the near-black ground, kept a step below rocks and
 // trees so the meadow reads as background: blue-green fine blades, leafy
 // tufts, curved emerald grass, seed heads, dry gold grass, and olive reeds.
-export const PALETTES = [
+const PALETTES = [
   [38, 79, 61], [45, 84, 53], [38, 86, 57],
   [52, 83, 57], [67, 78, 52], [58, 78, 52],
 ];

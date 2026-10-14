@@ -18,10 +18,7 @@ export function renderSize(width, height, dpr, requestedCell, mobile, pixelScale
   while ((Math.ceil(width / (cell * ASPECT)) + 1) * (Math.ceil(height / cell) + 1) > limit) cell *= 1.01;
   // Never drop below the renderer's smallest legible glyph (2x3 device
   // pixels), which it would otherwise meet by enlarging cells, undoing zoom.
-  // Fully zoomed out, cells are dots of colour that need only a pixel each.
-  const legible = cell < 3
-    ? Math.min(dpr || 1, Math.max(ratio, 1 / cell, 0.6 / (cell * ASPECT)))
-    : Math.min(dpr || 1, Math.max(ratio, 2 / (cell * ASPECT), 3 / cell));
+  const legible = Math.min(dpr || 1, Math.max(ratio, 2 / (cell * ASPECT), 3 / cell));
   return { dpr: legible, cell };
 }
 
