@@ -34,8 +34,10 @@ shared online lobby.
   jungle trees, pink cherry groves and drooping willows near lakes. Mature
   trees tower over the warrior, with varied heights, irregular leaf clusters,
   branching trunks and shaded canopy pockets. Smaller saplings and walkable
-  shrubs grow between the widely spaced mature trees. Trunks vary
-  independently from slender stems to thick old trees. Mossy
+  shrubs grow between the widely spaced mature trees. Fine character strokes
+  fan into layered sprays on uneven boughs, with curved stems, smaller side
+  shoots, open pine whorls and willow curtains starting on individual branches.
+  Trunks vary independently from slender stems to thick old trees. Mossy
   fallen logs, snapped bare trunks, exposed stumps, and beaver-gnawed wood
   with scattered chips add history to the forest; beaver damage stays near
   water. Fallen trunks block their full length, including across chunks.

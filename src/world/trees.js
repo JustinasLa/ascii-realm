@@ -4,6 +4,7 @@ import { valueNoise } from '../core/noise.js';
 import { FOLIAGE_TINT, FOLIAGE_TINT_AMOUNT, MOONLIGHT, SHADE } from '../render/palette.js';
 import { ASPECT } from './world.js';
 import { BARK_RAMP, BIRCH_RAMP, char, edgeChar, leafStroke, rampChar, strokeChar } from './tree-chars.js';
+import { branchCrown } from './tree-branches.js';
 
 export const TREE_SPECIES = Object.freeze([
   'oak', 'birch', 'pine', 'spruce', 'acacia', 'jungle', 'cherry', 'willow',
@@ -129,7 +130,7 @@ function geometry(species, rand) {
   const tiers = [];
   const wood = [];
   const strands = [];
-  const ellipse = (x, y, rx, ry, layer = 0) => blobs.push({ x, y, rx, ry, layer });
+  const ellipse = (x, y, rx, ry, layer = 0) => blobs.push({ x, y, rx, ry, layer, spray: species === 'pine' });
   const branch = (x0, y0, x1, y1, r0 = 0.45, r1 = 0.15, trunk = false) => {
     const pad = Math.max(1.5, r0, r1);
     wood.push({ x0, y0, x1, y1, r0, r1, trunk,
@@ -172,17 +173,27 @@ function geometry(species, rand) {
     ellipse(1.8, -h + 8, 3.5, 5, 4);
   } else if (EVERGREEN.has(species)) {
     const spruce = species === 'spruce';
-    h = (spruce ? 49 : 45) + rand() * 7;
+    h = (spruce ? 49 : 53) + rand() * 7;
     footW = 1.8;
+    // Keep the original number of random draws before growth chooses the
+    // trunk's footprint; changing the art must not move collision boundaries.
     const count = spruce ? 7 : 6;
     branch(0, 0, 0, -h + 0.7, 0.95, 0.14, true);
     for (let i = 0; i < count; i++) {
-      const top = -h + i * h * (spruce ? 0.094 : 0.113);
-      const depth = h * (spruce ? 0.24 : 0.17) + i * (spruce ? 0.12 : 0.45);
-      const width = (spruce ? 2 : 1.8) + i * (spruce ? 1.24 : 1.53);
-      tiers.push({ x: (rand() - 0.5) * 0.6, y: top, width, depth, layer: i });
-      branch(0, top + depth * 0.58, -width * 0.9, top + depth * 0.96, 0.36, 0.12);
-      branch(0, top + depth * 0.61, width * 0.9, top + depth * 0.95, 0.36, 0.12);
+      const top = -h + i * h * (spruce ? 0.094 : 0.076);
+      const depth = h * (spruce ? 0.2 : 0.13) + i * 0.18;
+      const width = (spruce ? 2 : 3) + i * (spruce ? 1.24 : 1.45);
+      const lean = (rand() - 0.5) * 0.9;
+      if (spruce) tiers.push({ x: lean, y: top, width, depth, layer: i });
+      else {
+        // Pines carry separate whorls on long exposed trunks. Each bough
+        // ends in needle sprays, with sky visible between the whorls.
+        ellipse(lean, top + depth * 0.48, width * 0.66, depth * 0.45, i);
+        ellipse(lean - width * 0.65, top + depth * 0.74, width * 0.48, depth * 0.3, i);
+        ellipse(lean + width * 0.67, top + depth * 0.6, width * 0.46, depth * 0.34, i);
+      }
+      branch(0, top + depth * 0.35, lean - width * 0.95, top + depth * 0.8, 0.36, 0.12);
+      branch(0, top + depth * 0.4, lean + width * 0.95, top + depth * 0.7, 0.36, 0.12);
     }
   } else if (species === 'acacia') {
     h = 31 + rand() * 5;
@@ -250,7 +261,7 @@ function geometry(species, rand) {
   for (let i = 0; i < blobs.length; i++) {
     const b = blobs[i];
     const anchorX = species === 'acacia' ? blobs[0].x : 0;
-    branch(anchorX, -h + 4, b.x, b.y, 0.4, 0.17);
+    branch(anchorX, b.spray ? b.y - b.ry * 0.25 : -h + 4, b.x, b.y, 0.4, 0.17);
     for (const sign of [-1, 1]) {
       branch(b.x, b.y, b.x + sign * b.rx * 0.66, b.y - b.ry * 0.35, 0.17, 0.1);
       branch(b.x + sign * b.rx * 0.4, b.y - b.ry * 0.2, b.x + sign * b.rx * 0.55, b.y - b.ry * 0.72, 0.13, 0.08);
@@ -283,23 +294,27 @@ function grow(shape, growth, rand) {
   const lean = (rand() - 0.5) * (mature ? 0.055 : 0.035);
   const xAt = (x, y) => x * sx - y * sy * lean;
   const clusters = [];
+  shape.crowns = [];
   for (const b of shape.blobs) {
     const x = xAt(b.x, b.y);
     const y = b.y * sy;
     const rx = b.rx * sx;
     const ry = b.ry * sy * (0.8 + rand() * 0.2);
+    shape.crowns.push({ x, y, rx, ry, layer: b.layer });
     // A core and smaller overlapping lobes provide an irregular crown and
     // visible shaded pockets between outward-facing leaf masses.
-    clusters.push({ x, y, rx: rx * 0.78, ry: ry * 0.8, layer: b.layer, depth: rand() * 2 });
+    clusters.push({ x, y, rx: rx * 0.58, ry: ry * 0.62, layer: b.layer, depth: rand() * 2 });
     // Many smaller lobes bulging out of the core make a crown of distinct
     // leaf masses, with dark creases between them and a lumpy outline.
-    const count = mature ? 9 : 4;
+    // Pine boughs are already split into three sprays; only a few small
+    // lobes are needed on each, keeping their cold bake inexpensive.
+    const count = mature ? (b.spray ? 3 : 7) : 4;
     for (let i = 0; i < count; i++) {
       const a = i / count * TAU + rand() * 0.5;
-      const reach = 0.5 + rand() * 0.22;
+      const reach = 0.55 + rand() * 0.25;
       clusters.push({ x: x + Math.cos(a) * rx * reach,
         y: y + Math.sin(a) * ry * reach * 0.92,
-        rx: rx * (0.25 + rand() * 0.14), ry: ry * (0.25 + rand() * 0.13),
+        rx: rx * (0.22 + rand() * 0.14), ry: ry * (0.23 + rand() * 0.13),
         layer: b.layer, depth: 1 + rand() * 4 });
     }
   }
@@ -440,7 +455,8 @@ function makeSampler(shape, species, season, seed) {
       const recess = clamp((leaf.depth - shallowest) / depthSpan);
       // A dark crease where one leaf mass tucks in behind another.
       const crease = covers > 1 && leaf.rel > 0.66 ? clamp((leaf.rel - 0.66) * 3) : 0;
-      leaf.light = clamp((lobe * 0.64 + global * 0.36) * (0.52 + recess * 0.48) - crease * 0.3 + height * 0.14 - 0.04);
+      leaf.light = clamp((lobe * 0.64 + global * 0.36) * (0.52 + recess * 0.48) - crease * 0.3 +
+        height * (species === 'spruce' ? 0.35 : 0.14) - 0.04 - (species === 'spruce' ? (1 - height) * 0.08 : 0));
       leaf.edge = leaf.rel > 0.84;
       leaf.rim = leaf.nx < -0.4 && leaf.ny < 0.3 && leaf.rel > 0.78;
     }
@@ -473,7 +489,7 @@ function makeSampler(shape, species, season, seed) {
       // Deep in the shade the canopy opens into holes where the branches
       // inside show through.
       const hole = valueNoise(px * 0.5, py * 0.36, seed + 211);
-      leaf.gap = leaf.light < 0.3 && hole > 0.52 + leaf.light * 1.1;
+      leaf.gap = hole > 0.69 + leaf.light * 0.2;
     }
 
     const bare = winter && !evergreen;
@@ -640,8 +656,8 @@ function bake(sample, seed, species, season, growth, shape, palette) {
         if (leaf.strand && hash2(dx, Math.floor(dy / 3), seed + 37) < 0.45) continue;
         // Leaves are left out here and there, so strokes stay separate
         // dashes instead of joining into zigzags.
-        const broken = !leaf.strand && hash2(dx, dy, seed + 211) < 0.36;
-        const dark = leaf.gap || broken || (!leaf.strand && texture < 0.08 + clamp(0.42 - lt) * 1.3);
+        const broken = !leaf.strand && hash2(dx, dy, seed + 211) < 0.2;
+        const dark = leaf.gap || broken || (!leaf.strand && texture < 0.06 + clamp(0.34 - lt) * 0.9);
         // Leaves hang out and down from the middle of their mass: needles
         // sweep along a tier, strands hang straight, and every leaf turns a
         // little its own way.
@@ -654,28 +670,34 @@ function bake(sample, seed, species, season, growth, shape, palette) {
           ax = leaf.nx < 0 ? -0.7 : 0.7;
           ay = 0.6 + leaf.v * 0.8;
         } else {
-          ax = leaf.nx * 0.7;
-          ay = leaf.ny * 0.3 + 1;
+          // Fan around the twig inside each small mass, curling toward
+          // its edge instead of every leaf pointing straight down.
+          ax = leaf.nx * 0.65 + (leaf.mass.flowX ?? 0) * 0.6;
+          ay = leaf.ny * 0.55 + (leaf.mass.flowY ?? 0.7) * 0.6;
         }
         const turn = leaf.strand ? (texture - 0.5) * 0.3 :
-          (valueNoise(dx * 0.35, dy * 0.25, seed + 13) - 0.5) * 1.6 + (hash2(dx, dy, seed + 17) - 0.5) * 0.6;
+          (valueNoise(dx * 0.18, dy * 0.14, seed + 13) - 0.5) * 1.2 + (hash2(dx, dy, seed + 17) - 0.5) * 0.3;
         const lx = ax * Math.cos(turn) - ay * Math.sin(turn);
         const ly = ax * Math.sin(turn) + ay * Math.cos(turn);
         // Long strokes where the leaves are thick and lit, short ones elsewhere.
-        const tip = leaf.strand ? (leaf.v > 0.9 ? 1 : 0) : texture > 0.3 ? 0 : 1;
+        const tip = leaf.strand ? (leaf.v > 0.9 ? 1 : 0) : leaf.edge && texture < 0.18 ? 2 : 0;
         if (dark) cell.g = cell.rustle = char(' ');
         else {
           cell.g = leafStroke(lx, ly, tip, ASPECT);
-          cell.rustle = leafStroke(lx * Math.cos(0.5) - ly * Math.sin(0.5), lx * Math.sin(0.5) + ly * Math.cos(0.5), tip, ASPECT);
+          cell.rustle = leafStroke(lx * Math.cos(0.2) - ly * Math.sin(0.2), lx * Math.sin(0.2) + ly * Math.cos(0.2), tip, ASPECT);
         }
         // Leaves stay a deep night green; the moon only silvers their tops.
-        let c = blend(color, LEAF_NIGHT, family === 'bloom' ? 0.1 : 0.55);
+        let c = blend(color, LEAF_NIGHT, family === 'bloom' ? 0.1 : 0.4);
         if (leaf.strand?.vine) c = blend(c, [40, 70, 50], 0.4);
         if (leaf.rim) c = blend(c, palette.rim, 0.25);
+        else if (leaf.edge && lt > 0.35 && texture > 0.8) c = blend(c, palette.rim, 0.32);
         else if (lt > 0.66) c = blend(c, palette.light, clamp(lt - 0.64) * 0.4);
-        if (winter && evergreen && (leaf.v < 0.3 || (leaf.edge && texture > 0.6))) c = blend(c, SNOW, 0.45);
-        // Neighbouring leaves catch the light differently.
-        c = c.map((v) => v * (0.8 + hash2(dx, dy, seed + 29) * 0.4));
+        if (winter && evergreen && ((leaf.tier ? leaf.v < 0.3 : leaf.ny < -0.35) ||
+          (leaf.edge && texture > 0.75))) c = blend(c, SNOW, 0.45);
+        // Fine characters cover less of a cell than grass blades. Lift their
+        // ink enough to keep the sprays readable at the widest zoom, while
+        // neighbouring leaves still catch different amounts of moonlight.
+        c = c.map((v) => v * (1 + hash2(dx, dy, seed + 29) * 0.5));
         rgb(cell, c);
         if (dark) cell.gap = true;
         if (solid) {
@@ -701,8 +723,8 @@ function bake(sample, seed, species, season, growth, shape, palette) {
         } else if (accent && pick < accent.p && lt > 0.2 && lt < 0.6 && !leaf.edge) {
           cell.g = cell.rustle = char(accent.ch);
           rgb(cell, accent.c.map((v) => v * (0.75 + lt * 0.4)));
-        } else if (!leaf.strand && pick > 0.982 - lt * 0.02) {
-          cell.g = cell.rustle = char(pick > 0.994 ? 'o' : '.');
+        } else if (!leaf.strand && pick > 0.987 - lt * 0.006) {
+          cell.g = cell.rustle = char(pick > 0.997 ? '*' : '.');
           rgb(cell, blend(DEW, palette.light, lt * 0.4).map((v) => v * (0.6 + lt * 0.5)));
         }
         continue;
@@ -958,13 +980,14 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
   const random = typeof rand === 'function' ? rand : () => hash2(draw++, spriteSeed, seed + 17);
   if (!['mature', 'sapling', 'bush'].includes(growth)) growth = 'mature';
   const shape = grow(growth === 'bush' ? bushGeometry(random) : geometry(species, random), growth, random);
+  branchCrown(shape, species, growth, spriteSeed);
   // Trunk age varies independently of crown size: slender trees and broad,
   // old trunks can share the same height and species.
   const thickness = Number.isFinite(girth) ? clamp(girth, 0.6, 2) :
     growth === 'mature' ? 0.6 + hash2(Math.floor(x), Math.floor(y), seed + 741) * 1.4 : 1;
   for (const wood of shape.wood) {
-    // Trunks are stout columns, as in an old forest.
-    const factor = wood.trunk ? thickness * 1.5 : 0.6 + thickness * 0.4;
+    // Tall stems stay slender; age can still produce a broad old trunk.
+    const factor = wood.trunk ? thickness * 0.95 : 0.6 + thickness * 0.4;
     wood.r0 *= factor;
     wood.r1 *= factor;
     padWood(wood);

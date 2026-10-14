@@ -5,7 +5,7 @@
 // level holds a few characters of about the same weight so neighbouring
 // cells vary without changing the shading.
 
-import { flatGlyph, glyph, STROKE_STEPS, strokeGlyph } from '../render/glyphs.js';
+import { glyph } from '../render/glyphs.js';
 
 const levels = (...sets) => sets.map((s) => [...s].map(glyph));
 
@@ -60,21 +60,16 @@ export function strokeChar(dx, dy) {
 
 export const char = glyph;
 
-const clampStep = (v) => Math.max(0, Math.min(STROKE_STEPS - 1, Math.round(v)));
-
-// A short leaf stroke lying along (ax, ay) - world units across, rows down -
-// for cells `aspect` world units wide. Steep leaves are upright strokes,
-// leaves lying near flat are flat ones. `tip` 0 is a full stroke, 1 and 2
-// taper off higher or lower in the cell, so leaves end at different lengths.
+// Leaves use fine font strokes, with air around every character. Grass's
+// broad, joining blade glyphs would turn these sprays into solid ribbons.
+// Vectors are in world units across and rows down; account for cell aspect
+// before choosing a direction. Short tips leave a loose, feathery edge.
 export function leafStroke(ax, ay, tip, aspect) {
-  const perRow = ax / (Math.abs(ay) < 1e-3 ? (ay < 0 ? -1e-3 : 1e-3) : ay) / aspect;
-  if (Math.abs(perRow) > 1.8) {
-    const d = Math.max(-2, Math.min(2, Math.round(ay / ax * aspect * 3)));
-    const l = Math.max(0, Math.min(2, 1 - Math.ceil(d / 2)));
-    return flatGlyph(l, Math.max(0, Math.min(2, l + d)));
-  }
-  const shift = Math.max(1 - STROKE_STEPS, Math.min(STROKE_STEPS - 1, Math.round(-perRow * STROKE_STEPS)));
-  const bottom = clampStep((STROKE_STEPS - 1) / 2 - shift / 2);
-  return strokeGlyph(bottom, clampStep(bottom + shift), tip);
+  const x = ax / aspect;
+  if (tip === 2) return glyph(ay < 0 ? "'" : ',');
+  if (Math.abs(x) < Math.abs(ay) * 0.28) return glyph(tip ? "'" : '|');
+  // Leaves on a flat bough still turn down at their tips. Horizontal rows
+  // of hyphens would flatten a spray into a ruled, fabric-like pattern.
+  if (Math.abs(ay) < Math.abs(x) * 0.2) return glyph(tip ? '`' : x < 0 ? '/' : '\\');
+  return glyph(x * ay < 0 ? '/' : '\\');
 }
-
