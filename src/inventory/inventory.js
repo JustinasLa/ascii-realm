@@ -82,7 +82,9 @@ export class Inventory {
     return Math.round(total * 1e9) / 1e9;
   }
 
-  add(id, count = 1) {
+  // The world uses this before pulling a loose item toward the player. A
+  // capacity check must not collect it, mutate stacks or emit pickup events.
+  spaceFor(id, count = 1) {
     const item = itemFor(id);
     if (!item || !validCount(count) || !Number.isFinite(this.capacity) || this.capacity < 0) return 0;
     const availableWeight = Math.max(0, this.capacity - this.weight);
@@ -90,6 +92,18 @@ export class Inventory {
       ? Math.max(0, Math.floor((availableWeight + WEIGHT_EPSILON) / item.weight))
       : count;
     const amount = Math.min(count, allowed);
+    if (!amount) return 0;
+    let space = 0;
+    for (let index = 0; index < SLOT_COUNT && space < amount; index++) {
+      const stack = this.slots[index];
+      if (stack === null) space += item.stackLimit;
+      else if (validStack(stack) && stack.id === id) space += item.stackLimit - stack.count;
+    }
+    return Math.min(amount, space);
+  }
+
+  add(id, count = 1) {
+    const amount = this.spaceFor(id, count);
     if (!amount) return 0;
     const added = putInSlots(this.slots, id, amount);
     if (added) this.events.push({ type: 'pickup', id, count: added });
@@ -100,6 +114,18 @@ export class Inventory {
     if (!validIndex(index, SLOT_COUNT) || !validStack(this.slots[index])) return null;
     const stack = this.slots[index];
     return { item: ITEMS[stack.id], stack };
+  }
+
+  // Drops remove only the selected bag stack; equipment and ID-based hotbar
+  // bindings are left intact so collecting the same item can restore a binding.
+  remove(index, count = 1) {
+    if (!validCount(count)) return null;
+    const selected = this.getItem(index);
+    if (!selected) return null;
+    const removed = { id: selected.stack.id, count: Math.min(count, selected.stack.count) };
+    selected.stack.count -= removed.count;
+    if (!selected.stack.count) this.slots[index] = null;
+    return removed;
   }
 
   move(from, to) {

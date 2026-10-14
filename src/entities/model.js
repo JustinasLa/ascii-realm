@@ -54,6 +54,7 @@ const CLIPS = {
   jumpLoop: 'Jump_Loop',
   jumpLand: 'Jump_Land',
   rest: 'Fixing_Kneeling',
+  pickup: 'PickUp_Table',
 };
 
 // Jumps played from motion capture (see jumps.js). Those off one foot can be
@@ -272,7 +273,7 @@ export class ModelFigure {
       a.setEffectiveWeight(0);
       this.actions[key] = a;
     }
-    for (const k of ['attack', 'jumpStart', 'jumpLand', ...captured]) {
+    for (const k of ['attack', 'jumpStart', 'jumpLand', 'pickup', ...captured]) {
       this.actions[k].setLoop(THREE.LoopOnce, 1);
       this.actions[k].clampWhenFinished = true;
     }
@@ -414,6 +415,11 @@ export class ModelFigure {
       this.start('attack', rate);
     }
     this.lastMove = cb.move;
+    // Stooping to gather something plays once per pickup.
+    const picking = p.pickupTime >= 0;
+    if (picking && !this.picking && !swing) this.start('pickup', 1.3);
+    else if (!picking && this.picking && this.oneShot?.key === 'pickup') this.oneShot = null;
+    this.picking = picking;
     if (this.oneShot) {
       this.oneShot.t += dt;
       const left = (this.oneShot.until - this.oneShot.from) / this.oneShot.rate - this.oneShot.t;

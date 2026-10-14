@@ -177,7 +177,13 @@ test('Player forwards sword audio payloads at the current world position and dra
   const payloads = [{ type: 'draw' }, { type: 'swing', move: 'd', speed: 1.2 }, { type: 'sheathe' }];
   player.combat.events.push(...payloads);
   player.update(dt, meadow, still, false);
-  assert.deepEqual(player.events, payloads.map((event) => ({ ...event, x: 23, y: -41, strength: 1 })));
+  // Sound events stay where the player stands; the cut also strikes a stride
+  // ahead, for felling trees and mowing grass.
+  const sounds = player.events.filter((event) => event.type !== 'strike');
+  assert.deepEqual(sounds, payloads.map((event) => ({ ...event, x: 23, y: -41, strength: 1 })));
+  const strikes = player.events.filter((event) => event.type === 'strike');
+  assert.equal(strikes.length, 1);
+  assert.equal(strikes[0].swing, 'd');
   assert.deepEqual(player.combat.events, []);
   player.events.length = 0;
   player.update(dt, meadow, still, false);

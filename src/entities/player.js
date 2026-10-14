@@ -19,6 +19,8 @@ const GRIP = 11;
 const SPRINT_GRIP = 5;
 const JUMP_SPEED = 3.6; // metres per second straight up
 const FALL = 14; // gravity, metres per second squared
+// Seconds to stoop, grab something from the ground and stand again.
+const PICKUP_TIME = 0.62;
 // The kinds of jump: seconds spent gathering before leaving the ground, how
 // fast the body leaves it (metres per second up), and any push forwards.
 //   stand  - a jump on the spot
@@ -97,6 +99,10 @@ export class Player {
     this.reach = 0;
     this.windUp = -1;
     this.landed = 0;
+    // A brief crouch and off-hand grab, separate from the jump's crouch.
+    this.pickupTime = -1;
+    this.pickupPose = 0;
+    this.moving = false;
     // The jump under way (see JUMPS), seconds since leaving the ground and
     // how long the flight will last; the trick done in the air, if any, with
     // its own clock and flight; and what was last landed, how long ago.
@@ -156,8 +162,40 @@ export class Player {
     this.bobV = 0;
   }
 
+  // Collection never locks the controls. Repeated pickups finish the
+  // current grab instead of keeping the outlaw crouched indefinitely.
+  animatePickup() {
+    if (this.pickupTime >= 0 || this.moving || this.air > 0 || this.windUp >= 0 || this.combat.busy) return false;
+    this.pickupTime = 0;
+    this.idle = 0;
+    return true;
+  }
+
+  cancelPickup() {
+    this.pickupTime = -1;
+    this.pickupPose = 0;
+  }
+
+  updatePickup(dt, moving) {
+    if (moving || this.air > 0 || this.windUp >= 0 || this.combat.busy) {
+      this.cancelPickup();
+      return;
+    }
+    if (this.pickupTime < 0) return;
+    this.pickupTime += dt;
+    if (this.pickupTime >= PICKUP_TIME) {
+      this.cancelPickup();
+      return;
+    }
+    // Bend down, briefly hold the grab, then stand back up. Smoothstep
+    // makes the ends of each movement settle without a visible jolt.
+    const t = Math.max(0, Math.min(1, this.pickupTime / 0.2, (PICKUP_TIME - this.pickupTime) / 0.32));
+    this.pickupPose = t * t * (3 - 2 * t);
+  }
+
   // The attack depends on what the warrior is doing at the time.
   attack() {
+    this.cancelPickup();
     if (!this.combat.canAcceptAttack || !this.vitals.spendStamina(ATTACK_STAMINA_COST)) return false;
     return this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
   }
@@ -183,6 +221,7 @@ export class Player {
   }
 
   toggleSword() {
+    this.cancelPickup();
     this.combat.toggle();
   }
 
@@ -190,6 +229,7 @@ export class Player {
   // of jump depends on the pace: on the spot, walking or running, and on
   // the spot, how many have been made in a row.
   jump() {
+    this.cancelPickup();
     if (this.windUp >= 0) {
       // Pressed twice in quick succession: the trick follows as soon as the
       // feet are off the ground.
@@ -293,6 +333,7 @@ export class Player {
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
     const moving = len > 0;
+    this.moving = moving;
     const ease = (rate) => 1 - Math.exp(-rate * dt);
     const depth = world.waterDepthAt?.(this.x, this.y) ?? 0;
     this.waterDepth += (depth - this.waterDepth) * ease(12);
@@ -415,7 +456,7 @@ export class Player {
 
     // After standing a while the warrior glances around, scanning one side
     // then the other, with the occasional downward look.
-    this.idle = moving || this.air > 0 || held ? 0 : this.idle + dt;
+    this.idle = moving || this.air > 0 || held || this.pickupTime >= 0 ? 0 : this.idle + dt;
     // Left alone long enough with the sword away, the warrior kneels to
     // rest, and springs up again the moment there is something to do.
     const rest = this.idle > 12 && this.waterDepth < 0.01 && !this.torch && !this.combat.inHand && !this.combat.busy;
@@ -447,14 +488,14 @@ export class Player {
 
     cb.update(dt, { moving, running: moving && this.run > 0.5, air: this.air > 0, held });
     for (const e of cb.events) {
-      if (e.type === 'slam') {
+      if (e.type === 'slam' || e.type === 'strike') {
         // The blade lands a stride ahead, in the direction faced.
         const reach = 0.95 * SCALE;
         this.events.push({
-          type: 'slam',
+          ...e,
           x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
           y: this.y + Math.cos(this.heading) * reach * TILT,
-          strength: e.strength,
+          strength: e.strength ?? 1,
         });
       } else if (e.type === 'lunge') {
         this.surge = e.speed;
@@ -464,8 +505,21 @@ export class Player {
       } else {
         this.events.push({ ...e, x: this.x, y: this.y, strength: e.strength ?? 1 });
       }
+      if (e.type === 'swing') {
+        // Each cut reaches a stride ahead, where it can fell trees and
+        // mow grass.
+        const reach = 0.95 * SCALE;
+        this.events.push({
+          type: 'strike',
+          swing: e.move,
+          x: this.x + (Math.sin(this.heading) * reach) / ASPECT,
+          y: this.y + Math.cos(this.heading) * reach * TILT,
+          strength: 1,
+        });
+      }
     }
     cb.events.length = 0;
+    this.updatePickup(dt, moving);
 
     this.pinFeet();
 

@@ -43,7 +43,9 @@ function statName(key) {
 
 /** A live inventory panel. Opening it blocks controls, while the world keeps moving. */
 export class InventoryScreen {
-  constructor({ inventory, player, onToggle, onNotify, name = 'Kael' }) {
+  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael' }) {
+    // Drops a bag stack into the world; returns { ok, message }.
+    this.onDrop = typeof onDrop === 'function' ? onDrop : null;
     this.inventory = inventory;
     this.player = player;
     this.onToggle = onToggle || (() => {});
@@ -196,11 +198,14 @@ export class InventoryScreen {
     this.useButton.append(element('kbd', '', 'Enter'));
     this.unequipButton = element('button', 'inventory-unequip', 'Unequip');
     this.unequipButton.append(element('kbd', '', 'U'));
-    for (const button of [this.equipButton, this.useButton, this.unequipButton]) button.type = 'button';
+    this.dropButton = element('button', 'inventory-drop', 'Drop');
+    this.dropButton.append(element('kbd', '', 'X'));
+    for (const button of [this.equipButton, this.useButton, this.unequipButton, this.dropButton]) button.type = 'button';
+    this.dropButton.addEventListener('click', () => this._drop());
     this.equipButton.addEventListener('click', () => this._equip());
     this.useButton.addEventListener('click', () => this._use());
     this.unequipButton.addEventListener('click', () => this._unequip());
-    actions.append(this.equipButton, this.useButton, this.unequipButton);
+    actions.append(this.equipButton, this.useButton, this.unequipButton, this.dropButton);
     this.feedback = element('p', 'inventory-feedback');
     this.feedback.setAttribute('role', 'status');
     this.feedback.setAttribute('aria-atomic', 'true');
@@ -213,7 +218,7 @@ export class InventoryScreen {
     body.append(equipment, carried);
 
     const help = element('div', 'inventory-help');
-    for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'], ['1-9', 'Assign quick slot']]) {
+    for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'], ['X', 'Drop'], ['1-9', 'Assign quick slot']]) {
       const hint = element('span', 'inventory-key-hint');
       hint.append(element('kbd', '', keys), element('span', '', action));
       help.append(hint);
@@ -324,7 +329,7 @@ export class InventoryScreen {
       this._navigate(event.code);
       return;
     }
-    if (['KeyG', 'KeyE', 'KeyU', 'Enter', 'NumpadEnter'].includes(event.code)) {
+    if (['KeyG', 'KeyE', 'KeyU', 'KeyX', 'Enter', 'NumpadEnter'].includes(event.code)) {
       this._consume(event);
       if (event.repeat) return;
       if (event.code === 'KeyG') {
@@ -333,6 +338,7 @@ export class InventoryScreen {
           : { source: 'bag', index: 0 }, true);
       } else if (event.code === 'KeyE') this._equip();
       else if (event.code === 'KeyU') this._unequip();
+      else if (event.code === 'KeyX') this._drop();
       else this._activate();
       return;
     }
@@ -435,6 +441,15 @@ export class InventoryScreen {
     this.update();
     if (context) this._focusDetails(this.useButton);
     else this._selectedButton()?.focus();
+  }
+
+  // Sets one of the selected bag stack down at the outlaw's feet.
+  _drop() {
+    const selected = this._selectedItem();
+    if (this.selection.source !== 'bag' || !selected || !this.onDrop) return;
+    const result = this.onDrop(this.selection.index);
+    if (result?.message) this.onNotify(result.message, result.ok ? 'success' : 'info');
+    this.update();
   }
 
   _unequip() {
@@ -546,6 +561,7 @@ export class InventoryScreen {
     if (this.useButton.disabled !== useDisabled) this.useButton.disabled = useDisabled;
     attribute(this.useButton, 'title', useDisabled ? 'Your vitality is already full.' : '');
     hidden(this.unequipButton, carried || !item);
+    hidden(this.dropButton, !carried || !item || !this.onDrop);
   }
 
   destroy() {

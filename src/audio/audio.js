@@ -6,6 +6,7 @@ import { playFootstep } from './footsteps.js';
 import { prepareGrassFootsteps } from './grass-steps.js';
 import { playLightning, prepareLightningSounds } from './lightning.js';
 import { playMovement } from './movement.js';
+import { playPickup } from './pickup.js';
 import { Music } from './music.js';
 import { ChargeHum, playSword } from './sword.js';
 import { playWaterSound, prepareWaterSounds } from './water.js';
@@ -52,6 +53,9 @@ export class GameAudio {
       }
       case 'splash':
         if (this.world.typeAt(event.x, event.y) === WATER) handles = playWaterSound(this.engine, event);
+        break;
+      case 'pickup':
+        handles = playPickup(this.engine, event);
         break;
       case 'draw': case 'sheathe': case 'swing':
         handles = playSword(this.engine, event);

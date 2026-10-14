@@ -136,6 +136,11 @@ export class Hud {
     hotbarWrap.append(this.selectedItem, hotbar, inventoryButton);
     this.element.append(hotbarWrap);
 
+    // What E would do here, e.g. "E  Gather 5 berries".
+    this.prompt = element('div', 'hud-prompt');
+    this.prompt.hidden = true;
+    this.element.append(this.prompt);
+
     this.toastLayer = element('div', 'hud-toasts');
     attribute(this.toastLayer, 'role', 'log');
     attribute(this.toastLayer, 'aria-label', 'Game notifications');
@@ -245,6 +250,12 @@ export class Hud {
     if (this.damageNumbers.length >= MAX_DAMAGE) this.damageNumbers.shift().node.remove();
     this.damageLayer.append(node);
     this.damageNumbers.push({ node, x, y, age: 0 });
+  }
+
+  setPrompt(value) {
+    const label = String(value || '');
+    hidden(this.prompt, !label);
+    text(this.prompt, label);
   }
 
   // Shows another line of player state in the frame, e.g. what is carried.
