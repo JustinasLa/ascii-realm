@@ -108,7 +108,9 @@ export class Hud {
     }
 
     const hotbarWrap = element('div', 'hud-hotbar-wrap');
+    const hotbarHeading = element('div', 'hud-hotbar-heading');
     this.selectedItem = element('div', 'hud-selected-item');
+    hotbarHeading.append(this.selectedItem, element('span', 'hud-quick-hint', '1–9 select · Q use'));
     const hotbar = element('div', 'hud-hotbar');
     attribute(hotbar, 'role', 'group');
     attribute(hotbar, 'aria-label', 'Quick slots. Use number keys 1 to 9 to select.');
@@ -134,7 +136,7 @@ export class Hud {
     attribute(bag, 'aria-hidden', 'true');
     inventoryButton.append(bag, element('span', 'hud-inventory-label', 'Inventory'), element('kbd', 'hud-inventory-key', 'I'));
     inventoryButton.addEventListener('click', () => this.onInventory());
-    hotbarWrap.append(this.selectedItem, hotbar, inventoryButton);
+    hotbarWrap.append(hotbarHeading, hotbar, inventoryButton);
     this.element.append(hotbarWrap);
 
     // What E would do here, e.g. "E  Gather 5 berries".
