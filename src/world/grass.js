@@ -2,7 +2,12 @@ import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { putCell } from '../render/cells.js';
-import { BLOSSOM, BUD, STROKE_STEPS, flatGlyph, glyph, strokeGlyph } from '../render/glyphs.js';
+import { LAYER, STROKE_STEPS, dg, flatGlyph, hasGlyph, over, strokeGlyph } from '../render/glyphs.js';
+import { FRONDS, PLACES } from '../render/glyph-packs/flora.js';
+import {
+  BLUEBELL, BUTTERCUP, CATTAIL, CLOCK, CLOVER, CORNFLOWER, DAISY, DANDELION, DEW, FERN, FORGET_ME_NOT,
+  FOXGLOVE, LUPIN, PALETTES, POPPY, THISTLE, YARROW, extraAt,
+} from './grass-roots.js';
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 
 // Terrain grows blades up to five cells high; drawn blades are longer than
@@ -24,29 +29,75 @@ const BODY_DEPTH = 3;
 const PART_LIFE = 2.2;
 const PART_SPRING = 2.6;
 const MAX_PARTS = 4096;
-const SEED_HEAD = glyph('"');
-const DOT = glyph('.');
-const SEED = glyph(':');
 const MAT = [51, 77, 53];
 const MATTED = [flatGlyph(2, 2), flatGlyph(1, 2), flatGlyph(2, 1)];
-// Night greens against the near-black ground, kept a step below rocks and
-// trees so the meadow reads as background: blue-green fine blades, leafy
-// tufts, curved emerald grass, seed heads, dry gold grass, and olive reeds.
-const PALETTES = [
-  [38, 79, 61], [45, 84, 53], [38, 86, 57],
-  [52, 83, 57], [67, 78, 52], [58, 78, 52],
-];
 // Tips catch the moonlight and pale toward this.
 const TIP = [74, 96, 85];
-const FLOWERS = [
-  [BLOSSOM, 171, 174, 168], [BUD, 150, 165, 168], [BLOSSOM, 174, 169, 150],
-  [BUD, 165, 168, 158], [glyph('°'), 168, 165, 150], [glyph('.'), 161, 171, 165],
-  [BLOSSOM, 165, 169, 175], [BLOSSOM, 174, 174, 171],
-];
-const PETAL = BUD;
-// Where the last drawn blade ended: the cell just beyond its tip.
+const L = (name) => over(dg(name));
+// Whatever a stalk carries comes in a glyph for each place its tip can end
+// across the cell (see PLACES in the flora pack).
+const P = (name) => PLACES.map((_, k) => over(dg(`${name}@${k}`)));
+const place = (x) => {
+  const f = x - Math.floor(x);
+  return f < 0.36 ? 0 : f > 0.64 ? 2 : 1;
+};
+// Flower stalks: thin strokes standing in for the broad blade strokes.
+const STROKE0 = strokeGlyph(0, 0, 0);
+const THIN = Array.from({ length: STROKE_STEPS * STROKE_STEPS * 3 }, (_, k) =>
+  dg(`flora.stem.${Math.floor(k / STROKE_STEPS) % STROKE_STEPS}.${k % STROKE_STEPS}`));
+
+// Wild flowers as they look by moonlight: still clearly white, gold, red,
+// blue or pink, but a little greyed and cooled. A head is a petal glyph
+// with an eye of another colour layered into it; a spike runs florets up
+// over the top of its own stalk and tapers in the cell above.
+// Heads also come smaller (named `.s`): buds and young flowers.
+const bud = (name) => hasGlyph(`${name}.s@0`) ? P(`${name}.s`) : P(name);
+const flower = (petals, colour, eyes = null, eye = null, extra = {}) =>
+  ({ petals: petals.map(P), buds: petals.map(bud), colour, eyes: eyes && eyes.map(P),
+    budEyes: eyes && eyes.map(bud), eye, ...extra });
+const SPECIES = [];
+SPECIES[DAISY] = flower(['flora.daisy.0', 'flora.daisy.1'], [226, 230, 222],
+  ['flora.daisy.eye', 'flora.daisy.eye.1'], [236, 192, 72]);
+SPECIES[BUTTERCUP] = flower(['flora.buttercup'], [240, 204, 62], ['flora.buttercup.gloss'], [255, 246, 190]);
+SPECIES[POPPY] = flower(['flora.poppy'], [222, 58, 52], ['flora.poppy.eye'], [34, 16, 26]);
+SPECIES[CORNFLOWER] = flower(['flora.cornflower'], [112, 158, 255], ['flora.cornflower.eye'], [84, 60, 168]);
+SPECIES[CLOVER] = flower(['flora.clover'], [206, 112, 176], ['flora.clover.tips'], [246, 200, 226]);
+SPECIES[DANDELION] = flower(['flora.dandelion'], [244, 206, 60], ['flora.dandelion.eye'], [214, 146, 40]);
+SPECIES[CLOCK] = flower(['flora.clock'], [214, 220, 226], ['flora.clock.core'], [110, 100, 80]);
+SPECIES[YARROW] = flower(['flora.yarrow'], [228, 224, 206]);
+SPECIES[FORGET_ME_NOT] = flower(['flora.myosotis.0', 'flora.myosotis.1'], [124, 176, 250],
+  ['flora.myosotis.eye.0', 'flora.myosotis.eye.1'], [246, 226, 120]);
+SPECIES[BLUEBELL] = flower(['flora.bluebell.0', 'flora.bluebell.1'], [132, 120, 240]);
+SPECIES[LUPIN] = flower(['flora.lupin.tip'], [146, 110, 236], ['flora.lupin.banner.tip'], [240, 234, 250],
+  { spike: ['flora.lupin.mid.0', 'flora.lupin.mid.1'].map(P),
+    shades: [[146, 110, 236], [226, 124, 194], [228, 224, 216], [124, 134, 244]] });
+SPECIES[FOXGLOVE] = flower(['flora.foxglove.tip'], [226, 104, 194], ['flora.foxglove.throat'], [80, 26, 68],
+  { spike: ['flora.foxglove.mid.0', 'flora.foxglove.mid.1'].map(P) });
+// A thistle's spiny bulb is green; its brush is layered on in purple.
+SPECIES[THISTLE] = flower(['flora.thistle.bulb'], [94, 118, 88], ['flora.thistle.brush'], [198, 102, 218]);
+const FALLEN = L('flora.fallen');
+// Grass seed heads, in pale moonlit straw, and the reeds' cattails.
+const SEEDS = ['flora.seed.oat.0', 'flora.seed.oat.1', 'flora.seed.timothy', 'flora.seed.plume.0',
+  'flora.seed.plume.1', 'flora.seed.rye'].map(P);
+const STRAW = [156, 150, 114];
+const CATTAIL_HEAD = P('flora.cattail');
+const CATTAIL_BROWN = [150, 104, 64];
+const DEWDROPS = [0, 1, 2, 3].map((i) => L(`flora.dew.${i}`));
+const DEW_LIGHT = [196, 220, 240];
+const FROND = FRONDS.map((_, i) => dg(`flora.frond.${i}`));
+const FROND_TIP = FRONDS.map((_, i) => dg(`flora.frond.tip.${i}`));
+const FERN_GREEN = [52, 124, 76];
+// Where the last drawn blade ended: the cell just beyond its tip, and the
+// column of each row it crossed (none when it lay down), so a flower spike
+// or a dew drop can be layered over the blade itself.
 let tipX = 0;
 let tipY = 0;
+let tipAt = 0.5;
+let bladeRows = 0;
+const ROW_X = new Int16Array(16);
+const ROW_P = new Uint8Array(16);
+const TONE = [0, 0, 0];
+const STALK = [0, 0, 0];
 
 // A smooth, sine-like wave with period 1 made of two parabolas. Cheaper
 // than Math.sin, which matters when it runs for every blade every frame.
@@ -57,7 +108,7 @@ const ripple = (p) => {
 
 const step = (v, steps) => v <= 0 ? 0 : v >= 1 ? steps - 1 : (v * steps) | 0;
 
-function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase = 0) {
+function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase = 0, thin = false) {
   // Firm contact lays even the tallest stalk right on the ground. Ease out
   // of the flat pose only as pressure recovers, rather than leaving little
   // upright stems in the fresh footprint.
@@ -87,8 +138,13 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
     // A blade ending low in its last row gets a short tip there.
     const rows = Math.max(1, Math.ceil(rise - 0.25));
     const tip = rise - rows + 1 < 0.7 ? 2 : 1;
-    const [tr, tg, tb] = tone;
+    const tr = tone[0];
+    const tg = tone[1];
+    const tb = tone[2];
     const lit = light * dim;
+    // Blades bowing toward the moon, up and to the left, catch more of its
+    // light along their upper edge.
+    const moon = 0.8 + (reach < 0 ? Math.min(0.6, -reach * 0.15) : 0);
     let bottom = 0.5;
     for (let j = 0; j < rows; j++) {
       const v = (j + 1) / rows;
@@ -97,7 +153,7 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
       // tall blades do not line up into horizontal bands of brightness.
       const u = Math.min(1, (j + 0.5) / rows + phase);
       const l = lit * (0.66 + u * 0.6);
-      const pale = u > 0.6 ? (u - 0.6) * 0.8 : 0;
+      const pale = u > 0.6 ? Math.min(1, (u - 0.6) * moon) : 0;
       const cr = (tr + (TIP[0] - tr) * pale) * l;
       const cg = (tg + (TIP[1] - tg) * pale) * l;
       const cb = (tb + (TIP[2] - tb) * pale) * l;
@@ -105,22 +161,26 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
       // column it passes through its own part, so the blade has no gaps.
       const from = Math.floor(Math.min(bottom, top) + 0.25);
       const to = Math.floor(Math.max(bottom, top) - 0.25);
+      ROW_X[j] = sx + Math.floor((bottom + top) / 2);
+      if (thin) ROW_P[j] = place((bottom + top) / 2);
       if (to <= from) {
         const col = Math.floor((bottom + top) / 2);
-        write(r, sx + col, base - j,
-          strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS), j === rows - 1 ? tip : 0),
-          cr, cg, cb, base);
+        const g = strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS), j === rows - 1 ? tip : 0);
+        write(r, sx + col, base - j, thin ? THIN[g - STROKE0] : g, cr, cg, cb, base);
       } else {
         const end = top > bottom ? to : from;
         for (let col = from; col <= to; col++) {
-          write(r, sx + col, base - j, strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS),
-            j === rows - 1 && col === end ? tip : 0), cr, cg, cb, base);
+          const g = strokeGlyph(step(bottom - col, STROKE_STEPS), step(top - col, STROKE_STEPS),
+            j === rows - 1 && col === end ? tip : 0);
+          write(r, sx + col, base - j, thin ? THIN[g - STROKE0] : g, cr, cg, cb, base);
         }
       }
       bottom = top;
     }
     tipX = sx + Math.floor(bottom);
     tipY = base - rows;
+    tipAt = bottom;
+    bladeRows = rows;
     return;
   }
   // Lying down: the blade crosses columns rather than rows, a little above
@@ -141,6 +201,77 @@ function drawBlade(r, view, write, x, y, height, lean, press, light, tone, phase
   }
   tipX = sx + side * cols;
   tipY = base - Math.floor(0.3 + rise);
+  tipAt = 0.5;
+  bladeRows = 0;
+}
+
+// A wild flower on the tip of the blade just drawn. A trampled one leaves
+// only a few petals on the mat.
+function drawFlower(r, paint, species, base, glow, flat, variation) {
+  const v = (variation * 64) & 1;
+  let [cr, cg, cb] = species.colour;
+  if (species.shades) [cr, cg, cb] = species.shades[(variation * 97) & 3];
+  if (flat > 0.6) {
+    paint(r, tipX, tipY, FALLEN, cr * glow * 0.6, cg * glow * 0.6, cb * glow * 0.6, base);
+    return;
+  }
+  if (species.spike && bladeRows > 1) {
+    // Florets run up the top of the stalk, opening first at the bottom:
+    // the lower ones a touch darker in the stalk's own shade.
+    const from = Math.max(1, bladeRows - 3);
+    for (let j = from; j < bladeRows; j++) {
+      const l = glow * (0.72 + (j - from) * 0.1);
+      paint(r, ROW_X[j], base - j, species.spike[(j + v) & 1][ROW_P[j]], cr * l, cg * l, cb * l, base);
+    }
+  }
+  // About one head in four is a bud or a young flower, a size smaller.
+  const young = ((variation * 1009) % 1) < 0.27;
+  const petals = young ? species.buds : species.petals;
+  paint(r, tipX, tipY, petals[v % petals.length][place(tipAt)], cr * glow, cg * glow, cb * glow, base);
+  if (species.eyes) {
+    const [er, eg, eb] = species.eye;
+    const eyes = young ? species.budEyes : species.eyes;
+    paint(r, tipX, tipY, eyes[v % eyes.length][place(tipAt)], er * glow, eg * glow, eb * glow, base);
+  }
+}
+
+// A fern in a damp hollow: a few pinnate fronds arching out from the root
+// and nodding with the wind, drawn segment by segment along each frond.
+function drawFern(r, view, paint, x, y, height, lean, flat, light, variation) {
+  const base = y - view.y0;
+  const count = 3 + Math.floor(variation * 2.99);
+  const length = height >= 4 ? 4 : 3;
+  const sway = Math.max(-0.5, Math.min(0.5, lean * 0.07));
+  for (let f = 0; f < count; f++) {
+    const spread = (f / (count - 1) - 0.5) * 2;
+    // Outer fronds arch over further; trampled ones lie down.
+    let angle = spread * (1.05 + flat * 0.4) + (variation - 0.5) * 0.3;
+    const droop = spread * (0.5 + flat * 0.3);
+    const reach = Math.abs(spread) < 0.4 ? length : length - 1;
+    let px = x - view.x0 + 0.5;
+    let py = base + 0.7;
+    const l = light * (0.8 + (spread < 0 ? 0.2 : 0) - Math.abs(spread) * 0.08);
+    for (let k = 0; k < reach; k++) {
+      const u = (k + 1) / reach;
+      const a = Math.max(-1.45, Math.min(1.45, angle + droop * u * u + sway * u));
+      const sx = Math.sin(a);
+      const sy = Math.cos(a);
+      const stepLength = 1 / Math.max(Math.abs(sy), Math.abs(sx) / ASPECT);
+      const nx = px + sx / ASPECT * stepLength;
+      const ny = py - sy * stepLength;
+      const cell = Math.round((a / 1.25) * 3) + 3;
+      const glyph = (k === reach - 1 ? FROND_TIP : FROND)[Math.max(0, Math.min(6, cell))];
+      const shade = l * (0.7 + u * 0.35);
+      paint(r, Math.floor((px + nx) / 2), Math.floor((py + ny) / 2), glyph,
+        FERN_GREEN[0] * shade, FERN_GREEN[1] * shade, FERN_GREEN[2] * shade, base);
+      px = nx;
+      py = ny;
+    }
+  }
+  tipX = 0;
+  tipY = 0;
+  tipAt = 0.5;
+  bladeRows = 0;
 }
 
 // Wind arrives in gusts: broad patches of stronger wind drift across the
@@ -443,6 +574,8 @@ export class Grass {
       const wy = sy + view.y0;
       const pressure = field.tracks[(wy - grid.y0) * grid.cols + wx - grid.x0] || 0;
       if (pressure > 0.45) {
+        // Flowers and seed heads do not stand back up through a mat.
+        if (ch & LAYER) return;
         ch = MATTED[Math.abs(wx * 7 + wy * 13) % MATTED.length];
         const blend = pressure * 0.6;
         cr += (MAT[0] * 0.5 - cr) * blend;
@@ -499,29 +632,62 @@ export class Grass {
         // under a figure stays in shadow.
         const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.1) *
           (0.82 + variation * 0.36) * (1 - sink * 0.8);
-        const tone = PALETTES[style];
-        const length = height * BLADE_LENGTH * (0.78 + jitter * 0.3);
-        drawBlade(r, view, paint, x, y, length, lean, bent, light, tone, (variation - 0.5) * 0.4);
-        const flower = blades ? blades.flowers[root] : 0;
-        if (flower) {
-          const [ch, fr, fg, fb] = FLOWERS[flower - 1];
-          const glow = (0.8 + variation * 0.25) * (1 - sink * 0.45) * (1 - flat * 0.4);
-          paint(r, tipX, tipY, flat > 0.6 ? DOT : ch, fr * glow, fg * glow, fb * glow, base);
-          // The last kind blooms in a little cluster across the stem.
-          if (flower === FLOWERS.length && flat < 0.6) {
-            paint(r, tipX - 1, tipY, PETAL, fr * glow * 0.8, fg * glow * 0.85, fb * glow * 0.9, base);
-            paint(r, tipX + 1, tipY, PETAL, fr * glow * 0.8, fg * glow * 0.85, fb * glow * 0.9, base);
-          }
-        } else if ((style === 3 && variation > 0.8) || (style === 5 && variation > 0.6)) {
-          paint(r, tipX, tipY, style === 5 ? SEED_HEAD : variation < 0.9 ? DOT : SEED,
-            tone[0] * light * 1.3, tone[1] * light * 1.2, tone[2] * light, base);
+        let tone = PALETTES[style];
+        if (blades) {
+          const k = root * 3;
+          TONE[0] = blades.tones[k];
+          TONE[1] = blades.tones[k + 1];
+          TONE[2] = blades.tones[k + 2];
+          tone = TONE;
         }
-        // Most roots are tufts: a second, shorter blade crosses the first.
-        // Ripples break reflections up too much for it to show there.
-        if ((style === 1 || jitter > 0.5) && !write.visible) {
+        const length = height * BLADE_LENGTH * (0.78 + jitter * 0.3);
+        const extra = blades ? blades.extras[root] :
+          extraAt(x, y, world.seed, style, height, chunk.elev?.[i] ?? 0.55, chunk.shade[i], variation);
+        const flower = blades ? blades.flowers[root] : 0;
+        if (extra === FERN) {
+          drawFern(r, view, paint, x, y, height, lean, flat, light, variation);
+          continue;
+        }
+        // Most roots are tufts: a second, shorter blade crosses the first
+        // (a flower's stalk stands alone). Ripples break reflections up too
+        // much for it to show there. It is drawn first so the main blade's
+        // tip, and whatever flowers on it, stay on top.
+        if ((style === 1 || jitter > 0.5) && !write.visible && !flower) {
           const fan = Math.max(-7, Math.min(7, lean + (variation < 0.5 ? 4 : -4) * (1 - press * 0.7)));
           drawBlade(r, view, paint, x, y, Math.max(2, length * (0.75 + jitter * 0.2)), fan, bent, light * 0.85,
             tone, (jitter - 0.5) * 0.4);
+        }
+        if (flower) {
+          // A flower's own stalk is thin, darker and a little yellower.
+          STALK[0] = tone[0] * 0.95 + 6;
+          STALK[1] = tone[1] * 0.85;
+          STALK[2] = tone[2] * 0.6;
+          drawBlade(r, view, paint, x, y, length, lean, bent, light, STALK, (variation - 0.5) * 0.4, true);
+        } else {
+          drawBlade(r, view, paint, x, y, length, lean, bent, light, tone, (variation - 0.5) * 0.4);
+        }
+        if (flower) {
+          const glow = (0.78 + chunk.shade[i] * 0.35 + variation * 0.2) * (1 - sink * 0.45) * (1 - flat * 0.4);
+          drawFlower(r, paint, SPECIES[flower], base, glow, flat, variation);
+        } else if (extra && flat < 0.5) {
+          if (extra === DEW) {
+            // A drop on the blade's middle glints now and then as the
+            // blade turns in the wind.
+            const glint = ripple(t * 0.23 + variation * 7.1 + rnd * 3);
+            if (bladeRows > 1 && glint > 0.5) {
+              const j = bladeRows >> 1;
+              const g = (glint - 0.5) * 2 * (1 - sink);
+              paint(r, ROW_X[j], base - j, DEWDROPS[(variation * 40) & 3],
+                DEW_LIGHT[0] * g, DEW_LIGHT[1] * g, DEW_LIGHT[2] * g, base);
+            }
+          } else if (extra === CATTAIL) {
+            const l = light * 0.9;
+            paint(r, tipX, tipY, CATTAIL_HEAD[place(tipAt)], CATTAIL_BROWN[0] * l, CATTAIL_BROWN[1] * l, CATTAIL_BROWN[2] * l, base);
+          } else {
+            const l = light * (0.85 + variation * 0.3);
+            paint(r, tipX, tipY, SEEDS[extra - 1][place(tipAt)], (STRAW[0] * 0.7 + tone[0] * 0.3) * l,
+              (STRAW[1] * 0.7 + tone[1] * 0.3) * l, (STRAW[2] * 0.7 + tone[2] * 0.3) * l, base);
+          }
         }
       }
     }
