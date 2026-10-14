@@ -218,7 +218,8 @@ export class InventoryScreen {
     body.append(equipment, carried);
 
     const help = element('div', 'inventory-help');
-    for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'], ['X', 'Drop'], ['1-9', 'Assign quick slot']]) {
+    for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'],
+      ...(this.onDrop ? [['X', 'Drop']] : []), ['1-9', 'Assign quick slot']]) {
       const hint = element('span', 'inventory-key-hint');
       hint.append(element('kbd', '', keys), element('span', '', action));
       help.append(hint);
