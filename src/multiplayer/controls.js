@@ -1,4 +1,4 @@
-import { cleanCode, cleanName, PLAYER_COLORS } from './protocol.js';
+import { cleanCode, cleanName } from './protocol.js';
 
 export function bindMultiplayerControls(client, { name, seed, onName, onDone = () => {}, document: doc = document,
   location: loc = location, history: navigation = history } = {}) {
@@ -84,7 +84,6 @@ export function bindMultiplayerControls(client, { name, seed, onName, onDone = (
     for (const member of client.players) {
       const item = doc.createElement('li');
       item.textContent = `${member.name}${member.id === client.id ? ' (you)' : ''}`;
-      item.style.color = `rgb(${PLAYER_COLORS[member.color % PLAYER_COLORS.length].join(',')})`;
       party.append(item);
     }
     // Refreshing keeps the code; resume tokens never appear in URLs or rosters.
