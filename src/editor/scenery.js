@@ -146,11 +146,10 @@ export class Scenery {
     // Bake before starting the transaction so a factory error changes nothing.
     const prop = createProp(kind, x, y, { scale, seed, variant });
     return this._change(() => {
-      if (this._nextId > MAX_PROP_ID) {
-        this._nextId = 1;
-        while (this.world.addedProps.has(`s:${this._nextId}`)) this._nextId++;
-      }
-      prop.id = `s:${this._nextId++}`;
+      do {
+        if (this._nextId > MAX_PROP_ID) this._nextId = 1;
+        prop.id = `s:${this._nextId++}`;
+      } while (this.world.addedProps.has(prop.id));
       prop.scale = scale;
       prop.seed = seed;
       this.world.addProp(prop);

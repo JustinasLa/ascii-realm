@@ -131,11 +131,11 @@ ModelFigure.load('assets/ual1.glb')
     model = m;
     debug.model = m;
     player.modelTrail = true;
-    // Walk a touch quicker than the walking clip, and run at exactly the
-    // jog's own ground speed so the feet never slide.
+    // Walk and run a little quicker than the clips' own ground speeds; the
+    // cadence rises to match, so the feet still keep pace.
     const gait = Object.fromEntries(m.gaits.map((g) => [g.key, g]));
-    player.walkSpeed = gait.walk.speed * 1.3;
-    player.runSpeed = gait.jog.speed;
+    player.walkSpeed = gait.walk.speed * 1.3 * 1.2;
+    player.runSpeed = gait.jog.speed * 1.2;
   })
   .catch((e) => console.error('Could not load the character model', e));
 
@@ -155,8 +155,8 @@ let last = performance.now();
 let time = 0;
 
 function frame(now) {
-  // Clamp dt so a backgrounded tab does not produce one enormous step.
-  const dt = Math.min((now - last) / 1000, 0.1);
+  // Clamp dt for early first-frame timestamps and long pauses in background tabs.
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1));
   last = now;
   time += dt;
   updateZoom(dt);
@@ -171,10 +171,11 @@ function frame(now) {
     if (sword) player.toggleSword();
   }
   clicked = false;
-  hitStop = Math.max(0, hitStop - dt);
-  const playerDt = hitStop > 0 ? dt * 0.05 : dt;
+  const stoppedDt = Math.min(dt, hitStop);
+  hitStop -= stoppedDt;
+  const playerDt = dt - stoppedDt + stoppedDt * 0.05;
   const held = isDown('KeyJ') || mouseHeld;
-  const paused = debug.freeze || builder.enabled;
+  const paused = debug.freeze || builder.enabled || playerDt === 0;
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {
     if (!paused) model.update(playerDt, player);

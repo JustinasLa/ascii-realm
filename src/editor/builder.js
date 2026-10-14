@@ -242,7 +242,8 @@ export class SceneryBuilder {
     const point = this.worldPoint(event);
     const previous = this.stroke.last;
     const distance = Math.hypot((point.x - previous.x) * ASPECT, point.y - previous.y);
-    const steps = Math.min(64, Math.max(1, Math.ceil(distance / Math.max(1, this.radius / 2))));
+    // Keep the sample spacing even when the browser coalesces a long movement.
+    const steps = Math.max(1, Math.ceil(distance / Math.max(1, this.radius / 2)));
     try {
       for (let i = 1; i <= steps; i++) {
         this.stamp({ x: previous.x + (point.x - previous.x) * i / steps,

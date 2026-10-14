@@ -152,6 +152,28 @@ test('invalid imports leave edits, caches, and history unchanged', () => {
   assert.equal(scene.canUndo, false, 'invalid imports should not consume history entries');
 });
 
+test('placements preserve imported props when IDs wrap and skip occupied IDs', () => {
+  const { world, scene } = fixture();
+  const props = [1, 3, 5, 1_000_000_000].map((id, i) => ({
+    id: `s:${id}`, kind: 'rock', x: 10.5 + i * 20, y: 20.5, scale: 1, seed: i, variant: 1,
+  }));
+  scene.load({ version: 1, seed: world.seed, terrain: [], removed: [], props });
+  const originals = structuredClone([...world.addedProps.values()]);
+  const placed = Array.from({ length: 3 }, (_, i) => scene.place('flowers', 100.5 + i * 10, 40.5, { seed: 10 + i }));
+  assert.deepEqual(placed.map((prop) => prop.id), ['s:2', 's:4', 's:6']);
+  assert.equal(world.addedProps.size, 7);
+  for (const original of originals) assert.deepEqual(world.addedProps.get(original.id), original);
+
+  const saved = scene.serialize();
+  scene.undo();
+  assert.equal(world.addedProps.size, 6);
+  scene.redo();
+  assert.deepEqual(scene.serialize(), saved);
+  scene.place('flowers', 130.5, 40.5, { seed: 13 });
+  assert.equal(world.addedProps.size, 8);
+  for (const original of originals) assert.deepEqual(world.addedProps.get(original.id), original);
+});
+
 test('invalid brush arguments are rejected without changing the scene', () => {
   const { scene } = fixture();
   const before = scene.serialize();
