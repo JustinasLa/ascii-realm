@@ -172,7 +172,7 @@ export class Combat {
       return;
     }
     if (SWINGS.includes(this.move)) this.queued = NEXT[this.move]();
-    else if (this.move === 'draw') this.queued = 'a';
+    else if (this.move === 'draw') this.queued ??= ctx.running ? 'thrust' : 'a';
   }
 
   toggle() {
@@ -192,6 +192,7 @@ export class Combat {
   // attack button is still down).
   update(dt, ctx = {}) {
     this.trailing = false;
+    let used = dt;
     let target;
     let rate = 12;
     if (this.move) {
@@ -200,10 +201,15 @@ export class Combat {
       target = KEYS[s.key];
       rate = s.rate;
       this.trailing = !!s.trail;
-      if (!(s.untilLanded && ctx.air)) this.t += dt;
-      if (s.spin) this.spin = Math.min(1, this.t / s.time) * Math.PI * 2 * s.spin;
       // A queued swing cuts the recovery of the last one short.
-      if (s.combo && this.queued) this.t = s.time;
+      if (s.combo && this.queued) {
+        used = 0;
+        this.t = s.time;
+      } else if (!(s.untilLanded && ctx.air)) {
+        used = Math.min(dt, s.time - this.t);
+        this.t += used;
+      }
+      if (s.spin) this.spin = Math.min(1, this.t / s.time) * Math.PI * 2 * s.spin;
       if (this.t >= s.time) {
         if (s.grab) this.inHand = true;
         if (s.release) this.inHand = false;
@@ -235,13 +241,14 @@ export class Combat {
         rate = 16;
         this.calm = 0;
       } else {
-        if (this.charged) {
+        if (!ctx.held && this.charged) {
           this.start('spin');
-          return this.update(0, ctx);
+          return this.update(dt, ctx);
         }
-        this.charge = 0;
+        // A jump pauses a held charge; only releasing the button fires it.
+        if (!ctx.held) this.charge = 0;
         target = ctx.running ? KEYS.sprint : ctx.moving ? KEYS.carry : KEYS.guard;
-        this.calm += dt;
+        this.calm = ctx.held ? 0 : this.calm + dt;
         if (this.calm > SHEATHE_AFTER && !ctx.moving) this.start('sheathe');
       }
     } else {
@@ -249,7 +256,7 @@ export class Combat {
       this.calm += dt;
     }
 
-    const k = 1 - Math.exp(-rate * dt);
+    const k = 1 - Math.exp(-rate * used);
     const p = this.pose;
     for (let i = 0; i < 3; i++) {
       p.hand[i] += (target.hand[i] - p.hand[i]) * k;
@@ -263,6 +270,11 @@ export class Combat {
     p.off += ((target.off ?? 0) - p.off) * k;
 
     const want = this.inHand || this.move ? 1 : 0;
-    this.active += (want - this.active) * (1 - Math.exp(-14 * dt));
+    this.active += (want - this.active) * (1 - Math.exp(-14 * used));
+
+    // Ease each pose only for its share of the frame, then carry the rest
+    // into the next step, queued swing or idle time. Airborne plunge holds
+    // consume the frame without advancing their timer.
+    if (used < dt) this.update(dt - used, ctx);
   }
 }

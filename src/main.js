@@ -54,6 +54,7 @@ window.addEventListener('wheel', (e) => {
   zoomBy(Math.exp(-Math.max(-200, Math.min(200, px)) * 0.0012));
 }, { passive: false });
 window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === '+' || e.key === '=') zoomBy(1.15);
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
@@ -129,26 +130,32 @@ let last = performance.now();
 let time = 0;
 
 function frame(now) {
-  // Clamp dt so a backgrounded tab does not produce one enormous step.
-  const dt = Math.min((now - last) / 1000, 0.1);
+  // Clamp dt for early first-frame timestamps and long pauses in background tabs.
+  const dt = Math.max(0, Math.min((now - last) / 1000, 0.1));
   last = now;
   time += dt;
   updateZoom(dt);
 
   const move = moveAxis();
-  if (wasTapped('Space')) player.jump();
-  if (wasTapped('KeyJ') || clicked) player.attack();
-  if (wasTapped('KeyF')) player.toggleSword();
+  const jump = wasTapped('Space');
+  const attack = wasTapped('KeyJ') || clicked;
+  const sword = wasTapped('KeyF');
+  if (!debug.freeze) {
+    if (jump) player.jump();
+    if (attack) player.attack();
+    if (sword) player.toggleSword();
+  }
   clicked = false;
-  hitStop = Math.max(0, hitStop - dt);
-  const playerDt = hitStop > 0 ? dt * 0.05 : dt;
+  const stoppedDt = Math.min(dt, hitStop);
+  hitStop -= stoppedDt;
+  const playerDt = dt - stoppedDt + stoppedDt * 0.05;
   const held = isDown('KeyJ') || mouseHeld;
-  if (!debug.freeze) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
+  if (!debug.freeze && playerDt > 0) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {
-    if (!debug.freeze) model.update(playerDt, player);
+    if (!debug.freeze && playerDt > 0) model.update(playerDt, player);
     // The sword's trail follows the blade of the 3D character.
     player.trail = player.trail.filter((t) => player.time - t.t < 0.16);
-    const blade = player.combat.trailing ? model.swordLine() : null;
+    const blade = !debug.freeze && playerDt > 0 && player.combat.trailing ? model.swordLine() : null;
     if (blade) {
       player.trail.push({ t: player.time, hx: player.x + blade.base[0], hy: player.y + blade.base[1],
         tx: player.x + blade.tip[0], ty: player.y + blade.tip[1] });
