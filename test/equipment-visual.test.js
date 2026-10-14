@@ -39,16 +39,15 @@ test('starter equipment preserves the fully dressed outlaw from every cardinal d
   }
 });
 
-test('unequipping and restoring the cape changes and restores the visible figure', () => {
+test('the outlaw keeps the clothes on even with their equipment slots empty', () => {
   const player = outlaw(Math.PI);
   const inventory = new Inventory();
   player.equipment = inventory.equipment;
-  const equipped = render(player);
-
-  assert.equal(inventory.unequip('cape'), true);
-  assert.notDeepEqual(render(player), equipped, 'removing the cape changes rendered cells');
-  equipAgain(inventory, 'travelCloak');
-  assert.deepEqual(render(player), equipped);
+  const dressed = render(player);
+  for (const slot of ['helm', 'chest', 'legs', 'hands', 'cape']) {
+    assert.equal(inventory.unequip(slot), true);
+    assert.deepEqual(render(player), dressed, `taking off ${slot} leaves the outfit as it is`);
+  }
 });
 
 test('unequipping and restoring a sheathed short sword removes and restores its visible scabbard', () => {
@@ -101,22 +100,6 @@ test('the off-hand buckler visibly equips, removes, and restores beside the non-
   assert.deepEqual(render(player), shielded);
 });
 
-for (const [slot, id] of [
-  ['helm', 'outlawHood'], ['chest', 'leatherJerkin'],
-  ['legs', 'ridingBoots'], ['hands', 'leatherBracers'],
-]) {
-  test(`removing ${slot} reveals an underlying body and re-equipping restores the figure`, () => {
-    const player = outlaw();
-    const inventory = new Inventory();
-    player.equipment = inventory.equipment;
-    const equipped = render(player);
-    assert.equal(inventory.unequip(slot), true);
-    assert.notDeepEqual(render(player), equipped);
-    equipAgain(inventory, id);
-    assert.deepEqual(render(player), equipped);
-  });
-}
-
 test('an unequipped outlaw still renders its head, torso, hands, and every leg segment', () => {
   const player = outlaw();
   player.equipment = new Inventory({ starter: false }).equipment;
@@ -131,11 +114,9 @@ test('an unequipped outlaw still renders its head, torso, hands, and every leg s
       && Math.abs(cy + 0.5 - y) < 1.5), `body is visible near projected joint ${x},${y}`);
   }
   const parts = dressFigure(player);
-  // A linen shirt, bare hands and hair; no hood, jerkin, boots, bracers,
-  // cloak or blade.
-  assert.ok(parts.some((part) => part.mat === MATERIALS.linen));
-  assert.ok(parts.some((part) => part.mat === MATERIALS.skin));
-  assert.ok(parts.some((part) => part.mat === MATERIALS.hair));
-  assert.equal(parts.some((part) => [MATERIALS.hood, MATERIALS.jerkin, MATERIALS.boot, MATERIALS.bracer,
-    MATERIALS.cloak, MATERIALS.blade].includes(part.mat)), false);
+  // The clothes are part of the character for now; only the blade is missing.
+  for (const mat of [MATERIALS.hood, MATERIALS.jerkin, MATERIALS.boot, MATERIALS.bracer, MATERIALS.cloak]) {
+    assert.ok(parts.some((part) => part.mat === mat));
+  }
+  assert.equal(parts.some((part) => part.mat === MATERIALS.blade), false);
 });

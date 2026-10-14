@@ -31,5 +31,10 @@ export function weaponFeel(weapon) {
 export const isBow = (weapon) => weapon?.type === 'bow';
 export const isThrown = (weapon) => weapon?.type === 'spear' || weapon?.type === 'javelin';
 
+// For now the outlaw's clothes are part of the character rather than items,
+// so they are always worn; only the hands' gear follows the equipment.
+const OUTFIT = new Set(['helm', 'chest', 'legs', 'hands', 'cape']);
+export const wears = (equipment, slot) => equipment === undefined || OUTFIT.has(slot) || Boolean(equipment?.[slot]);
+
 // A two-handed weapon in the main hand leaves no hand free for a torch.
 export const needsBothHands = (equipment) => Boolean(ITEMS[equipment?.mainHand?.id]?.twoHanded);

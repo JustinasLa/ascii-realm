@@ -2,6 +2,7 @@ import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT, WATER } from '../world/world.js';
 import { SWORD_SIDE } from './combat.js';
+import { wears } from './loadout.js';
 import { MATERIALS } from './materials.js';
 import { add, buildRig, cross, lerp3, mul, project, rotY, SCALE, sub, TILT } from './rig.js';
 import { capsule, ellipse, quad } from './shapes.js';
@@ -85,10 +86,11 @@ const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 // forest green and worn leather, a longbow and quiver on the back and a
 // short sword at the hip.
 // `equipment` is the inventory's worn gear, slot by slot; without one the
-// outlaw is fully dressed. Each missing piece reveals what is underneath.
+// outlaw is fully dressed. The clothes are always worn for now; a missing
+// weapon or buckler simply is not drawn.
 function dress(rig, capeSim, equipment, weapon = null) {
   const d = new Dresser();
-  const wearing = (slot) => equipment === undefined || Boolean(equipment?.[slot]);
+  const wearing = (slot) => wears(equipment, slot);
   if (wearing('cape') && capeSim?.pts) cloak(d, rig, capeSim.pts);
 
   for (const l of rig.legs) {

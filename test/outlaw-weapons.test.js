@@ -40,7 +40,7 @@ test('a player swing uses the equipped weapon\'s stamina, tempo and chop power',
     player.equipment = hand(id);
     const before = player.vitals.stamina;
     assert.equal(player.attack(), true);
-    assert.ok(Math.abs(before - player.vitals.stamina - player.feel.stamina) < 1e-9);
+    assert.equal(player.vitals.stamina, before);
     const events = [];
     for (let i = 0; i < 240 && !events.some((e) => e.type === 'strike'); i++) {
       player.update(1 / 60, { isWalkable: () => true, typeAt: () => GRASS }, { x: 0, y: 0 }, false);

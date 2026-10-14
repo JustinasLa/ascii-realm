@@ -83,9 +83,8 @@ export class Hud {
     this.nameNode = element('div', 'hud-name', String(name || 'Wanderer').slice(0, 24));
     status.append(this.nameNode);
     this.health = makeVital('Health', 'health', 'HP');
-    this.stamina = makeVital('Stamina', 'stamina', 'ST');
     this.load = element('div', 'hud-frame-note');
-    status.append(this.health.node, this.stamina.node, this.load);
+    status.append(this.health.node, this.load);
     this.party = element('div', 'hud-party');
     this.partyTab = element('div', 'hud-party-tab', 'party');
     this.partyTab.hidden = true;
@@ -203,7 +202,6 @@ export class Hud {
     const elapsed = Number.isFinite(dt) ? Math.max(0, dt) : 0;
     const vitals = this.player.vitals || {};
     this.updateVital(this.health, vitals.health, vitals.maxHealth);
-    this.updateVital(this.stamina, vitals.stamina, vitals.maxStamina);
     const weight = Number.isFinite(this.inventory.weight) ? this.inventory.weight : 0;
     text(this.load, `Bag ${number(weight)}/${number(this.inventory.capacity ?? 0)} kg`);
     this.updateHotbar();
@@ -275,7 +273,7 @@ export class Hud {
   }
 
   // Party members' frames, below the player's own: [{ name, health, maxHealth,
-  // stamina, maxStamina, note }]. An empty list hides the party.
+  // note }]. An empty list hides the party.
   setParty(members) {
     const list = Array.isArray(members) ? members : [];
     const signature = JSON.stringify(list.map((m) => [m.id, m.name]));
@@ -286,10 +284,9 @@ export class Hud {
         const frame = element('div', 'hud-frame hud-member');
         const title = element('div', 'hud-name');
         const health = makeVital(`${member.name} health`, 'health', 'HP');
-        const stamina = makeVital(`${member.name} stamina`, 'stamina', 'ST');
-        frame.append(title, health.node, stamina.node);
+        frame.append(title, health.node);
         this.party.append(frame);
-        return { title, health, stamina };
+        return { title, health };
       });
       this.partyTab.hidden = list.length === 0;
     }
@@ -297,7 +294,6 @@ export class Hud {
       const frame = this.partyFrames[index];
       text(frame.title, `${String(member.name || 'Wanderer').slice(0, 24)}${member.note ? ` · ${member.note}` : ''}`);
       this.updateVital(frame.health, member.health, member.maxHealth);
-      this.updateVital(frame.stamina, member.stamina, member.maxStamina);
     });
   }
 

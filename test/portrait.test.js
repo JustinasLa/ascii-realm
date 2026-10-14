@@ -70,16 +70,19 @@ test('portrait never mutates the world player or its equipment and ignores anima
   assert.equal(context.clears, 1);
 });
 
-test('equipping and removing gear changes the portrait and restoring gear restores identical glyphs', () => {
+test('the portrait follows the sword in hand while the clothes always stay on', () => {
   const { canvas, context } = canvasFixture();
   const portrait = new CharacterPortrait(canvas, { pixelRatio: 1 });
   const { player, inventory } = gearedPlayer();
   portrait.update(player);
   const equipped = structuredClone(context.cells);
   assert.equal(inventory.unequip('helm'), true);
+  portrait.update(player);
+  assert.deepEqual(context.cells, equipped, 'the hood is part of the character for now');
+  assert.equal(inventory.unequip('mainHand'), true);
   assert.equal(portrait.update(player), true);
-  assert.notDeepEqual(context.cells, equipped, 'removing the helm visibly reveals the face');
-  assert.equal(portrait.update(player), false);
+  assert.notDeepEqual(context.cells, equipped, 'taking off the sword changes the portrait');
+  assert.equal(inventory.equip(inventory.slots.findIndex((stack) => stack?.id === 'shortSword')), true);
   assert.equal(inventory.equip(inventory.slots.findIndex((stack) => stack?.id === 'outlawHood')), true);
   assert.equal(portrait.update(player), true);
   assert.deepEqual(context.cells, equipped);
