@@ -179,3 +179,33 @@ test('damage numbers follow camera scrolling in CSS pixels and rise before expir
   assert.ok(position().y < initial.y, 'damage rises above its world position');
   assert.equal(byClass(document.body, 'hud-damage').length, 1);
 });
+
+test('wounded enemies get just the segmented health bar, following them and gone once dropped', (t) => {
+  const { document, hud } = mount(t);
+  hud.setFoes([{ id: 7, name: 'Skeleton', health: 38.2, maxHealth: 60, x: 140, y: 210 }]);
+  hud.update(0, view);
+  const bars = byClass(document.body, 'hud-foe');
+  assert.equal(bars.length, 1);
+  const bar = bars[0];
+  assert.equal(bar.textContent, '', 'no name, label or numbers');
+  assert.equal(bar.getAttribute('aria-label'), 'Skeleton health');
+  assert.equal(Number(bar.getAttribute('aria-valuenow')), 38.2);
+  assert.equal(Number(bar.getAttribute('aria-valuemax')), 60);
+  const filled = byClass(bar, 'hud-vital-filled')[0];
+  assert.equal(filled.style.width, '63.7%');
+  const position = () => /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(bar.style.transform).slice(1).map(Number);
+  const [x, y] = position();
+  hud.setFoes([{ id: 7, name: 'Skeleton', health: 15, maxHealth: 60, x: 141, y: 210 }]);
+  hud.update(0, view);
+  assert.ok(Math.abs(position()[0] - x - 10) < 0.11, 'moves with the enemy in CSS pixels');
+  assert.equal(position()[1], y);
+  assert.equal(filled.style.width, '25.0%');
+  assert.equal(byClass(document.body, 'hud-foe').length, 1, 'the same bar is reused');
+  // Off screen, it hides; left out, it goes.
+  hud.setFoes([{ id: 7, name: 'Skeleton', health: 15, maxHealth: 60, x: 1000, y: 210 }]);
+  hud.update(0, view);
+  assert.equal(bar.hidden, true);
+  hud.setFoes([]);
+  hud.update(0, view);
+  assert.equal(byClass(document.body, 'hud-foe').length, 0);
+});

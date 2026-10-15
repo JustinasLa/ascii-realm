@@ -167,6 +167,15 @@ shared online lobby.
   Gusts bend grass and roughen the water. Clear is the default; selection and
   intensity are saved. Effects also work with sound muted or before audio is
   enabled.
+- **Skeletons.** The dead climb out of the ground a short way off, run at the
+  player and hack at them with rusted swords; step back out of reach and the
+  blow misses. Like the player they wade into lakes up to the knee, slowed and
+  splashing, but they only ever rise on dry land. They are bones hung on the same animated 3D rig as the player,
+  with ember eyes. Three sword cuts break one apart: each cut staggers it and
+  knocks it back, and the last sends it crashing to the ground, where it lies
+  before sinking away. Up to three are about at once, and another rises a few
+  seconds after one falls. Wounds heal after a short breather; struck down, the
+  player wakes where they began. `?skeletons=N` sets how many roam (0 for none).
 - **Phone controls and performance.** A touch stick for walking/running, separate
   jump and sword buttons, and zoom controls in portrait or landscape. Rendering
   targets 60 fps, caps backing resolution, and lowers that resolution under

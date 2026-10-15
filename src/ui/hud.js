@@ -63,6 +63,9 @@ export class Hud {
     this.onInventory = typeof onInventory === 'function' ? onInventory : () => {};
     this.toasts = [];
     this.damageNumbers = [];
+    // Frames over wounded enemies, by id.
+    this.foes = [];
+    this.foeFrames = new Map();
     this.destroyed = false;
 
     this.root = document.getElementById('hud-root');
@@ -216,6 +219,70 @@ export class Hud {
       }
     }
     this.updateDamage(elapsed, view);
+    this.updateFoes(view);
+  }
+
+  // Wounded enemies to show a health bar over, in the segmented style of the
+  // player's own: [{ id, name, health, maxHealth, x, y }], where (x, y) is
+  // the world cell just above the head. Bars of enemies left out are removed.
+  setFoes(foes) {
+    this.foes = Array.isArray(foes) ? foes : [];
+  }
+
+  updateFoes(view) {
+    const present = new Set(this.foes.map((foe) => foe.id));
+    for (const [id, frame] of this.foeFrames) {
+      if (present.has(id)) continue;
+      frame.node.remove();
+      this.foeFrames.delete(id);
+    }
+    if (!this.foes.length) return;
+    const project = this.projector(view);
+    for (const foe of this.foes) {
+      let frame = this.foeFrames.get(foe.id);
+      if (!frame) {
+        // Just the bar: no frame, name or numbers.
+        const node = element('div', 'hud-vital-bar hud-foe');
+        attribute(node, 'role', 'meter');
+        attribute(node, 'aria-valuemin', 0);
+        const filled = element('span', 'hud-vital-filled');
+        node.append(filled);
+        this.damageLayer.append(node);
+        frame = { node, filled };
+        this.foeFrames.set(foe.id, frame);
+      }
+      const max = Number.isFinite(foe.maxHealth) && foe.maxHealth > 0 ? foe.maxHealth : 1;
+      const current = Number.isFinite(foe.health) ? clamp(foe.health, 0, max) : 0;
+      style(frame.filled, 'width', `${(current / max * 100).toFixed(1)}%`);
+      attribute(frame.node, 'aria-label', `${String(foe.name || 'Enemy').slice(0, 24)} health`);
+      attribute(frame.node, 'aria-valuemax', number(max));
+      attribute(frame.node, 'aria-valuenow', number(current));
+      const at = project?.(foe.x, foe.y);
+      hidden(frame.node, !at?.visible);
+      if (!at?.visible) continue;
+      style(frame.node, 'transform', `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px) translate(-50%, -100%)`);
+    }
+  }
+
+  // Maps world cells to CSS pixels in the HUD for this frame's view, or
+  // null if the view or canvas has no size yet. Camera offsets and cell
+  // dimensions are device pixels, while DOM positions are CSS pixels.
+  projector(view) {
+    if (!this.canvas || !view || !Number.isFinite(view.cellW) || view.cellW <= 0 || !Number.isFinite(view.cellH) || view.cellH <= 0 || !this.canvas.width || !this.canvas.height) {
+      return null;
+    }
+    const canvas = this.canvas.getBoundingClientRect();
+    const root = this.root.getBoundingClientRect();
+    const scaleX = canvas.width / this.canvas.width;
+    const scaleY = canvas.height / this.canvas.height;
+    const left = canvas.left - root.left;
+    const top = canvas.top - root.top;
+    return (x, y) => {
+      const worldX = ((x - view.x0) * view.cellW - view.offX) * scaleX;
+      const worldY = ((y - view.y0) * view.cellH - view.offY) * scaleY;
+      return { x: left + worldX, y: top + worldY,
+        visible: worldX >= 0 && worldX <= canvas.width && worldY >= 0 && worldY <= canvas.height };
+    };
   }
 
   notify(message, kind = 'pickup') {
@@ -339,5 +406,6 @@ export class Hud {
     this.element.remove();
     this.toasts.length = 0;
     this.damageNumbers.length = 0;
+    this.foeFrames.clear();
   }
 }

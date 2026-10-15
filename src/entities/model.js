@@ -155,7 +155,7 @@ function reachFor(leg, target) {
 
 // Picks the outline glyph for a partly covered cell from the direction the
 // covered samples lean, and how squarely that edge faces the moon.
-function outline(mx, my, cover) {
+export function outline(mx, my, cover) {
   const len = Math.hypot(mx, my) || 1;
   const nx = -mx / len;
   const ny = -my / len;
@@ -192,10 +192,17 @@ function holdTorch(arm, target) {
   setWorldQuaternion(arm.upper, swing.multiply(arm.upper.getWorldQuaternion(new THREE.Quaternion())));
 }
 
+// Each animation library is fetched once and shared, e.g. with the skeletons.
+const libraries = new Map();
+
 export class ModelFigure {
+  static library(url) {
+    if (!libraries.has(url)) libraries.set(url, new GLTFLoader().loadAsync(url));
+    return libraries.get(url);
+  }
+
   static async load(url) {
-    const gltf = await new GLTFLoader().loadAsync(url);
-    return new ModelFigure(gltf);
+    return new ModelFigure(await ModelFigure.library(url));
   }
 
   constructor(gltf) {

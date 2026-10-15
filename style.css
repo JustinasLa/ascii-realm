@@ -77,6 +77,8 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-toast[data-kind="error"], .hud-toast[data-kind="damage"] { border-color: var(--frame); border-left-width: 3px; }
 .hud-damage-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .hud-damage { position: absolute; color: var(--accent); font-size: 14px; font-weight: 600; text-shadow: 1px 1px #000, -1px -1px #000; white-space: nowrap; }
+/* A wounded enemy's health: the status frame's segmented bar on its own. */
+.hud-foe { position: absolute; left: 0; top: 0; width: 64px; height: 6px; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
 .hud-prompt { position: absolute; left: 50%; bottom: max(144px, calc(env(safe-area-inset-bottom) + 144px)); transform: translateX(-50%); max-width: calc(100% - 24px); padding: 4px 8px; background: var(--surface); border: 1px solid var(--frame); text-align: center; }
 #hint { position: fixed; z-index: 5; left: 50%; bottom: max(112px, calc(env(safe-area-inset-bottom) + 112px)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); padding: 4px 8px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); font-size: 11px; text-align: center; pointer-events: none; transition: opacity 1.5s; }
 #hint.hidden { opacity: 0; }
