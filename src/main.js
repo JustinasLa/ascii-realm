@@ -492,7 +492,7 @@ function fallInBattle() {
   hud.notify('You were struck down. You wake where you began.', 'info');
 }
 
-// A status frame over each skeleton's skull once it has been cut.
+// A health bar over each skeleton's skull once it has been cut.
 function woundedFoes(figures) {
   return figures.filter(({ skeleton: s, top }) => s.alive && s.health < s.maxHealth && top !== null)
     .map(({ skeleton: s, top }) => ({ id: s.id, name: 'Skeleton', health: s.health, maxHealth: s.maxHealth,

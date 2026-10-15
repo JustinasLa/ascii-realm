@@ -222,9 +222,9 @@ export class Hud {
     this.updateFoes(view);
   }
 
-  // Wounded enemies to show a status frame over, like the player's own:
-  // [{ id, name, health, maxHealth, x, y }], where (x, y) is the world cell
-  // just above the head. Frames of enemies left out are removed.
+  // Wounded enemies to show a health bar over, in the segmented style of the
+  // player's own: [{ id, name, health, maxHealth, x, y }], where (x, y) is
+  // the world cell just above the head. Bars of enemies left out are removed.
   setFoes(foes) {
     this.foes = Array.isArray(foes) ? foes : [];
   }
@@ -241,16 +241,22 @@ export class Hud {
     for (const foe of this.foes) {
       let frame = this.foeFrames.get(foe.id);
       if (!frame) {
-        const node = element('div', 'hud-frame hud-foe');
-        const title = element('div', 'hud-name');
-        const health = makeVital(`${foe.name} health`, 'health', 'HP');
-        node.append(title, health.node);
+        // Just the bar: no frame, name or numbers.
+        const node = element('div', 'hud-vital-bar hud-foe');
+        attribute(node, 'role', 'meter');
+        attribute(node, 'aria-valuemin', 0);
+        const filled = element('span', 'hud-vital-filled');
+        node.append(filled);
         this.damageLayer.append(node);
-        frame = { node, title, health };
+        frame = { node, filled };
         this.foeFrames.set(foe.id, frame);
       }
-      text(frame.title, String(foe.name || 'Enemy').slice(0, 24));
-      this.updateVital(frame.health, foe.health, foe.maxHealth);
+      const max = Number.isFinite(foe.maxHealth) && foe.maxHealth > 0 ? foe.maxHealth : 1;
+      const current = Number.isFinite(foe.health) ? clamp(foe.health, 0, max) : 0;
+      style(frame.filled, 'width', `${(current / max * 100).toFixed(1)}%`);
+      attribute(frame.node, 'aria-label', `${String(foe.name || 'Enemy').slice(0, 24)} health`);
+      attribute(frame.node, 'aria-valuemax', number(max));
+      attribute(frame.node, 'aria-valuenow', number(current));
       const at = project?.(foe.x, foe.y);
       hidden(frame.node, !at?.visible);
       if (!at?.visible) continue;
