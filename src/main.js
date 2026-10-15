@@ -194,7 +194,7 @@ const carriedItem = document.getElementById('carried-item');
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
-  player, inventory, name, debug: params.has('debug'),
+  player, inventory, name,
   onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
   onInventory: () => inventoryScreen.toggle(),
 });
@@ -397,14 +397,16 @@ const builder = new SceneryBuilder({ world, player, camera, renderer,
 debug.builder = builder;
 if (params.has('builder')) builder.setEnabled(true);
 
-// Skeletons rise from the ground around the player and goblins come running
-// to hunt them down. ?skeletons=N and ?goblins=N set how many of each may
-// be about at once; 0 leaves the world free of them.
+// Skeletons rise from the ground around the player, goblins come running
+// and now and then a troll lumbers in, all to hunt them down. ?skeletons=N,
+// ?goblins=N and ?trolls=N set how many of each may be about at once; 0
+// leaves the world free of them.
 const countOf = (name, fallback) => {
   const n = Number(params.get(name) ?? fallback);
   return Number.isFinite(n) ? Math.max(0, Math.min(8, Math.floor(n))) : fallback;
 };
-const monsters = new Monsters({ seed, counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2) } });
+const monsters = new Monsters({ seed,
+  counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2), troll: countOf('trolls', 1) } });
 let monsterFigures = null;
 debug.monsters = monsters;
 // When the player last took a wound; they heal after a breather.
@@ -475,6 +477,11 @@ function monsterEvent(e) {
     case 'death':
       sound.play({ ...e, type: voice });
       dust.burst(world, e.x, e.y, 14, 8);
+      // A troll comes down like a felled tree.
+      if (kind === KINDS.troll) {
+        camera.shake(0.5);
+        dust.burst(world, e.x, e.y, 26, 10);
+      }
       hud.notify(`${kind.name} ${kind === KINDS.skeleton ? 'destroyed' : 'slain'} (${monsters.kills} slain)`, 'pickup');
       break;
     case 'rise':
@@ -484,6 +491,22 @@ function monsterEvent(e) {
     case 'spot':
       sound.play({ ...e, type: voice });
       break;
+    case 'enrage':
+      sound.play({ ...e, type: voice });
+      hud.notify(`The ${kind.name.toLowerCase()} is enraged!`, 'info');
+      break;
+    case 'slam': {
+      // A club smashing into the ground: dust, grit, and a jolt felt more
+      // the closer the player stands.
+      sound.play({ type: 'slam', x: e.x, y: e.y, strength: e.strength });
+      dust.burst(world, e.x, e.y, 20, 11);
+      const surface = world.typeAt(e.x, e.y);
+      if (surface !== GRASS && surface !== WATER) dust.sparks(e.x, e.y, 10);
+      splashes.react(world, { type: 'land', x: e.x, y: e.y, strength: 1 });
+      const near = Math.hypot((e.x - player.x) * ASPECT / SCALE, (e.y - player.y) / (SCALE * TILT));
+      camera.shake(0.8 * Math.max(0, 1 - near / 14));
+      break;
+    }
   }
 }
 

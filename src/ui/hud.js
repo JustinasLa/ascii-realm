@@ -56,7 +56,7 @@ function makeVital(label, kind, short) {
 
 /** Persistent ASCII controls and short-lived feedback from real game events. */
 export class Hud {
-  constructor({ player, inventory, name, debug = false, onSelect, onInventory }) {
+  constructor({ player, inventory, name, onSelect, onInventory }) {
     this.player = player;
     this.inventory = inventory;
     this.onSelect = typeof onSelect === 'function' ? onSelect : () => {};
@@ -95,12 +95,6 @@ export class Hud {
     const framesNode = this.frames;
 
     this.element.append(framesNode);
-
-    if (debug) {
-      this.coordinates = element('div', 'hud-coordinates');
-      attribute(this.coordinates, 'aria-label', 'Debug world coordinates');
-      this.element.append(this.coordinates);
-    }
 
     const hotbarWrap = element('div', 'hud-hotbar-wrap');
     const hotbarHeading = element('div', 'hud-hotbar-heading');
@@ -201,12 +195,6 @@ export class Hud {
     const weight = Number.isFinite(this.inventory.weight) ? this.inventory.weight : 0;
     text(this.load, `Bag ${number(weight)}/${number(this.inventory.capacity ?? 0)} kg`);
     this.updateHotbar();
-
-    if (this.coordinates) {
-      const x = Number.isFinite(this.player.x) ? number(this.player.x) : '--';
-      const y = Number.isFinite(this.player.y) ? number(this.player.y) : '--';
-      text(this.coordinates, `X ${x}  Y ${y}`);
-    }
 
     for (let index = this.toasts.length - 1; index >= 0; index--) {
       const toast = this.toasts[index];

@@ -13,17 +13,21 @@ import { getWeapon } from './weapons.js';
 // skin and hangs bones on its armature instead: a skull with ember eyes,
 // ribs, a pelvis and long thin limbs. A goblin keeps the skin, painted green
 // with a ragged loincloth, shrunk to a little over a metre, with a big head,
-// long ears and nose and yellow eyes. One offscreen renderer serves every
-// monster, each drawn into its own slot of the image, read back in one go.
+// long ears and nose and yellow eyes. A troll is the same skin grown to
+// two and a half metres, mossy grey, hunched over broad shoulders and a
+// small head with tusks, swinging a stone club. One offscreen renderer
+// serves every monster, each drawn into its own slot of the image, read
+// back in one go.
 
 const SX = 4;
 const SY = 6;
 const N = SX * SY;
-// Each slot, in cells: wide enough for a skeleton lying full length across
-// the screen, deep enough for one fallen towards the camera.
+// Each slot, in cells: wide enough for a troll lying full length across the
+// screen, tall enough for its club raised overhead, and deep enough for one
+// fallen towards the camera.
 const COLS = 64;
-const ROWS = 44;
-const FEET_ROW = 30;
+const ROWS = 52;
+const FEET_ROW = 38;
 // At most this many are drawn, nearest the player first.
 export const MAX_DRAWN = 4;
 const FOOT_FLOOR = 0.1;
@@ -34,32 +38,123 @@ const RIM = [214, 222, 236];
 const BONE = 0xd9d0b4;
 const KNUCKLE = 0xa89f88;
 const EMBER = 0xff5a1e;
-const GOBLIN = { skin: 0x6b8a3c, dark: 0x4c6630, cloth: 0x5c4630, eye: 0xffdc28 };
+// The colours of each skinned kind: skin, darker hands and feet, the hide
+// round its hips, its glowing eyes, and anything bony such as tusks.
+const PALETTES = {
+  goblin: { skin: 0x6b8a3c, dark: 0x4c6630, cloth: 0x5c4630, eye: 0xffdc28 },
+  troll: { skin: 0x7c8268, dark: 0x5c6150, cloth: 0x5e4834, eye: 0xffa020, tusk: 0xe6dcc0 },
+};
 
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 const RUSTED_SWORD = { ...getWeapon('sword-shield', 'copper'), materialColor: [120, 84, 58] };
 const NOTCHED_DAGGER = { ...getWeapon('dagger', 'copper'), materialColor: [150, 110, 70] };
+const STONE_CLUB = { ...getWeapon('hammer', 'copper'), materialColor: [128, 124, 112] };
 
-// How each kind looks and moves: its clips, its size, how big its head is,
-// and the blade in its hand.
+// How each kind looks and moves: its clips, its size, how some bones are
+// scaled (a goblin's big head, a troll's broad shoulders and small head),
+// what is hung on it, and the weapon in its hand and how big that is.
 const LOOKS = {
   skeleton: {
     clips: { idle: 'Sword_Idle', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Sword_Attack', hit: 'Hit_Chest',
       death: 'Death01' },
     skinned: false,
     scale: 1,
-    headScale: 1,
+    bones: {},
     weapon: RUSTED_SWORD,
+    weaponScale: 1,
   },
   goblin: {
     clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Punch_Jab', hit: 'Hit_Head',
       death: 'Death01' },
     skinned: true,
     scale: 0.62,
-    headScale: 1.35,
+    bones: { 'DEF-head': 1.35 },
     weapon: NOTCHED_DAGGER,
+    weaponScale: 1,
+  },
+  troll: {
+    // The arms are posed by hand round the two-handed club (see wield); the
+    // attack clip is a crouch the body drops into as the club comes down.
+    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', attack: 'Crouch_Idle_Loop', hit: 'Hit_Chest',
+      death: 'Death01' },
+    skinned: true,
+    scale: 1.45,
+    // Scaling the chest scales everything above it too: the shoulders and
+    // arms broaden, so the head is shrunk back down past its own size.
+    bones: { 'DEF-spine.003': 1.22, 'DEF-head': 0.62, 'DEF-forearm.L': 1.15, 'DEF-forearm.R': 1.15 },
+    weapon: STONE_CLUB,
+    weaponScale: 1.05,
+    twoHanded: true,
   },
 };
+
+// The two-handed club's swing, as the angle of the club above the forward
+// horizontal: carried slanting back over the shoulder, heaved up behind the
+// head, then brought down in front until its head meets the ground.
+const DEG = Math.PI / 180;
+const CARRY = 115 * DEG;
+const HEAVE = 168 * DEG;
+const SMASH = -45 * DEG;
+// Along the club from the grip, in its own units: the head, and where each
+// hand holds the haft (the right above the left).
+const CLUB_HEAD = 0.72;
+const UPPER_HAND = 0.1;
+const LOWER_HAND = -0.07;
+const UP = new THREE.Vector3(0, 1, 0);
+const smooth = (t) => t * t * (3 - 2 * t);
+
+// Where the club is in its swing `t` seconds into a smash.
+function swingAngle(t, kind) {
+  const w = kind.windUp;
+  const lift = w * 0.7;
+  if (t < lift) return CARRY + (HEAVE - CARRY) * (1 - (1 - t / lift) ** 2);
+  // Gathering speed all the way down.
+  if (t < w) return HEAVE + (SMASH - HEAVE) * ((t - lift) / (w - lift)) ** 2;
+  if (t < w + 0.35) return SMASH;
+  return SMASH + (CARRY - SMASH) * smooth(Math.min(1, (t - w - 0.35) / Math.max(0.01, kind.swingTime - w - 0.35)));
+}
+
+// How far the body has dropped into a crouch `t` seconds into a smash:
+// upright while heaving the club up, sinking as it comes down, and rising
+// again once it has struck.
+function smashCrouch(t, kind) {
+  const w = kind.windUp;
+  if (t < w * 0.6) return 0;
+  if (t < w) return smooth((t - w * 0.6) / (w * 0.4));
+  if (t < w + 0.35) return 1;
+  return 1 - smooth(Math.min(1, (t - w - 0.35) / Math.max(0.01, kind.swingTime - w - 0.35)));
+}
+
+// Turns a bone so its world orientation becomes `world`.
+function setWorldQuaternion(b, world) {
+  const parent = b.parent.getWorldQuaternion(new THREE.Quaternion());
+  b.quaternion.copy(parent.invert().multiply(world));
+  b.updateMatrixWorld(true);
+}
+
+// Two-bone IK: bends the elbow and swings the upper arm so the hand reaches
+// `target`, a world position, keeping the arm in its current plane.
+function reachWith(arm, target) {
+  const A = arm.upper.getWorldPosition(new THREE.Vector3());
+  const B = arm.fore.getWorldPosition(new THREE.Vector3());
+  const C = arm.hand.getWorldPosition(new THREE.Vector3());
+  const a = A.distanceTo(B);
+  const b = B.distanceTo(C);
+  const d = Math.min(A.distanceTo(target), a + b - 1e-4);
+  const BA = A.clone().sub(B).normalize();
+  const BC = C.clone().sub(B).normalize();
+  const axis = new THREE.Vector3().crossVectors(BA, BC);
+  if (axis.lengthSq() > 1e-10) {
+    axis.normalize();
+    const now = Math.acos(Math.max(-1, Math.min(1, BA.dot(BC))));
+    const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
+    const turn = new THREE.Quaternion().setFromAxisAngle(axis, want - now);
+    setWorldQuaternion(arm.fore, turn.multiply(arm.fore.getWorldQuaternion(new THREE.Quaternion())));
+  }
+  const C2 = arm.hand.getWorldPosition(new THREE.Vector3());
+  const swing = new THREE.Quaternion().setFromUnitVectors(C2.sub(A).normalize(), target.clone().sub(A).normalize());
+  setWorldQuaternion(arm.upper, swing.multiply(arm.upper.getWorldQuaternion(new THREE.Quaternion())));
+}
 
 // Shared, built once: bone-white and darker knuckle materials, the eyes,
 // and the goblin's painted skin.
@@ -70,9 +165,12 @@ function materialsOf() {
     knuckle: new THREE.MeshLambertMaterial({ color: KNUCKLE }),
     socket: new THREE.MeshBasicMaterial({ color: 0x0c0806 }),
     ember: new THREE.MeshBasicMaterial({ color: EMBER }),
-    goblin: new THREE.MeshLambertMaterial({ vertexColors: true }),
-    goblinSkin: new THREE.MeshLambertMaterial({ color: GOBLIN.skin }),
-    goblinEye: new THREE.MeshBasicMaterial({ color: GOBLIN.eye }),
+    painted: new THREE.MeshLambertMaterial({ vertexColors: true }),
+    goblinSkin: new THREE.MeshLambertMaterial({ color: PALETTES.goblin.skin }),
+    goblinEye: new THREE.MeshBasicMaterial({ color: PALETTES.goblin.eye }),
+    trollSkin: new THREE.MeshLambertMaterial({ color: PALETTES.troll.skin }),
+    trollEye: new THREE.MeshBasicMaterial({ color: PALETTES.troll.eye }),
+    tusk: new THREE.MeshLambertMaterial({ color: PALETTES.troll.tusk }),
   };
   return materials;
 }
@@ -184,11 +282,29 @@ function dressGoblin(model, bones) {
     new THREE.Vector3(0, -0.45, 1).normalize(), m.goblinSkin);
 }
 
-// The mannequin's own skin, painted goblin green by the bone that moves each
-// vertex most: a ragged loincloth round the hips and thighs, darker hands
-// and feet. The geometry is copied, as the player's figure paints the
+// Tusks jutting up from the jaw, a bulbous nose and small amber eyes under
+// a heavy brow, on the troll's head in its rest pose.
+function dressTroll(model, bones) {
+  const m = materialsOf();
+  model.updateMatrixWorld(true);
+  const head = bones[bone('DEF-head')];
+  const at = head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.08, 0));
+  for (const side of [-1, 1]) {
+    cone(head, at.clone().add(new THREE.Vector3(side * 0.055, -0.06, 0.08)), 0.022, 0.09,
+      new THREE.Vector3(side * 0.25, 1, 0.3).normalize(), m.tusk);
+    ball(head, at.clone().add(new THREE.Vector3(side * 0.042, 0.03, 0.085)), 0.016, m.trollEye);
+  }
+  ball(head, at.clone().add(new THREE.Vector3(0, 0.0, 0.11)), 0.04, m.trollSkin, [1, 0.9, 1.1]);
+  ball(head, at.clone().add(new THREE.Vector3(0, 0.06, 0.07)), 0.07, m.trollSkin, [1.5, 0.45, 0.8]);
+}
+
+const DRESS = { goblin: dressGoblin, troll: dressTroll };
+
+// The mannequin's own skin, painted from a kind's palette by the bone that
+// moves each vertex most: a ragged hide round the hips and thighs, darker
+// hands and feet. The geometry is copied, as the player's figure paints the
 // shared one with clothes.
-function paintGoblin(model) {
+function paintSkin(model, palette) {
   model.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     o.geometry = o.geometry.clone();
@@ -202,10 +318,10 @@ function paintGoblin(model) {
       // The hem rises and falls, so the cloth looks torn.
       const hem = /thigh/.test(name) && position.getY(i) > 0.68 + 0.05 * Math.sin(position.getX(i) * 60);
       const part = /hips/.test(name) || hem ? 'cloth' : /hand|f_|thumb|foot|toe/.test(name) ? 'dark' : 'skin';
-      color.set(GOBLIN[part]).toArray(colors, i * 3);
+      color.set(palette[part]).toArray(colors, i * 3);
     }
     o.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    o.material = materialsOf().goblin;
+    o.material = materialsOf().painted;
     o.frustumCulled = false;
   });
 }
@@ -213,7 +329,8 @@ function paintGoblin(model) {
 // A copy of the library's scene with only what a kind needs: the armature,
 // and for a skinned kind the mannequin's skin, freshly painted. Anything the
 // player's figure hung on the bones is left behind.
-function prototypeOf(scene, skinned) {
+function prototypeOf(scene, kind) {
+  const skinned = LOOKS[kind].skinned;
   const copy = skinned ? cloneSkinned(scene) : scene.clone();
   const keep = (o) => o.isBone || (skinned && o.isSkinnedMesh);
   const drop = [];
@@ -224,7 +341,7 @@ function prototypeOf(scene, skinned) {
     if (!needed) drop.push(o);
   });
   for (const o of drop) o.removeFromParent();
-  if (skinned) paintGoblin(copy);
+  if (skinned) paintSkin(copy, PALETTES[kind]);
   return copy;
 }
 
@@ -237,12 +354,26 @@ class Rig {
     this.model = this.look.skinned ? cloneSkinned(source) : source.clone();
     this.bones = {};
     this.model.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
-    if (this.look.skinned) dressGoblin(this.model, this.bones);
+    if (this.look.skinned) DRESS[kind](this.model, this.bones);
     else dressBones(this.model, this.bones);
     this.armory = new Armory(this.model, this.bones);
     this.armory.update(this.look.weapon, true);
+    this.armory.active.scale.setScalar(this.look.weaponScale);
     this.model.scale.setScalar(this.look.scale);
     this.head = this.bones[bone('DEF-head')];
+    this.scaled = Object.entries(this.look.bones).map(([name, s]) => [this.bones[bone(name)], s]);
+    if (this.look.twoHanded) {
+      // The club leaves the hand bone: it is placed in the swing each frame
+      // and both hands are brought to its haft.
+      this.club = this.armory.active;
+      this.model.add(this.club);
+      this.arms = ['R', 'L'].map((side) => ({
+        upper: this.bones[bone(`DEF-upper_arm.${side}`)],
+        fore: this.bones[bone(`DEF-forearm.${side}`)],
+        hand: this.bones[bone(`DEF-hand.${side}`)],
+      }));
+      this.swing = CARRY;
+    }
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
     this.legs = ['L', 'R'].map((side) => ['thigh', 'shin', 'foot'].map((b) => this.bones[bone(`DEF-${b}.${side}`)]));
     this.waterDepth = 0;
@@ -283,6 +414,11 @@ class Rig {
         a.death.play();
       }
       w.death = 1;
+    } else if (s.state === 'attack' && this.look.twoHanded) {
+      // Standing, then dropping into the smash.
+      if (entered) a.attack.reset().play();
+      w.attack = smashCrouch(s.stateTime, k);
+      w.idle = 1 - w.attack;
     } else if (s.state === 'attack') {
       if (entered) {
         a.attack.reset();
@@ -317,9 +453,9 @@ class Rig {
       a[key].setEffectiveWeight(this.weights[key]);
     }
     this.mixer.update(dt);
-    // A big head, set outright each frame: the clips key the bones' scale,
+    // Bone sizes, set outright each frame: the clips key the bones' scale,
     // but stop writing it once a clamped clip such as the fall has ended.
-    if (this.look.headScale !== 1) this.head.scale.setScalar(this.look.headScale);
+    for (const [b, s] of this.scaled) b.scale.setScalar(s);
     this.model.rotation.y = s.heading;
     // Keep a standing monster's feet on the ground; a fallen one lies where
     // the clip put it, sinking away at last.
@@ -335,7 +471,58 @@ class Rig {
     this.waterDepth = s.waterDepth ?? 0;
     this.model.position.y -= this.waterDepth + s.sunk * 0.6 * this.look.scale;
     this.model.updateMatrixWorld(true);
+    if (this.club) this.wield(dt, s, entered);
     this.flash = s.hurt < 0.14 ? 1 - s.hurt / 0.14 : 0;
+  }
+
+  // Holds the club in both hands at its place in the swing, never letting
+  // its head go below the ground; a fallen troll lets it drop beside it.
+  // Worked out in the model's own space, where it faces +z.
+  wield(dt, s, entered) {
+    const club = this.club;
+    // Where the ground is, a little raised, in the model's own units.
+    const floor = (0.04 - this.model.position.y) / this.look.scale;
+    if (s.state === 'dead') {
+      if (entered) this.dropFrom = { position: club.position.clone(), quaternion: club.quaternion.clone(), t: 0 };
+      const drop = this.dropFrom;
+      drop.t = Math.min(1, drop.t + dt * 2.5);
+      const k = drop.t * drop.t;
+      const lying = new THREE.Quaternion().setFromUnitVectors(UP, new THREE.Vector3(0.95, 0, 0.3).normalize());
+      club.position.lerpVectors(drop.position, new THREE.Vector3(0.45, floor, 0.5), k);
+      club.quaternion.slerpQuaternions(drop.quaternion, lying, k);
+      return;
+    }
+    const target = s.state === 'attack' ? swingAngle(s.stateTime, s.kind) : CARRY;
+    this.swing = s.state === 'attack' ? target : this.swing + (target - this.swing) * (1 - Math.exp(-dt * 8));
+    const local = (b) => this.model.worldToLocal(b.getWorldPosition(new THREE.Vector3()));
+    const shoulders = local(this.arms[0].upper).add(local(this.arms[1].upper)).multiplyScalar(0.5);
+    // The hands travel a shallower arc than the club, from over the head
+    // down to arm's length in front of the knees.
+    const grip = (angle) => {
+      const arc = angle > 0 ? 0.75 * angle - 0.1 : 1.1 * angle - 0.1;
+      return shoulders.clone().add(new THREE.Vector3(0, -0.1 + 0.58 * Math.sin(arc), 0.58 * Math.cos(arc)));
+    };
+    let angle = this.swing;
+    let at = grip(angle);
+    const length = CLUB_HEAD * this.look.weaponScale;
+    if (at.y + length * Math.sin(angle) < floor) {
+      angle = Math.asin(Math.max(-1, Math.min(1, (floor - at.y) / length)));
+      at = grip(angle);
+      angle = Math.asin(Math.max(-1, Math.min(1, (floor - at.y) / length)));
+    }
+    const along = new THREE.Vector3(0, Math.sin(angle), Math.cos(angle));
+    club.position.copy(at);
+    club.quaternion.setFromUnitVectors(UP, along);
+    club.updateMatrixWorld(true);
+    const hold = (offset) => this.model.localToWorld(at.clone().addScaledVector(along, offset * this.look.weaponScale));
+    reachWith(this.arms[0], hold(UPPER_HAND));
+    reachWith(this.arms[1], hold(LOWER_HAND));
+  }
+
+  // The club head's height above the ground, in metres, if it has a club.
+  clubHeadHeight() {
+    if (!this.club) return null;
+    return this.club.localToWorld(new THREE.Vector3(0, CLUB_HEAD, 0)).y;
   }
 
   // Where the surface cuts each leg, in metres from the feet across and
@@ -398,8 +585,7 @@ function groundSpeed(rig, key) {
 export class MonsterFigures {
   // `gltf` is the loaded animation library; its scene is copied, not used.
   constructor(gltf, { renderer = null } = {}) {
-    this.prototypes = Object.fromEntries(Object.entries(LOOKS)
-      .map(([kind, look]) => [kind, prototypeOf(gltf.scene, look.skinned)]));
+    this.prototypes = Object.fromEntries(Object.keys(LOOKS).map((kind) => [kind, prototypeOf(gltf.scene, kind)]));
     this.clips = Object.fromEntries(Object.entries(LOOKS).map(([kind, look]) => [kind,
       Object.fromEntries(Object.entries(look.clips).map(([key, name]) => {
         const clip = gltf.animations.find((c) => c.name === name);
