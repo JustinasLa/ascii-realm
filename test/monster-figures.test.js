@@ -291,7 +291,7 @@ test('an elf is tall and pale in a green tunic, bow in hand, and raises it to dr
   assert.ok(regions.leg[0] > regions.leg[2] && regions.leg[0] < 0.5, `brown leggings: ${regions.leg}`);
   assert.equal(rig.armory.active?.visible, true, 'a bow in hand');
   for (let time = 0; time < 0.5; time += dt) f.update(dt, [e]);
-  const hand = () => rig.bones['DEF-handR'].getWorldPosition(new THREE.Vector3()).y;
+  const hand = () => rig.bones['DEF-handL'].getWorldPosition(new THREE.Vector3()).y;
   const resting = hand();
   e.setState('aim');
   for (let time = 0; time < 0.4; time += dt) {
@@ -299,4 +299,36 @@ test('an elf is tall and pale in a green tunic, bow in hand, and raises it to dr
     f.update(dt, [e]);
   }
   assert.ok(hand() > resting + 0.3, `hand from ${resting} m to ${hand()} m`);
+});
+
+test('an elf draws like an archer: bow upright in the outstretched left hand, string back to the cheek', async () => {
+  const THREE = await import(modules.get('three'));
+  const f = figures();
+  const e = new Monster(0, 0, { kind: KINDS.elf, heading: 0.7 });
+  f.update(dt, [e]);
+  e.setState('aim');
+  for (let time = 0; time < 0.6; time += dt) {
+    e.stateTime += dt;
+    f.update(dt, [e]);
+  }
+  const rig = f.rigs.get(e);
+  const bow = rig.armory.active;
+  assert.equal(bow.parent, rig.bones['DEF-handL'], 'held in the left hand');
+  // Into the elf's own frame, facing +z, to judge the shape.
+  const local = (v) => v.applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.7);
+  const at = (x, y) => local(bow.localToWorld(new THREE.Vector3(x, y, 0)));
+  const grip = at(0, 0);
+  const string = at(0, -0.13);
+  const tips = [at(-0.73, -0.13), at(0.73, -0.13)];
+  // Upright: the tips one above the other.
+  assert.ok(Math.abs(tips[0].y - tips[1].y) > 1.2, 'limbs up and down');
+  assert.ok(Math.hypot(tips[0].x - tips[1].x, tips[0].z - tips[1].z) < 0.15, 'not leaning');
+  // The belly faces the target: the grip ahead of the string, the tips level with it.
+  assert.ok(grip.z > string.z + 0.1, `grip ${grip.z}, string ${string.z}`);
+  for (const tip of tips) assert.ok(Math.abs(tip.z - string.z) < 0.05, 'the string meets the tips');
+  const bone = (n) => local(rig.bones[n].getWorldPosition(new THREE.Vector3()));
+  const head = bone('DEF-head');
+  assert.ok(bone('DEF-handL').z > 0.4 && Math.abs(bone('DEF-handL').y - bone('DEF-upper_armL').y) < 0.15,
+    'the bow arm straight out at shoulder height');
+  assert.ok(bone('DEF-handR').distanceTo(head) < 0.25, 'the drawing hand at the cheek');
 });

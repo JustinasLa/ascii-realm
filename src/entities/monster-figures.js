@@ -92,14 +92,16 @@ const LOOKS = {
     twoHanded: true,
   },
   elf: {
-    // Drawing the bow raises both arms towards the target.
-    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Pistol_Aim_Neutral',
+    // A light jog rather than the library's flat-out sprint; the arms are
+    // posed by hand to draw the bow (see draw).
+    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', attack: 'Pistol_Aim_Neutral',
       hit: 'Hit_Head', death: 'Death01' },
     skinned: true,
     scale: 1.06,
     bones: { 'DEF-head': 0.94 },
     weapon: LONGBOW,
     weaponScale: 1,
+    archer: true,
   },
 };
 
@@ -402,6 +404,16 @@ class Rig {
     this.model.scale.setScalar(this.look.scale);
     this.head = this.bones[bone('DEF-head')];
     this.scaled = Object.entries(this.look.bones).map(([name, s]) => [this.bones[bone(name)], s]);
+    if (this.look.archer) {
+      // The bow is held in the left hand, the right draws the string.
+      this.bowHand = this.bones[bone('DEF-hand.L')];
+      this.bowHand.add(this.armory.active);
+      this.archerArms = ['L', 'R'].map((side) => ({
+        upper: this.bones[bone(`DEF-upper_arm.${side}`)],
+        fore: this.bones[bone(`DEF-forearm.${side}`)],
+        hand: this.bones[bone(`DEF-hand.${side}`)],
+      }));
+    }
     if (this.look.twoHanded) {
       // The club leaves the hand bone: it is placed in the swing each frame
       // and both hands are brought to its haft.
@@ -516,7 +528,37 @@ class Rig {
     this.model.position.y -= this.waterDepth + s.sunk * 0.6 * this.look.scale;
     this.model.updateMatrixWorld(true);
     if (this.club) this.wield(dt, s, entered);
+    if (this.bowHand && s.state === 'aim') this.draw(s);
     this.flash = s.hurt < 0.14 ? 1 - s.hurt / 0.14 : 0;
+  }
+
+  // An archer's draw, eased in over a moment: the bow arm straight out
+  // towards the target at shoulder height with the bow upright, and the
+  // drawing hand pulled back to the cheek. Worked out in the model's own
+  // space, where it faces +z.
+  draw(s) {
+    const k = smooth(Math.min(1, s.stateTime / 0.25));
+    const local = (b) => this.model.worldToLocal(b.getWorldPosition(new THREE.Vector3()));
+    const [bowArm, drawArm] = this.archerArms;
+    const shoulder = local(bowArm.upper);
+    const other = local(drawArm.upper);
+    const inward = Math.sign(other.x - shoulder.x);
+    const world = (v) => this.model.localToWorld(v);
+    const reach = (arm, goal) => {
+      const now = arm.hand.getWorldPosition(new THREE.Vector3());
+      reachWith(arm, now.lerp(world(goal), k));
+    };
+    reach(bowArm, shoulder.clone().add(new THREE.Vector3(inward * 0.12, 0.03, 0.62)));
+    reach(drawArm, other.clone().add(new THREE.Vector3(-inward * 0.14, 0.1, 0.1)));
+    // The bow hand turned so the bow stands upright, its back to the target:
+    // the hand's length (the bow's forward) points ahead, its side up.
+    const forward = new THREE.Vector3(0, 0, 1);
+    const up = new THREE.Vector3(0, 1, 0);
+    const basis = new THREE.Matrix4().makeBasis(new THREE.Vector3().crossVectors(forward, up), forward, up);
+    const upright = this.model.getWorldQuaternion(new THREE.Quaternion())
+      .multiply(new THREE.Quaternion().setFromRotationMatrix(basis));
+    const hand = this.bowHand.getWorldQuaternion(new THREE.Quaternion());
+    setWorldQuaternion(this.bowHand, hand.slerp(upright, k));
   }
 
   // Holds the club in both hands at its place in the swing, never letting

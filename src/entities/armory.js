@@ -85,7 +85,7 @@ function build(type) {
         const mesh = rod(0.75, 0.014, WOOD);
         mesh.position.set(0, 0, 0);
         mesh.geometry.translate(0, 0.375, 0);
-        mesh.rotation.z = sign * (Math.PI / 2 - 0.18);
+        mesh.rotation.z = sign * (Math.PI / 2 + 0.18);
         return mesh;
       };
       add(limb(1));
