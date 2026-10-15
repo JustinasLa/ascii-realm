@@ -179,3 +179,32 @@ test('damage numbers follow camera scrolling in CSS pixels and rise before expir
   assert.ok(position().y < initial.y, 'damage rises above its world position');
   assert.equal(byClass(document.body, 'hud-damage').length, 1);
 });
+
+test('wounded enemies get a status frame like the player, following them and gone once dropped', (t) => {
+  const { document, hud } = mount(t);
+  hud.setFoes([{ id: 7, name: 'Skeleton', health: 38.2, maxHealth: 60, x: 140, y: 210 }]);
+  hud.update(0, view);
+  const frames = byClass(document.body, 'hud-foe');
+  assert.equal(frames.length, 1);
+  const frame = frames[0];
+  assert.match(frame.textContent, /Skeleton/);
+  assert.match(frame.textContent, /HP38\/60/);
+  const bar = meter(frame, 'hud-health');
+  assert.equal(bar.current, 38.2);
+  assert.equal(bar.maximum, 60);
+  const position = () => /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/.exec(frame.style.transform).slice(1).map(Number);
+  const [x, y] = position();
+  hud.setFoes([{ id: 7, name: 'Skeleton', health: 16, maxHealth: 60, x: 141, y: 210 }]);
+  hud.update(0, view);
+  assert.ok(Math.abs(position()[0] - x - 10) < 0.11, 'moves with the enemy in CSS pixels');
+  assert.equal(position()[1], y);
+  assert.match(frame.textContent, /HP16\/60/);
+  assert.equal(byClass(document.body, 'hud-foe').length, 1, 'the same frame is reused');
+  // Off screen, it hides; left out, it goes.
+  hud.setFoes([{ id: 7, name: 'Skeleton', health: 16, maxHealth: 60, x: 1000, y: 210 }]);
+  hud.update(0, view);
+  assert.equal(frame.hidden, true);
+  hud.setFoes([]);
+  hud.update(0, view);
+  assert.equal(byClass(document.body, 'hud-foe').length, 0);
+});

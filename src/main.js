@@ -485,18 +485,11 @@ function fallInBattle() {
   hud.notify('You were struck down. You wake where you began.', 'info');
 }
 
-// A skeleton's health over its skull once it has been cut.
-function drawBoneHealth(figure, view) {
-  const s = figure.skeleton;
-  if (!s.alive || s.health >= s.maxHealth || figure.top === null) return;
-  const width = 8;
-  const filled = Math.ceil((s.health / s.maxHealth) * width);
-  const sx = Math.floor(s.x - width / 2) - view.x0;
-  const sy = figure.top - 2 - view.y0;
-  for (let i = 0; i < width; i++) {
-    renderer.put(sx + i, sy, glyph(i < filled ? '=' : '-'), ...(i < filled ? [214, 74, 52] : [80, 60, 58]));
-    renderer.putBg(sx + i, sy, 8, 10, 14);
-  }
+// A status frame over each skeleton's skull once it has been cut.
+function woundedFoes(figures) {
+  return figures.filter(({ skeleton: s, top }) => s.alive && s.health < s.maxHealth && top !== null)
+    .map(({ skeleton: s, top }) => ({ id: s.id, name: 'Skeleton', health: s.health, maxHealth: s.maxHealth,
+      x: s.x, y: top - 1 }));
 }
 
 let time = 0;
@@ -829,7 +822,6 @@ function frame(now) {
     drawTrail(renderer, view, peer.player.trail, peer.trailTime);
     drawNameTag(renderer, view, peer.player, peer.figure, peer.name, colorOf(peer.color));
   }
-  for (const bones of boneFigures) drawBoneHealth(bones, view);
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
@@ -848,6 +840,7 @@ function frame(now) {
       maxHealth: player.vitals.maxHealth,
       note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
         (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
+  hud.setFoes(woundedFoes(boneFigures));
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
   const workMs = performance.now() - started;
