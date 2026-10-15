@@ -194,7 +194,7 @@ const carriedItem = document.getElementById('carried-item');
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
-  player, inventory, name, debug: params.has('debug'),
+  player, inventory, name,
   onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
   onInventory: () => inventoryScreen.toggle(),
 });

@@ -51,7 +51,6 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-party { display: flex; flex-direction: column; gap: 6px; }
 .hud-party:empty { display: none; }
 .hud-party-tab { align-self: flex-start; padding: 1px 6px; background: var(--surface); border: 1px solid var(--frame); font-size: 11px; }
-.hud-coordinates { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); padding: 2px 6px; color: var(--muted); background: var(--surface); font-size: 10px; font-variant-numeric: tabular-nums; }
 
 /* Quick slots form one framed instrument with a shared caption. */
 .hud-hotbar-wrap { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-template-columns: auto 54px; gap: 6px 8px; padding: 6px 8px 8px; background: var(--surface); border: 1px solid var(--frame); }
@@ -254,8 +253,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   #panel-dock summary { min-height: 32px; padding-top: 8px; padding-bottom: 8px; }
 }
 @media (max-width: 680px) {
-  .hud-coordinates { top: 144px; left: 12px; transform: none; }
-  .hud:has(.hud-member) .hud-coordinates { display: none; }
   .hud-party { width: min(190px, calc(100vw - 192px)); }
   .hud-member .hud-vital { grid-template-columns: 18px 1fr; }
   .hud-member .hud-vital-value { display: none; }
@@ -331,7 +328,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 }
 /* On short, narrow landscapes, the two-row bar fits between the touch pads. */
 @media (max-height: 540px) and (min-width: 521px) and (max-width: 780px) {
-  .hud-coordinates { top: 144px; left: 12px; transform: none; }
   .hud-frames { max-height: calc(100dvh - 172px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); }
   .hud-party { width: 190px; }
   .hud-member .hud-vital { grid-template-columns: 18px 1fr; }

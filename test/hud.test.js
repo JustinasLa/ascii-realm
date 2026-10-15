@@ -91,23 +91,11 @@ test('HUD hotbar reflects equipment, selection, and consumed quick-item counts',
   assert.equal(inventoryOpened, 1);
 });
 
-test('HUD has no compass and coordinates are available only in debug mode', (t) => {
-  const { document, player, hud } = mount(t);
-  assert.equal(byClass(document.body, 'hud-coordinates').length, 0);
+test('HUD shows neither a compass nor coordinates', (t) => {
+  const { document } = mount(t);
   assert.equal(byClass(document.body, 'hud-compass').length, 0);
-  hud.destroy();
-  const debugHud = new Hud({ player, inventory: new Inventory(), name: 'Kael', debug: true });
-  t.after(() => debugHud.destroy());
-  debugHud.update(0, view);
-  const coordinates = byClass(document.body, 'hud-coordinates')[0];
-  assert.ok(coordinates);
-  const initial = coordinates.textContent;
-  player.x += 20;
-  player.y -= 30;
-  debugHud.update(0, view);
-  assert.notEqual(coordinates.textContent, initial);
-  assert.match(coordinates.textContent, /124/);
-  assert.match(coordinates.textContent, /176/);
+  assert.equal(byClass(document.body, 'hud-coordinates').length, 0);
+  assert.doesNotMatch(document.body.textContent, /X -?\d/);
 });
 
 test('pickup events and arbitrary player, item, and toast text are displayed as plain text', (t) => {
