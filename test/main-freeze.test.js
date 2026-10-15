@@ -103,7 +103,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
     buildAtlas: noop, glyph: noop, drawGround: noop, drawSkyReflection: noop,
     drawShadow: noop, drawProp: noop, reflector: noop, dressFigure: noop,
     drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop,
-    ModelFigure: { load: () => Promise.resolve(model) },
+    ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
+    Skeletons: inert(), SkeletonFigures: class {},
     SceneryBuilder: class {
       constructor() { this.enabled = false; }
       drawPreview() {}
