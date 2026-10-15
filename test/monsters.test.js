@@ -403,3 +403,105 @@ test('one troll at most comes, well after the first skeletons, and not too close
   assert.equal(monsters.of('troll').length, 1);
   assert.ok(distance(monsters.of('troll')[0], p) >= TROLL.spawn.near - 0.01);
 });
+
+const ELF = KINDS.elf;
+const elf = (mx, mz) => new Monster(...toCells(mx, mz), { kind: ELF });
+const field = { isWalkable: () => true, typeAt: () => GRASS, propsIn: () => [] };
+
+test('an elf closes to bowshot and keeps there, never coming to blows', () => {
+  const e = elf(0, 0);
+  const target = player(...toCells(30, 0));
+  const events = [];
+  for (let t = 0; t < 8; t += dt) {
+    e.update(dt, field, target);
+    events.push(...e.events.splice(0));
+  }
+  const d = distance(e, target);
+  assert.ok(d >= ELF.ranged.near - 0.5 && d <= ELF.ranged.far + 0.5, `${d} m away`);
+  assert.ok(events.some((x) => x.type === 'shoot'), 'and it shoots');
+  assert.ok(!events.some((x) => x.type === 'swing' || x.type === 'hit-player'), 'no melee');
+});
+
+test('an elf stands to draw, then looses an arrow that strikes a player standing still', () => {
+  const monsters = new Monsters({ counts: { elf: 1 }, first: Infinity });
+  const e = elf(0, 0);
+  monsters.list.push(e);
+  const p = player(...toCells(10, 0));
+  const seen = [];
+  let drawing = 0;
+  for (let t = 0; t < 4 && !seen.some((x) => x.type === 'hit-player'); t += dt) {
+    monsters.update(dt, field, p);
+    if (e.state === 'aim') {
+      drawing += dt;
+      assert.equal(e.groundSpeed, 0, 'stands still to draw');
+    }
+    seen.push(...monsters.events.splice(0));
+  }
+  assert.ok(drawing >= ELF.ranged.draw - 0.05);
+  const hit = seen.find((x) => x.type === 'hit-player');
+  assert.ok(hit, seen.map((x) => x.type).join());
+  assert.equal(hit.arrow, true);
+  assert.equal(hit.amount, ELF.ranged.damage);
+  assert.equal(hit.monster, e);
+  assert.ok(seen.findIndex((x) => x.type === 'shoot') < seen.indexOf(hit));
+});
+
+test('an elf leads a player moving steadily across its aim', () => {
+  const monsters = new Monsters({ counts: { elf: 1 }, first: Infinity });
+  const e = elf(0, 0);
+  e.cooldown = 0.6;
+  monsters.list.push(e);
+  const p = player(...toCells(11, -3));
+  let hits = 0;
+  for (let t = 0; t < 2.6; t += dt) {
+    // Walking steadily down the screen at 2 m/s.
+    p.y += toCells(0, 2 * dt)[1];
+    monsters.update(dt, field, p);
+    hits += monsters.events.splice(0).filter((x) => x.type === 'hit-player').length;
+  }
+  assert.ok(hits >= 1, 'the shot was led onto the moving player');
+});
+
+test('an arrow loosed at a spot the player has left misses and sticks in the ground', () => {
+  const monsters = new Monsters({ counts: { elf: 1 }, first: Infinity });
+  const e = elf(0, 0);
+  monsters.list.push(e);
+  const p = player(...toCells(10, 0));
+  monsters.loose(e, { target: { x: p.x, y: p.y + toCells(0, 3)[1] }, speed: ELF.ranged.speed, damage: 9 });
+  const seen = [];
+  for (let t = 0; t < 1.5; t += dt) {
+    monsters.flyArrows(dt, field, p);
+    seen.push(...monsters.events.splice(0));
+  }
+  assert.ok(!seen.some((x) => x.type === 'hit-player'));
+  assert.equal(seen.filter((x) => x.type === 'arrow-land').length, 1);
+  assert.equal(monsters.arrows.landed.length, 1);
+});
+
+test('an elf backs away from a player who closes in, but not every moment', () => {
+  const e = elf(0, 0);
+  const target = player(...toCells(3, 0));
+  e.update(dt, field, target, [], () => 0.2);
+  e.update(dt, field, target, [], () => 0.2);
+  assert.equal(e.state, 'kite');
+  const before = distance(e, target);
+  for (let t = 0; t < 0.6; t += dt) e.update(dt, field, target, [], () => 0.2);
+  assert.ok(distance(e, target) > before + 1.2, `backed off to ${distance(e, target)} m`);
+  // Caught again straight after, it stands and shoots rather than run.
+  for (let t = 0; t < 1; t += dt) e.update(dt, field, target, [], () => 0.2);
+  [target.x, target.y] = [e.x + toCells(2.5, 0)[0], e.y];
+  e.update(dt, field, target, [], () => 0.2);
+  assert.notEqual(e.state, 'kite');
+});
+
+test('two cuts bring an elf down', () => {
+  const monsters = new Monsters({ counts: { elf: 1 }, first: Infinity });
+  const e = elf(1, 0);
+  monsters.list.push(e);
+  const p = player(0, 0, { heading: Math.PI / 2 });
+  monsters.strike({ type: 'strike', swing: 'a' }, p, 22);
+  assert.ok(e.alive);
+  [e.x, e.y] = toCells(1, 0);
+  monsters.strike({ type: 'strike', swing: 'a' }, p, 22);
+  assert.equal(e.alive, false);
+});

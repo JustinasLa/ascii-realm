@@ -191,6 +191,13 @@ shared online lobby.
   wind-up, get clear of the spot, then cut back. It shrugs off most cuts, reeling only from every third, flies
   into a rage (and a quicker pace) when badly hurt, and takes seven cuts to
   bring down, falling with a thud. One at a time; `?trolls=N` sets how many.
+- **Elves.** A tall, pale archer in a green hooded tunic with long ears and a
+  longbow. It never comes to blows: it keeps a few metres off, sidesteps
+  between shots, then stands, draws and looses an arrow that leads a moving
+  player. Arrows fly in a visible arc and stick where they land, so change
+  direction once one is loosed to dodge it. Close in and it backs away, but
+  not every moment; two cuts bring it down. One at a time; `?elves=N` sets how
+  many.
   Wounded monsters show a segmented health bar over their heads.
 - **Phone controls and performance.** A touch stick for walking/running, separate
   jump and sword buttons, and zoom controls in portrait or landscape. Rendering

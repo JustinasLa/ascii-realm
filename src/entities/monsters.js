@@ -1,4 +1,5 @@
 import { mulberry32 } from '../core/rng.js';
+import { Projectiles } from '../world/projectiles.js';
 import { ASPECT, MAX_WATER_DEPTH, WATER } from '../world/world.js';
 import { SCALE, TILT } from './rig.js';
 
@@ -151,6 +152,51 @@ export const KINDS = freeze({
     stride: freeze({ walk: 1.0, run: 1.4 }),
     sounds: freeze({ hurt: 'troll-hit', death: 'troll-death', spot: 'troll-roar', enrage: 'troll-roar' }),
   }),
+  // A tall, light-footed archer who never comes to blows: it keeps its
+  // distance, stands to draw and loose arrows that lead a moving target,
+  // sidesteps between shots and backs away when the player closes in.
+  // Arrows can be dodged by moving; two cuts bring one down.
+  elf: freeze({
+    id: 'elf',
+    name: 'Elf',
+    health: 40,
+    rise: 0,
+    walkSpeed: 1.6,
+    runShare: 0.88,
+    maxRun: 5,
+    notice: 34,
+    forget: 52,
+    // It never closes to strike, so these only matter for the shape of
+    // the profile.
+    reach: 0,
+    windUp: 0.3,
+    swingTime: 0.6,
+    hitRange: 0,
+    hitArc: 0,
+    damage: 0,
+    cooldown: 0,
+    stagger: 0.35,
+    knockback: 0.6,
+    linger: 20,
+    sink: 2.5,
+    personalSpace: 0.8,
+    radius: 0.6,
+    poise: 1,
+    enrage: 0,
+    fury: 1,
+    slam: false,
+    skirmishAfter: 0,
+    panic: 0,
+    flee: 0,
+    // How it fights from afar: the range it keeps, in metres, how long it
+    // draws, how soon it shoots again, its arrows' speed (m/s) and damage,
+    // how far ahead of a moving player it aims (at most, in seconds of
+    // their movement), and how often it may back away.
+    ranged: freeze({ near: 3.5, far: 8, draw: 0.85, cooldown: 1.3, speed: 16, damage: 9, lead: 0.6, kiteEvery: 3 }),
+    spawn: freeze({ near: 22, far: 30, first: 25, every: 22 }),
+    stride: freeze({ walk: 0.7, run: 1.1 }),
+    sounds: freeze({ hurt: 'elf-hit', death: 'elf-death', spot: 'elf-spot', shoot: 'elf-shoot' }),
+  }),
 });
 
 // Offsets on screen to metres on the ground, and back. A metre across the
@@ -204,6 +250,11 @@ export class Monster {
     // Cuts taken since it last reeled, and whether it has flown into a rage.
     this.shrugged = 0;
     this.enraged = false;
+    // An archer's sense of how its prey is moving, in cells a second, and
+    // how long until it may back away again.
+    this.preyVelocity = { x: 0, y: 0 };
+    this.lastPrey = null;
+    this.kiteIn = 0;
     this.deadTime = 0;
     // How far the body has sunk into the ground, 0 to 1.
     this.sunk = 0;
@@ -270,8 +321,17 @@ export class Monster {
       return;
     }
     const prey = target && target.alive !== false ? this.offsetTo(target.x, target.y) : null;
+    if (prey && this.lastPrey && dt > 0) {
+      const k2 = 1 - Math.exp(-dt * 6);
+      this.preyVelocity.x += ((target.x - this.lastPrey.x) / dt - this.preyVelocity.x) * k2;
+      this.preyVelocity.y += ((target.y - this.lastPrey.y) / dt - this.preyVelocity.y) * k2;
+    }
+    this.lastPrey = prey ? { x: target.x, y: target.y } : null;
+    this.kiteIn = Math.max(0, this.kiteIn - dt);
     let want = 0;
-    switch (this.state) {
+    if (k.ranged && (this.state === 'chase' || this.state === 'aim' || this.state === 'kite')) {
+      want = this.archer(dt, prey, target, random);
+    } else switch (this.state) {
       case 'rise':
         if (prey) this.turnTowards(prey.bearing, 2, dt);
         if (this.stateTime >= k.rise) this.setState('idle');
@@ -392,6 +452,57 @@ export class Monster {
     }
   }
 
+  // An archer keeps its distance: closing in from too far, backing away from
+  // too near, and otherwise sidestepping until it can stand, draw and loose
+  // an arrow where a moving player is about to be. Returns the speed it wants.
+  archer(dt, prey, target, random) {
+    const k = this.kind;
+    const r = k.ranged;
+    if (!prey || prey.distance > k.forget) {
+      this.setState('idle');
+      return 0;
+    }
+    if (this.state === 'aim') {
+      this.turnTowards(prey.bearing, 9, dt);
+      if (prey.distance < r.near * 0.5 && this.kiteIn === 0) return this.kite(random, target);
+      if (this.stateTime < r.draw) return 0;
+      const lead = Math.min(r.lead, prey.distance / r.speed);
+      this.events.push({ type: 'shoot', x: this.x, y: this.y, damage: r.damage, speed: r.speed, strength: 1,
+        target: { x: target.x + this.preyVelocity.x * lead, y: target.y + this.preyVelocity.y * lead } });
+      this.cooldown = r.cooldown;
+      this.setState('chase');
+      return 0;
+    }
+    if (this.state === 'kite') {
+      this.turnTowards(prey.bearing + Math.PI + this.circle * 0.5, 8, dt);
+      if (this.stateTime >= this.skirmishFor) this.setState('chase');
+      return this.runFor(target);
+    }
+    if (prey.distance < r.near && this.kiteIn === 0) return this.kite(random, target);
+    if (prey.distance > r.far) {
+      this.turnTowards(prey.bearing, 7, dt);
+      return this.runFor(target);
+    }
+    if (this.cooldown === 0 && (target.air ?? 0) < 0.5) {
+      // Feet planted to draw.
+      this.speed = 0;
+      this.setState('aim');
+      return 0;
+    }
+    // Between shots, step across the player's line.
+    this.turnTowards(prey.bearing + this.circle * Math.PI / 2, 6, dt);
+    return k.walkSpeed;
+  }
+
+  // Turns tail for a moment, veering to one side.
+  kite(random, target) {
+    this.circle = random() < 0.5 ? -1 : 1;
+    this.skirmishFor = 0.7 + random() * 0.5;
+    this.kiteIn = this.kind.ranged.kiteEvery;
+    this.setState('kite');
+    return this.runFor(target);
+  }
+
   // Whether its blow lands: the player is close, in front of it (or near
   // where a smash comes down), and not high in the air.
   canHit(prey, target, impact = null) {
@@ -477,7 +588,7 @@ export class Monster {
 // hits, and clears away the fallen. Events carry the monster they came from.
 export class Monsters {
   // `counts` caps how many of each kind are about at once.
-  constructor({ counts = { skeleton: 3, goblin: 2, troll: 1 }, seed = 1, first = null, every = null } = {}) {
+  constructor({ counts = { skeleton: 3, goblin: 2, troll: 1, elf: 1 }, seed = 1, first = null, every = null } = {}) {
     this.list = [];
     this.counts = { ...counts };
     this.random = mulberry32((seed * 7919) ^ 0x5eed);
@@ -486,6 +597,8 @@ export class Monsters {
     this.every = every;
     this.events = [];
     this.kills = 0;
+    // Arrows loosed at the player, flying or stuck where they fell.
+    this.arrows = new Projectiles();
   }
 
   get living() {
@@ -526,6 +639,7 @@ export class Monsters {
         this.spawnIn[kind] = this.every ?? KINDS[kind].spawn.every;
       }
     }
+    this.flyArrows(dt, world, player);
     const living = this.living;
     for (const monster of this.list) {
       if (monster.knock) {
@@ -541,8 +655,58 @@ export class Monsters {
   }
 
   collect(monster) {
-    for (const e of monster.events) this.events.push({ ...e, monster });
+    for (const e of monster.events) {
+      if (e.type === 'shoot') this.loose(monster, e);
+      this.events.push({ ...e, monster });
+    }
     monster.events.length = 0;
+  }
+
+  // An arrow from an archer's shoulder in an arc to the ground where it
+  // aimed; one that cannot reach is not loosed.
+  loose(monster, e) {
+    const arrow = this.arrows.launch({ x: monster.x, y: monster.y, h: SCALE * 1.4, aimTarget: e.target,
+      projectile: { kind: 'arrow', speed: e.speed }, damage: e.damage, weapon: monster.kind.id });
+    if (arrow) arrow.shooter = monster;
+    return arrow;
+  }
+
+  // Flies the arrows on and checks each one's path this frame against the
+  // player's body: it strikes if it passes within a hand's breadth of them
+  // at a height they stand at. Arrows that strike are spent; the rest fly
+  // on, or stick where they land.
+  flyArrows(dt, world, player) {
+    const before = new Map(this.arrows.list.map((p) => [p, { x: p.x, y: p.y, h: p.h }]));
+    const shooters = new Map(this.arrows.list.map((p) => [p.id, p.shooter ?? null]));
+    this.arrows.update(dt, world);
+    const spent = new Set();
+    if (player && player.alive !== false) {
+      for (const [p, from] of before) {
+        const [ax, az] = toMetres(from.x - player.x, from.y - player.y);
+        const [bx, bz] = toMetres(p.x - player.x, p.y - player.y);
+        const dx = bx - ax;
+        const dz = bz - az;
+        const length2 = dx * dx + dz * dz;
+        const t = length2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + az * dz) / length2)) : 0;
+        const near = Math.hypot(ax + dx * t, az + dz * t);
+        const height = (from.h + (p.h - from.h) * t) / SCALE - (player.air ?? 0);
+        if (near > 0.45 || height < -0.2 || height > 1.9) continue;
+        spent.add(p);
+        this.events.push({ type: 'hit-player', arrow: true, amount: p.damage, x: player.x, y: player.y,
+          monster: p.shooter });
+      }
+    }
+    if (spent.size) {
+      this.arrows.list = this.arrows.list.filter((p) => !spent.has(p));
+      this.arrows.landed = this.arrows.landed.filter((p) => !spent.has(p));
+    }
+    const spentIds = new Set([...spent].map((p) => p.id));
+    for (const impact of this.arrows.events) {
+      if (spentIds.has(impact.id)) continue;
+      this.events.push({ type: 'arrow-land', x: impact.x, y: impact.y, strength: 0.2,
+        monster: shooters.get(impact.id) ?? null });
+    }
+    this.arrows.events.length = 0;
   }
 
   // A sword cut from the player (a 'strike' event, see player.js) hits every
@@ -571,6 +735,7 @@ export class Monsters {
   // Calls them all off, e.g. once the player has fallen.
   clear() {
     this.list.length = 0;
+    this.arrows.list.length = 0;
     for (const id of Object.keys(this.spawnIn)) this.spawnIn[id] = this.every ?? KINDS[id].spawn.every;
   }
 }
