@@ -1,5 +1,5 @@
 import { mulberry32 } from '../core/rng.js';
-import { ASPECT, WATER } from '../world/world.js';
+import { ASPECT, MAX_WATER_DEPTH, WATER } from '../world/world.js';
 import { SCALE, TILT } from './rig.js';
 
 // Skeletons: restless dead that climb out of the ground, run at the player
@@ -48,11 +48,16 @@ export const toCells = (mx, mz) => [mx * SCALE / ASPECT, mz * SCALE * TILT];
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-// Whether a skeleton can stand at a point: dry land clear of solid props,
-// with room for its shoulders like the player.
+// Whether a skeleton can stand at a point: clear of solid props, with room
+// for its shoulders like the player. Like the player it wades through
+// water, which never comes above the knee.
 export function standable(world, x, y) {
-  return world.typeAt(x, y) !== WATER && world.isWalkable(x, y)
-    && world.isWalkable(x - 1, y) && world.isWalkable(x + 1, y);
+  return world.isWalkable(x, y) && world.isWalkable(x - 1, y) && world.isWalkable(x + 1, y);
+}
+
+// Skeletons climb out of earth, not lake beds.
+export function dryLand(world, x, y) {
+  return world.typeAt(x, y) !== WATER && standable(world, x, y);
 }
 
 let nextId = 1;
@@ -78,6 +83,12 @@ export class Skeleton {
     this.deadTime = 0;
     // How far the bones have sunk into the ground, 0 to 1.
     this.sunk = 0;
+    // Metres below the surface while wading, and how much the water slows
+    // it, as for the player.
+    this.waterDepth = 0;
+    this.speedScale = 1;
+    // Ground covered since the last footfall.
+    this.stride = 0;
     this.events = [];
   }
 
@@ -114,6 +125,10 @@ export class Skeleton {
     this.hurt += dt;
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.groundSpeed = 0;
+    const depth = world.waterDepthAt?.(this.x, this.y) ?? 0;
+    this.waterDepth += (depth - this.waterDepth) * (1 - Math.exp(-12 * dt));
+    if (Math.abs(depth - this.waterDepth) < 0.001) this.waterDepth = depth;
+    this.speedScale = 1 - 0.38 * this.waterDepth / MAX_WATER_DEPTH;
     if (this.state === 'dead') {
       this.deadTime += dt;
       if (this.deadTime > SKELETON.linger) this.sunk = Math.min(1, (this.deadTime - SKELETON.linger) / SKELETON.sink);
@@ -170,6 +185,7 @@ export class Skeleton {
         if (this.stateTime >= SKELETON.stagger) this.setState(prey ? 'chase' : 'idle');
         break;
     }
+    want *= this.speedScale;
     const ease = 1 - Math.exp(-dt * (want > this.speed ? 6 : 10));
     this.speed += (want - this.speed) * ease;
     if (this.speed < 0.02 && want === 0) this.speed = 0;
@@ -191,7 +207,15 @@ export class Skeleton {
       mz -= (prey.mz / prey.distance) * push;
     }
     this.move(world, mx, mz);
-    this.groundSpeed = dt > 0 ? Math.hypot(...toMetres(this.x - this.lastX, this.y - this.lastY)) / dt : 0;
+    const covered = Math.hypot(...toMetres(this.x - this.lastX, this.y - this.lastY));
+    this.groundSpeed = dt > 0 ? covered / dt : 0;
+    // A footfall every stride, longer when running: a splash in the water.
+    this.stride += covered;
+    const length = 0.6 + 0.35 * Math.min(1, this.groundSpeed / 4);
+    if (this.stride >= length) {
+      this.stride -= length;
+      this.events.push({ type: 'step', x: this.x, y: this.y, strength: Math.min(1, this.groundSpeed / 5) });
+    }
   }
 
   // Whether its blow lands: the player is close, in front of it, and not
@@ -202,7 +226,7 @@ export class Skeleton {
       && (target.air ?? 0) < 0.6;
   }
 
-  // Moves by metres; it will not walk into water or through trees and rocks.
+  // Moves by metres; it will not walk through trees and rocks.
   // Blocked, it slides along the obstacle, or failing that veers around it,
   // keeping to the side it last went round. One caught inside something
   // (risen under a fallen trunk, say) may walk out.
@@ -260,7 +284,7 @@ export class Skeleton {
   }
 }
 
-// Every skeleton in the world: it raises new ones out of sight of the player,
+// Every skeleton in the world: it raises new ones a short way from the player,
 // turns the player's sword cuts into hits, and clears away the fallen.
 export class Skeletons {
   constructor({ max = 3, seed = 1, firstAfter = 3, respawn = 9 } = {}) {
@@ -286,7 +310,7 @@ export class Skeletons {
       const [dx, dy] = toCells(Math.sin(angle) * distance, Math.cos(angle) * distance);
       const x = player.x + dx;
       const y = player.y + dy;
-      if (!standable(world, x, y)) continue;
+      if (!dryLand(world, x, y)) continue;
       const skeleton = new Skeleton(x, y, { heading: angle + Math.PI, risen });
       this.list.push(skeleton);
       this.events.push({ type: 'bone-rise', x, y, strength: 0.7, skeleton });

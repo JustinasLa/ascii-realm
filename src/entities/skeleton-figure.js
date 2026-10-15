@@ -149,6 +149,8 @@ class Rig {
     this.armory = new Armory(this.model, this.bones);
     this.armory.update(RUSTED_SWORD, true);
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
+    this.legs = ['L', 'R'].map((side) => ['thigh', 'shin', 'foot'].map((b) => this.bones[bone(`DEF-${b}.${side}`)]));
+    this.waterDepth = 0;
     this.mixer = new THREE.AnimationMixer(this.model);
     this.actions = {};
     for (const [key, clip] of Object.entries(clips)) {
@@ -202,8 +204,9 @@ class Rig {
       w.hit = 1;
     } else {
       // Walking or running at the speed it covers the ground, the clips
-      // played at the rate that keeps the feet from sliding.
-      const speed = s.groundSpeed;
+      // played at the rate that keeps the feet from sliding. Wading slows
+      // the body more than the legs, as for the player.
+      const speed = s.groundSpeed / (s.speedScale ?? 1);
       const moving = Math.min(1, speed / 0.6);
       const run = Math.max(0, Math.min(1, (speed - 1.4) / 1.6));
       w.idle = 1 - moving;
@@ -230,9 +233,30 @@ class Rig {
       for (const f of this.feet) lowest = Math.min(lowest, f.getWorldPosition(v).y);
       this.model.position.y = -(lowest - FOOT_FLOOR);
     }
-    this.model.position.y -= s.sunk * 0.6;
+    // Wading, it stands on the lake bed; the water hides what is below.
+    this.waterDepth = s.waterDepth ?? 0;
+    this.model.position.y -= this.waterDepth + s.sunk * 0.6;
     this.model.updateMatrixWorld(true);
     this.flash = s.hurt < 0.14 ? 1 - s.hurt / 0.14 : 0;
+  }
+
+  // Where the surface cuts each leg, in metres from the feet across and
+  // along the ground, like the player's (see model.js).
+  waterContacts() {
+    if (this.waterDepth <= 0.001 || this.state === 'dead') return [];
+    const contacts = [];
+    for (const leg of this.legs) {
+      const joints = leg.map((b) => b.getWorldPosition(new THREE.Vector3()));
+      for (let i = 0; i < joints.length - 1; i++) {
+        const a = joints[i];
+        const b = joints[i + 1];
+        if (a.y < 0 || b.y > 0 || a.y === b.y) continue;
+        const at = a.clone().lerp(b, a.y / (a.y - b.y));
+        contacts.push({ x: at.x, z: at.z });
+        break;
+      }
+    }
+    return contacts;
   }
 
   // How high the skull is above the ground, in metres.
@@ -311,8 +335,10 @@ export class SkeletonFigures {
     this.renderer.setSize(this.width, this.height, false);
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.autoClear = false;
-    // Whatever sinks below the ground is cut away.
-    this.renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.03)];
+    // Whatever sinks below the ground is cut away, or below the surface
+    // while wading.
+    this.ground = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.03)];
+    this.surface = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)];
     this.drawn = [];
     this.walkSpeed = null;
     this.runSpeed = null;
@@ -354,7 +380,7 @@ export class SkeletonFigures {
 
   // Renders the skeletons nearest `near` that stand within the view, each
   // in its own slot, reads the image back once and turns each into cells.
-  // Returns [{ skeleton, cells, base, top }].
+  // Returns [{ skeleton, cells, base, top, contacts }].
   rasterise(view, skeletons, near) {
     const inView = skeletons.filter((s) => s.x > view.x0 - COLS / 2 && s.x < view.x0 + view.cols + COLS / 2
       && s.y > view.y0 - (ROWS - FEET_ROW) && s.y < view.y0 + view.rows + FEET_ROW);
@@ -370,6 +396,7 @@ export class SkeletonFigures {
     const slotW = COLS * SX;
     drawn.forEach((s, i) => {
       for (const [other, rig] of this.rigs) rig.model.visible = other === s;
+      r.clippingPlanes = this.rigs.get(s).waterDepth > 0.001 ? this.surface : this.ground;
       this.frame(s.x, s.y);
       r.setViewport(i * slotW, 0, slotW, this.height);
       r.setScissor(i * slotW, 0, slotW, this.height);
@@ -380,7 +407,10 @@ export class SkeletonFigures {
     const gl = r.getContext();
     gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
     drawn.forEach((s, i) => {
-      this.drawn.push({ skeleton: s, ...this.cellsOf(i, s, view, this.rigs.get(s).flash) });
+      const rig = this.rigs.get(s);
+      // Waterlines round the legs, in world cells.
+      const contacts = rig.waterContacts().map((c) => ({ x: s.x + c.x * SCALE / ASPECT, y: s.y + c.z * SCALE * TILT }));
+      this.drawn.push({ skeleton: s, contacts, ...this.cellsOf(i, s, view, rig.flash) });
     });
     return this.drawn;
   }

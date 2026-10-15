@@ -454,6 +454,13 @@ function skeletonEvent(e) {
     case 'swing':
       sound.play(e);
       break;
+    case 'step':
+      // Wading kicks up a splash; on land the bones barely make a sound.
+      if (world.typeAt(e.x, e.y) === WATER) {
+        splashes.react(world, e);
+        sound.play(e);
+      } else sound.play({ ...e, strength: e.strength * 0.4 });
+      break;
     case 'bone-hit':
       sound.play(e);
       hud.damage(e.amount, e.x, e.y);
@@ -803,6 +810,7 @@ function frame(now) {
   grass.drawReflections(renderer, world, view, time, mirror, reflections);
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
+  for (const bones of boneFigures) contacts.push(...bones.contacts);
   splashes.drawSurface(renderer, view, time);
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);

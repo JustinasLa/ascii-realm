@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SKELETON, Skeleton, Skeletons, toCells, toMetres } from '../src/entities/skeleton.js';
-import { GRASS, WATER } from '../src/world/world.js';
+import { GRASS, MAX_WATER_DEPTH, WATER } from '../src/world/world.js';
 
 const open = { isWalkable: () => true, typeAt: () => GRASS };
 const dt = 1 / 60;
@@ -80,12 +80,30 @@ test('stepping back out of reach makes a skeleton miss', () => {
   assert.ok(events.some((e) => e.type === 'miss'));
 });
 
-test('a skeleton will not walk into water or through blocked ground', () => {
-  const lake = { isWalkable: () => true, typeAt: (x) => (x > 20 ? WATER : GRASS) };
+test('a skeleton wades through water knee deep, slowed like the player, splashing as it goes', () => {
+  const lake = { isWalkable: () => true, typeAt: (x) => (x > 20 ? WATER : GRASS),
+    waterDepthAt: (x) => (x > 20 ? MAX_WATER_DEPTH : 0) };
   const s = risen(0, 0);
+  const target = player(...toCells(30, 0));
+  const steps = [];
+  let wet = Infinity;
+  for (let t = 0; t < 10 && s.state === 'chase' || t === 0; t += dt) {
+    s.update(dt, lake, target);
+    steps.push(...s.events.splice(0).filter((e) => e.type === 'step'));
+    if (s.x > 40 && s.waterDepth === MAX_WATER_DEPTH) wet = Math.min(wet, s.groundSpeed);
+  }
+  assert.ok(s.x > 40, `waded in to ${s.x}`);
+  assert.equal(s.waterDepth, MAX_WATER_DEPTH, 'never deeper than the knee');
+  assert.ok(Math.abs(s.speedScale - 0.62) < 1e-9);
+  // Its 4 m/s run slows by the same share as the player's at knee depth.
+  const run = target.runSpeed * SKELETON.runShare;
+  assert.ok(Math.abs(wet - run * 0.62) < 0.05, `wading at ${wet} m/s`);
+  assert.ok(steps.some((e) => e.x > 20), 'footfalls in the water');
+  assert.ok(steps.some((e) => e.x < 20), 'and on land');
+});
+
+test('a skeleton will not walk through blocked ground', () => {
   const target = player(40, 0);
-  for (let t = 0; t < 8; t += dt) s.update(dt, lake, target);
-  assert.ok(s.x <= 20, `stopped at ${s.x}`);
   const wall = { isWalkable: (x) => x < 10, typeAt: () => GRASS };
   const t2 = risen(0, 0);
   for (let t = 0; t < 8; t += dt) t2.update(dt, wall, target);

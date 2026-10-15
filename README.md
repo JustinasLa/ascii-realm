@@ -169,7 +169,8 @@ shared online lobby.
   enabled.
 - **Skeletons.** The dead climb out of the ground a short way off, run at the
   player and hack at them with rusted swords; step back out of reach and the
-  blow misses. They are bones hung on the same animated 3D rig as the player,
+  blow misses. Like the player they wade into lakes up to the knee, slowed and
+  splashing, but they only ever rise on dry land. They are bones hung on the same animated 3D rig as the player,
   with ember eyes. Three sword cuts break one apart: each cut staggers it and
   knocks it back, and the last sends it crashing to the ground, where it lies
   before sinking away. Up to three are about at once, and another rises a few

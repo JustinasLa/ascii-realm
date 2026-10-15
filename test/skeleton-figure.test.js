@@ -103,6 +103,21 @@ test('a skeleton climbs up from the ground as it rises', () => {
   assert.ok(rig.headHeight() > 1.3, `ends at ${rig.headHeight()} m`);
 });
 
+test('a wading skeleton stands on the lake bed, its legs cut by the surface', () => {
+  const f = figures();
+  const s = new Skeleton(0, 0, { risen: true });
+  f.update(dt, [s]);
+  const rig = f.rigs.get(s);
+  const dry = rig.headHeight();
+  assert.deepEqual(rig.waterContacts(), []);
+  s.waterDepth = 0.42;
+  f.update(dt, [s]);
+  assert.ok(Math.abs(rig.headHeight() - (dry - 0.42)) < 0.02, 'lowered by the depth');
+  const contacts = rig.waterContacts();
+  assert.equal(contacts.length, 2, 'a waterline on each leg');
+  for (const c of contacts) assert.ok(Math.abs(c.x) < 0.4 && Math.abs(c.z) < 0.4);
+});
+
 test('rigs of removed skeletons are reused', () => {
   const f = figures();
   const a = new Skeleton(0, 0, { risen: true });
