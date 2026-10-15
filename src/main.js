@@ -397,16 +397,17 @@ const builder = new SceneryBuilder({ world, player, camera, renderer,
 debug.builder = builder;
 if (params.has('builder')) builder.setEnabled(true);
 
-// Skeletons rise from the ground around the player, goblins come running
-// and now and then a troll lumbers in, all to hunt them down. ?skeletons=N,
-// ?goblins=N and ?trolls=N set how many of each may be about at once; 0
-// leaves the world free of them.
+// Skeletons rise from the ground around the player, goblins come running,
+// now and then a troll lumbers in and an elf takes aim from afar, all to
+// hunt them down. ?skeletons=N, ?goblins=N, ?trolls=N and ?elves=N set how
+// many of each may be about at once; 0 leaves the world free of them.
 const countOf = (name, fallback) => {
   const n = Number(params.get(name) ?? fallback);
   return Number.isFinite(n) ? Math.max(0, Math.min(8, Math.floor(n))) : fallback;
 };
 const monsters = new Monsters({ seed,
-  counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2), troll: countOf('trolls', 1) } });
+  counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2), troll: countOf('trolls', 1),
+    elf: countOf('elves', 1) } });
 let monsterFigures = null;
 debug.monsters = monsters;
 // When the player last took a wound; they heal after a breather.
@@ -447,16 +448,24 @@ function drawName(top, color = [212, 218, 228]) {
 // What the monsters do: their blows on the player, the player's on them,
 // and their coming and falling. Each kind has its own voice.
 function monsterEvent(e) {
-  const { kind } = e.monster;
-  const voice = kind.sounds[e.type];
+  // An arrow can outlive the archer who loosed it.
+  const kind = e.monster?.kind;
+  const voice = kind?.sounds[e.type];
   switch (e.type) {
     case 'hit-player':
       if (player.takeDamage(e.amount) > 0) {
         lastHurt = time;
-        camera.shake(0.35);
-        sound.play({ type: 'slam', x: player.x, y: player.y, strength: 0.45 });
+        camera.shake(e.arrow ? 0.15 : 0.35);
+        sound.play({ type: 'slam', x: player.x, y: player.y, strength: e.arrow ? 0.25 : 0.45 });
         dust.burst(world, player.x, player.y, 4, 4);
       }
+      break;
+    case 'shoot':
+      sound.play({ ...e, type: voice });
+      break;
+    case 'arrow-land':
+      sound.play({ type: 'land', x: e.x, y: e.y, strength: 0.2 });
+      splashes.react(world, { type: 'land', x: e.x, y: e.y, strength: 0.15 });
       break;
     case 'swing':
       sound.play(e);
@@ -814,7 +823,7 @@ function frame(now) {
     reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
     drawables.push({ y: node.y, draw: () => drawResource(renderer, view, node, time) });
   }
-  for (const shaft of projectiles.landedDrawables()) {
+  for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
   const carried = visibleTorches.filter((torch) => torch.carried);
@@ -853,6 +862,7 @@ function frame(now) {
   weather.drawAtmosphere(renderer, view, time);
 
   projectiles.drawFlying(renderer, view);
+  monsters.arrows.drawFlying(renderer, view);
   drawTrail(renderer, view, player.trail, player.time);
   const self = multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
   const ownColor = self ? colorOf(self.color) : undefined;

@@ -263,3 +263,40 @@ test('a troll swings its club in both hands, high overhead, down to the ground a
     `lands ${Math.hypot(impact.at.x, impact.at.z)} m ahead`);
   assert.ok(apart < 0.35, `hands stray ${apart} m from the grip`);
 });
+
+test('an elf is tall and pale in a green tunic, bow in hand, and raises it to draw', async () => {
+  const THREE = await import(modules.get('three'));
+  const f = figures();
+  const e = new Monster(0, 0, { kind: KINDS.elf });
+  f.update(dt, [e]);
+  const rig = f.rigs.get(e);
+  // The colour of each vertex by the bone that moves it most, across both
+  // of the mannequin's meshes. (The fingers have the most vertices.)
+  const regions = {};
+  rig.model.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    const { color, skinIndex, skinWeight } = o.geometry.attributes;
+    for (let i = 0; i < color.count; i++) {
+      let best = 0;
+      for (let k = 1; k < 4; k++) if (skinWeight.getComponent(i, k) > skinWeight.getComponent(i, best)) best = k;
+      const name = o.skeleton.bones[skinIndex.getComponent(i, best)].name;
+      const region = /spine/.test(name) ? 'torso' : /head/.test(name) ? 'head' : /handR/.test(name) ? 'hand'
+        : /shinL/.test(name) ? 'leg' : null;
+      if (region) regions[region] = [color.getX(i), color.getY(i), color.getZ(i)];
+    }
+  });
+  const [tr, tg, tb] = regions.torso;
+  assert.ok(tg > tr && tg > tb, `a green tunic: ${regions.torso}`);
+  for (const pale of [regions.head, regions.hand]) assert.ok(pale[0] > 0.6 && pale[1] > 0.5, `pale skin: ${pale}`);
+  assert.ok(regions.leg[0] > regions.leg[2] && regions.leg[0] < 0.5, `brown leggings: ${regions.leg}`);
+  assert.equal(rig.armory.active?.visible, true, 'a bow in hand');
+  for (let time = 0; time < 0.5; time += dt) f.update(dt, [e]);
+  const hand = () => rig.bones['DEF-handR'].getWorldPosition(new THREE.Vector3()).y;
+  const resting = hand();
+  e.setState('aim');
+  for (let time = 0; time < 0.4; time += dt) {
+    e.stateTime += dt;
+    f.update(dt, [e]);
+  }
+  assert.ok(hand() > resting + 0.3, `hand from ${resting} m to ${hand()} m`);
+});

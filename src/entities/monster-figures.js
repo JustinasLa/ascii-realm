@@ -15,9 +15,10 @@ import { getWeapon } from './weapons.js';
 // with a ragged loincloth, shrunk to a little over a metre, with a big head,
 // long ears and nose and yellow eyes. A troll is the same skin grown to
 // two and a half metres, mossy grey, hunched over broad shoulders and a
-// small head with tusks, swinging a stone club. One offscreen renderer
-// serves every monster, each drawn into its own slot of the image, read
-// back in one go.
+// small head with tusks, swinging a stone club. An elf is tall and pale in
+// a green hooded tunic, with long swept-back ears and a bow. One offscreen
+// renderer serves every monster, each drawn into its own slot of the image,
+// read back in one go.
 
 const SX = 4;
 const SY = 6;
@@ -38,17 +39,21 @@ const RIM = [214, 222, 236];
 const BONE = 0xd9d0b4;
 const KNUCKLE = 0xa89f88;
 const EMBER = 0xff5a1e;
-// The colours of each skinned kind: skin, darker hands and feet, the hide
-// round its hips, its glowing eyes, and anything bony such as tusks.
+// The colours of each skinned kind: skin, the hide or cloth round its hips,
+// and, where they differ from the skin, its torso, arms, legs, hands and
+// feet; its glowing eyes, and anything bony such as tusks.
 const PALETTES = {
   goblin: { skin: 0x6b8a3c, dark: 0x4c6630, cloth: 0x5c4630, eye: 0xffdc28 },
   troll: { skin: 0x7c8268, dark: 0x5c6150, cloth: 0x5e4834, eye: 0xffa020, tusk: 0xe6dcc0 },
+  elf: { skin: 0xdccbb0, hands: 0xdccbb0, feet: 0x4a3828, cloth: 0x3c5634, torso: 0x45663a, arms: 0x45663a,
+    legs: 0x5a4a36, hood: 0x3a5532 },
 };
 
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 const RUSTED_SWORD = { ...getWeapon('sword-shield', 'copper'), materialColor: [120, 84, 58] };
 const NOTCHED_DAGGER = { ...getWeapon('dagger', 'copper'), materialColor: [150, 110, 70] };
 const STONE_CLUB = { ...getWeapon('hammer', 'copper'), materialColor: [128, 124, 112] };
+const LONGBOW = getWeapon('bow', 'steel');
 
 // How each kind looks and moves: its clips, its size, how some bones are
 // scaled (a goblin's big head, a troll's broad shoulders and small head),
@@ -85,6 +90,16 @@ const LOOKS = {
     weapon: STONE_CLUB,
     weaponScale: 1.05,
     twoHanded: true,
+  },
+  elf: {
+    // Drawing the bow raises both arms towards the target.
+    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Pistol_Aim_Neutral',
+      hit: 'Hit_Head', death: 'Death01' },
+    skinned: true,
+    scale: 1.06,
+    bones: { 'DEF-head': 0.94 },
+    weapon: LONGBOW,
+    weaponScale: 1,
   },
 };
 
@@ -169,6 +184,8 @@ function materialsOf() {
     goblinSkin: new THREE.MeshLambertMaterial({ color: PALETTES.goblin.skin }),
     goblinEye: new THREE.MeshBasicMaterial({ color: PALETTES.goblin.eye }),
     trollSkin: new THREE.MeshLambertMaterial({ color: PALETTES.troll.skin }),
+    elfSkin: new THREE.MeshLambertMaterial({ color: PALETTES.elf.skin }),
+    elfHood: new THREE.MeshLambertMaterial({ color: PALETTES.elf.hood, side: THREE.DoubleSide }),
     trollEye: new THREE.MeshBasicMaterial({ color: PALETTES.troll.eye }),
     tusk: new THREE.MeshLambertMaterial({ color: PALETTES.troll.tusk }),
   };
@@ -298,7 +315,24 @@ function dressTroll(model, bones) {
   ball(head, at.clone().add(new THREE.Vector3(0, 0.06, 0.07)), 0.07, m.trollSkin, [1.5, 0.45, 0.8]);
 }
 
-const DRESS = { goblin: dressGoblin, troll: dressTroll };
+// Long ears swept up and back through a hood that is open at the face, on
+// the elf's head in its rest pose.
+function dressElf(model, bones) {
+  const m = materialsOf();
+  model.updateMatrixWorld(true);
+  const head = bones[bone('DEF-head')];
+  const at = head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.1, 0));
+  for (const side of [-1, 1]) {
+    cone(head, at.clone().add(new THREE.Vector3(side * 0.08, 0.01, -0.005)), 0.024, 0.2,
+      new THREE.Vector3(side, 0.6, -0.3).normalize(), m.elfSkin);
+  }
+  const hood = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 10, Math.PI / 2 + 0.9, Math.PI * 2 - 1.8), m.elfHood);
+  hood.position.copy(at).add(new THREE.Vector3(0, 0.01, -0.015));
+  hood.frustumCulled = false;
+  head.attach(hood);
+}
+
+const DRESS = { goblin: dressGoblin, troll: dressTroll, elf: dressElf };
 
 // The mannequin's own skin, painted from a kind's palette by the bone that
 // moves each vertex most: a ragged hide round the hips and thighs, darker
@@ -317,8 +351,14 @@ function paintSkin(model, palette) {
       const name = o.skeleton.bones[skinIndex.getComponent(i, best)]?.name ?? '';
       // The hem rises and falls, so the cloth looks torn.
       const hem = /thigh/.test(name) && position.getY(i) > 0.68 + 0.05 * Math.sin(position.getX(i) * 60);
-      const part = /hips/.test(name) || hem ? 'cloth' : /hand|f_|thumb|foot|toe/.test(name) ? 'dark' : 'skin';
-      color.set(palette[part]).toArray(colors, i * 3);
+      const part = /hips/.test(name) || hem ? 'cloth'
+        : /hand|f_|thumb/.test(name) ? 'hands'
+          : /foot|toe/.test(name) ? 'feet'
+            : /spine|shoulder/.test(name) ? 'torso'
+              : /upper_arm|forearm/.test(name) ? 'arms'
+                : /thigh|shin/.test(name) ? 'legs' : 'skin';
+      const extremity = part === 'hands' || part === 'feet';
+      color.set(palette[part] ?? (extremity ? palette.dark : palette.skin)).toArray(colors, i * 3);
     }
     o.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     o.material = materialsOf().painted;
@@ -414,6 +454,10 @@ class Rig {
         a.death.play();
       }
       w.death = 1;
+    } else if (s.state === 'aim') {
+      // Raising the bow and holding the draw.
+      if (entered) a.attack.reset().play();
+      w.attack = 1;
     } else if (s.state === 'attack' && this.look.twoHanded) {
       // Standing, then dropping into the smash.
       if (entered) a.attack.reset().play();
