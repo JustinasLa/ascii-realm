@@ -73,7 +73,9 @@ const LOOKS = {
     weaponScale: 1,
   },
   troll: {
-    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', attack: 'Sword_Attack', hit: 'Hit_Chest',
+    // The arms are posed by hand round the two-handed club (see wield); the
+    // attack clip is a crouch the body drops into as the club comes down.
+    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', attack: 'Crouch_Idle_Loop', hit: 'Hit_Chest',
       death: 'Death01' },
     skinned: true,
     scale: 1.45,
@@ -81,9 +83,78 @@ const LOOKS = {
     // arms broaden, so the head is shrunk back down past its own size.
     bones: { 'DEF-spine.003': 1.22, 'DEF-head': 0.62, 'DEF-forearm.L': 1.15, 'DEF-forearm.R': 1.15 },
     weapon: STONE_CLUB,
-    weaponScale: 1.5,
+    weaponScale: 1.05,
+    twoHanded: true,
   },
 };
+
+// The two-handed club's swing, as the angle of the club above the forward
+// horizontal: carried slanting back over the shoulder, heaved up behind the
+// head, then brought down in front until its head meets the ground.
+const DEG = Math.PI / 180;
+const CARRY = 115 * DEG;
+const HEAVE = 168 * DEG;
+const SMASH = -45 * DEG;
+// Along the club from the grip, in its own units: the head, and where each
+// hand holds the haft (the right above the left).
+const CLUB_HEAD = 0.72;
+const UPPER_HAND = 0.1;
+const LOWER_HAND = -0.07;
+const UP = new THREE.Vector3(0, 1, 0);
+const smooth = (t) => t * t * (3 - 2 * t);
+
+// Where the club is in its swing `t` seconds into a smash.
+function swingAngle(t, kind) {
+  const w = kind.windUp;
+  const lift = w * 0.7;
+  if (t < lift) return CARRY + (HEAVE - CARRY) * (1 - (1 - t / lift) ** 2);
+  // Gathering speed all the way down.
+  if (t < w) return HEAVE + (SMASH - HEAVE) * ((t - lift) / (w - lift)) ** 2;
+  if (t < w + 0.35) return SMASH;
+  return SMASH + (CARRY - SMASH) * smooth(Math.min(1, (t - w - 0.35) / Math.max(0.01, kind.swingTime - w - 0.35)));
+}
+
+// How far the body has dropped into a crouch `t` seconds into a smash:
+// upright while heaving the club up, sinking as it comes down, and rising
+// again once it has struck.
+function smashCrouch(t, kind) {
+  const w = kind.windUp;
+  if (t < w * 0.6) return 0;
+  if (t < w) return smooth((t - w * 0.6) / (w * 0.4));
+  if (t < w + 0.35) return 1;
+  return 1 - smooth(Math.min(1, (t - w - 0.35) / Math.max(0.01, kind.swingTime - w - 0.35)));
+}
+
+// Turns a bone so its world orientation becomes `world`.
+function setWorldQuaternion(b, world) {
+  const parent = b.parent.getWorldQuaternion(new THREE.Quaternion());
+  b.quaternion.copy(parent.invert().multiply(world));
+  b.updateMatrixWorld(true);
+}
+
+// Two-bone IK: bends the elbow and swings the upper arm so the hand reaches
+// `target`, a world position, keeping the arm in its current plane.
+function reachWith(arm, target) {
+  const A = arm.upper.getWorldPosition(new THREE.Vector3());
+  const B = arm.fore.getWorldPosition(new THREE.Vector3());
+  const C = arm.hand.getWorldPosition(new THREE.Vector3());
+  const a = A.distanceTo(B);
+  const b = B.distanceTo(C);
+  const d = Math.min(A.distanceTo(target), a + b - 1e-4);
+  const BA = A.clone().sub(B).normalize();
+  const BC = C.clone().sub(B).normalize();
+  const axis = new THREE.Vector3().crossVectors(BA, BC);
+  if (axis.lengthSq() > 1e-10) {
+    axis.normalize();
+    const now = Math.acos(Math.max(-1, Math.min(1, BA.dot(BC))));
+    const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
+    const turn = new THREE.Quaternion().setFromAxisAngle(axis, want - now);
+    setWorldQuaternion(arm.fore, turn.multiply(arm.fore.getWorldQuaternion(new THREE.Quaternion())));
+  }
+  const C2 = arm.hand.getWorldPosition(new THREE.Vector3());
+  const swing = new THREE.Quaternion().setFromUnitVectors(C2.sub(A).normalize(), target.clone().sub(A).normalize());
+  setWorldQuaternion(arm.upper, swing.multiply(arm.upper.getWorldQuaternion(new THREE.Quaternion())));
+}
 
 // Shared, built once: bone-white and darker knuckle materials, the eyes,
 // and the goblin's painted skin.
@@ -291,6 +362,18 @@ class Rig {
     this.model.scale.setScalar(this.look.scale);
     this.head = this.bones[bone('DEF-head')];
     this.scaled = Object.entries(this.look.bones).map(([name, s]) => [this.bones[bone(name)], s]);
+    if (this.look.twoHanded) {
+      // The club leaves the hand bone: it is placed in the swing each frame
+      // and both hands are brought to its haft.
+      this.club = this.armory.active;
+      this.model.add(this.club);
+      this.arms = ['R', 'L'].map((side) => ({
+        upper: this.bones[bone(`DEF-upper_arm.${side}`)],
+        fore: this.bones[bone(`DEF-forearm.${side}`)],
+        hand: this.bones[bone(`DEF-hand.${side}`)],
+      }));
+      this.swing = CARRY;
+    }
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
     this.legs = ['L', 'R'].map((side) => ['thigh', 'shin', 'foot'].map((b) => this.bones[bone(`DEF-${b}.${side}`)]));
     this.waterDepth = 0;
@@ -331,6 +414,11 @@ class Rig {
         a.death.play();
       }
       w.death = 1;
+    } else if (s.state === 'attack' && this.look.twoHanded) {
+      // Standing, then dropping into the smash.
+      if (entered) a.attack.reset().play();
+      w.attack = smashCrouch(s.stateTime, k);
+      w.idle = 1 - w.attack;
     } else if (s.state === 'attack') {
       if (entered) {
         a.attack.reset();
@@ -383,7 +471,58 @@ class Rig {
     this.waterDepth = s.waterDepth ?? 0;
     this.model.position.y -= this.waterDepth + s.sunk * 0.6 * this.look.scale;
     this.model.updateMatrixWorld(true);
+    if (this.club) this.wield(dt, s, entered);
     this.flash = s.hurt < 0.14 ? 1 - s.hurt / 0.14 : 0;
+  }
+
+  // Holds the club in both hands at its place in the swing, never letting
+  // its head go below the ground; a fallen troll lets it drop beside it.
+  // Worked out in the model's own space, where it faces +z.
+  wield(dt, s, entered) {
+    const club = this.club;
+    // Where the ground is, a little raised, in the model's own units.
+    const floor = (0.04 - this.model.position.y) / this.look.scale;
+    if (s.state === 'dead') {
+      if (entered) this.dropFrom = { position: club.position.clone(), quaternion: club.quaternion.clone(), t: 0 };
+      const drop = this.dropFrom;
+      drop.t = Math.min(1, drop.t + dt * 2.5);
+      const k = drop.t * drop.t;
+      const lying = new THREE.Quaternion().setFromUnitVectors(UP, new THREE.Vector3(0.95, 0, 0.3).normalize());
+      club.position.lerpVectors(drop.position, new THREE.Vector3(0.45, floor, 0.5), k);
+      club.quaternion.slerpQuaternions(drop.quaternion, lying, k);
+      return;
+    }
+    const target = s.state === 'attack' ? swingAngle(s.stateTime, s.kind) : CARRY;
+    this.swing = s.state === 'attack' ? target : this.swing + (target - this.swing) * (1 - Math.exp(-dt * 8));
+    const local = (b) => this.model.worldToLocal(b.getWorldPosition(new THREE.Vector3()));
+    const shoulders = local(this.arms[0].upper).add(local(this.arms[1].upper)).multiplyScalar(0.5);
+    // The hands travel a shallower arc than the club, from over the head
+    // down to arm's length in front of the knees.
+    const grip = (angle) => {
+      const arc = angle > 0 ? 0.75 * angle - 0.1 : 1.1 * angle - 0.1;
+      return shoulders.clone().add(new THREE.Vector3(0, -0.1 + 0.58 * Math.sin(arc), 0.58 * Math.cos(arc)));
+    };
+    let angle = this.swing;
+    let at = grip(angle);
+    const length = CLUB_HEAD * this.look.weaponScale;
+    if (at.y + length * Math.sin(angle) < floor) {
+      angle = Math.asin(Math.max(-1, Math.min(1, (floor - at.y) / length)));
+      at = grip(angle);
+      angle = Math.asin(Math.max(-1, Math.min(1, (floor - at.y) / length)));
+    }
+    const along = new THREE.Vector3(0, Math.sin(angle), Math.cos(angle));
+    club.position.copy(at);
+    club.quaternion.setFromUnitVectors(UP, along);
+    club.updateMatrixWorld(true);
+    const hold = (offset) => this.model.localToWorld(at.clone().addScaledVector(along, offset * this.look.weaponScale));
+    reachWith(this.arms[0], hold(UPPER_HAND));
+    reachWith(this.arms[1], hold(LOWER_HAND));
+  }
+
+  // The club head's height above the ground, in metres, if it has a club.
+  clubHeadHeight() {
+    if (!this.club) return null;
+    return this.club.localToWorld(new THREE.Vector3(0, CLUB_HEAD, 0)).y;
   }
 
   // Where the surface cuts each leg, in metres from the feet across and

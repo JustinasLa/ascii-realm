@@ -55,7 +55,9 @@ export const KINDS = freeze({
     // swinging again sooner. 0 never is.
     enrage: 0,
     fury: 1,
-    // Whether its blows shake the ground where they land.
+    // Whether its blows are ground smashes: they land this far ahead, in
+    // metres, and catch anyone within `smashRadius` of that spot rather than
+    // in front of it, shaking the ground.
     slam: false,
     // Hit and run: after this many blows it backs off this far for a while.
     // 0 never backs off.
@@ -140,6 +142,8 @@ export const KINDS = freeze({
     enrage: 0.45,
     fury: 1.35,
     slam: true,
+    smashAt: 1.65,
+    smashRadius: 1.4,
     skirmishAfter: 0,
     panic: 0,
     flee: 0,
@@ -303,11 +307,13 @@ export class Monster {
         if (!this.struck && this.stateTime >= k.windUp) {
           this.struck = true;
           this.blows++;
+          let impact = null;
           if (k.slam) {
-            const [dx, dy] = toCells(Math.sin(this.heading) * k.reach * 0.9, Math.cos(this.heading) * k.reach * 0.9);
-            this.events.push({ type: 'slam', x: this.x + dx, y: this.y + dy, strength: 1 });
+            const [dx, dy] = toCells(Math.sin(this.heading) * k.smashAt, Math.cos(this.heading) * k.smashAt);
+            impact = { x: this.x + dx, y: this.y + dy };
+            this.events.push({ type: 'slam', ...impact, strength: 1 });
           }
-          if (prey && this.canHit(prey, target)) {
+          if (prey && this.canHit(prey, target, impact)) {
             this.events.push({ type: 'hit-player', amount: k.damage, x: target.x, y: target.y });
           } else {
             this.events.push({ type: 'miss', x: this.x, y: this.y });
@@ -386,9 +392,13 @@ export class Monster {
     }
   }
 
-  // Whether its blow lands: the player is close, in front of it, and not
-  // high in the air.
-  canHit(prey, target) {
+  // Whether its blow lands: the player is close, in front of it (or near
+  // where a smash comes down), and not high in the air.
+  canHit(prey, target, impact = null) {
+    if (impact) {
+      const [mx, mz] = toMetres(target.x - impact.x, target.y - impact.y);
+      return Math.hypot(mx, mz) <= this.kind.smashRadius && (target.air ?? 0) < 0.6;
+    }
     return prey.distance <= this.kind.hitRange
       && Math.abs(wrap(prey.bearing - this.heading)) <= this.kind.hitArc
       && (target.air ?? 0) < 0.6;

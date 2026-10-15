@@ -185,9 +185,10 @@ shared online lobby.
   Up to two are about at once; `?goblins=N` sets how many (0 for none).
 - **Trolls.** Now and then a troll lumbers in: two and a half metres of mossy
   grey hide, hunched over broad shoulders, with a small tusked head and a stone
-  club. It is slow enough to outrun, but its overhead smash hits twice as hard
-  as a skeleton's and shakes the ground; watch the long wind-up and step aside,
-  then cut back. It shrugs off most cuts, reeling only from every third, flies
+  club carried in both hands. It is slow enough to outrun, but it heaves the
+  club up behind its head and crouches into a ground smash that hits twice as
+  hard as a skeleton and shakes the earth where it lands; watch the long
+  wind-up, get clear of the spot, then cut back. It shrugs off most cuts, reeling only from every third, flies
   into a rage (and a quicker pace) when badly hurt, and takes seven cuts to
   bring down, falling with a thud. One at a time; `?trolls=N` sets how many.
   Wounded monsters show a segmented health bar over their heads.
