@@ -1,18 +1,20 @@
 import * as THREE from 'three';
+import { clone as cloneSkinned } from '../../vendor/three/utils/SkeletonUtils.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { Armory } from './armory.js';
 import { outline } from './model.js';
 import { SCALE, TILT } from './rig.js';
-import { SKELETON } from './skeleton.js';
 import { getWeapon } from './weapons.js';
 
-// Skeletons drawn the same way as the player: a rigged 3D figure playing the
+// Monsters drawn the same way as the player: a rigged 3D figure playing the
 // animation library's clips, rendered from the game's camera into a small
-// image and turned into character cells. The mannequin's skin is hidden and
-// bones are hung on its skeleton instead: a skull with ember eyes, ribs, a
-// pelvis and long thin limbs. One offscreen renderer serves every skeleton,
-// each drawn into its own slot of the image, read back in one go.
+// image and turned into character cells. A skeleton hides the mannequin's
+// skin and hangs bones on its armature instead: a skull with ember eyes,
+// ribs, a pelvis and long thin limbs. A goblin keeps the skin, painted green
+// with a ragged loincloth, shrunk to a little over a metre, with a big head,
+// long ears and nose and yellow eyes. One offscreen renderer serves every
+// monster, each drawn into its own slot of the image, read back in one go.
 
 const SX = 4;
 const SY = 6;
@@ -32,20 +34,35 @@ const RIM = [214, 222, 236];
 const BONE = 0xd9d0b4;
 const KNUCKLE = 0xa89f88;
 const EMBER = 0xff5a1e;
-
-const CLIPS = {
-  idle: 'Sword_Idle',
-  walk: 'Walk_Loop',
-  run: 'Sprint_Loop',
-  attack: 'Sword_Attack',
-  hit: 'Hit_Chest',
-  death: 'Death01',
-};
+const GOBLIN = { skin: 0x6b8a3c, dark: 0x4c6630, cloth: 0x5c4630, eye: 0xffdc28 };
 
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 const RUSTED_SWORD = { ...getWeapon('sword-shield', 'copper'), materialColor: [120, 84, 58] };
+const NOTCHED_DAGGER = { ...getWeapon('dagger', 'copper'), materialColor: [150, 110, 70] };
 
-// Shared, built once: bone-white and darker knuckle materials, and the eyes.
+// How each kind looks and moves: its clips, its size, how big its head is,
+// and the blade in its hand.
+const LOOKS = {
+  skeleton: {
+    clips: { idle: 'Sword_Idle', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Sword_Attack', hit: 'Hit_Chest',
+      death: 'Death01' },
+    skinned: false,
+    scale: 1,
+    headScale: 1,
+    weapon: RUSTED_SWORD,
+  },
+  goblin: {
+    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Punch_Jab', hit: 'Hit_Head',
+      death: 'Death01' },
+    skinned: true,
+    scale: 0.62,
+    headScale: 1.35,
+    weapon: NOTCHED_DAGGER,
+  },
+};
+
+// Shared, built once: bone-white and darker knuckle materials, the eyes,
+// and the goblin's painted skin.
 let materials = null;
 function materialsOf() {
   materials ??= {
@@ -53,6 +70,9 @@ function materialsOf() {
     knuckle: new THREE.MeshLambertMaterial({ color: KNUCKLE }),
     socket: new THREE.MeshBasicMaterial({ color: 0x0c0806 }),
     ember: new THREE.MeshBasicMaterial({ color: EMBER }),
+    goblin: new THREE.MeshLambertMaterial({ vertexColors: true }),
+    goblinSkin: new THREE.MeshLambertMaterial({ color: GOBLIN.skin }),
+    goblinEye: new THREE.MeshBasicMaterial({ color: GOBLIN.eye }),
   };
   return materials;
 }
@@ -84,6 +104,16 @@ function ring(parent, at, rx, rz, tube, material) {
   mesh.position.copy(at);
   mesh.rotation.x = Math.PI / 2;
   mesh.scale.set(rx, rz, 1);
+  mesh.frustumCulled = false;
+  parent.attach(mesh);
+  return mesh;
+}
+
+// A cone from `at` pointing along `toward`, hung on `parent`.
+function cone(parent, at, radius, length, toward, material) {
+  const mesh = new THREE.Mesh(new THREE.ConeGeometry(radius, length, 7), material);
+  mesh.position.copy(at).addScaledVector(toward, length / 2);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), toward);
   mesh.frustumCulled = false;
   parent.attach(mesh);
   return mesh;
@@ -138,16 +168,81 @@ function dressBones(model, bones) {
   }
 }
 
-// One skeleton's rig: a copy of the library's armature with bones hung on
-// it, its own animation mixer, and the clip weights it is blending.
+// Long ears swept back, a hooked nose and yellow eyes on the goblin's head,
+// in its rest pose.
+function dressGoblin(model, bones) {
+  const m = materialsOf();
+  model.updateMatrixWorld(true);
+  const head = bones[bone('DEF-head')];
+  const at = head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.1, 0));
+  for (const side of [-1, 1]) {
+    const root = at.clone().add(new THREE.Vector3(side * 0.085, 0.02, -0.01));
+    cone(head, root, 0.035, 0.2, new THREE.Vector3(side, 0.35, -0.35).normalize(), m.goblinSkin);
+    ball(head, at.clone().add(new THREE.Vector3(side * 0.038, 0.012, 0.088)), 0.019, m.goblinEye);
+  }
+  cone(head, at.clone().add(new THREE.Vector3(0, -0.02, 0.09)), 0.026, 0.09,
+    new THREE.Vector3(0, -0.45, 1).normalize(), m.goblinSkin);
+}
+
+// The mannequin's own skin, painted goblin green by the bone that moves each
+// vertex most: a ragged loincloth round the hips and thighs, darker hands
+// and feet. The geometry is copied, as the player's figure paints the
+// shared one with clothes.
+function paintGoblin(model) {
+  model.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    o.geometry = o.geometry.clone();
+    const { skinIndex, skinWeight, position } = o.geometry.attributes;
+    const colors = new Float32Array(skinIndex.count * 3);
+    const color = new THREE.Color();
+    for (let i = 0; i < skinIndex.count; i++) {
+      let best = 0;
+      for (let k = 1; k < 4; k++) if (skinWeight.getComponent(i, k) > skinWeight.getComponent(i, best)) best = k;
+      const name = o.skeleton.bones[skinIndex.getComponent(i, best)]?.name ?? '';
+      // The hem rises and falls, so the cloth looks torn.
+      const hem = /thigh/.test(name) && position.getY(i) > 0.68 + 0.05 * Math.sin(position.getX(i) * 60);
+      const part = /hips/.test(name) || hem ? 'cloth' : /hand|f_|thumb|foot|toe/.test(name) ? 'dark' : 'skin';
+      color.set(GOBLIN[part]).toArray(colors, i * 3);
+    }
+    o.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    o.material = materialsOf().goblin;
+    o.frustumCulled = false;
+  });
+}
+
+// A copy of the library's scene with only what a kind needs: the armature,
+// and for a skinned kind the mannequin's skin, freshly painted. Anything the
+// player's figure hung on the bones is left behind.
+function prototypeOf(scene, skinned) {
+  const copy = skinned ? cloneSkinned(scene) : scene.clone();
+  const keep = (o) => o.isBone || (skinned && o.isSkinnedMesh);
+  const drop = [];
+  copy.traverse((o) => {
+    if (o === copy || keep(o)) return;
+    let needed = false;
+    o.traverse((c) => { if (c !== o && keep(c)) needed = true; });
+    if (!needed) drop.push(o);
+  });
+  for (const o of drop) o.removeFromParent();
+  if (skinned) paintGoblin(copy);
+  return copy;
+}
+
+// One monster's rig: a copy of the library's armature dressed for its kind,
+// its own animation mixer, and the clip weights it is blending.
 class Rig {
-  constructor(source, clips, runSpeed) {
-    this.model = source.clone();
+  constructor(kind, source, clips) {
+    this.kind = kind;
+    this.look = LOOKS[kind];
+    this.model = this.look.skinned ? cloneSkinned(source) : source.clone();
     this.bones = {};
     this.model.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
-    dressBones(this.model, this.bones);
+    if (this.look.skinned) dressGoblin(this.model, this.bones);
+    else dressBones(this.model, this.bones);
     this.armory = new Armory(this.model, this.bones);
-    this.armory.update(RUSTED_SWORD, true);
+    this.armory.update(this.look.weapon, true);
+    this.model.scale.setScalar(this.look.scale);
+    this.head = this.bones[bone('DEF-head')];
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
     this.legs = ['L', 'R'].map((side) => ['thigh', 'shin', 'foot'].map((b) => this.bones[bone(`DEF-${b}.${side}`)]));
     this.waterDepth = 0;
@@ -164,14 +259,14 @@ class Rig {
       this.actions[key].clampWhenFinished = true;
     }
     this.weights = Object.fromEntries(Object.keys(clips).map((k) => [k, k === 'idle' ? 1 : 0]));
-    this.runSpeed = runSpeed;
     this.state = null;
     this.flash = 0;
   }
 
-  // Sets this frame's pose from the skeleton's state.
+  // Sets this frame's pose from the monster's state.
   update(dt, s) {
-    const w = Object.fromEntries(Object.keys(this.actions).map((k) => [k, 0]));
+    const k = s.kind;
+    const w = Object.fromEntries(Object.keys(this.actions).map((key) => [key, 0]));
     const entered = s.state !== this.state;
     this.state = s.state;
     const a = this.actions;
@@ -179,7 +274,7 @@ class Rig {
       // Clawing out of the grave: the fall played backwards, from the ground.
       const d = a.death.getClip().duration;
       a.death.paused = true;
-      a.death.time = d * (1 - Math.min(1, s.stateTime / SKELETON.rise));
+      a.death.time = d * (1 - Math.min(1, s.stateTime / k.rise));
       w.death = 1;
     } else if (s.state === 'dead') {
       if (entered) {
@@ -191,14 +286,14 @@ class Rig {
     } else if (s.state === 'attack') {
       if (entered) {
         a.attack.reset();
-        a.attack.timeScale = a.attack.getClip().duration / SKELETON.swingTime;
+        a.attack.timeScale = a.attack.getClip().duration / k.swingTime;
         a.attack.play();
       }
       w.attack = 1;
     } else if (s.state === 'stagger') {
       if (entered) {
         a.hit.reset();
-        a.hit.timeScale = Math.max(1, a.hit.getClip().duration / (SKELETON.stagger + 0.15));
+        a.hit.timeScale = Math.max(1, a.hit.getClip().duration / (k.stagger + 0.15));
         a.hit.play();
       }
       w.hit = 1;
@@ -207,8 +302,8 @@ class Rig {
       // played at the rate that keeps the feet from sliding. Wading slows
       // the body more than the legs, as for the player.
       const speed = s.groundSpeed / (s.speedScale ?? 1);
-      const moving = Math.min(1, speed / 0.6);
-      const run = Math.max(0, Math.min(1, (speed - 1.4) / 1.6));
+      const moving = Math.min(1, speed / (0.6 * this.look.scale));
+      const run = Math.max(0, Math.min(1, (speed - k.walkSpeed) / 1.6));
       w.idle = 1 - moving;
       w.walk = moving * (1 - run);
       w.run = moving * run;
@@ -217,13 +312,16 @@ class Rig {
     }
     // A fall is sudden, everything else blends.
     const ease = s.state === 'dead' || s.state === 'rise' ? 1 : 1 - Math.exp(-dt * 16);
-    for (const k in w) {
-      this.weights[k] += (w[k] - this.weights[k]) * ease;
-      a[k].setEffectiveWeight(this.weights[k]);
+    for (const key in w) {
+      this.weights[key] += (w[key] - this.weights[key]) * ease;
+      a[key].setEffectiveWeight(this.weights[key]);
     }
     this.mixer.update(dt);
+    // A big head, set outright each frame: the clips key the bones' scale,
+    // but stop writing it once a clamped clip such as the fall has ended.
+    if (this.look.headScale !== 1) this.head.scale.setScalar(this.look.headScale);
     this.model.rotation.y = s.heading;
-    // Keep a standing skeleton's feet on the ground; a fallen one lies where
+    // Keep a standing monster's feet on the ground; a fallen one lies where
     // the clip put it, sinking away at last.
     this.model.position.y = 0;
     if (s.state !== 'dead' && s.state !== 'rise') {
@@ -231,11 +329,11 @@ class Rig {
       const v = new THREE.Vector3();
       let lowest = Infinity;
       for (const f of this.feet) lowest = Math.min(lowest, f.getWorldPosition(v).y);
-      this.model.position.y = -(lowest - FOOT_FLOOR);
+      this.model.position.y = -(lowest - FOOT_FLOOR * this.look.scale);
     }
     // Wading, it stands on the lake bed; the water hides what is below.
     this.waterDepth = s.waterDepth ?? 0;
-    this.model.position.y -= this.waterDepth + s.sunk * 0.6;
+    this.model.position.y -= this.waterDepth + s.sunk * 0.6 * this.look.scale;
     this.model.updateMatrixWorld(true);
     this.flash = s.hurt < 0.14 ? 1 - s.hurt / 0.14 : 0;
   }
@@ -259,9 +357,9 @@ class Rig {
     return contacts;
   }
 
-  // How high the skull is above the ground, in metres.
+  // How high the head is above the ground, in metres.
   headHeight() {
-    return this.bones[bone('DEF-head')].getWorldPosition(new THREE.Vector3()).y;
+    return this.head.getWorldPosition(new THREE.Vector3()).y;
   }
 }
 
@@ -297,22 +395,22 @@ function groundSpeed(rig, key) {
   return speeds[Math.floor(speeds.length / 2)] || 1;
 }
 
-export class SkeletonFigures {
+export class MonsterFigures {
   // `gltf` is the loaded animation library; its scene is copied, not used.
   constructor(gltf, { renderer = null } = {}) {
-    // Only the armature is kept; the mannequin's skin and anything hung on
-    // its bones are left behind.
-    this.source = gltf.scene.clone();
-    const drop = [];
-    this.source.traverse((o) => { if (o !== this.source && !o.isBone && !o.children.some((c) => c.isBone)) drop.push(o); });
-    for (const o of drop) o.removeFromParent();
-    this.clips = Object.fromEntries(Object.entries(CLIPS).map(([key, name]) => {
-      const clip = gltf.animations.find((c) => c.name === name);
-      if (!clip) throw new Error(`Missing clip ${name}`);
-      return [key, clip];
-    }));
+    this.prototypes = Object.fromEntries(Object.entries(LOOKS)
+      .map(([kind, look]) => [kind, prototypeOf(gltf.scene, look.skinned)]));
+    this.clips = Object.fromEntries(Object.entries(LOOKS).map(([kind, look]) => [kind,
+      Object.fromEntries(Object.entries(look.clips).map(([key, name]) => {
+        const clip = gltf.animations.find((c) => c.name === name);
+        if (!clip) throw new Error(`Missing clip ${name}`);
+        return [key, clip];
+      }))]));
     this.rigs = new Map();
-    this.spare = [];
+    // Rigs of fallen monsters, kept for the next of their kind.
+    this.spare = Object.fromEntries(Object.keys(LOOKS).map((kind) => [kind, []]));
+    // How fast each kind's walk and run carry it, measured from its feet.
+    this.speeds = {};
     this.scene = new THREE.Scene();
     // The same moonlight as the player, a touch colder.
     const moon = new THREE.DirectionalLight(0xd8e0ff, 3.2);
@@ -340,20 +438,16 @@ export class SkeletonFigures {
     this.ground = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.03)];
     this.surface = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)];
     this.drawn = [];
-    this.walkSpeed = null;
-    this.runSpeed = null;
   }
 
-  rigOf(skeleton) {
-    let rig = this.rigs.get(skeleton);
+  rigOf(monster) {
+    let rig = this.rigs.get(monster);
     if (rig) return rig;
-    rig = this.spare.pop() ?? new Rig(this.source, this.clips, 1);
-    if (this.runSpeed === null) {
-      this.walkSpeed = groundSpeed(rig, 'walk');
-      this.runSpeed = groundSpeed(rig, 'run');
-    }
-    rig.walkSpeed = this.walkSpeed;
-    rig.runSpeed = this.runSpeed;
+    const kind = monster.kind.id;
+    rig = this.spare[kind].pop() ?? new Rig(kind, this.prototypes[kind], this.clips[kind]);
+    this.speeds[kind] ??= { walk: groundSpeed(rig, 'walk'), run: groundSpeed(rig, 'run') };
+    rig.walkSpeed = this.speeds[kind].walk;
+    rig.runSpeed = this.speeds[kind].run;
     rig.state = null;
     for (const a of Object.values(rig.actions)) {
       a.reset();
@@ -361,28 +455,28 @@ export class SkeletonFigures {
       a.setEffectiveWeight(0);
     }
     rig.weights = Object.fromEntries(Object.keys(rig.actions).map((k) => [k, k === 'idle' ? 1 : 0]));
-    this.rigs.set(skeleton, rig);
+    this.rigs.set(monster, rig);
     this.scene.add(rig.model);
     return rig;
   }
 
-  // Poses every skeleton and lets go of the rigs of those that are gone.
-  update(dt, skeletons) {
-    const present = new Set(skeletons);
-    for (const [skeleton, rig] of this.rigs) {
-      if (present.has(skeleton)) continue;
-      this.rigs.delete(skeleton);
+  // Poses every monster and lets go of the rigs of those that are gone.
+  update(dt, monsters) {
+    const present = new Set(monsters);
+    for (const [monster, rig] of this.rigs) {
+      if (present.has(monster)) continue;
+      this.rigs.delete(monster);
       this.scene.remove(rig.model);
-      this.spare.push(rig);
+      this.spare[rig.kind].push(rig);
     }
-    for (const skeleton of skeletons) this.rigOf(skeleton).update(dt, skeleton);
+    for (const monster of monsters) this.rigOf(monster).update(dt, monster);
   }
 
-  // Renders the skeletons nearest `near` that stand within the view, each
-  // in its own slot, reads the image back once and turns each into cells.
-  // Returns [{ skeleton, cells, base, top, contacts }].
-  rasterise(view, skeletons, near) {
-    const inView = skeletons.filter((s) => s.x > view.x0 - COLS / 2 && s.x < view.x0 + view.cols + COLS / 2
+  // Renders the monsters nearest `near` that stand within the view, each in
+  // its own slot, reads the image back once and turns each into cells.
+  // Returns [{ monster, cells, base, top, contacts }].
+  rasterise(view, monsters, near) {
+    const inView = monsters.filter((s) => s.x > view.x0 - COLS / 2 && s.x < view.x0 + view.cols + COLS / 2
       && s.y > view.y0 - (ROWS - FEET_ROW) && s.y < view.y0 + view.rows + FEET_ROW);
     inView.sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y));
     const drawn = inView.slice(0, MAX_DRAWN);
@@ -410,12 +504,12 @@ export class SkeletonFigures {
       const rig = this.rigs.get(s);
       // Waterlines round the legs, in world cells.
       const contacts = rig.waterContacts().map((c) => ({ x: s.x + c.x * SCALE / ASPECT, y: s.y + c.z * SCALE * TILT }));
-      this.drawn.push({ skeleton: s, contacts, ...this.cellsOf(i, s, view, rig.flash) });
+      this.drawn.push({ monster: s, contacts, ...this.cellsOf(i, s, view, rig.flash) });
     });
     return this.drawn;
   }
 
-  // Points the camera so the skeleton's feet land on their fractional cell.
+  // Points the camera so the monster's feet land on their fractional cell.
   frame(x, y) {
     const cx0 = Math.floor(x) - (COLS >> 1);
     const cy0 = Math.floor(y) - FEET_ROW;
@@ -433,7 +527,8 @@ export class SkeletonFigures {
 
   // Turns slot `slot` of the read-back image into cells, like the player's
   // figure: partly covered cells become a pale outline, solid ones a glyph
-  // by brightness. A fresh cut flashes the bones white.
+  // by brightness. Glowing eyes keep their colour, and a fresh cut flashes
+  // the body white.
   cellsOf(slot, s, view, flash) {
     const cx0 = Math.floor(s.x) - (COLS >> 1);
     const cy0 = Math.floor(s.y) - FEET_ROW;
@@ -468,6 +563,9 @@ export class SkeletonFigures {
         r /= hits;
         g /= hits;
         b /= hits;
+        // Unlit, the eyes come out at full strength, the skeleton's embers
+        // and the goblin's yellow alike, unlike anything moonlit.
+        const glow = r > 235 && b < 70;
         if (flash > 0) {
           r += (255 - r) * flash;
           g += (235 - g) * flash;
@@ -475,9 +573,7 @@ export class SkeletonFigures {
         }
         const sx = cx0 + cx - view.x0;
         const sy = cy0 + cy - view.y0;
-        // The embers keep their glow rather than being rimmed in moonlight.
-        const ember = r > 150 && r > g * 1.6 && r > b * 2;
-        if (hits < N - 4 && !ember) {
+        if (hits < N - 4 && !glow) {
           const o = outline(mx, my, hits / N);
           const t = Math.min(1, 0.3 + o.rim * 0.55);
           cells.push({ sx, sy, g: o.g, r: r + (RIM[0] - r) * t, gg: g + (RIM[1] - g) * t, b: b + (RIM[2] - b) * t,
@@ -485,8 +581,8 @@ export class SkeletonFigures {
           continue;
         }
         const lum = (r * 0.3 + g * 0.55 + b * 0.15) / 255;
-        const ch = ember ? glyph('*') : RAMP[Math.min(RAMP.length - 1, 3 + Math.floor(lum * 2.2 * (RAMP.length - 3)))];
-        const k = ember ? 1 : 1.3;
+        const ch = glow ? glyph('*') : RAMP[Math.min(RAMP.length - 1, 3 + Math.floor(lum * 2.2 * (RAMP.length - 3)))];
+        const k = glow ? 1 : 1.3;
         cells.push({ sx, sy, g: ch, r: Math.min(255, 30 + r * k), gg: Math.min(255, 28 + g * k), b: Math.min(255, 24 + b * k),
           br: 4 + r * 0.04, bgG: 4 + g * 0.04, bb: 5 + b * 0.04 });
       }
@@ -494,7 +590,7 @@ export class SkeletonFigures {
     return { cells, top: top === Infinity ? null : cy0 + top, base: Math.floor(s.y) - view.y0 };
   }
 
-  // Draws one skeleton's cells through a writer (see cells.js).
+  // Draws one monster's cells through a writer (see cells.js).
   static draw(renderer, figure, write) {
     for (const c of figure.cells) write(renderer, c.sx, c.sy, c.g, c.r, c.gg, c.b, figure.base, c.br, c.bgG, c.bb);
   }

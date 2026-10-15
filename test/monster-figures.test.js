@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { SKELETON, Skeleton, Skeletons, toCells } from '../src/entities/skeleton.js';
+import { KINDS, Monster, Monsters, toCells } from '../src/entities/monsters.js';
 import { GRASS } from '../src/world/world.js';
 
 const dataURL = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
@@ -27,24 +27,26 @@ function moduleURL(path) {
   return url;
 }
 moduleURL('../vendor/three/utils/BufferGeometryUtils.js');
+moduleURL('../vendor/three/utils/SkeletonUtils.js');
 const { GLTFLoader } = await import(moduleURL('../vendor/three/loaders/GLTFLoader.js'));
 moduleURL('../src/entities/retarget.js');
 moduleURL('../src/entities/gear.js');
 moduleURL('../src/entities/armory.js');
 moduleURL('../src/entities/model.js');
-const { SkeletonFigures } = await import(moduleURL('../src/entities/skeleton-figure.js'));
+const { MonsterFigures } = await import(moduleURL('../src/entities/monster-figures.js'));
 
 const bytes = readFileSync(new URL('../assets/ual1.glb', import.meta.url));
 const gltf = await new GLTFLoader().parseAsync(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '');
-const figures = () => new SkeletonFigures(gltf, { renderer: {
+const figures = () => new MonsterFigures(gltf, { renderer: {
   setPixelRatio() {}, setSize() {}, setClearColor() {},
 } });
+const SKELETON = KINDS.skeleton;
 const open = { isWalkable: () => true, typeAt: () => GRASS };
 const dt = 1 / 60;
 
 test('the skeleton is bones on the armature, not the mannequin skin', () => {
   const f = figures();
-  const s = new Skeleton(0, 0, { risen: true });
+  const s = new Monster(0, 0, { risen: true });
   f.update(dt, [s]);
   const rig = f.rigs.get(s);
   let skinned = 0;
@@ -63,36 +65,36 @@ test('the skeleton is bones on the armature, not the mannequin skin', () => {
 
 test('a skeleton stands upright, runs on its feet, and falls over when killed', () => {
   const f = figures();
-  const skeletons = new Skeletons({ firstAfter: Infinity });
-  const s = new Skeleton(0, 0, { risen: true });
-  skeletons.list.push(s);
+  const monsters = new Monsters({ counts: { skeleton: 3 }, first: Infinity });
+  const s = new Monster(0, 0, { risen: true });
+  monsters.list.push(s);
   const player = { x: toCells(12, 0)[0], y: 0, air: 0, heading: -Math.PI / 2, runSpeed: 5, feel: { reach: 0.95 } };
-  for (let t = 0; t < 0.5; t += dt) f.update(dt, skeletons.list);
+  for (let t = 0; t < 0.5; t += dt) f.update(dt, monsters.list);
   const rig = f.rigs.get(s);
   const standing = rig.headHeight();
   assert.ok(standing > 1.3, `head at ${standing} m`);
   // Running at the player, it stays on its feet.
   for (let t = 0; t < 1.5; t += dt) {
-    skeletons.update(dt, open, player);
-    f.update(dt, skeletons.list);
+    monsters.update(dt, open, player);
+    f.update(dt, monsters.list);
   }
   assert.equal(s.state, 'chase');
   assert.ok(rig.weights.run > 0.5, 'running');
   assert.ok(rig.headHeight() > 1.1);
   // Cut down, it collapses to the ground.
   [player.x, player.y] = [s.x + toCells(1, 0)[0], s.y];
-  skeletons.strike({ type: 'strike', swing: 'spin' }, player, 1000);
+  monsters.strike({ type: 'strike', swing: 'spin' }, player, 1000);
   assert.equal(s.state, 'dead');
   for (let t = 0; t < 3; t += dt) {
-    skeletons.update(dt, open, player);
-    f.update(dt, skeletons.list);
+    monsters.update(dt, open, player);
+    f.update(dt, monsters.list);
   }
   assert.ok(rig.headHeight() < 0.5, `head at ${rig.headHeight()} m after falling`);
 });
 
 test('a skeleton climbs up from the ground as it rises', () => {
   const f = figures();
-  const s = new Skeleton(0, 0);
+  const s = new Monster(0, 0);
   f.update(dt, [s]);
   const rig = f.rigs.get(s);
   assert.ok(rig.headHeight() < 0.5, `starts at ${rig.headHeight()} m`);
@@ -105,7 +107,7 @@ test('a skeleton climbs up from the ground as it rises', () => {
 
 test('a wading skeleton stands on the lake bed, its legs cut by the surface', () => {
   const f = figures();
-  const s = new Skeleton(0, 0, { risen: true });
+  const s = new Monster(0, 0, { risen: true });
   f.update(dt, [s]);
   const rig = f.rigs.get(s);
   const dry = rig.headHeight();
@@ -118,14 +120,14 @@ test('a wading skeleton stands on the lake bed, its legs cut by the surface', ()
   for (const c of contacts) assert.ok(Math.abs(c.x) < 0.4 && Math.abs(c.z) < 0.4);
 });
 
-test('rigs of removed skeletons are reused', () => {
+test('rigs of removed monsters are reused', () => {
   const f = figures();
-  const a = new Skeleton(0, 0, { risen: true });
+  const a = new Monster(0, 0, { risen: true });
   f.update(dt, [a]);
   const rig = f.rigs.get(a);
   f.update(dt, []);
   assert.equal(f.rigs.size, 0);
-  const b = new Skeleton(5, 5, { risen: true });
+  const b = new Monster(5, 5, { risen: true });
   f.update(dt, [b]);
   assert.equal(f.rigs.get(b), rig);
   assert.equal(f.scene.children.filter((c) => c === rig.model).length, 1);
@@ -133,7 +135,7 @@ test('rigs of removed skeletons are reused', () => {
 
 test('read-back pixels become cells: outline at the edges, glyphs inside, glowing eyes', () => {
   const f = figures();
-  const s = new Skeleton(10.5, 20.5, { risen: true });
+  const s = new Monster(10.5, 20.5, { risen: true });
   // Paint slot 0: a solid bone-white block and a lone ember-red cell.
   const fill = (cx, cy, rgb, cover = 1) => {
     for (let j = 0; j < 6; j++) {
@@ -158,4 +160,41 @@ test('read-back pixels become cells: outline at the edges, glyphs inside, glowin
   // A fresh cut flashes the bones.
   const flashed = f.cellsOf(0, s, view, 1);
   assert.ok(flashed.cells[0].gg >= cells[0].gg);
+});
+
+test('a goblin is a small green figure with a big head, and falls over when killed', () => {
+  const f = figures();
+  const monsters = new Monsters({ counts: { goblin: 1 }, first: Infinity });
+  const g = new Monster(0, 0, { kind: KINDS.goblin });
+  const s = new Monster(5, 0, { risen: true });
+  monsters.list.push(g, s);
+  f.update(dt, monsters.list);
+  const rig = f.rigs.get(g);
+  let skin = null;
+  rig.model.traverse((o) => { if (o.isSkinnedMesh) skin = o; });
+  assert.ok(skin, 'it keeps the mannequin skin');
+  assert.ok(skin.material.vertexColors);
+  // Its painted skin is its own: the player's figure paints the shared mesh.
+  let shared = null;
+  gltf.scene.traverse((o) => { if (o.isSkinnedMesh && o.name === skin.name) shared = o; });
+  assert.notEqual(skin.geometry, shared.geometry);
+  const colors = skin.geometry.attributes.color;
+  let green = 0;
+  for (let i = 0; i < colors.count; i++) if (colors.getY(i) > colors.getX(i) && colors.getY(i) > colors.getZ(i)) green++;
+  assert.ok(green > colors.count * 0.5, 'mostly green');
+  for (let t = 0; t < 0.5; t += dt) f.update(dt, monsters.list);
+  const standing = rig.headHeight();
+  const skeletonHead = f.rigs.get(s).headHeight();
+  assert.ok(standing > 0.7 && standing < skeletonHead * 0.75, `goblin head at ${standing} m, skeleton ${skeletonHead} m`);
+  assert.ok(rig.head.scale.x > 1.2, 'a big head');
+  const p = { x: g.x + toCells(0.8, 0)[0], y: 0, air: 0, heading: -Math.PI / 2, runSpeed: 5, feel: { reach: 0.95 } };
+  monsters.strike({ type: 'strike', swing: 'spin' }, p, 1000);
+  for (let t = 0; t < 3; t += dt) {
+    monsters.update(dt, open, p);
+    f.update(dt, monsters.list);
+  }
+  assert.ok(rig.headHeight() < 0.35, `head at ${rig.headHeight()} m after falling`);
+  // Long after the fall has ended, the head is still its own size.
+  for (let t = 0; t < 2; t += dt) f.update(dt, monsters.list);
+  assert.ok(Math.abs(rig.head.scale.x - 1.35) < 1e-6, `head scale ${rig.head.scale.x}`);
 });
