@@ -290,3 +290,116 @@ test('skeletons and goblins each come in up to their own number', () => {
   assert.ok(d >= GOBLIN.spawn.near - 0.01 && d <= GOBLIN.spawn.far + 0.01, `${d} m away`);
   assert.ok(!monsters.events.some((e) => e.type === 'rise' && e.monster === g), 'goblins do not climb out of the ground');
 });
+
+const TROLL = KINDS.troll;
+const troll = (mx, mz) => new Monster(...toCells(mx, mz), { kind: TROLL });
+
+test('a troll lumbers: slower than a skeleton, easily outrun', () => {
+  const t = troll(0, 0);
+  const s = risen(0, 0);
+  const target = player(...toCells(25, 0));
+  let fastest = { t: 0, s: 0 };
+  for (let time = 0; time < 4; time += dt) {
+    t.update(dt, open, target);
+    s.update(dt, open, target);
+    fastest = { t: Math.max(fastest.t, t.groundSpeed), s: Math.max(fastest.s, s.groundSpeed) };
+  }
+  assert.ok(fastest.t < fastest.s * 0.75, `troll ${fastest.t} m/s, skeleton ${fastest.s} m/s`);
+  assert.ok(fastest.t < target.runSpeed * 0.6);
+});
+
+test('a troll raises its club slowly and smashes the ground where it lands', () => {
+  const t = troll(0, 0);
+  const target = player(...toCells(1.8, 0));
+  const events = [];
+  let swungAt = null;
+  for (let time = 0; time < 2.5; time += dt) {
+    t.update(dt, open, target);
+    for (const e of t.events.splice(0)) {
+      events.push({ ...e, time });
+      if (e.type === 'swing') swungAt ??= time;
+    }
+  }
+  const slam = events.find((e) => e.type === 'slam');
+  const hit = events.find((e) => e.type === 'hit-player');
+  assert.ok(slam && hit, events.map((e) => e.type).join());
+  assert.ok(hit.time - swungAt > 0.8, 'a long, readable wind-up');
+  assert.equal(hit.amount, TROLL.damage);
+  assert.ok(TROLL.damage > SKELETON.damage * 2);
+  // The smash lands out in front, where the player stands.
+  assert.ok(Math.hypot(...toMetres(slam.x - target.x, slam.y - target.y)) < 0.8);
+});
+
+test('stepping aside from the smash dodges it', () => {
+  const t = troll(0, 0);
+  const target = player(...toCells(1.8, 0));
+  const events = [];
+  for (let time = 0; time < TROLL.windUp * 0.8; time += dt) {
+    t.update(dt, open, target);
+    events.push(...t.events.splice(0));
+  }
+  assert.equal(t.state, 'attack');
+  // Round behind its shoulder, out of the club's arc.
+  [target.x, target.y] = toCells(-0.4, 1.6);
+  for (let time = 0; time < 0.6; time += dt) {
+    t.update(dt, open, target);
+    events.push(...t.events.splice(0));
+  }
+  assert.ok(events.some((e) => e.type === 'slam'), 'the club still comes down');
+  assert.ok(!events.some((e) => e.type === 'hit-player'));
+});
+
+test('a troll shrugs off cuts, reeling only from every third, and rages when badly hurt', () => {
+  const monsters = new Monsters({ counts: { troll: 1 }, first: Infinity });
+  const t = troll(1.9, 0);
+  monsters.list.push(t);
+  const p = player(0, 0, { heading: Math.PI / 2 });
+  const cut = () => {
+    [t.x, t.y] = toCells(1.9, 0);
+    return monsters.strike({ type: 'strike', swing: 'a' }, p, 22).length;
+  };
+  monsters.update(dt, open, p);
+  assert.equal(cut(), 1, 'a cut finds a troll further off than a skeleton');
+  assert.notEqual(t.state, 'stagger');
+  cut();
+  assert.notEqual(t.state, 'stagger');
+  cut();
+  assert.equal(t.state, 'stagger', 'the third cut makes it reel');
+  assert.ok(!monsters.events.some((e) => e.type === 'enrage'));
+  cut();
+  assert.equal(t.enraged, true);
+  assert.equal(monsters.events.filter((e) => e.type === 'enrage').length, 1);
+  cut();
+  cut();
+  assert.ok(t.alive, 'six cuts are not enough');
+  cut();
+  assert.equal(t.alive, false, 'seven bring it down');
+  // A skeleton as far off is out of reach of the same cut.
+  const s = risen(1.9, 0);
+  monsters.list.push(s);
+  assert.equal(monsters.strike({ type: 'strike', swing: 'a' }, p, 22).length, 0);
+});
+
+test('an enraged troll is quicker', () => {
+  const calm = troll(0, 0);
+  const angry = troll(0, 5);
+  angry.enraged = true;
+  const target = player(...toCells(20, 2.5));
+  let fastest = { calm: 0, angry: 0 };
+  for (let time = 0; time < 4; time += dt) {
+    calm.update(dt, open, target);
+    angry.update(dt, open, target);
+    fastest = { calm: Math.max(fastest.calm, calm.groundSpeed), angry: Math.max(fastest.angry, angry.groundSpeed) };
+  }
+  assert.ok(fastest.angry > fastest.calm * 1.25, JSON.stringify(fastest));
+});
+
+test('one troll at most comes, well after the first skeletons, and not too close', () => {
+  const monsters = new Monsters({ seed: 5 });
+  const p = player(0, 0, { alive: false });
+  for (let t = 0; t < TROLL.spawn.first - 1; t += 0.5) monsters.update(0.5, open, { ...p });
+  assert.equal(monsters.of('troll').length, 0);
+  for (let t = 0; t < 120; t += 0.5) monsters.update(0.5, open, { ...p });
+  assert.equal(monsters.of('troll').length, 1);
+  assert.ok(distance(monsters.of('troll')[0], p) >= TROLL.spawn.near - 0.01);
+});

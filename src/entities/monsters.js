@@ -44,8 +44,19 @@ export const KINDS = freeze({
     // How long the body lies before sinking away, and how long that takes.
     linger: 24,
     sink: 2.5,
-    // How close two monsters may stand, in metres.
+    // How close two monsters may stand, and how far its body reaches out
+    // from its middle (so how close the player can get, and how far off a
+    // cut still finds it), in metres.
     personalSpace: 0.85,
+    radius: 0.75,
+    // How many cuts it takes before reeling from one; 1 reels from every cut.
+    poise: 1,
+    // Below this share of its health it is enraged: quicker, by `fury`, and
+    // swinging again sooner. 0 never is.
+    enrage: 0,
+    fury: 1,
+    // Whether its blows shake the ground where they land.
+    slam: false,
     // Hit and run: after this many blows it backs off this far for a while.
     // 0 never backs off.
     skirmishAfter: 0,
@@ -85,6 +96,11 @@ export const KINDS = freeze({
     linger: 18,
     sink: 2.5,
     personalSpace: 0.7,
+    radius: 0.6,
+    poise: 1,
+    enrage: 0,
+    fury: 1,
+    slam: false,
     skirmishAfter: 1,
     backOff: 3.2,
     panic: 0.45,
@@ -92,6 +108,44 @@ export const KINDS = freeze({
     spawn: freeze({ near: 20, far: 28, first: 12, every: 14 }),
     stride: freeze({ walk: 0.4, run: 0.7 }),
     sounds: freeze({ hurt: 'goblin-hit', death: 'goblin-death', spot: 'goblin-spot' }),
+  }),
+  // Huge, slow and hard to stop: a troll lumbers after the player, raises its
+  // stone club high and brings it down in a smash that shakes the ground. It
+  // shrugs off most cuts, reeling only from every third, and rages when
+  // badly hurt. Outrun it, or step aside from the smash and cut back.
+  troll: freeze({
+    id: 'troll',
+    name: 'Troll',
+    health: 150,
+    rise: 0,
+    walkSpeed: 1.3,
+    runShare: 0.5,
+    maxRun: 2.8,
+    notice: 30,
+    forget: 46,
+    reach: 2.1,
+    windUp: 0.95,
+    swingTime: 1.7,
+    hitRange: 2.8,
+    hitArc: 1.0,
+    damage: 26,
+    cooldown: 1.1,
+    stagger: 0.55,
+    knockback: 0.25,
+    linger: 30,
+    sink: 3.5,
+    personalSpace: 1.4,
+    radius: 1.15,
+    poise: 3,
+    enrage: 0.45,
+    fury: 1.35,
+    slam: true,
+    skirmishAfter: 0,
+    panic: 0,
+    flee: 0,
+    spawn: freeze({ near: 24, far: 32, first: 40, every: 50 }),
+    stride: freeze({ walk: 1.0, run: 1.4 }),
+    sounds: freeze({ hurt: 'troll-hit', death: 'troll-death', spot: 'troll-roar', enrage: 'troll-roar' }),
   }),
 });
 
@@ -143,6 +197,9 @@ export class Monster {
     // Seconds since the last cut it took, for a flash of the body.
     this.hurt = Infinity;
     this.panicked = false;
+    // Cuts taken since it last reeled, and whether it has flown into a rage.
+    this.shrugged = 0;
+    this.enraged = false;
     this.deadTime = 0;
     // How far the body has sunk into the ground, 0 to 1.
     this.sunk = 0;
@@ -181,9 +238,14 @@ export class Monster {
     this.heading = wrap(this.heading + Math.max(-step, Math.min(step, d)));
   }
 
-  // Its full run towards a player running at `runSpeed`.
+  // Its full run towards a player running at `runSpeed`, and quicker still
+  // in a rage.
   runFor(target) {
-    return Math.min(this.kind.maxRun, (target?.runSpeed ?? 5) * this.kind.runShare);
+    return Math.min(this.kind.maxRun, (target?.runSpeed ?? 5) * this.kind.runShare) * this.fury;
+  }
+
+  get fury() {
+    return this.enraged ? this.kind.fury : 1;
   }
 
   // One step of thought and movement. `target` is the player; `others` the
@@ -232,7 +294,7 @@ export class Monster {
           break;
         }
         // Slow to a walk when nearly within reach, so it does not overrun.
-        want = prey.distance < k.reach + 1.2 ? k.walkSpeed * 1.5 : this.runFor(target);
+        want = prey.distance < k.reach + 1.2 ? k.walkSpeed * 1.5 * this.fury : this.runFor(target);
         break;
       }
       case 'attack':
@@ -241,6 +303,10 @@ export class Monster {
         if (!this.struck && this.stateTime >= k.windUp) {
           this.struck = true;
           this.blows++;
+          if (k.slam) {
+            const [dx, dy] = toCells(Math.sin(this.heading) * k.reach * 0.9, Math.cos(this.heading) * k.reach * 0.9);
+            this.events.push({ type: 'slam', x: this.x + dx, y: this.y + dy, strength: 1 });
+          }
           if (prey && this.canHit(prey, target)) {
             this.events.push({ type: 'hit-player', amount: k.damage, x: target.x, y: target.y });
           } else {
@@ -250,7 +316,7 @@ export class Monster {
         // A little lunge into the blow.
         if (this.stateTime > k.windUp * 0.6 && this.stateTime < k.windUp * 1.1) want = 1.6;
         if (this.stateTime >= k.swingTime) {
-          this.cooldown = k.cooldown;
+          this.cooldown = k.cooldown / this.fury;
           if (prey && k.skirmishAfter && this.blows >= k.skirmishAfter) {
             // Skip back out of reach and circle before the next rush.
             this.blows = 0;
@@ -303,8 +369,8 @@ export class Monster {
         mz -= (o.mz / o.distance) * push;
       }
     }
-    if (prey && prey.distance < 0.75 && prey.distance > 1e-6) {
-      const push = (0.75 - prey.distance);
+    if (prey && prey.distance < k.radius && prey.distance > 1e-6) {
+      const push = (k.radius - prey.distance);
       mx -= (prey.mx / prey.distance) * push;
       mz -= (prey.mz / prey.distance) * push;
     }
@@ -370,6 +436,10 @@ export class Monster {
     this.hurt = 0;
     const away = this.offsetTo(fromX, fromY);
     this.events.push({ type: 'hurt', amount: damage, x: this.x, y: this.y, strength: Math.min(1, damage / 25) });
+    if (k.enrage && !this.enraged && this.health > 0 && this.health < k.health * k.enrage) {
+      this.enraged = true;
+      this.events.push({ type: 'enrage', x: this.x, y: this.y, strength: 1 });
+    }
     if (this.health <= 0) {
       // Facing the blow as it falls.
       this.heading = away.bearing;
@@ -379,6 +449,11 @@ export class Monster {
       this.events.push({ type: 'death', x: this.x, y: this.y, strength: 1 });
       return true;
     }
+    // A heavy monster shrugs off most cuts, carrying on with what it was
+    // doing, and reels only from every so many.
+    this.shrugged++;
+    if (this.shrugged < k.poise) return true;
+    this.shrugged = 0;
     this.knock = { bearing: away.bearing + Math.PI, left: k.knockback };
     this.heading = away.bearing;
     this.speed = 0;
@@ -392,7 +467,7 @@ export class Monster {
 // hits, and clears away the fallen. Events carry the monster they came from.
 export class Monsters {
   // `counts` caps how many of each kind are about at once.
-  constructor({ counts = { skeleton: 3, goblin: 2 }, seed = 1, first = null, every = null } = {}) {
+  constructor({ counts = { skeleton: 3, goblin: 2, troll: 1 }, seed = 1, first = null, every = null } = {}) {
     this.list = [];
     this.counts = { ...counts };
     this.random = mulberry32((seed * 7919) ^ 0x5eed);
@@ -464,14 +539,14 @@ export class Monsters {
   // monster within the weapon's reach in front of them, or all round for a
   // spinning slash. Returns the monsters hit.
   strike(event, player, damage) {
-    const reach = (player.feel?.reach ?? 0.95) + 0.75;
+    const reach = player.feel?.reach ?? 0.95;
     const all = event.swing === 'spin';
     const hit = [];
     for (const monster of this.list) {
       if (!monster.alive) continue;
       const [mx, mz] = toMetres(monster.x - player.x, monster.y - player.y);
       const distance = Math.hypot(mx, mz);
-      if (distance > reach) continue;
+      if (distance > reach + monster.kind.radius) continue;
       const off = Math.abs(wrap(Math.atan2(mx, mz) - player.heading));
       if (!all && distance > 0.5 && off > 1.25) continue;
       if (monster.takeHit(damage, player.x, player.y)) hit.push(monster);

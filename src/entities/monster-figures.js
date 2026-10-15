@@ -13,17 +13,21 @@ import { getWeapon } from './weapons.js';
 // skin and hangs bones on its armature instead: a skull with ember eyes,
 // ribs, a pelvis and long thin limbs. A goblin keeps the skin, painted green
 // with a ragged loincloth, shrunk to a little over a metre, with a big head,
-// long ears and nose and yellow eyes. One offscreen renderer serves every
-// monster, each drawn into its own slot of the image, read back in one go.
+// long ears and nose and yellow eyes. A troll is the same skin grown to
+// two and a half metres, mossy grey, hunched over broad shoulders and a
+// small head with tusks, swinging a stone club. One offscreen renderer
+// serves every monster, each drawn into its own slot of the image, read
+// back in one go.
 
 const SX = 4;
 const SY = 6;
 const N = SX * SY;
-// Each slot, in cells: wide enough for a skeleton lying full length across
-// the screen, deep enough for one fallen towards the camera.
+// Each slot, in cells: wide enough for a troll lying full length across the
+// screen, tall enough for its club raised overhead, and deep enough for one
+// fallen towards the camera.
 const COLS = 64;
-const ROWS = 44;
-const FEET_ROW = 30;
+const ROWS = 52;
+const FEET_ROW = 38;
 // At most this many are drawn, nearest the player first.
 export const MAX_DRAWN = 4;
 const FOOT_FLOOR = 0.1;
@@ -34,30 +38,50 @@ const RIM = [214, 222, 236];
 const BONE = 0xd9d0b4;
 const KNUCKLE = 0xa89f88;
 const EMBER = 0xff5a1e;
-const GOBLIN = { skin: 0x6b8a3c, dark: 0x4c6630, cloth: 0x5c4630, eye: 0xffdc28 };
+// The colours of each skinned kind: skin, darker hands and feet, the hide
+// round its hips, its glowing eyes, and anything bony such as tusks.
+const PALETTES = {
+  goblin: { skin: 0x6b8a3c, dark: 0x4c6630, cloth: 0x5c4630, eye: 0xffdc28 },
+  troll: { skin: 0x7c8268, dark: 0x5c6150, cloth: 0x5e4834, eye: 0xffa020, tusk: 0xe6dcc0 },
+};
 
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 const RUSTED_SWORD = { ...getWeapon('sword-shield', 'copper'), materialColor: [120, 84, 58] };
 const NOTCHED_DAGGER = { ...getWeapon('dagger', 'copper'), materialColor: [150, 110, 70] };
+const STONE_CLUB = { ...getWeapon('hammer', 'copper'), materialColor: [128, 124, 112] };
 
-// How each kind looks and moves: its clips, its size, how big its head is,
-// and the blade in its hand.
+// How each kind looks and moves: its clips, its size, how some bones are
+// scaled (a goblin's big head, a troll's broad shoulders and small head),
+// what is hung on it, and the weapon in its hand and how big that is.
 const LOOKS = {
   skeleton: {
     clips: { idle: 'Sword_Idle', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Sword_Attack', hit: 'Hit_Chest',
       death: 'Death01' },
     skinned: false,
     scale: 1,
-    headScale: 1,
+    bones: {},
     weapon: RUSTED_SWORD,
+    weaponScale: 1,
   },
   goblin: {
     clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Sprint_Loop', attack: 'Punch_Jab', hit: 'Hit_Head',
       death: 'Death01' },
     skinned: true,
     scale: 0.62,
-    headScale: 1.35,
+    bones: { 'DEF-head': 1.35 },
     weapon: NOTCHED_DAGGER,
+    weaponScale: 1,
+  },
+  troll: {
+    clips: { idle: 'Idle_Loop', walk: 'Walk_Loop', run: 'Jog_Fwd_Loop', attack: 'Sword_Attack', hit: 'Hit_Chest',
+      death: 'Death01' },
+    skinned: true,
+    scale: 1.45,
+    // Scaling the chest scales everything above it too: the shoulders and
+    // arms broaden, so the head is shrunk back down past its own size.
+    bones: { 'DEF-spine.003': 1.22, 'DEF-head': 0.62, 'DEF-forearm.L': 1.15, 'DEF-forearm.R': 1.15 },
+    weapon: STONE_CLUB,
+    weaponScale: 1.5,
   },
 };
 
@@ -70,9 +94,12 @@ function materialsOf() {
     knuckle: new THREE.MeshLambertMaterial({ color: KNUCKLE }),
     socket: new THREE.MeshBasicMaterial({ color: 0x0c0806 }),
     ember: new THREE.MeshBasicMaterial({ color: EMBER }),
-    goblin: new THREE.MeshLambertMaterial({ vertexColors: true }),
-    goblinSkin: new THREE.MeshLambertMaterial({ color: GOBLIN.skin }),
-    goblinEye: new THREE.MeshBasicMaterial({ color: GOBLIN.eye }),
+    painted: new THREE.MeshLambertMaterial({ vertexColors: true }),
+    goblinSkin: new THREE.MeshLambertMaterial({ color: PALETTES.goblin.skin }),
+    goblinEye: new THREE.MeshBasicMaterial({ color: PALETTES.goblin.eye }),
+    trollSkin: new THREE.MeshLambertMaterial({ color: PALETTES.troll.skin }),
+    trollEye: new THREE.MeshBasicMaterial({ color: PALETTES.troll.eye }),
+    tusk: new THREE.MeshLambertMaterial({ color: PALETTES.troll.tusk }),
   };
   return materials;
 }
@@ -184,11 +211,29 @@ function dressGoblin(model, bones) {
     new THREE.Vector3(0, -0.45, 1).normalize(), m.goblinSkin);
 }
 
-// The mannequin's own skin, painted goblin green by the bone that moves each
-// vertex most: a ragged loincloth round the hips and thighs, darker hands
-// and feet. The geometry is copied, as the player's figure paints the
+// Tusks jutting up from the jaw, a bulbous nose and small amber eyes under
+// a heavy brow, on the troll's head in its rest pose.
+function dressTroll(model, bones) {
+  const m = materialsOf();
+  model.updateMatrixWorld(true);
+  const head = bones[bone('DEF-head')];
+  const at = head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.08, 0));
+  for (const side of [-1, 1]) {
+    cone(head, at.clone().add(new THREE.Vector3(side * 0.055, -0.06, 0.08)), 0.022, 0.09,
+      new THREE.Vector3(side * 0.25, 1, 0.3).normalize(), m.tusk);
+    ball(head, at.clone().add(new THREE.Vector3(side * 0.042, 0.03, 0.085)), 0.016, m.trollEye);
+  }
+  ball(head, at.clone().add(new THREE.Vector3(0, 0.0, 0.11)), 0.04, m.trollSkin, [1, 0.9, 1.1]);
+  ball(head, at.clone().add(new THREE.Vector3(0, 0.06, 0.07)), 0.07, m.trollSkin, [1.5, 0.45, 0.8]);
+}
+
+const DRESS = { goblin: dressGoblin, troll: dressTroll };
+
+// The mannequin's own skin, painted from a kind's palette by the bone that
+// moves each vertex most: a ragged hide round the hips and thighs, darker
+// hands and feet. The geometry is copied, as the player's figure paints the
 // shared one with clothes.
-function paintGoblin(model) {
+function paintSkin(model, palette) {
   model.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     o.geometry = o.geometry.clone();
@@ -202,10 +247,10 @@ function paintGoblin(model) {
       // The hem rises and falls, so the cloth looks torn.
       const hem = /thigh/.test(name) && position.getY(i) > 0.68 + 0.05 * Math.sin(position.getX(i) * 60);
       const part = /hips/.test(name) || hem ? 'cloth' : /hand|f_|thumb|foot|toe/.test(name) ? 'dark' : 'skin';
-      color.set(GOBLIN[part]).toArray(colors, i * 3);
+      color.set(palette[part]).toArray(colors, i * 3);
     }
     o.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    o.material = materialsOf().goblin;
+    o.material = materialsOf().painted;
     o.frustumCulled = false;
   });
 }
@@ -213,7 +258,8 @@ function paintGoblin(model) {
 // A copy of the library's scene with only what a kind needs: the armature,
 // and for a skinned kind the mannequin's skin, freshly painted. Anything the
 // player's figure hung on the bones is left behind.
-function prototypeOf(scene, skinned) {
+function prototypeOf(scene, kind) {
+  const skinned = LOOKS[kind].skinned;
   const copy = skinned ? cloneSkinned(scene) : scene.clone();
   const keep = (o) => o.isBone || (skinned && o.isSkinnedMesh);
   const drop = [];
@@ -224,7 +270,7 @@ function prototypeOf(scene, skinned) {
     if (!needed) drop.push(o);
   });
   for (const o of drop) o.removeFromParent();
-  if (skinned) paintGoblin(copy);
+  if (skinned) paintSkin(copy, PALETTES[kind]);
   return copy;
 }
 
@@ -237,12 +283,14 @@ class Rig {
     this.model = this.look.skinned ? cloneSkinned(source) : source.clone();
     this.bones = {};
     this.model.traverse((o) => { if (o.isBone) this.bones[o.name] = o; });
-    if (this.look.skinned) dressGoblin(this.model, this.bones);
+    if (this.look.skinned) DRESS[kind](this.model, this.bones);
     else dressBones(this.model, this.bones);
     this.armory = new Armory(this.model, this.bones);
     this.armory.update(this.look.weapon, true);
+    this.armory.active.scale.setScalar(this.look.weaponScale);
     this.model.scale.setScalar(this.look.scale);
     this.head = this.bones[bone('DEF-head')];
+    this.scaled = Object.entries(this.look.bones).map(([name, s]) => [this.bones[bone(name)], s]);
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
     this.legs = ['L', 'R'].map((side) => ['thigh', 'shin', 'foot'].map((b) => this.bones[bone(`DEF-${b}.${side}`)]));
     this.waterDepth = 0;
@@ -317,9 +365,9 @@ class Rig {
       a[key].setEffectiveWeight(this.weights[key]);
     }
     this.mixer.update(dt);
-    // A big head, set outright each frame: the clips key the bones' scale,
+    // Bone sizes, set outright each frame: the clips key the bones' scale,
     // but stop writing it once a clamped clip such as the fall has ended.
-    if (this.look.headScale !== 1) this.head.scale.setScalar(this.look.headScale);
+    for (const [b, s] of this.scaled) b.scale.setScalar(s);
     this.model.rotation.y = s.heading;
     // Keep a standing monster's feet on the ground; a fallen one lies where
     // the clip put it, sinking away at last.
@@ -398,8 +446,7 @@ function groundSpeed(rig, key) {
 export class MonsterFigures {
   // `gltf` is the loaded animation library; its scene is copied, not used.
   constructor(gltf, { renderer = null } = {}) {
-    this.prototypes = Object.fromEntries(Object.entries(LOOKS)
-      .map(([kind, look]) => [kind, prototypeOf(gltf.scene, look.skinned)]));
+    this.prototypes = Object.fromEntries(Object.keys(LOOKS).map((kind) => [kind, prototypeOf(gltf.scene, kind)]));
     this.clips = Object.fromEntries(Object.entries(LOOKS).map(([kind, look]) => [kind,
       Object.fromEntries(Object.entries(look.clips).map(([key, name]) => {
         const clip = gltf.animations.find((c) => c.name === name);

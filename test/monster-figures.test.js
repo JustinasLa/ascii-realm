@@ -152,11 +152,11 @@ test('read-back pixels become cells: outline at the edges, glyphs inside, glowin
   const view = { x0: 0, y0: 0 };
   const { cells, top } = f.cellsOf(0, s, view, 0);
   assert.equal(cells.length, 3 * 4 + 2);
-  const at = (cx, cy) => cells.find((c) => c.sx === Math.floor(s.x) - 32 + cx && c.sy === Math.floor(s.y) - 30 + cy);
+  const at = (cx, cy) => cells.find((c) => c.sx === Math.floor(s.x) - 32 + cx && c.sy === Math.floor(s.y) - 38 + cy);
   assert.ok(at(31, 11).g !== at(29, 10).g, 'an edge is drawn differently from the solid bone');
   const eye = at(31, 8);
   assert.ok(eye.r > 200 && eye.gg < 140, 'the eye keeps its ember colour');
-  assert.equal(top, Math.floor(s.y) - 30 + 8);
+  assert.equal(top, Math.floor(s.y) - 38 + 8);
   // A fresh cut flashes the bones.
   const flashed = f.cellsOf(0, s, view, 1);
   assert.ok(flashed.cells[0].gg >= cells[0].gg);
@@ -197,4 +197,29 @@ test('a goblin is a small green figure with a big head, and falls over when kill
   // Long after the fall has ended, the head is still its own size.
   for (let t = 0; t < 2; t += dt) f.update(dt, monsters.list);
   assert.ok(Math.abs(rig.head.scale.x - 1.35) < 1e-6, `head scale ${rig.head.scale.x}`);
+});
+
+test('a troll towers over a skeleton, broad and small-headed, and falls over when killed', () => {
+  const f = figures();
+  const monsters = new Monsters({ counts: { troll: 1 }, first: Infinity });
+  const t = new Monster(0, 0, { kind: KINDS.troll });
+  const s = new Monster(8, 0, { risen: true });
+  monsters.list.push(t, s);
+  for (let time = 0; time < 0.5; time += dt) f.update(dt, monsters.list);
+  const rig = f.rigs.get(t);
+  const tall = rig.headHeight();
+  const skeletonHead = f.rigs.get(s).headHeight();
+  assert.ok(tall > skeletonHead * 1.25, `troll head at ${tall} m, skeleton ${skeletonHead} m`);
+  let skin = null;
+  rig.model.traverse((o) => { if (o.isSkinnedMesh) skin = o; });
+  const c = skin.geometry.attributes.color;
+  assert.ok(Math.abs(c.getX(0) - c.getZ(0)) < 0.2, 'mossy grey, not goblin green');
+  const p = { x: t.x + toCells(1, 0)[0], y: 0, air: 0, heading: -Math.PI / 2, runSpeed: 5, feel: { reach: 0.95 } };
+  monsters.strike({ type: 'strike', swing: 'spin' }, p, 1000);
+  for (let time = 0; time < 4; time += dt) {
+    monsters.update(dt, open, p);
+    f.update(dt, monsters.list);
+  }
+  assert.ok(rig.headHeight() < 0.7, `head at ${rig.headHeight()} m after falling`);
+  assert.ok(Math.abs(rig.bones['DEF-spine003'].scale.x - 1.22) < 1e-6, 'its build holds after the fall');
 });

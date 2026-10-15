@@ -1,6 +1,7 @@
 import { Ambience } from './ambience.js';
 import { playBones } from './bones.js';
 import { playGoblin } from './goblin.js';
+import { playTroll } from './troll.js';
 import { AudioEngine } from './engine.js';
 import { EnvironmentSampler, nightAmount, surfaceAt } from './environment.js';
 import { FireAudio } from './fire.js';
@@ -64,6 +65,9 @@ export class GameAudio {
         break;
       case 'goblin-spot': case 'goblin-hit': case 'goblin-death':
         handles = playGoblin(this.engine, event);
+        break;
+      case 'troll-roar': case 'troll-hit': case 'troll-death':
+        handles = playTroll(this.engine, event);
         break;
       case 'draw': case 'sheathe': case 'swing':
         handles = playSword(this.engine, event);
