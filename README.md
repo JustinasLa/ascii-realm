@@ -176,6 +176,14 @@ shared online lobby.
   before sinking away. Up to three are about at once, and another rises a few
   seconds after one falls. Wounds heal after a short breather; struck down, the
   player wakes where they began. `?skeletons=N` sets how many roam (0 for none).
+- **Goblins.** Small, green and quick, with long ears and yellow eyes, goblins
+  come running from further off, cackling once they spot the player. One darts
+  in to stab with a notched dagger, skips back out of reach and circles before
+  rushing in again. Cut once, it panics and flees squealing, then comes back for
+  more; a second cut finishes it. They hit lighter than skeletons but more
+  often, are nearly as fast as a running player, and wade like everyone else.
+  Up to two are about at once; `?goblins=N` sets how many (0 for none).
+  Wounded monsters show a segmented health bar over their heads.
 - **Phone controls and performance.** A touch stick for walking/running, separate
   jump and sword buttons, and zoom controls in portrait or landscape. Rendering
   targets 60 fps, caps backing resolution, and lowers that resolution under

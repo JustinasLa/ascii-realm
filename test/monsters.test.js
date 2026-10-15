@@ -1,16 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SKELETON, Skeleton, Skeletons, toCells, toMetres } from '../src/entities/skeleton.js';
+import { KINDS, Monster, Monsters, toCells, toMetres } from '../src/entities/monsters.js';
 import { GRASS, MAX_WATER_DEPTH, WATER } from '../src/world/world.js';
 
+const SKELETON = KINDS.skeleton;
 const open = { isWalkable: () => true, typeAt: () => GRASS };
 const dt = 1 / 60;
 const distance = (a, b) => Math.hypot(...toMetres(a.x - b.x, a.y - b.y));
 const player = (x, y, extra = {}) => ({ x, y, air: 0, heading: 0, runSpeed: 5, feel: { reach: 0.95 }, ...extra });
-const risen = (mx, mz) => new Skeleton(...toCells(mx, mz), { risen: true });
+const risen = (mx, mz) => new Monster(...toCells(mx, mz), { risen: true });
 
 test('a skeleton climbs out of the ground before it moves', () => {
-  const s = new Skeleton(0, 0);
+  const s = new Monster(0, 0);
   const target = player(...toCells(10, 0));
   s.update(0.5, open, target);
   assert.equal(s.state, 'rise');
@@ -128,73 +129,164 @@ test('a skeleton caught inside an obstacle can walk out of it', () => {
 });
 
 test('sword cuts in front of the player hit, and three bring a skeleton down', () => {
-  const skeletons = new Skeletons({ firstAfter: Infinity });
+  const monsters = new Monsters({ counts: { skeleton: 3 }, first: Infinity });
   const s = risen(0, 1.2);
-  skeletons.list.push(s);
+  monsters.list.push(s);
   const p = player(0, 0, { heading: 0 });
   const behind = player(0, 0, { heading: Math.PI });
   const cut = { type: 'strike', swing: 'a' };
-  assert.equal(skeletons.strike(cut, behind, 22).length, 0, 'a cut the other way misses');
-  assert.equal(skeletons.strike({ ...cut, swing: 'spin' }, behind, 22).length, 1, 'a spin hits all round');
+  assert.equal(monsters.strike(cut, behind, 22).length, 0, 'a cut the other way misses');
+  assert.equal(monsters.strike({ ...cut, swing: 'spin' }, behind, 22).length, 1, 'a spin hits all round');
   assert.equal(s.state, 'stagger');
   assert.ok(s.alive);
-  skeletons.strike(cut, p, 22);
+  monsters.strike(cut, p, 22);
   assert.ok(s.alive);
-  skeletons.strike(cut, p, 22);
+  monsters.strike(cut, p, 22);
   assert.equal(s.alive, false);
   assert.equal(s.state, 'dead');
-  assert.equal(skeletons.kills, 1);
-  assert.ok(skeletons.events.some((e) => e.type === 'bone-collapse'));
+  assert.equal(monsters.kills, 1);
+  assert.ok(monsters.events.some((e) => e.type === 'death'));
   // The dead neither move nor take further hits.
-  assert.equal(skeletons.strike(cut, p, 22).length, 0);
+  assert.equal(monsters.strike(cut, p, 22).length, 0);
 });
 
 test('a staggered skeleton is knocked back and recovers', () => {
-  const skeletons = new Skeletons({ firstAfter: Infinity });
+  const monsters = new Monsters({ counts: { skeleton: 3 }, first: Infinity });
   const s = risen(0, 1);
-  skeletons.list.push(s);
+  monsters.list.push(s);
   const p = player(0, 0);
-  skeletons.strike({ type: 'strike', swing: 'a' }, p, 10);
+  monsters.strike({ type: 'strike', swing: 'a' }, p, 10);
   const before = distance(s, p);
-  for (let t = 0; t < 0.3; t += dt) skeletons.update(dt, open, p);
+  for (let t = 0; t < 0.3; t += dt) monsters.update(dt, open, p);
   assert.ok(distance(s, p) > before + 0.3, 'pushed away');
-  for (let t = 0; t < SKELETON.stagger; t += dt) skeletons.update(dt, open, p);
+  for (let t = 0; t < SKELETON.stagger; t += dt) monsters.update(dt, open, p);
   assert.notEqual(s.state, 'stagger');
 });
 
 test('the fallen lie a while, then sink away and are removed', () => {
-  const skeletons = new Skeletons({ firstAfter: Infinity });
+  const monsters = new Monsters({ counts: { skeleton: 3 }, first: Infinity });
   const s = risen(0, 1);
-  skeletons.list.push(s);
-  skeletons.strike({ type: 'strike', swing: 'a' }, player(0, 0), 1000);
+  monsters.list.push(s);
+  monsters.strike({ type: 'strike', swing: 'a' }, player(0, 0), 1000);
   const [x, y] = [s.x, s.y];
-  skeletons.update(SKELETON.linger - 1, open, player(0, 0));
-  assert.equal(skeletons.list.length, 1);
+  monsters.update(SKELETON.linger - 1, open, player(0, 0));
+  assert.equal(monsters.list.length, 1);
   assert.equal(s.sunk, 0);
   assert.deepEqual([s.x, s.y], [x, y]);
-  for (let t = 0; t < 1 + SKELETON.sink + 0.1; t += 0.1) skeletons.update(0.1, open, player(0, 0));
-  assert.equal(skeletons.list.length, 0);
+  for (let t = 0; t < 1 + SKELETON.sink + 0.1; t += 0.1) monsters.update(0.1, open, player(0, 0));
+  assert.equal(monsters.list.length, 0);
 });
 
-test('skeletons rise near the player, out of the water, up to the limit', () => {
+test('monsters rise near the player, out of the water, up to the limit', () => {
   const lakeSide = { isWalkable: () => true, typeAt: (x) => (x < 0 ? WATER : GRASS) };
-  const skeletons = new Skeletons({ max: 2, firstAfter: 1, respawn: 2, seed: 4 });
+  const monsters = new Monsters({ counts: { skeleton: 2 }, first: 1, every: 2, seed: 4 });
   const p = player(0, 0);
-  for (let t = 0; t < 0.9; t += 0.1) skeletons.update(0.1, lakeSide, p);
-  assert.equal(skeletons.list.length, 0);
-  for (let t = 0; t < 10; t += 0.1) skeletons.update(0.1, lakeSide, { ...p, x: 0, y: 0 });
-  assert.equal(skeletons.living.length, 2);
-  for (const s of skeletons.list) assert.ok(s.x >= 0);
+  for (let t = 0; t < 0.9; t += 0.1) monsters.update(0.1, lakeSide, p);
+  assert.equal(monsters.list.length, 0);
+  for (let t = 0; t < 10; t += 0.1) monsters.update(0.1, lakeSide, { ...p, x: 0, y: 0 });
+  assert.equal(monsters.living.length, 2);
+  for (const s of monsters.list) assert.ok(s.x >= 0);
   // A far spawn keeps out of sight but not out of mind.
-  const fresh = new Skeletons({ firstAfter: Infinity, seed: 9 });
+  const fresh = new Monsters({ counts: { skeleton: 3 }, first: Infinity, seed: 9 });
   const s = fresh.spawnNear(open, p);
   const d = distance(s, p);
   assert.ok(d >= 14 && d <= 26, `${d} m away`);
 });
 
-test('skeletons do not attack a player who has fallen', () => {
+test('monsters do not attack a player who has fallen', () => {
   const s = risen(0, 0);
   const target = player(...toCells(1, 0), { alive: false });
   for (let t = 0; t < 2; t += dt) s.update(dt, open, target);
   assert.ok(!s.events.some((e) => e.type === 'hit-player'));
+});
+
+const GOBLIN = KINDS.goblin;
+const goblin = (mx, mz) => new Monster(...toCells(mx, mz), { kind: GOBLIN });
+
+test('a goblin arrives on its feet and cackles when it spots the player', () => {
+  const g = goblin(0, 0);
+  assert.equal(g.state, 'idle');
+  const target = player(...toCells(GOBLIN.notice - 2, 0));
+  g.update(dt, open, target);
+  assert.equal(g.state, 'chase');
+  assert.deepEqual(g.events.map((e) => e.type), ['spot']);
+});
+
+test('a goblin is quicker than a skeleton but a sprinting player still escapes it', () => {
+  const g = goblin(0, 0);
+  const s = risen(0, 0);
+  const target = player(...toCells(20, 0));
+  let fastest = { g: 0, s: 0 };
+  for (let t = 0; t < 3; t += dt) {
+    g.update(dt, open, target);
+    s.update(dt, open, target);
+    fastest = { g: Math.max(fastest.g, g.groundSpeed), s: Math.max(fastest.s, s.groundSpeed) };
+  }
+  assert.ok(fastest.g > fastest.s + 0.4, `goblin ${fastest.g} m/s, skeleton ${fastest.s} m/s`);
+  assert.ok(fastest.g < target.runSpeed);
+});
+
+test('a goblin stabs, skips back out of reach to circle, then rushes in again', () => {
+  const g = goblin(0, 0);
+  const target = player(...toCells(0.9, 0));
+  const states = [];
+  const hits = [];
+  let farthest = 0;
+  let backedOff = false;
+  for (let t = 0; t < 6; t += dt) {
+    g.update(dt, open, target, [], () => 0.3);
+    for (const e of g.events.splice(0)) if (e.type === 'hit-player') hits.push(t);
+    if (states.at(-1) !== g.state) states.push(g.state);
+    if (g.state === 'skirmish') {
+      backedOff = true;
+      farthest = Math.max(farthest, distance(g, target));
+    }
+  }
+  assert.ok(backedOff, `states: ${states.join(' > ')}`);
+  assert.ok(farthest > GOBLIN.backOff * 0.8, `backed off to ${farthest} m`);
+  assert.ok(hits.length >= 2, 'and came back to stab again');
+  assert.equal(hits.length > 0 && GOBLIN.damage < SKELETON.damage, true, 'a goblin stab is lighter than a sword cut');
+  const first = states.indexOf('attack');
+  assert.equal(states[first + 1], 'skirmish');
+  assert.equal(states[first + 2], 'chase');
+});
+
+test('a wounded goblin panics and flees, then comes back; two cuts finish it', () => {
+  const monsters = new Monsters({ counts: { goblin: 1 }, first: Infinity });
+  const g = goblin(1, 0);
+  monsters.list.push(g);
+  const p = player(0, 0, { heading: Math.PI / 2 });
+  assert.equal(monsters.strike({ type: 'strike', swing: 'a' }, p, 22).length, 1);
+  assert.ok(g.alive);
+  const before = distance(g, p);
+  for (let t = 0; t < GOBLIN.stagger + 1.2; t += dt) monsters.update(dt, open, p);
+  assert.equal(g.state, 'flee');
+  assert.ok(distance(g, p) > before + 2, `fled to ${distance(g, p)} m`);
+  for (let t = 0; t < GOBLIN.flee; t += dt) monsters.update(dt, open, p);
+  assert.equal(g.state, 'chase', 'back for more');
+  // It only panics once.
+  [g.x, g.y] = toCells(1, 0);
+  monsters.strike({ type: 'strike', swing: 'a' }, p, 10);
+  assert.ok(g.alive);
+  for (let t = 0; t < GOBLIN.stagger + 0.1; t += dt) monsters.update(dt, open, p);
+  assert.notEqual(g.state, 'flee');
+  [g.x, g.y] = toCells(1, 0);
+  monsters.strike({ type: 'strike', swing: 'a' }, p, 22);
+  assert.equal(g.alive, false);
+  assert.ok(monsters.events.some((e) => e.type === 'death' && e.monster === g));
+});
+
+test('skeletons and goblins each come in up to their own number', () => {
+  const monsters = new Monsters({ counts: { skeleton: 2, goblin: 1 }, seed: 3 });
+  const p = player(0, 0);
+  for (let t = 0; t < GOBLIN.spawn.first - 1; t += 0.1) monsters.update(0.1, open, { ...p });
+  assert.ok(monsters.of('skeleton').length >= 1);
+  assert.equal(monsters.of('goblin').length, 0, 'goblins come later');
+  for (let t = 0; t < 30; t += 0.1) monsters.update(0.1, open, { ...p, alive: false });
+  assert.equal(monsters.of('skeleton').length, 2);
+  assert.equal(monsters.of('goblin').length, 1);
+  const g = monsters.of('goblin')[0];
+  const d = distance(g, p);
+  assert.ok(d >= GOBLIN.spawn.near - 0.01 && d <= GOBLIN.spawn.far + 0.01, `${d} m away`);
+  assert.ok(!monsters.events.some((e) => e.type === 'rise' && e.monster === g), 'goblins do not climb out of the ground');
 });

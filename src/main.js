@@ -6,8 +6,8 @@ import { bindAudioControls } from './audio/controls.js';
 import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
-import { Skeletons } from './entities/skeleton.js';
-import { SkeletonFigures } from './entities/skeleton-figure.js';
+import { KINDS, Monsters } from './entities/monsters.js';
+import { MonsterFigures } from './entities/monster-figures.js';
 import { isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
 import { SCALE, TILT } from './entities/rig.js';
@@ -397,23 +397,26 @@ const builder = new SceneryBuilder({ world, player, camera, renderer,
 debug.builder = builder;
 if (params.has('builder')) builder.setEnabled(true);
 
-// Skeletons rise from the ground around the player and hunt them down.
-// ?skeletons=N sets how many may be about at once; 0 leaves the world quiet.
-const skeletonCount = Number(params.get('skeletons') ?? 3);
-const skeletons = new Skeletons({ seed,
-  max: Number.isFinite(skeletonCount) ? Math.max(0, Math.min(8, Math.floor(skeletonCount))) : 3 });
-let skeletonFigures = null;
-debug.skeletons = skeletons;
+// Skeletons rise from the ground around the player and goblins come running
+// to hunt them down. ?skeletons=N and ?goblins=N set how many of each may
+// be about at once; 0 leaves the world free of them.
+const countOf = (name, fallback) => {
+  const n = Number(params.get(name) ?? fallback);
+  return Number.isFinite(n) ? Math.max(0, Math.min(8, Math.floor(n))) : fallback;
+};
+const monsters = new Monsters({ seed, counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2) } });
+let monsterFigures = null;
+debug.monsters = monsters;
 // When the player last took a wound; they heal after a breather.
 let lastHurt = -Infinity;
 
 // The player's 3D character; until it has loaded the shape-built figure
-// stands in. The skeletons are drawn from the same animation library.
+// stands in. The monsters are drawn from the same animation library.
 let model = null;
 ModelFigure.library('assets/ual1.glb').then((gltf) => {
-  skeletonFigures = new SkeletonFigures(gltf);
-  debug.skeletonFigures = skeletonFigures;
-}).catch((e) => console.error('Could not set up the skeletons', e));
+  monsterFigures = new MonsterFigures(gltf);
+  debug.monsterFigures = monsterFigures;
+}).catch((e) => console.error('Could not set up the monsters', e));
 ModelFigure.load('assets/ual1.glb')
   .then((m) => {
     model = m;
@@ -439,9 +442,11 @@ function drawName(top, color = [212, 218, 228]) {
     renderer.putBg(sx + i, sy, 8, 10, 14);
   }
 }
-// What the skeletons do: their blows on the player, the player's on them,
-// and their rising and falling.
-function skeletonEvent(e) {
+// What the monsters do: their blows on the player, the player's on them,
+// and their coming and falling. Each kind has its own voice.
+function monsterEvent(e) {
+  const { kind } = e.monster;
+  const voice = kind.sounds[e.type];
   switch (e.type) {
     case 'hit-player':
       if (player.takeDamage(e.amount) > 0) {
@@ -461,19 +466,23 @@ function skeletonEvent(e) {
         sound.play(e);
       } else sound.play({ ...e, strength: e.strength * 0.4 });
       break;
-    case 'bone-hit':
-      sound.play(e);
+    case 'hurt':
+      sound.play({ ...e, type: voice });
       hud.damage(e.amount, e.x, e.y);
-      dust.sparks(e.x, e.y - 12, 6);
+      // Bone chips off a skeleton; a goblin just reels.
+      if (kind === KINDS.skeleton) dust.sparks(e.x, e.y - 12, 6);
       break;
-    case 'bone-collapse':
-      sound.play(e);
+    case 'death':
+      sound.play({ ...e, type: voice });
       dust.burst(world, e.x, e.y, 14, 8);
-      hud.notify(`Skeleton destroyed (${skeletons.kills} slain)`, 'pickup');
+      hud.notify(`${kind.name} ${kind === KINDS.skeleton ? 'destroyed' : 'slain'} (${monsters.kills} slain)`, 'pickup');
       break;
-    case 'bone-rise':
-      sound.play(e);
+    case 'rise':
+      sound.play({ ...e, type: voice });
       dust.burst(world, e.x, e.y, 12, 6);
+      break;
+    case 'spot':
+      sound.play({ ...e, type: voice });
       break;
   }
 }
@@ -488,15 +497,15 @@ function fallInBattle() {
   player.vitals.health = player.vitals.maxHealth;
   camera.x = player.x;
   camera.y = player.y - 11;
-  skeletons.clear();
+  monsters.clear();
   hud.notify('You were struck down. You wake where you began.', 'info');
 }
 
-// A health bar over each skeleton's skull once it has been cut.
+// A health bar over each monster's head once it has been cut.
 function woundedFoes(figures) {
-  return figures.filter(({ skeleton: s, top }) => s.alive && s.health < s.maxHealth && top !== null)
-    .map(({ skeleton: s, top }) => ({ id: s.id, name: 'Skeleton', health: s.health, maxHealth: s.maxHealth,
-      x: s.x, y: top - 1 }));
+  return figures.filter(({ monster: m, top }) => m.alive && m.health < m.maxHealth && top !== null)
+    .map(({ monster: m, top }) => ({ id: m.id, name: m.kind.name, health: m.health, maxHealth: m.maxHealth,
+      x: m.x, y: top - 1 }));
 }
 
 let time = 0;
@@ -617,7 +626,7 @@ function frame(now) {
     // Each cut can fell a tree a blow at a time or mow tall grass.
     if (e.type === 'strike' && !paused) {
       for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
-      if (skeletons.strike(e, player, player.weapon?.damage ?? 20).length) hitStop = Math.max(hitStop, 0.06);
+      if (monsters.strike(e, player, player.weapon?.damage ?? 20).length) hitStop = Math.max(hitStop, 0.06);
     }
     if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
@@ -642,11 +651,11 @@ function frame(now) {
   }
   player.events.length = 0;
   if (!paused) {
-    skeletons.update(playerDt, world, player);
-    skeletonFigures?.update(playerDt, skeletons.list);
+    monsters.update(playerDt, world, player);
+    monsterFigures?.update(playerDt, monsters.list);
   }
-  for (const e of skeletons.events) skeletonEvent(e);
-  skeletons.events.length = 0;
+  for (const e of monsters.events) monsterEvent(e);
+  monsters.events.length = 0;
   if (!paused && player.vitals.health <= 0) fallInBattle();
   else if (!paused && time - lastHurt > 6) player.heal(5 * playerDt);
   if (!paused) {
@@ -731,9 +740,9 @@ function frame(now) {
   let figure = null;
   if (model) model.rasterise(view, player.x, player.y);
   else figure = dressFigure(player);
-  const boneFigures = skeletonFigures ? skeletonFigures.rasterise(view, skeletons.list, player) : [];
-  for (const bones of boneFigures) {
-    if (bones.skeleton.alive) drawShadow(renderer, view, bones.skeleton.x, bones.skeleton.y, 0);
+  const monsterCells = monsterFigures ? monsterFigures.rasterise(view, monsters.list, player) : [];
+  for (const { monster } of monsterCells) {
+    if (monster.alive) drawShadow(renderer, view, monster.x, monster.y, 0);
   }
 
   // Match the reveal region to this pose, including a jump or sword swing.
@@ -796,9 +805,9 @@ function frame(now) {
     else drawFigure(renderer, view, player, figure);
     for (const torch of carried) torches.draw(renderer, view, torch);
   } });
-  for (const bones of boneFigures) {
-    reflections.push({ y: bones.skeleton.y, draw: () => SkeletonFigures.draw(renderer, bones, mirror) });
-    drawables.push({ y: bones.skeleton.y, draw: () => SkeletonFigures.draw(renderer, bones, putCell) });
+  for (const figure of monsterCells) {
+    reflections.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, mirror) });
+    drawables.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, putCell) });
   }
   // Friends are drawn as the shape-built outlaw in their own gear.
   for (const peer of peers) {
@@ -810,7 +819,7 @@ function frame(now) {
   grass.drawReflections(renderer, world, view, time, mirror, reflections);
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
-  for (const bones of boneFigures) contacts.push(...bones.contacts);
+  for (const figure of monsterCells) contacts.push(...figure.contacts);
   splashes.drawSurface(renderer, view, time);
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
@@ -848,7 +857,7 @@ function frame(now) {
       maxHealth: player.vitals.maxHealth,
       note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
         (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
-  hud.setFoes(woundedFoes(boneFigures));
+  hud.setFoes(woundedFoes(monsterCells));
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
   const workMs = performance.now() - started;
