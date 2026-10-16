@@ -384,7 +384,10 @@ export class ModelFigure {
     const speed = p.groundSpeed ?? p.speed;
     // Water drag changes cadence, while the blend still follows whether
     // the player is walking or running at that reduced ground speed.
-    const gaitSpeed = speed / (p.speedScale ?? 1);
+    // Roots and channels can reduce movement speed to exactly zero. A
+    // stationary rooted character must keep a finite idle animation.
+    const speedScale = p.speedScale ?? 1;
+    const gaitSpeed = speedScale > 0 ? speed / speedScale : 0;
     const w = Object.fromEntries(Object.keys(this.actions).map((k) => [k, 0]));
 
     // Locomotion: pure walk at the player's walking speed, pure jog at
@@ -534,17 +537,20 @@ export class ModelFigure {
   // landing run on over whatever comes next.
   jumping(p, w) {
     const up = p.windUp >= 0 || p.air > 0;
-    if (up && !this.jump) {
-      let key = p.jumpKind;
+    if (up && (!this.jump || this.jump.launchId !== p.launchId)) {
+      // A lift/knockback may arrive without a normal jump capture, including
+      // an older peer's state. The standing loop also covers forced flight.
+      const kind = p.jumpKind === 'stand' || CAPTURES[p.jumpKind] ? p.jumpKind : 'stand';
+      let key = kind;
       if (MIRRORED.includes(key)) {
         // Off whichever foot is down now.
         const [l, r] = this.feet.map((f) => f.getWorldPosition(new THREE.Vector3()).y);
         if ((l < r ? 'L' : 'R') !== CAPTURES[key].off) key += 'M';
       }
-      this.jump = { kind: p.jumpKind, key, trick: null };
+      this.jump = { kind, key, trick: null, launchId: p.launchId };
       // Unused one-shot clips still advance with the mixer; replay anticipation
       // for each standing jump instead of blending in its clamped final pose.
-      if (p.jumpKind === 'stand') this.actions.jumpStart.reset().play();
+      if (kind === 'stand') this.actions.jumpStart.reset().play();
       this.turnFrom = null;
       // Springing straight off again cuts the last landing short.
       if (this.oneShot && this.jumpKeys.includes(this.oneShot.key)) this.oneShot = null;

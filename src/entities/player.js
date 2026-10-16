@@ -301,6 +301,25 @@ export class Player {
     this.trickQueued = false;
   }
 
+  // External forces bypass jump anticipation, but still establish the full
+  // flight/animation state that the model and landing logic consume.
+  launch(verticalSpeed) {
+    if (!Number.isFinite(verticalSpeed) || verticalSpeed <= 0) return false;
+    this.cancelPickup();
+    this.jumpKind = 'stand';
+    this.windUp = -1;
+    this.air = Math.max(this.air, 0.05);
+    this.vy = verticalSpeed;
+    this.jumpT = 0;
+    this.flight = (verticalSpeed + Math.sqrt(verticalSpeed ** 2 + 2 * FALL * this.air)) / FALL;
+    this.trick = null;
+    this.trickT = 0;
+    this.trickQueued = false;
+    this.launchId = (this.launchId ?? 0) + 1;
+    this.events.push({ type: 'jump', x: this.x, y: this.y, strength: 1 });
+    return true;
+  }
+
   // A second spring off the air itself, with a trick to show for it.
   startTrick() {
     this.trick = TRICKS[this.jumpKind];
