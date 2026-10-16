@@ -5,4 +5,5 @@ export const seithr = [
   "ice-shield",
   "ice-wave",
   "temp-icicle-blitz",
+  "seithr-glyph",
 ];
