@@ -3,4 +3,5 @@ export const oseni = [
   "temp-meteor",
   "fire-breath",
   "temp-summon-phoenix",
+  "oseni-glyph",
 ];
