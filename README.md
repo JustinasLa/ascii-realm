@@ -14,6 +14,12 @@ shared online lobby.
 
 ## Features
 
+- **Rune casting.** Open Rune spells, choose a rune, aim and press `R` or Cast.
+  Mana, cooldowns, projectiles, shields, status effects and channels share one
+  simulation. The [casting arena](docs/casting-simulation.html) has stationary
+  enemy and ally targets, a wall toggle and manual time stepping. Rune spells
+  are added individually; class abilities are outside this batch.
+
 - **One-pass WebGL2 renderer.** The CPU fills a cell buffer (glyph + colours);
   a fragment shader draws every glyph from a font atlas, so the screen can hold
   tens of thousands of characters at full frame rate.

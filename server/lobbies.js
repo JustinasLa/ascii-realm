@@ -1,6 +1,8 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { Player } from '../src/entities/player.js';
+import { spellIds } from '../src/spells/catalog.js';
+import { readSpellCast } from '../src/spells/protocol.js';
 import { World, ASPECT } from '../src/world/world.js';
 import { cleanCode, cleanName, cleanSeed, MAX_PLAYERS, playerState,
   PROTOCOL_VERSION, readPlayerState, UPDATE_MS, validCode } from '../src/multiplayer/protocol.js';
@@ -155,6 +157,14 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
       else if (request.type === 'leave') {
         remove(session, false);
         socket.close(1000, 'Left lobby');
+      } else if (request.type === 'spellcast' && session.player && now - (session.lastCast ?? 0) >= 100) {
+        const cast = readSpellCast(request.cast, spellIds);
+        if (cast) {
+          session.lastCast = now;
+          for (const peer of session.room.players.values()) if (peer.socket && peer !== session.player) {
+            send(peer.socket, { type: 'spellcast', casterId: session.player.id, ...cast });
+          }
+        }
       } else if (request.type === 'state' && session.player && now - session.lastState >= 20) {
         const state = readPlayerState(request.state);
         if (state) {

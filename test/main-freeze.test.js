@@ -66,6 +66,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Inventory, ITEMS, Hud: inert(), InventoryScreen: inert(),
     GroundItems: inert(), Harvesting: inert(), Collection: inert(), drawItem: noop, drawResource: noop,
     Projectiles: inert(), screenToWorld: () => null, isBow: () => false, isThrown: () => false, SCALE: 13, TILT: 0.5,
+    Spellcasting: class extends inert() { constructor() { super(); this.effects = { draw: noop }; } },
+    SpellControls: inert(), loadSpells: async () => [],
     moveAxis: () => move,
     wasTapped: code => taps.delete(code),
     Player, ASPECT, GRASS, CHUNK_SIZE: 64,
