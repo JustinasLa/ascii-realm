@@ -12,7 +12,8 @@
     <canvas id="screen" tabindex="0" aria-label="Game scene. Press B to build scenery."></canvas>
     <div id="hud-root"></div>
     <div id="inventory-root"></div>
-    <div id="hint">WASD move &middot; Shift run &middot; Space jump &middot; J strike &middot; I inventory</div>
+    <div id="spell-controls" data-game-ui aria-label="Spell casting"></div>
+    <div id="hint">WASD move &middot; Shift run &middot; Space jump &middot; J strike &middot; R cast &middot; I inventory</div>
     <div id="touch-controls" aria-label="Game controls">
       <div id="move-pad" aria-label="Drag to walk. Push to the edge to run." role="group">
         <span id="move-stick"></span>
@@ -22,6 +23,7 @@
         <button type="button" data-key="KeyF" aria-label="Draw or sheathe sword">DRAW</button>
         <button type="button" data-key="Space" aria-label="Jump">JUMP</button>
         <button type="button" data-key="KeyJ" class="strike" aria-label="Strike">STRIKE</button>
+        <button type="button" data-key="KeyR" aria-label="Cast selected rune spell">CAST</button>
       </div>
       <div class="zoom-controls" aria-label="Zoom">
         <button type="button" data-zoom="0.8695652174" aria-label="Zoom out">−</button>

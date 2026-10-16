@@ -348,3 +348,22 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 @media (prefers-reduced-motion: reduce) {
   .hud, #hint, #fire-status, #inventory-root::before { transition: none; }
 }
+/* Rune casting sits above the hotbar and remains reachable on touch screens. */
+#spell-controls { position: fixed; left: 50%; bottom: 104px; transform: translateX(-50%); display: flex;
+  align-items: center; gap: 9px; padding: 7px 10px; background: #10191ef0; border: 1px solid #46535c;
+  color: #d9e4dd; font: 12px Consolas, monospace; z-index: 15; max-width: calc(100vw - 24px); }
+.spell-mana { display: grid; grid-template-columns: auto 90px; gap: 3px 7px; align-items: center; }
+.spell-mana output { grid-column: 1 / 3; font-size: 10px; color: #99bddf; }
+#spell-mana { width: 90px; height: 10px; accent-color: #638eca; }
+#spell-cast { padding: 6px 10px; border: 1px solid #667780; background: #1e3039; color: #e6efdf;
+  cursor: pointer; font: inherit; white-space: nowrap; }
+#spell-cast:disabled { opacity: .45; cursor: default; }
+#spell-ready { min-width: 35px; font-size: 10px; color: #a4c3d6; }
+#spell-library { color: #c8d5cd; }
+.inventory-open #spell-controls { visibility: hidden; }
+.spell-library-panel { padding: 10px; display: grid; gap: 8px; width: 260px; font-size: 12px; }
+.spell-library-panel select { width: 100%; background: #131d23; color: #d6e1d8; padding: 6px; border: 1px solid #46535c; }
+.spell-library-panel p { margin: 0; line-height: 1.5; }
+#spell-stats { color: #96c9ed; }
+@media (max-width: 600px) { #spell-controls { bottom: 88px; gap: 5px; } .spell-mana { grid-template-columns: auto 60px; }
+  #spell-mana { width: 60px; } #spell-cast { max-width: 180px; overflow: hidden; text-overflow: ellipsis; } }

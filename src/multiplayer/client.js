@@ -4,6 +4,11 @@ import { cleanCode, cleanName, cleanSeed, lobbyServerUrl, MAX_PLAYERS, PROTOCOL_
 const validId = (id) => typeof id === 'string' && /^[0-9a-f]{1,32}$/.test(id);
 
 export class MultiplayerClient {
+  sendCast(cast) {
+    if (this.status === 'online' && this.socket?.readyState === 1 && this.socket.bufferedAmount < 32768) {
+      this.socket.send(JSON.stringify({ type: 'spellcast', cast }));
+    }
+  }
   constructor({ getState, onJoin = () => {}, onSnapshot = () => {}, onChange = () => {},
     WebSocketImpl = globalThis.WebSocket, baseUrl = globalThis.location?.href,
     connectionTimeout = 8000, retryDelay = 1000 } = {}) {
@@ -89,6 +94,8 @@ export class MultiplayerClient {
         clearInterval(this.sendTimer);
         this.sendTimer = setInterval(() => this.sendState(), UPDATE_MS);
         this.sendState();
+      } else if (message.type === 'spellcast' && this.room && typeof message.casterId === 'string') {
+        this.onCast?.(message);
       } else if (message.type === 'snapshot' && this.room && Array.isArray(message.players)) {
         const before = this.players.map((p) => `${p.id}:${p.name}`).join('|');
         this.players = readMembers(message.players);

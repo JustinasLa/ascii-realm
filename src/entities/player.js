@@ -227,9 +227,10 @@ export class Player {
     return this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
   }
 
-  takeDamage(amount) {
-    const applied = this.vitals.takeDamage(amount);
+  takeDamage(amount, attacker = null) {
+    const applied = this.vitals.takeDamage(this.magic?.incoming(amount) ?? amount);
     if (applied > 0) this.events.push({ type: 'damage', amount: applied, x: this.x, y: this.y });
+    if (applied > 0) this.magic?.received(applied, attacker);
     return applied;
   }
 
@@ -274,6 +275,7 @@ export class Player {
   // of jump depends on the pace: on the spot, walking or running, and on
   // the spot, how many have been made in a row.
   jump() {
+    if (this.magicRooted) return;
     this.cancelPickup();
     if (this.windUp >= 0) {
       // Pressed twice in quick succession: the trick follows as soon as the
@@ -375,7 +377,7 @@ export class Player {
     const depth = world.waterDepthAt?.(this.x, this.y) ?? 0;
     this.waterDepth += (depth - this.waterDepth) * ease(12);
     if (Math.abs(depth - this.waterDepth) < 0.001) this.waterDepth = depth;
-    this.speedScale = 1 - 0.38 * this.waterDepth / MAX_WATER_DEPTH;
+    this.speedScale = (1 - 0.38 * this.waterDepth / MAX_WATER_DEPTH) * (this.magicSpeed ?? 1);
 
     // Letting go mid-sprint does not stop the warrior dead: they skid to a
     // halt, braced, throwing up dirt.

@@ -10,6 +10,9 @@ import { KINDS, Monsters } from './entities/monsters.js';
 import { MonsterFigures } from './entities/monster-figures.js';
 import { isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
+import { Spellcasting } from './spells/casting.js';
+import { loadSpells } from './spells/catalog.js';
+import { SpellControls } from './spells/controls.js';
 import { SCALE, TILT } from './entities/rig.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
@@ -408,6 +411,36 @@ const countOf = (name, fallback) => {
 const monsters = new Monsters({ seed,
   counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2), troll: countOf('trolls', 1),
     elf: countOf('elves', 1) } });
+const spellPeers = new Map();
+const syncSpellPeers = () => {
+  player.spellId = multiplayer.id ?? 'self';
+  for (const member of multiplayer.players) {
+    if (member.id === multiplayer.id) continue;
+    const peer = spellPeers.get(member.id) ?? { spellPlayer: true, spellId: member.id };
+    Object.assign(peer, member.state, { maxHealth: 100 });
+    spellPeers.set(member.id, peer);
+  }
+  for (const id of spellPeers.keys()) if (!multiplayer.players.some(m => m.id === id)) spellPeers.delete(id);
+};
+const casting = new Spellcasting({ player, world, monsters, peers: () => [...spellPeers.values()],
+  notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e) });
+debug.casting = casting;
+let castRequested = false;
+const spellControls = new SpellControls(casting, { root: document.getElementById('spell-controls'),
+  dock: document.getElementById('panel-dock'), onCast: () => { castRequested = true; },
+  onFocus: () => canvas.focus({ preventScroll: true }) });
+loadSpells().then(spells => {
+  casting.spells = new Map(spells.map(s => [s.id, s]));
+  casting.selected = casting.spells.has(params.get('spell')) ? params.get('spell') : spells[0]?.id ?? '';
+  spellControls.populate();
+}).catch(error => { console.error('Could not load rune spells', error); hud.notify('Could not load rune spells. Refresh to try again.'); });
+multiplayer.onCast = message => {
+  syncSpellPeers();
+  const caster = spellPeers.get(message.casterId);
+  if (!caster) return;
+  const target = player.spellId === message.targetId ? player : spellPeers.get(message.targetId);
+  casting.cast(message.id, { caster, target, heading: message.heading, aim: message.aim, remote: true });
+};
 let monsterFigures = null;
 debug.monsters = monsters;
 // When the player last took a wound; they heal after a breather.
@@ -522,6 +555,7 @@ function monsterEvent(e) {
 // Struck down, the player wakes back where they began, whole again, and the
 // dead go back into the ground for a while.
 function fallInBattle() {
+  casting.reset();
   player.respawn(spawn.x, spawn.y);
   model?.resetPose(player);
   clearInput();
@@ -611,6 +645,8 @@ function frame(now) {
   const torchKey = wasTapped('KeyT');
   const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
+  const cast = wasTapped('KeyR') || castRequested;
+  castRequested = false;
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
     if (attack && armed && !ranged) player.attack();
@@ -618,6 +654,13 @@ function frame(now) {
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
+    if (cast && !isGameplayBlocked()) {
+      syncSpellPeers();
+      const aim = aimPoint({ projectileRange: 40 }, 1);
+      const heading = Math.atan2((aim.x - player.x) * ASPECT / SCALE, (aim.y - player.y) / (SCALE * TILT));
+      const result = casting.cast(casting.selected, { aim, heading });
+      if (!result.ok) hud.notify(result.reason);
+    }
   }
   const itemHint = player.handsFull ? 'Two-handed · torch tucked away'
     : player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
@@ -659,7 +702,8 @@ function frame(now) {
     // Each cut can fell a tree a blow at a time or mow tall grass.
     if (e.type === 'strike' && !paused) {
       for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
-      if (monsters.strike(e, player, player.weapon?.damage ?? 20).length) hitStop = Math.max(hitStop, 0.06);
+      const hit = monsters.strike(e, player, Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0)));
+      if (hit.length) hitStop = Math.max(hitStop, 0.06);
     }
     if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
@@ -684,6 +728,8 @@ function frame(now) {
   }
   player.events.length = 0;
   if (!paused) {
+    syncSpellPeers();
+    casting.update(playerDt);
     monsters.update(playerDt, world, player);
     monsterFigures?.update(playerDt, monsters.list);
   }
@@ -864,6 +910,7 @@ function frame(now) {
 
   projectiles.drawFlying(renderer, view);
   monsters.arrows.drawFlying(renderer, view);
+  casting.effects.draw(renderer, view, casting.projectiles);
   drawTrail(renderer, view, player.trail, player.time);
   const self = multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
   const ownColor = self ? colorOf(self.color) : undefined;
@@ -894,6 +941,7 @@ function frame(now) {
   hud.setFoes(woundedFoes(monsterCells));
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
+  spellControls.update(paused || isGameplayBlocked());
   const workMs = performance.now() - started;
   if (quality.sample(workMs, dt)) resize();
   debug.metrics.frames++;

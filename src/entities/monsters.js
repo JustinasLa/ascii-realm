@@ -314,12 +314,13 @@ export class Monster {
     const depth = world.waterDepthAt?.(this.x, this.y) ?? 0;
     this.waterDepth += (depth - this.waterDepth) * (1 - Math.exp(-12 * dt));
     if (Math.abs(depth - this.waterDepth) < 0.001) this.waterDepth = depth;
-    this.speedScale = 1 - 0.38 * this.waterDepth / MAX_WATER_DEPTH;
+    this.speedScale = (1 - 0.38 * this.waterDepth / MAX_WATER_DEPTH) * (this.magicSpeed ?? 1);
     if (this.state === 'dead') {
       this.deadTime += dt;
       if (this.deadTime > k.linger) this.sunk = Math.min(1, (this.deadTime - k.linger) / k.sink);
       return;
     }
+    if (this.magicStunned) { this.speed = 0; return; }
     const prey = target && target.alive !== false ? this.offsetTo(target.x, target.y) : null;
     if (prey && this.lastPrey && dt > 0) {
       const k2 = 1 - Math.exp(-dt * 6);
@@ -374,7 +375,7 @@ export class Monster {
             this.events.push({ type: 'slam', ...impact, strength: 1 });
           }
           if (prey && this.canHit(prey, target, impact)) {
-            this.events.push({ type: 'hit-player', amount: k.damage, x: target.x, y: target.y });
+            this.events.push({ type: 'hit-player', amount: Math.max(0, k.damage + (this.magicDamage ?? 0)), x: target.x, y: target.y });
           } else {
             this.events.push({ type: 'miss', x: this.x, y: this.y });
           }
@@ -553,6 +554,8 @@ export class Monster {
   takeHit(damage, fromX, fromY) {
     const k = this.kind;
     if (!this.alive || this.state === 'rise' && this.stateTime < k.rise * 0.5) return false;
+    damage = this.magic?.incoming(damage) ?? damage;
+    if (damage <= 0) return false;
     this.health = Math.max(0, this.health - damage);
     this.hurt = 0;
     const away = this.offsetTo(fromX, fromY);
