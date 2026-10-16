@@ -84,41 +84,23 @@ shared online lobby.
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 - **Status frames and quick slots.** A party-style frame in the top-left
-  corner shows the outlaw's name, segmented HP and stamina bars, the satchel's
-  weight and what is in the free hand. Running and sword strikes spend
-  stamina, which recovers after a short rest. A compass and nine quick slots
-  sit at the edges of the screen.
+  corner shows the outlaw's name, segmented HP bar and the satchel's weight.
+  Nine quick slots sit along the bottom, and a carried-item hint shows whether
+  the torch is in hand. Running and sword strikes have no stamina cost.
 - **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
-  paper doll drawn with the outlaw's own glyphs, item details and a 40 kg
-  carrying limit. The hood, jerkin, boots, bracers, cloak, short sword and
-  buckler each show on the 3D character and come off to reveal what is
-  underneath. Assign items to quick slots and use the starter draughts,
-  tonics and bandages to restore health or stamina. Opening the inventory
-  blocks movement and attacks while the world keeps running.
-
-![Inventory with the outlaw's gear, a satchel and selected item details](docs/inventory.png)
-
-- **Weapons.** Nine weapons in iron by default, each a satchel item that shows
-  on the 3D character, in hand or slung across the back or at the hip: short
-  sword, greatsword, battle axe, war hammer, spear, dagger, quarterstaff,
-  javelin and yew longbow. Heavier weapons swing more slowly and cost more
-  stamina; spears reach further; an axe fells a tree in one blow and a
-  greatsword or hammer in two. Hold the attack to draw the bow and release to
-  shoot at the cursor (or straight ahead from the keyboard), using arrows from
-  the satchel; tap with a spear or javelin to jab, or hold and release to throw
-  it. Arrows and thrown weapons stay where they land until you walk over them,
-  and the next spear or javelin in the satchel is taken up after a throw. The
-  satchel holds 60 kg and starts with every weapon and 30 arrows to try.
-- **Gathering.** Loose resources bob and glint above the ground and reflect in
-  water: granite, basalt or limestone stones to match the local rock layer,
-  sticks under trees, flint, berries, mushrooms, reeds and clay by the shore.
-  Walk over items to pick them up; nearby loot drifts toward you, and `E` picks
-  up or gathers from a berry bush or tall grass. Three sword blows fell any tree
-  for logs, leaving a stump, and cuts through tall grass give straw and fibre.
-  Standing still, the outlaw stoops to grab what is picked up. A full satchel
-  leaves the rest on the ground, and `X` in the inventory drops an item.
-  Felled trees, gathered plants and moved items stay that way for the session,
-  even after the land has been unloaded and generated again.
+  equipment view drawn with the outlaw's own glyphs, item details, 24 bag slots
+  and a 60 kg carrying limit. The bag starts empty, with a short sword equipped
+  and assigned to quick slot 1. You can move the sword into the bag, equip it
+  again and assign it to other quick slots. Clothes are part of the character;
+  the torch is carried separately from the inventory. Opening the inventory
+  blocks movement and attacks while the world, including enemies, keeps running.
+- **Sword and scenery.** The short sword is the available weapon. Draw or
+  sheathe it, chain cuts into a combo, lunge from a run, plunge from a jump or
+  hold and release for a spinning slash. Three sword blows fell a tree,
+  leaving a stump, and cuts mow tall grass. Felled trees and cut plants stay
+  that way for the session, even after the land has been unloaded and generated
+  again. Gathering, loose pickups and item drops are disabled; cutting plants
+  produces no loot.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,
@@ -148,8 +130,8 @@ shared online lobby.
   choir, bowed tones, low drones, distant bells and a synthesized room reverb.
   Every sound has 25 shuffled variations; grass also shuffles its six recordings.
   Music rotates automatically through a season and weather playlist. Choose
-  automatic seasons or Spring, Summer, Autumn or Winter in the Audio panel;
-  winter quiets insects and frogs, while autumn brings out leaf rustle.
+  automatic seasons or Spring, Summer, Autumn or Winter in the Weather & seasons
+  panel; winter quiets insects and frogs, while autumn brings out leaf rustle.
   Sword effects layer weathered steel, dry leather, low air rush and weighted
   impacts. Sound starts on your first key press or click;
   the Audio panel shows the current song, lets you skip, and saves mute and
@@ -158,8 +140,9 @@ shared online lobby.
   effects: slanted rain, falling snow and hail, blowing leaves and sand,
   drifting fog and branching lightning bolts. Storm strikes flash twice,
   light the ground, reflect in lakes and throw up spray on water. Thunder
-  follows the same strike when sound is enabled. Press `L`, or use the Audio
-  panel's Summon lightning button, to strike beside the player in any weather.
+  follows the same strike when sound is enabled. Press `L`, or use the Weather &
+  seasons panel's Summon lightning button, to strike beside the player in any
+  weather.
   Ground strikes ignite a fire on open, dry terrain. The flames grow after the
   bolt fades and leave a scorched patch; lake strikes make spray instead.
   Intensity controls particle density, wind, haze and water impacts. Rain and
@@ -209,7 +192,7 @@ shared online lobby.
 - **Multiplayer lobbies.** Create a lobby and share its six-character code;
   friends enter the code to join the same seeded world. Movement, jumps, swings,
   gear, weapons, nameplates and reflections are visible to everyone, and each
-  friend's health and stamina appear in the party frames under your own. Players
+  friend's health appears in the party frames under your own. Players
   have distinct nameplate colours, and brief connection drops reconnect
   automatically. The lobby keeps working when its creator leaves.
 
@@ -276,8 +259,7 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
 | `Space` | Jump; again in the air for a trick (a barrel roll when running) |
-| `J` / left click | Strike with the equipped weapon: repeat for a combo, sprint for a thrust, jump for a plunge; cuts fell trees and mow tall grass |
-| Hold `J` / left button | Draw the bow, or ready a spear or javelin throw; release to shoot or throw at the cursor |
+| `J` / left click | Strike with the sword: repeat for a combo, run for a thrust, jump for a plunge; cuts fell trees and mow tall grass |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | `T` | Stow the torch or draw a fresh lit torch |
@@ -285,20 +267,18 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
-| Audio panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
-| Audio panel's Weather / Intensity | Choose Clear or one of 17 weather presets and adjust sound and visual intensity |
-| `L` / Audio panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
+| Weather & seasons panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
+| Weather & seasons panel's Weather / Intensity | Choose Clear or one of 17 weather presets and adjust sound and visual intensity |
+| `L` / Weather & seasons panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
 | `1`–`9` | Select a quick slot; gear in it is equipped |
-| `Q` | Use the selected quick-slot item |
-| `E` | Pick up a nearby item or gather from a berry bush or tall grass |
+| `Q` | Activate the selected quick slot to re-equip the sword |
 | `I` / `Tab` | Open or close the inventory (`Escape` also closes it) |
 | `G`, with inventory open | Switch between the satchel and equipment |
 | Arrow keys, with inventory open | Move through items in the selected pane |
 | `Enter`, with inventory open | Use or equip a satchel item, or take off selected gear |
 | `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
-| `X`, with inventory open | Drop one of the selected satchel item |
 | `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
 
@@ -353,8 +333,8 @@ src/
 The server owns lobby membership, IDs, colours and world seeds; each player
 simulates their own movement and sends bounded pose snapshots at 20 Hz.
 Other players interpolate snapshots 100 ms behind and are drawn as the
-shape-built outlaw in their own gear. This is cooperative exploration with
-cosmetic sword play; it does not add PvP damage, shared loot or competitive
+shape-built outlaw in their own gear. Monsters and combat are simulated locally;
+lobbies do not synchronize enemies or add PvP damage, shared loot or competitive
 movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
 the browser uses its native WebSocket API.
 

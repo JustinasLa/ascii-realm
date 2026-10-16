@@ -73,6 +73,36 @@ test('standing jump anticipation restarts after idle and on a later jump', async
   }
 });
 
+test('respawning clears the fatal jump and sword animation before the next draw', async () => {
+  const model = await figure();
+  const player = new Player(240, 160);
+  player.jumpKind = 'leap';
+  player.air = 0.4;
+  player.flight = 0.5;
+  player.jumpT = 0.2;
+  player.attack();
+  model.update(0.2, player);
+  assert.ok(model.jump);
+  assert.ok(model.oneShot);
+  assert.ok(model.weights.attack > 0);
+
+  const respawned = new Player(0, 0);
+  model.resetPose(respawned);
+  assert.equal(model.jump, null);
+  assert.equal(model.oneShot, null);
+  assert.equal(model.lastMove, null);
+  assert.equal(model.armory.held, null);
+  assert.equal(model.model.position.y, 0);
+  assert.equal(model.model.rotation.y, 0);
+  assert.deepEqual(respawned.events, [], 'a teleport must not emit a landing or footfall');
+  for (const [key, action] of Object.entries(model.actions)) {
+    assert.equal(action.getEffectiveWeight(), key === 'idle' ? 1 : 0, key);
+  }
+  model.update(1 / 60, respawned);
+  assert.equal(model.jump, null);
+  assert.equal(model.oneShot, null, 'no deferred landing is played at spawn');
+});
+
 test('the 3D character keeps its clothes on and shows an equipped buckler', async () => {
   const model = await figure();
   const player = new Player(0, 0);

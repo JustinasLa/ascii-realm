@@ -35,6 +35,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
   const model = {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
     update: () => { modelUpdates++; },
+    resetPose: noop,
     rasterise: noop,
     renderPose: noop,
     cells: [],
@@ -268,4 +269,98 @@ test('a frozen sword swing keeps its trail bounded and resumes sampling when unf
   assert.ok(bladeSamples() > 0);
   assert.ok(modelUpdates() > 0);
   assert.ok(player.trail.some(point => point.t > sample.t));
+});
+
+test('falling in battle wakes the player grounded without the old plunge or motion', async () => {
+  const { game, frame } = await loadGame();
+  const player = game.player;
+  player.x = 240;
+  player.y = 160;
+  player.air = 0.4;
+  player.vy = -1;
+  player.jumpKind = 'leap';
+  player.trick = 'barrel';
+  player.surge = 5;
+  player.waterDepth = 0.42;
+  player.anchors = [[11, 12], [13, 14]];
+  player.liftAnchors = [[11, 12], [13, 14]];
+  player.attack();
+  player.vitals.health = 0;
+
+  frame();
+
+  assert.equal(player.vitals.health, player.vitals.maxHealth);
+  assert.equal(player.x, 0);
+  assert.equal(player.y, 0);
+  assert.equal(player.air, 0, 'respawning cannot continue the fatal jump');
+  assert.equal(player.vy, 0);
+  assert.equal(player.jumpKind, null);
+  assert.equal(player.trick, null);
+  assert.equal(player.combat.move, null, 'the old plunge must not strike at spawn');
+  assert.equal(player.surge, 0);
+  assert.equal(player.waterDepth, 0);
+  assert.deepEqual(player.anchors, [null, null]);
+  assert.deepEqual(player.liftAnchors, [null, null]);
+
+  for (let i = 0; i < 30; i++) frame();
+  assert.equal(player.x, 0, 'old motion cannot carry the player away from spawn');
+  assert.equal(player.y, 0);
+  assert.equal(player.combat.move, null);
+});
+
+test('respawning cancels pending actions while preserving the loadout and player settings', async () => {
+  const { game } = await loadGame();
+  const player = game.player;
+  const equipment = player.equipment;
+  const vitals = player.vitals;
+  player.time = 32;
+  player.torchOut = false;
+  player.walkSpeed = 2.1;
+  player.runSpeed = 6.4;
+  vitals.maxHealth = 125;
+  vitals.maxStamina = 80;
+  vitals.health = 0;
+  player.jump();
+  player.combat.inHand = true;
+  player.combat.charge = 0.8;
+  player.ranged.held = 0.7;
+  player.ranged.aiming = true;
+  player.aimTarget = { x: 180, y: 200 };
+  player.skid = 0.2;
+  player.skidSpeed = 5;
+  player.wasMoving = true;
+  player.trail.push({ t: 32, hx: 180, hy: 200, tx: 190, ty: 210 });
+  player.events.push({ type: 'strike', x: 180, y: 200 });
+  player.foliageBounds = { x: 180, y: 200, w: 30, h: 50 };
+  player.footPlants.set(-1, { grounded: true, plant: 4 });
+
+  player.respawn(3, 5);
+
+  assert.equal(player.equipment, equipment);
+  assert.equal(player.vitals, vitals);
+  assert.equal(vitals.health, 125);
+  assert.equal(vitals.maxHealth, 125);
+  assert.equal(vitals.maxStamina, 80);
+  assert.equal(player.time, 32);
+  assert.equal(player.torchOut, false);
+  assert.equal(player.walkSpeed, 2.1);
+  assert.equal(player.runSpeed, 6.4);
+  assert.equal(player.modelTrail, true);
+  assert.equal(player.windUp, -1);
+  assert.equal(player.combat.charge, 0);
+  assert.equal(player.combat.inHand, false);
+  assert.equal(player.ranged.aiming, false);
+  assert.equal(player.ranged.held, 0);
+  assert.equal(player.aimTarget, null);
+  assert.equal(player.trail.length, 0);
+  assert.equal(player.events.length, 0);
+  assert.equal(player.footPlants.size, 0);
+  assert.equal(player.foliageBounds, null);
+
+  for (let i = 0; i < 60; i++) player.update(1 / 60, game.world, { x: 0, y: 0 }, false, false);
+  assert.equal(player.x, 3, 'a previous skid cannot move the respawned player');
+  assert.equal(player.y, 5);
+  assert.equal(player.air, 0, 'a queued jump cannot launch at spawn');
+  assert.equal(player.combat.move, null, 'releasing the old charge cannot attack at spawn');
+  assert.ok(!player.events.some(event => event.type === 'strike'));
 });

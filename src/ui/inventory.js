@@ -82,7 +82,8 @@ export class InventoryScreen {
     const header = element('header', 'inventory-header');
     const title = element('h2', 'inventory-title', 'Inventory');
     const identity = element('div', 'inventory-identity');
-    identity.append(title, element('span', 'inventory-character-name', String(name)));
+    this.nameNode = element('span', 'inventory-character-name', String(name));
+    identity.append(title, this.nameNode);
     const close = element('button', 'inventory-close', 'Close');
     close.append(element('kbd', '', 'Esc'));
     close.type = 'button';
@@ -274,6 +275,8 @@ export class InventoryScreen {
       if (target?.isConnected && !this.screen.contains(target)) target.focus({ preventScroll: true });
     }
   }
+
+  setName(name) { setText(this.nameNode, String(name)); }
 
   toggle() { this.setOpen(!this._isOpen); }
 

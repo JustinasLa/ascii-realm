@@ -353,6 +353,27 @@ export class ModelFigure {
     return { key, speed, cycle: speed * dur, strike };
   }
 
+  // A respawn starts a new pose, without blending the old jump or attack
+  // into it or treating the teleport as a landing.
+  resetPose(player) {
+    this.phase = 0;
+    this.oneShot = null;
+    this.lastMove = null;
+    this.jump = null;
+    this.picking = false;
+    this.held = {};
+    this.turnFrom = null;
+    this.turned = 0;
+    this.turnLeft = 0;
+    this.level = undefined;
+    for (const [key, action] of Object.entries(this.actions)) {
+      action.reset().play();
+      this.weights[key] = key === 'idle' ? 1 : 0;
+      action.setEffectiveWeight(this.weights[key]);
+    }
+    this.update(0, player);
+  }
+
   // Sets the pose for this frame from the player's state.
   update(dt, p) {
     this.posePending = false;
