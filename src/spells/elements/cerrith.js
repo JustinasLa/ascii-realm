@@ -5,4 +5,5 @@ export const cerrith = [
   "hand-cure",
   "blessing-of-swiftness",
   "temp-earth-spike",
+  "cerrith-glyph",
 ];
