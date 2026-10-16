@@ -10,4 +10,5 @@ export const cerrith = [
   "temp-vine-wave",
   "blessing-of-healing",
   "mana-transfer",
+  "temp-shock-wave",
 ];

@@ -1,0 +1,30 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "temp-shock-wave",
+  "name": "Woodland Anvil",
+  "element": "cerrith",
+  "root": "temp_shock_wave",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 25.0,
+        "mana": 10.0,
+        "damage": 20.0
+      },
+      "root": "temp_shock_wave",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": false,
+  "nodes": {
+    "temp_shock_wave": {"steps":[{"op":"skill","args":{"s":"TEMP_Shock_Wave_SKILL"}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "temp_shock_wave_skill": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"potion","args":{"type":"SLOW","duration":"60","level":"99","hasparticles":"false"},"target":{"op":"self","args":{}}},{"op":"delay","args":{"ticks":"40"}},{"op":"leap","args":{"velocity":"100"},"target":{"op":"forward","args":{"f":"0.1","y":"2"}}},{"op":"delay","args":{"ticks":"3"}},{"op":"ondamaged","args":{"auraname":"landresist","d":"10","damagemods":"FALL 0"},"target":{"op":"self","args":{}}},{"op":"leap","args":{"velocity":"100"},"target":{"op":"forward","args":{"f":"0.1","y":"-3"}}},{"op":"delay","args":{"ticks":"5"}},{"op":"projectile","args":{"ontick":"TEMP_Shockwave_SUM","v":"15","i":"7","hr":"1","vr":"1","mr":"20","hnp":"false","ho":"0","se":"false","d":"200","hs":"true","hfs":"0.1"},"target":{"op":"forward","args":{"f":"7","y":"0"}}}]},
+    "temp_shockwave_sum": {"steps":[{"op":"summon","args":{"type":"Earth_Crack","amount":"1","radius":"0","yradius":"0","onsurface":"true"},"target":{"op":"origin","args":{}}},{"op":"skill","args":{"s":"TEMP_Shockwave_DAMAGE","delay":"27"},"target":{"op":"entitiesnearorigin","args":{"r":"5"}}}]},
+    "temp_shockwave_damage": {"steps":[{"op":"aura","args":{"auraname":"TEMP_Shockwave_HIT","duration":"20"}},{"op":"mmodamage","args":{"types":"MAGIC","a":"<modifier.damage>","pkb":"false","hnp":"true","hp":"true","pi":"true"}},{"op":"throw","args":{"velocity":"0","velocityy":"8","delay":"1"}}],"targetConditions":["owner{} false","hasaura{n=TEMP_Shockwave_HIT} false"]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_temp_skills.yml"], "sha256": "ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7"}
+};
