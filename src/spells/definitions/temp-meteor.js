@@ -1,0 +1,31 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "temp-meteor",
+  "name": "Meteor",
+  "element": "oseni",
+  "root": "temp_meteor",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 10.0,
+        "mana": 4.0,
+        "damage": 10.0
+      },
+      "root": "temp_meteor",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": false,
+  "nodes": {
+    "temp_meteor": {"steps":[{"op":"delay","args":{"ticks":"10"}},{"op":"projectile","args":{"bullettype":"MOB","bulletspin":"8","mob":"Meteor","onend":"TEMP_Meteor_HIT","v":"14","i":"1","hr":"1","vr":"1","mr":"50","hnp":"true","ho":"0","se":"false","hs":"false","hfs":"0","sfo":"0","syo":"6","tyo":"2"},"target":{"op":"forward","args":{"f":"5","y":"0"}}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "temp_meteor_hit": {"steps":[{"op":"skill","args":{"s":"TEMP_Meteor_HIT_D"},"target":{"op":"entitiesnearorigin","args":{"r":"6"}}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"summon","args":{"type":"Ground_Crack","amount":"1","radius":"0","yradius":"0","onsurface":"true"},"target":{"op":"origin","args":{"yoffset":"0"}}},{"op":"totem","args":{"md":"40","ot":"TEMP_Meteor_BURN_FX","oh":"TEMP_Meteor_BURN","hnp":"true","hp":"true","hr":"1.5","vr":"1","i":"5"},"target":{"op":"origin","args":{}}}]},
+    "temp_meteor_hit_d": {"steps":[{"op":"ignite","args":{"ticks":"20 * <modifier.duration>"}},{"op":"mmodamage","args":{"types":"MAGIC","a":"<modifier.damage>","pi":"true"}}],"targetConditions":["mmoCanTarget{interaction=OFFENSE_ACTION} true","entitytype{t=armorstands} false"]},
+    "temp_meteor_burn_fx": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"}}]},
+    "temp_meteor_burn": {"steps":[{"op":"ignite","args":{"ticks":"20 * <modifier.duration>"}}],"targetConditions":["mmoCanTarget{interaction=OFFENSE_ACTION} true","entitytype{t=armorstands} false"]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_temp_skills.yml"], "sha256": "ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7"}
+};
