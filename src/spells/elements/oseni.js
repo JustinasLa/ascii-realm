@@ -1,1 +1,3 @@
-export const oseni = [];
+export const oseni = [
+  "fire-shard",
+];
