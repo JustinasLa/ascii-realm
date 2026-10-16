@@ -3,4 +3,5 @@ export const cerrith = [
   "shielding-orb",
   "temp-quickshot",
   "hand-cure",
+  "blessing-of-swiftness",
 ];
