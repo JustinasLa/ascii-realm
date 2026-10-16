@@ -8,4 +8,5 @@ export const cerrith = [
   "cerrith-glyph",
   "restoration",
   "temp-vine-wave",
+  "blessing-of-healing",
 ];
