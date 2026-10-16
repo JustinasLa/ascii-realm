@@ -3,4 +3,5 @@ export const mitlan = [
   "bubble-shard",
   "scalding-wave",
   "tidal-shield",
+  "mitlan-glyph",
 ];
