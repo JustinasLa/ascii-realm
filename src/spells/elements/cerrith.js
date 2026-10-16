@@ -9,4 +9,5 @@ export const cerrith = [
   "restoration",
   "temp-vine-wave",
   "blessing-of-healing",
+  "mana-transfer",
 ];
