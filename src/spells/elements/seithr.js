@@ -9,4 +9,5 @@ export const seithr = [
   "cold-embrace",
   "temp-glacial-fan",
   "frostveil",
+  "frozen-tomb",
 ];
