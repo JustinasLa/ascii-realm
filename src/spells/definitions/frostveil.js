@@ -1,0 +1,33 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "frostveil",
+  "name": "Frostveil",
+  "element": "seithr",
+  "root": "frostveil",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 25.0,
+        "mana": 10.0,
+        "duration": 20.0
+      },
+      "root": "frostveil",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": false,
+  "nodes": {
+    "frostveil": {"steps":[{"op":"projectile","args":{"onend":"Frostveil_SUMMON_LEVEL","v":"100","i":"1","hr":"1","vr":"1","mr":"20","hnp":"false","se":"false","sb":"true"},"target":{"op":"forward","args":{"f":"20","y":"0"}}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "frostveil_summon_level": {"steps":[{"op":"projectile","args":{"v":"0","i":"1","md":"1","hnp":"false","hp":"false","se":"false","sb":"false","fromorigin":"true","onend":"Frostveil_SUMMON"},"target":{"op":"origin","args":{"yoffset":"10"}}}]},
+    "frostveil_summon": {"steps":[{"op":"totem","args":{"md":"20","ot":"Frostveil_SKILLSPAWN_FX","hnp":"false","hp":"true","hr":"4","vr":"2","i":"20","hs":"true","hfs":"0.1"},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"20"}},{"op":"totem","args":{"md":"<modifier.duration> * 20","ot":"Frostveil_SKILL","hnp":"true","hp":"true","hr":"4","vr":"2","i":"5","delay":"1","hs":"true","hfs":"0.1","bullettype":"DISPLAY","bulletmaterial":"PAPER","bulletmodel":"7207","bulletbrightness":"15","bulletbrightnesssky":"15","bulletscale":"10.64,1,10.64"},"target":{"op":"origin","args":{}}}]},
+    "frostveil_skillspawn_fx": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"2","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"5"}},{"op":"visual","args":{"shape":"burst","radius":"4","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"5"}},{"op":"visual","args":{"shape":"burst","radius":"6","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"5"}},{"op":"visual","args":{"shape":"burst","radius":"8","life":"0.25"},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"5"}},{"op":"visual","args":{"shape":"burst","radius":"10","life":"0.25"},"target":{"op":"origin","args":{}}}]},
+    "frostveil_skill": {"steps":[{"op":"skill","args":{"s":"Frostveil_SKILL_ACTIVE"},"target":{"op":"entitiesnearorigin","args":{"r":"10"}}},{"op":"skill","args":{"s":"Frostveil_SKILL_FX"},"target":{"op":"origin","args":{}}}]},
+    "frostveil_skill_active": {"steps":[{"op":"aura","args":{"auraname":"Silenced","d":"25","refreshduration":"true"}}]},
+    "frostveil_skill_fx": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"10","life":"0.25"},"target":{"op":"origin","args":{}}}]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_seithr_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml"], "sha256": "dd420157d6e6bbbfa6a8aa60a51f3e625b8a4885f4070cfc3fb59b94b1130599"}
+};
