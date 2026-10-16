@@ -414,7 +414,11 @@ export class Spellcasting {
     this.state(actor).motion = { x: mx / length * speed, z: mz / length * speed, left: 0.35,
       ...(op === 'pull' ? { stop: point } : {}) };
     const up = n('velocityy', n('vy', op === 'leap' ? (target.h ?? 0) * 4 : 0));
-    if (isPlayer(actor) && up > 0) { actor.air = Math.max(actor.air ?? 0, 0.05); actor.vy = Math.min(12, up < 2 ? up * 8 : up); }
+    if (isPlayer(actor) && up > 0) {
+      const speed = Math.min(12, up < 2 ? up * 8 : up);
+      if (actor.launch) actor.launch(speed);
+      else { actor.air = Math.max(actor.air ?? 0, 0.05); actor.vy = speed; actor.jumpKind = 'stand'; }
+    }
     if (isPlayer(actor) && up < 0 && actor.air > 0) actor.vy = up;
     if (!isPlayer(actor) && up > 0) actor.magicLift = Math.min(2.5, up * 0.12);
   }
