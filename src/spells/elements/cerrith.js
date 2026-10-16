@@ -7,4 +7,5 @@ export const cerrith = [
   "temp-earth-spike",
   "cerrith-glyph",
   "restoration",
+  "temp-vine-wave",
 ];
