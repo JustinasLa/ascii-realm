@@ -1,0 +1,30 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "temp-last-stand",
+  "name": "Flight of the Gladiator",
+  "element": "oseni",
+  "root": "temp_last_stand",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 20.0,
+        "mana": 8.0,
+        "damage": 20.0
+      },
+      "root": "temp_last_stand",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": false,
+  "nodes": {
+    "temp_last_stand": {"steps":[{"op":"ondamaged","args":{"auraname":"resist","d":"27","ce":"true"},"target":{"op":"self","args":{}}},{"op":"aura","args":{"auraname":"Last_Stand","duration":"40"},"target":{"op":"self","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"summon","args":{"type":"paladin_spin_slash","amount":"1","radius":"0","yradius":"0","onsurface":"true"},"target":{"op":"self","args":{}}},{"op":"skill","args":{"s":"TEMP_Last_Stand_D1"},"target":{"op":"eir","args":{"r":"8"}}},{"op":"skill","args":{"s":"TEMP_Last_Stand_PULL","repeat":"2","repeatinterval":"2"},"target":{"op":"eir","args":{"r":"8"}}},{"op":"delay","args":{"ticks":"12"}},{"op":"lunge","args":{"velocity":"1.2","velocityy":"0.7"},"target":{"op":"forward","args":{"f":"-5","y":"1","lockpitch":"true"}}},{"op":"delay","args":{"ticks":"12"}},{"op":"lunge","args":{"velocity":"1.3","velocityy":"-1.2"},"target":{"op":"forward","args":{"f":"5","y":"-1","lockpitch":"true"}}},{"op":"delay","args":{"ticks":"5"}},{"op":"summon","args":{"type":"holy_smash_rupture","amount":"1","radius":"0","yradius":"0","onsurface":"true"},"target":{"op":"forward","args":{"f":"0","y":"0.1","lockpitch":"true"}}},{"op":"visual","args":{"shape":"burst","radius":"2","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"4","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"6","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"8","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"10","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"summon","args":{"type":"light_beam_fx","amount":"1","radius":"0","yradius":"0","onsurface":"true"},"target":{"op":"self","args":{}}},{"op":"summon","args":{"type":"light_beam_fx_rotated","amount":"1","radius":"0","yradius":"0","onsurface":"true"},"target":{"op":"self","args":{}}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"self","args":{}}},{"op":"skill","args":{"s":"TEMP_Last_Stand_Final_Damage"},"target":{"op":"eir","args":{"r":"8"}}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "temp_last_stand_d1": {"steps":[{"op":"aura","args":{"auraname":"ATTACK_CD","duration":"2"},"target":{"op":"self","args":{}}},{"op":"throw","args":{"velocity":"0","velocityy":"5","delay":"2"}},{"op":"pull","args":{"velocity":"5","repeat":"2","repeatinterval":"2"}},{"op":"mmodamage","args":{"types":"MAGIC","a":"<modifier.damage> * 0.5","pkb":"true","pi":"true","delay":"2"}}],"targetConditions":["mmoCanTarget{interaction=OFFENSE_ACTION} true","entitytype{t=armorstands} false"]},
+    "temp_last_stand_pull": {"steps":[{"op":"pull","args":{"velocity":"5"}}],"targetConditions":["mmoCanTarget{interaction=OFFENSE_ACTION} true","entitytype{t=armorstands} false"]},
+    "temp_last_stand_final_damage": {"steps":[{"op":"aura","args":{"auraname":"ATTACK_CD","duration":"2"},"target":{"op":"self","args":{}}},{"op":"mmodamage","args":{"types":"MAGIC","a":"<modifier.damage>","pkb":"true","pi":"true"}},{"op":"throw","args":{"velocity":"7","velocityy":"5","delay":"2"}}],"targetConditions":["mmoCanTarget{interaction=OFFENSE_ACTION} true","entitytype{t=armorstands} false"]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_temp_skills.yml"], "sha256": "ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7"}
+};
