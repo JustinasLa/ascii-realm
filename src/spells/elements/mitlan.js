@@ -1,1 +1,3 @@
-export const mitlan = [];
+export const mitlan = [
+  "tide-shard",
+];
