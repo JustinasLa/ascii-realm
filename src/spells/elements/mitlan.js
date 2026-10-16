@@ -5,4 +5,5 @@ export const mitlan = [
   "tidal-shield",
   "mitlan-glyph",
   "crashing-wave",
+  "maelstrom",
 ];
