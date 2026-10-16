@@ -1,1 +1,3 @@
-export const cerrith = [];
+export const cerrith = [
+  "healing-orb",
+];
