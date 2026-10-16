@@ -1,0 +1,32 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "shielding-orb",
+  "name": "Shielding Orb",
+  "element": "cerrith",
+  "root": "shielding_orb",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 10.0,
+        "mana": 4.0,
+        "shield_power": 13.0,
+        "shield_duration": 6.0
+      },
+      "root": "shielding_orb",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": true,
+  "nodes": {
+    "shielding_orb": {"steps":[{"op":"projectile","args":{"ontick":"Shielding_Orb_TICK","onhit":"Shielding_Orb_HIT","v":"40","i":"1","hr":"1","vr":"1","mr":"40","hnp":"true","syo":"1.5","tyo":"1.5","bullettype":"DISPLAY","bulletmaterial":"PAPER","bulletmodel":"7201","bulletbrightness":"15","bulletbrightnesssky":"15","bulletscale":"0.55,0.55,0.55","bulletbillboard":"CENTER"},"target":{"op":"forward","args":{"f":"20","y":"0"}}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "shielding_orb_tick": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"origin","args":{}}}]},
+    "shielding_orb_hit": {"steps":[{"op":"skill","args":{"s":"Shielding_Orb_SHIELD"}},{"op":"randomskill","args":{"s":"Shielding_Orb_FX_1"}}]},
+    "shielding_orb_shield": {"steps":[{"op":"potion","args":{"type":"ABSORPTION","duration":"<modifier.shield_duration> * 20","level":"(<modifier.shield_power> + 3) / 4 - 1","hasparticles":"false"},"target":{"op":"playersnearorigin","args":{"r":"3","limit":"1","sort":"NEAREST"}}},{"op":"shield","args":{"a":"0","ms":"<modifier.shield_power>"},"target":{"op":"playersnearorigin","args":{"r":"3","limit":"1","sort":"NEAREST"}}}]},
+    "shielding_orb_fx_1": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"3","life":"0.25"}}]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_cerrith_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml"], "sha256": "c9f405f18142629574b33481eadbd1e219bd9e0ed27d41487977509c68af4129"}
+};
