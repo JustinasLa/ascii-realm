@@ -6,4 +6,5 @@ export const oseni = [
   "oseni-glyph",
   "temp-last-stand",
   "fire-rain",
+  "temp-blazing-barrage",
 ];
