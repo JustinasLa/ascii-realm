@@ -6,4 +6,5 @@ export const mitlan = [
   "mitlan-glyph",
   "crashing-wave",
   "maelstrom",
+  "drowning-prison",
 ];
