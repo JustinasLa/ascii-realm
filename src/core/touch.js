@@ -33,6 +33,9 @@ export function installTouchControls(zoomBy) {
   pad.addEventListener('pointerdown', (e) => {
     if (pointer !== null || e.button !== 0) return;
     e.preventDefault();
+    // A panel's focused control blocks movement. Touching the joystick
+    // returns to the scene before setting a fresh movement axis.
+    document.getElementById('screen')?.focus({ preventScroll: true });
     pointer = e.pointerId;
     const rect = pad.getBoundingClientRect();
     centerX = rect.left + rect.width / 2;

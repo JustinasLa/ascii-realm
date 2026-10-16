@@ -237,6 +237,28 @@ export class Player {
     return this.vitals.heal(amount);
   }
 
+  // Waking after a defeat starts a new pose at the spawn point. Keep the
+  // same player and loadout references used by the HUD and inventory, but
+  // leave the old jump, charge, momentum and planted feet behind.
+  respawn(x, y) {
+    const persistent = {
+      equipment: this.equipment,
+      modelTrail: this.modelTrail,
+      walkSpeed: this.walkSpeed,
+      runSpeed: this.runSpeed,
+      time: this.time,
+      torchOut: this.torchOut,
+      vitals: this.vitals,
+    };
+    Object.assign(this, new Player(x, y), persistent);
+    this.foliageBounds = null;
+    this.vitals.clamp();
+    this.vitals.health = this.vitals.maxHealth;
+    this.vitals.stamina = this.vitals.maxStamina;
+    this.vitals.regenDelay = 0;
+    this.settleCape();
+  }
+
   // Unequipping the weapon puts it away at once, mid-swing or not.
   cancelWeapon() {
     this.combat.cancel();

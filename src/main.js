@@ -242,7 +242,7 @@ debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
 bindMultiplayerControls(multiplayer, {
   name, seed: () => seed,
-  onName: (value) => { name = value; hud.setName(value); },
+  onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
   onDone: () => canvas.focus({ preventScroll: true }),
 });
 window.addEventListener('pagehide', () => multiplayer.leave(false));
@@ -522,11 +522,12 @@ function monsterEvent(e) {
 // Struck down, the player wakes back where they began, whole again, and the
 // dead go back into the ground for a while.
 function fallInBattle() {
-  player.x = spawn.x;
-  player.y = spawn.y;
-  player.vx = 0;
-  player.vz = 0;
-  player.vitals.health = player.vitals.maxHealth;
+  player.respawn(spawn.x, spawn.y);
+  model?.resetPose(player);
+  clearInput();
+  clicked = false;
+  mouseHeld = false;
+  hitStop = 0;
   camera.x = player.x;
   camera.y = player.y - 11;
   monsters.clear();

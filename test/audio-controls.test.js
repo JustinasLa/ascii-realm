@@ -87,10 +87,39 @@ test('audio controls respect activation, browser shortcuts and listener cleanup'
   }
   assert.equal(unlocks, 8, 'plain and Shift-modified audio shortcuts still unlock sound');
 
+  for (const target of [
+    { tagName: 'INPUT' },
+    { tagName: 'TEXTAREA' },
+    { tagName: 'SELECT' },
+    { isContentEditable: true },
+    { closest: () => ({}) },
+  ]) {
+    for (const code of ['KeyM', 'KeyN']) {
+      const event = send('keydown', { code, repeat: false }, target);
+      assert.equal(event.defaultPrevented, false, 'typing retains its default action');
+      assert.equal(engine.muted, false, `${code} typed in an editor must not mute`);
+      assert.equal(skips, 2, `${code} typed in an editor must not skip`);
+    }
+  }
+  const shadowHost = { tagName: 'DIV' };
+  for (const code of ['KeyM', 'KeyN']) {
+    send('keydown', { code, repeat: false,
+      composedPath: () => [{ tagName: 'INPUT' }, shadowHost, window] }, shadowHost);
+    send('keydown', { code, repeat: false, isComposing: true });
+    const consumed = new Event('keydown', { cancelable: true });
+    Object.assign(consumed, { code, repeat: false });
+    consumed.preventDefault();
+    window.dispatchEvent(consumed);
+    send('keydown', { code, repeat: true });
+    assert.equal(engine.muted, false, `${code} must not escape a control or repeat`);
+    assert.equal(skips, 2, `${code} must not skip during editing, composition or repeat`);
+  }
+  const beforeUnbind = unlocks;
+
   unbind();
   send('pointerdown', { pointerType: 'mouse' });
   send('pointerup', { pointerType: 'touch' });
   send('keydown', { code: 'KeyW', repeat: false });
-  assert.equal(unlocks, 8, 'all activation listeners are removed');
+  assert.equal(unlocks, beforeUnbind, 'all activation listeners are removed');
   await Promise.resolve();
 });

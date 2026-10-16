@@ -120,8 +120,16 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
   }
   const keydown = event => {
     if (event.ctrlKey || event.metaKey || event.altKey || event.code === 'Escape') return;
-    if (event.code === 'KeyM' && !event.repeat) engine.toggleMute();
-    if (event.code === 'KeyN' && !event.repeat) skipSong();
+    // Typing names, server addresses or select options must keep its keys.
+    // Inspect the composed path as well, so shadow-root editors are covered.
+    const editingTarget = target => target?.isContentEditable
+      || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName?.toUpperCase?.())
+      || target?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
+    const editing = editingTarget(event.target) || event.composedPath?.().some(editingTarget);
+    if (!event.defaultPrevented && !event.isComposing && !editing && !event.repeat) {
+      if (event.code === 'KeyM') engine.toggleMute();
+      if (event.code === 'KeyN') skipSong();
+    }
     unlock();
     refresh();
   };
