@@ -1,1 +1,3 @@
-export const seithr = [];
+export const seithr = [
+  "silencing-shard",
+];
