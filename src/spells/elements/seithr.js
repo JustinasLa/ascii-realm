@@ -6,4 +6,5 @@ export const seithr = [
   "ice-wave",
   "temp-icicle-blitz",
   "seithr-glyph",
+  "cold-embrace",
 ];

@@ -1,0 +1,35 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "cold-embrace",
+  "name": "Cold Embrace",
+  "element": "seithr",
+  "root": "cold_embrace",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 20.0,
+        "mana": 8.0,
+        "duration": 6.0
+      },
+      "root": "cold_embrace",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": false,
+  "nodes": {
+    "cold_embrace": {"steps":[{"op":"projectile","args":{"onend":"Cold_Embrace_SUMMON_LEVEL","v":"100","i":"1","hr":"1","vr":"1","mr":"20","hnp":"false","se":"false","sb":"true"},"target":{"op":"forward","args":{"f":"20","y":"0"}}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "cold_embrace_summon_level": {"steps":[{"op":"projectile","args":{"v":"0","i":"1","md":"1","hnp":"false","hp":"false","se":"false","sb":"false","fromorigin":"true","onend":"Cold_Embrace_SUMMON"},"target":{"op":"origin","args":{"yoffset":"10"}}}]},
+    "cold_embrace_summon": {"steps":[{"op":"totem","args":{"md":"20","ot":"Cold_Embrace_SKILLSPAWN_FX","hnp":"false","hp":"true","hr":"4","vr":"2","i":"20","hs":"true","hfs":"0.1","bullettype":"DISPLAY","bulletmaterial":"PAPER","bulletmodel":"7207","bulletbrightness":"15","bulletbrightnesssky":"15","bulletscale":"4.26,1,4.26"},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"20"}},{"op":"totem","args":{"md":"20","ot":"Cold_Embrace_SKILL","hnp":"true","hp":"true","hr":"4","vr":"2","i":"20","delay":"1","hs":"true","hfs":"0.1"},"target":{"op":"origin","args":{}}}]},
+    "cold_embrace_skillspawn_fx": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"ringaroundorigin","args":{"r":"1","p":"4"}}},{"op":"delay","args":{"ticks":"5"}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"ringaroundorigin","args":{"r":"1","p":"8"}}},{"op":"delay","args":{"ticks":"5"}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"ringaroundorigin","args":{"r":"2","p":"12"}}},{"op":"delay","args":{"ticks":"2"}},{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"ringaroundorigin","args":{"r":"2","p":"16"}}}]},
+    "cold_embrace_skill": {"steps":[{"op":"skill","args":{"s":"Cold_Embrace_SKILL_ACTIVE"},"target":{"op":"entitiesnearorigin","args":{"r":"4"}}},{"op":"skill","args":{"s":"Cold_Embrace_SKILL_FX"},"target":{"op":"origin","args":{}}}]},
+    "cold_embrace_skill_active": {"steps":[{"op":"aura","args":{"auraname":"Weakened","ot":"Weakened","d":"<modifier.duration> * 20","i":"20"}}]},
+    "weakened": {"steps":[{"op":"potion","args":{"type":"WEAKNESS","duration":"21","level":"0","hasparticles":"false"}},{"op":"delay","args":{"ticks":"10"}},{"op":"randomskill","args":{"s":"Weakened_MSG_1"}}],"targetConditions":["hasaura{aura=Weakened}"]},
+    "weakened_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Weakened </gradient>"}}]},
+    "cold_embrace_skill_fx": {"steps":[{"op":"visual","args":{"radius":"2","life":"0.4"},"target":{"op":"origin","args":{"cpitch":"0.01"}}},{"op":"visual","args":{"shape":"burst","radius":"4","life":"0.25"},"target":{"op":"origin","args":{}}}]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_seithr_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml"], "sha256": "dd420157d6e6bbbfa6a8aa60a51f3e625b8a4885f4070cfc3fb59b94b1130599"}
+};
