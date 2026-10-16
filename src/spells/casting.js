@@ -123,7 +123,7 @@ export class Spellcasting {
     if (!root) return { ok: false, reason: 'Spell definition missing.' };
     if (!ctx.target) ctx.target = this.aimTarget(caster, options.aim, spell.supportive);
     if (!this.conditions(root.conditions, ctx, caster) || !this.conditions(root.targetConditions, ctx, ctx.target)) {
-      return { ok: false, reason: 'No valid target in range.' };
+      return { ok: Boolean(ctx.stopped), stopped: Boolean(ctx.stopped), reason: 'No valid target in range.' };
     }
     const cost = Math.max(0, ctx.modifiers.mana ?? 0);
     if (s.mana < cost) return { ok: false, reason: 'Not enough mana.' };
@@ -172,7 +172,7 @@ export class Spellcasting {
         pass = this.expand(a.v1 ?? '<target.uuid>', ctx) === this.expand(a.v2 ?? a.uuid, ctx);
       } else throw new Error(`Unsupported spell condition: ${op}`);
       if (mode === 'castinstead' || mode === 'cast') {
-        if (pass) { this.run(match[3], ctx); if (mode === 'castinstead') return false; }
+        if (pass) { this.run(match[3], ctx); if (mode === 'castinstead') { ctx.stopped = /_stop$/i.test(match[3]); return false; } }
       } else if (mode === 'orelsecast') { if (!pass) { this.run(match[3], ctx); return false; } }
       else if (Boolean(pass) !== (mode !== 'false')) return false;
     }
@@ -234,6 +234,12 @@ export class Spellcasting {
     if (!node) return;
     const nested = { ...ctx, depth: ctx.depth + 1 };
     if (!this.conditions(node.conditions, nested, ctx.caster) || !this.conditions(node.targetConditions, nested, ctx.target)) return;
+    if (node.cooldown) {
+      const state = this.state(ctx.caster);
+      state.skillReady ??= new Map();
+      if ((state.skillReady.get(lower(name)) ?? 0) > this.time) return;
+      state.skillReady.set(lower(name), this.time + node.cooldown);
+    }
     let delay = 0;
     for (const step of node.steps) {
       if (step.op === 'delay') { delay += this.number(step.args.ticks, ctx) / 20; continue; }
@@ -268,7 +274,7 @@ export class Spellcasting {
       const s = this.state(target);
       const duration = clamp(n('d', n('duration', 20)) / 20, 0.05, 5000);
       switch (step.op) {
-        case 'mmodamage': case 'damage': this.damage(target, Math.max(0, n('a', n('amount', 0))), ctx); break;
+        case 'mmodamage': case 'damage': this.damage(target, Math.max(0, n('a', n('amount', 0))), ctx, a); break;
         case 'heal': {
           const value = n('a', n('amount', 0));
           if (target.heal) target.heal(value);
@@ -372,8 +378,14 @@ export class Spellcasting {
     return amount - shielded;
   }
 
-  damage(target, amount, ctx) {
+  damage(target, amount, ctx, options = {}) {
     if (!alive(target) || target === ctx.caster || !Number.isFinite(amount) || amount <= 0) return;
+    const targetState = this.state(target);
+    if (!TRUE(options.ii) && (targetState.invulnerableUntil ?? 0) > this.time) {
+      if (amount <= targetState.lastHitDamage) return;
+      amount -= targetState.lastHitDamage;
+    }
+    if (!TRUE(options.pi)) { targetState.invulnerableUntil = this.time + 0.5; targetState.lastHitDamage = amount; }
     this.state(ctx.caster).lastCombat = this.time;
     this.state(target).lastCombat = this.time;
     if (target.takeHit) {

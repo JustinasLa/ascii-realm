@@ -78,6 +78,9 @@ def step(text):
     # Bukkit-only absorption maximum reset is implicit in the shield expiry.
     if result["op"] == "attribute":
         return None
+    if result["op"] == "randomskill":
+        # Minecraft particle variants collapse to the same ASCII primitive.
+        result["args"]["s"] = result["args"].get("s", "").split(",")[0]
     return result
 
 
@@ -137,6 +140,8 @@ def export(snapshot, output, include_classes=False):
                 raise ValueError(f"Missing skill {key} for {spell['id']}")
             source = nodes[key]
             graph[key] = compiled = {"steps": []}
+            if source.get("Cooldown"):
+                compiled["cooldown"] = source["Cooldown"]
             used.add(node_sources[key])
             for from_key, to_key in [("Conditions", "conditions"), ("TargetConditions", "targetConditions")]:
                 if source.get(from_key):
@@ -165,7 +170,10 @@ def export(snapshot, output, include_classes=False):
     output.mkdir(parents=True, exist_ok=True)
     for spell in spells.values():
         # One node per line keeps each spell PR compact and readable.
-        text = json.dumps(spell, ensure_ascii=False, indent=2)
+        header = {k: v for k, v in spell.items() if k not in ["nodes", "source"]}
+        text = json.dumps(header, ensure_ascii=False, indent=2)[:-2] + ',\n  "nodes": {\n'
+        text += ',\n'.join('    ' + json.dumps(k) + ': ' + json.dumps(v, ensure_ascii=False, separators=(',', ':')) for k, v in spell['nodes'].items())
+        text += '\n  },\n  "source": ' + json.dumps(spell['source'], ensure_ascii=False) + '\n}'
         (output / f"{spell['id']}.js").write_text("// Gameplay derived from TF's configured rune/class ability.\nexport default " + text + ";\n", encoding="utf-8")
     return list(spells)
 

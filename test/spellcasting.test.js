@@ -107,3 +107,23 @@ test('spell relay accepts allowlisted intent and rejects arbitrary actions or in
   assert.equal(readSpellCast({ id: 'bolt', heading: Infinity }, ['bolt']), null);
   assert.equal(readSpellCast({ id: 'bolt', heading: 0, aim: { x: NaN, y: 2 } }, ['bolt']), null);
 });
+
+test('fan projectile offsets spread shots instead of multiplying hits along one line', () => {
+  const bolt = structuredClone(practiceSpells[0]);
+  const base = bolt.nodes[bolt.root].steps[0];
+  bolt.nodes[bolt.root].steps = [-45, 0, 45].map(ho => ({ ...base, args: { ...base.args, ho: String(ho) } }));
+  const { casting, foe } = scene([bolt]);
+  casting.cast(bolt.id, { heading: 0 }); casting.update(0.5);
+  assert.equal(foe.health, 48);
+});
+
+test('deferred area effects keep the projectile position where the effect was created', () => {
+  const spell = { id: 'trail', root: 'trail', variants: [{ id: 'rune', kind: 'rune' }], nodes: {
+    trail: { steps: [{ op: 'projectile', args: { v: '5', mr: '20', hnp: 'false', hp: 'false', se: 'false', i: '4', ontick: 'pulse' }, target: { op: 'forward', args: { f: '20' } } }] },
+    pulse: { steps: [{ op: 'skill', args: { s: 'blast', delay: '20' }, target: { op: 'entitiesnearorigin', args: { r: '2' } } }] },
+    blast: { steps: [{ op: 'mmodamage', args: { a: '12' } }] },
+  } };
+  const { casting, foe } = scene([spell], { metres: 4 });
+  casting.cast(spell.id, { heading: 0 }); casting.update(2); casting.update(0.5);
+  assert.ok(foe.health < foe.maxHealth);
+});

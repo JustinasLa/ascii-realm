@@ -16,7 +16,8 @@ export class SpellControls {
       + '<option value="oseni">Oseni · fire</option><option value="seithr">Seithr · ice</option>'
       + '<option value="cerrith">Cerrith · life</option><option value="mitlan">Mitlan · water</option></select>'
       + '<label for="spell-select">Rune</label><select id="spell-select"></select><p id="spell-description"></p>'
-      + '<p id="spell-stats"></p><p>Aim with the pointer, then press R or Cast. On touch, spells follow your facing. Support spells need a player in range.</p></div>';
+      + '<p id="spell-stats"></p><p>Aim with the pointer, then press R or Cast. On touch, spells follow your facing. Support spells need a player in range.</p>'
+      + '<a href="docs/casting-simulation.html">Practice in the casting arena</a></div>';
     dock.prepend(this.panel);
     this.select = this.panel.querySelector('#spell-select');
     this.element = this.panel.querySelector('#spell-element');
