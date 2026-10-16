@@ -3,4 +3,5 @@ export const seithr = [
   "ice-shard",
   "temp-frost-bolt",
   "ice-shield",
+  "ice-wave",
 ];
