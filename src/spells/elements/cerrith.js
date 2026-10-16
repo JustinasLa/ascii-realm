@@ -6,4 +6,5 @@ export const cerrith = [
   "blessing-of-swiftness",
   "temp-earth-spike",
   "cerrith-glyph",
+  "restoration",
 ];
