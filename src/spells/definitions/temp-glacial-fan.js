@@ -1,0 +1,31 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "temp-glacial-fan",
+  "name": "Glacial Fan",
+  "element": "seithr",
+  "root": "temp_glacial_fan",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 20.0,
+        "mana": 8.0,
+        "damage": 16.0
+      },
+      "root": "temp_glacial_fan",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": false,
+  "nodes": {
+    "temp_glacial_fan": {"steps":[{"op":"summon","args":{"type":"VFX_AwakenedMage_Glacial_Spikes","amount":"1","radius":"0","yradius":"0","onsurface":"false"},"target":{"op":"forward","args":{"f":"0.5","y":"1.3"}}},{"op":"skill","args":{"s":"TEMP_Sorcery_Combo_GLACIAL_PRO","origin":"@SelfEyeLocation{fo=-0.5","yo":"-0.2}"},"target":{"op":"forward","args":{"f":"12","uel":"true"}}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "temp_sorcery_combo_glacial_pro": {"steps":[{"op":"projectile","args":{"bmd":"true","onhit":"TEMP_Sorcery_Combo_GLACIAL_DAMAGE_D","v":"25","i":"1","hr":"0.6","vr":"0.6","mr":"8","hnp":"true","ho":"-45","se":"false","sb":"true","hs":"false","hfs":"0","sfo":"0","syo":"0","tyo":"0","sso":"0","fo":"true","hitconditions":"[- isLiving true]","byo":"0","drawhitbox":"false","ham":"true"}},{"op":"projectile","args":{"delay":"3","bmd":"true","onhit":"TEMP_Sorcery_Combo_GLACIAL_DAMAGE_D","v":"25","i":"1","hr":"0.6","vr":"0.6","mr":"8","hnp":"true","ho":"-22.5","se":"false","sb":"true","hs":"false","hfs":"0","sfo":"0","syo":"0","tyo":"0","sso":"0","fo":"true","hitconditions":"[- isLiving true]","byo":"0","drawhitbox":"false","ham":"true"}},{"op":"projectile","args":{"delay":"6","bmd":"true","onhit":"TEMP_Sorcery_Combo_GLACIAL_DAMAGE_D","v":"25","i":"1","hr":"0.6","vr":"0.6","mr":"8","hnp":"true","ho":"0","se":"false","sb":"true","hs":"false","hfs":"0","sfo":"0","syo":"0","tyo":"0","sso":"0","fo":"true","hitconditions":"[- isLiving true]","byo":"0","drawhitbox":"false","ham":"true"}},{"op":"projectile","args":{"delay":"9","bmd":"true","onhit":"TEMP_Sorcery_Combo_GLACIAL_DAMAGE_D","v":"25","i":"1","hr":"0.6","vr":"0.6","mr":"8","hnp":"true","ho":"22.5","se":"false","sb":"true","hs":"false","hfs":"0","sfo":"0","syo":"0","tyo":"0","sso":"0","fo":"true","hitconditions":"[- isLiving true]","byo":"0","drawhitbox":"false","ham":"true"}},{"op":"projectile","args":{"delay":"12","bmd":"true","onhit":"TEMP_Sorcery_Combo_GLACIAL_DAMAGE_D","v":"25","i":"1","hr":"0.6","vr":"0.6","mr":"8","hnp":"true","ho":"45","se":"false","sb":"true","hs":"false","hfs":"0","sfo":"0","syo":"0","tyo":"0","sso":"0","fo":"true","hitconditions":"[- isLiving true]","byo":"0","drawhitbox":"false","ham":"true"}}]},
+    "temp_sorcery_combo_glacial_damage_d": {"steps":[{"op":"skill","args":{"s":"TEMP_Sorcery_Combo_GLACIAL_DAMAGE_DD"},"target":{"op":"entitiesnearorigin","args":{"r":"3","limit":"3","sort":"NEAREST"}}}],"cooldown":0.001},
+    "temp_sorcery_combo_glacial_damage_dd": {"steps":[{"op":"skill","args":{"s":"TEMP_Sorcery_Combo_GLACIAL_DAMAGE"},"target":{"op":"targetedtarget","args":{"conditions":"[ - isLiving true - hasaura{aura=immunedelay} false ]"}}}]},
+    "temp_sorcery_combo_glacial_damage": {"steps":[{"op":"aura","args":{"auraname":"immunedelay","duration":"3"}},{"op":"mmodamage","args":{"types":"MAGIC","a":"<modifier.damage>","pkb":"true","hnp":"true","hp":"true"}},{"op":"visual","args":{"radius":"0.6","life":"0.3"}}],"targetConditions":["entitytype{t=ARMOR_STAND} false","mmoCanTarget{interaction=OFFENSE_ACTION} true"]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_temp_skills.yml"], "sha256": "ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7"}
+};

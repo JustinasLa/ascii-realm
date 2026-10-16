@@ -7,4 +7,5 @@ export const seithr = [
   "temp-icicle-blitz",
   "seithr-glyph",
   "cold-embrace",
+  "temp-glacial-fan",
 ];
