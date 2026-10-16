@@ -1,0 +1,35 @@
+// Gameplay derived from TF's configured rune/class ability.
+export default {
+  "id": "fire-rain",
+  "name": "Fire Rain",
+  "element": "oseni",
+  "root": "fire_rain",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "cooldown": 25.0,
+        "mana": 10.0,
+        "damage": 12.0
+      },
+      "root": "fire_rain",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": false,
+  "nodes": {
+    "fire_rain": {"steps":[{"op":"skill","args":{"s":"Fire_Rain_TP"}},{"op":"skill","args":{"s":"Fire_Rain_LEAP"}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "fire_rain_tp": {"steps":[{"op":"aura","args":{"auraname":"Fire_Rain_Return","d":"135","cancelondeath":"true","cancelonchangeworld":"true","cancelonteleport":"true"},"target":{"op":"self","args":{}}},{"op":"totem","args":{"md":"130","ot":"Fire_Rain_SKILLSPAWN_FX","hnp":"false","hp":"false","hr":"4","vr":"2","i":"1","hs":"true","hfs":"0.1"},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"130"}},{"op":"skill","args":{"s":"Fire_Rain_RETURN"}}]},
+    "fire_rain_skillspawn_fx": {"steps":[{"op":"visual","args":{"shape":"ward","radius":"1","life":"0.25"}}]},
+    "fire_rain_return": {"steps":[{"op":"auraremove","args":{"aura":"Fire_Rain_Return"},"target":{"op":"self","args":{}}},{"op":"teleport","args":{},"target":{"op":"origin","args":{}}},{"op":"delay","args":{"ticks":"5"}},{"op":"disengage","args":{"v":"4","vy":"0.1"},"target":{"op":"self","args":{}}}],"conditions":["hasaura{aura=Fire_Rain_Return} true"]},
+    "fire_rain_leap": {"steps":[{"op":"lunge","args":{"velocity":"10","velocityy":"12"},"target":{"op":"self","args":{}}},{"op":"potion","args":{"type":"SLOW_FALLING","duration":"130","level":"0","hasparticles":"false"},"target":{"op":"self","args":{}}},{"op":"delay","args":{"ticks":"20"}},{"op":"projectile","args":{"ontick":"Fire_Rain_TICK","onend":"Fire_Rain_HIT","v":"80","i":"1","hr":"1","vr":"1","mr":"80","hnp":"true","syo":"1.5","tyo":"1.5","repeat":"5","repeatinterval":"20","bullettype":"DISPLAY","bulletmaterial":"PAPER","bulletmodel":"7202","bulletbrightness":"15","bulletbrightnesssky":"15","bulletscale":"0.9,0.9,0.9"},"target":{"op":"forward","args":{"f":"20","y":"0"}}}]},
+    "fire_rain_tick": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"1","life":"0.25"},"target":{"op":"origin","args":{}}}]},
+    "fire_rain_hit": {"steps":[{"op":"skill","args":{"s":"Fire_Rain_DAMAGE"}},{"op":"randomskill","args":{"s":"Fire_Rain_FX_1"}}]},
+    "fire_rain_damage": {"steps":[{"op":"mmodamage","args":{"types":"MAGIC","a":"<modifier.damage>","pi":"true"},"target":{"op":"entitiesnearorigin","args":{"r":"5"}}}]},
+    "fire_rain_fx_1": {"steps":[{"op":"visual","args":{"shape":"burst","radius":"5","life":"0.25"}}]}
+  },
+  "source": {"snapshot": "TFMCMain01 2026-10-16", "files": ["MythicMobs/skills/TFMC/Classes/tfmc_oseni_skills.yml", "MythicMobs/skills/TFMC/Classes/tfmc_status_skills.yml"], "sha256": "cc41f032e051b5cfe15d040f7fbd68b0cc12ff0501dca0bfd844b295b09958b9"}
+};
