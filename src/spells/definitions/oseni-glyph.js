@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/oseni-glyph.js';
+
 export default {
+  presentation,
   "id": "oseni-glyph",
   "name": "Oseni Glyph",
   "element": "oseni",
