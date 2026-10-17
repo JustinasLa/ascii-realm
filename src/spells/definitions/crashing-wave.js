@@ -1,5 +1,8 @@
+import presentation from '../presentations/crashing-wave.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "crashing-wave",
   "name": "Crashing Wave",
   "element": "mitlan",
