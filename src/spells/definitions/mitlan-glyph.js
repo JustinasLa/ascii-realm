@@ -1,5 +1,8 @@
+import presentation from '../presentations/mitlan-glyph.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "mitlan-glyph",
   "name": "Mitlan Glyph",
   "element": "mitlan",
