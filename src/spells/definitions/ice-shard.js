@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/ice-shard.js';
+
 export default {
+  presentation,
   "id": "ice-shard",
   "name": "Ice Shard",
   "element": "seithr",
