@@ -1,5 +1,8 @@
+import presentation from '../presentations/maelstrom.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "maelstrom",
   "name": "Maelstrom",
   "element": "mitlan",
