@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/silencing-shard.js';
+
 export default {
+  presentation,
   "id": "silencing-shard",
   "name": "Silencing Shard",
   "element": "seithr",
