@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/drowning-prison.js';
+
 export default {
+  presentation,
   "id": "drowning-prison",
   "name": "Drowning Prison",
   "element": "mitlan",
