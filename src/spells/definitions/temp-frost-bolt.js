@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/temp-frost-bolt.js';
+
 export default {
+  presentation,
   "id": "temp-frost-bolt",
   "name": "Frost Bolt",
   "element": "seithr",
