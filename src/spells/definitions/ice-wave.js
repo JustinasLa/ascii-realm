@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/ice-wave.js';
+
 export default {
+  presentation,
   "id": "ice-wave",
   "name": "Ice Wave",
   "element": "seithr",
