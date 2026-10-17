@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/tide-shard.js';
+
 export default {
+  presentation,
   "id": "tide-shard",
   "name": "Tide Shard",
   "element": "mitlan",
