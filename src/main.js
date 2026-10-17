@@ -425,6 +425,8 @@ const syncSpellPeers = () => {
 const casting = new Spellcasting({ player, world, monsters, peers: () => [...spellPeers.values()],
   notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e) });
 debug.casting = casting;
+document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
+window.addEventListener('pagehide', () => casting.clearPresentation());
 let castRequested = false;
 const spellControls = new SpellControls(casting, { root: document.getElementById('spell-controls'),
   dock: document.getElementById('panel-dock'), onCast: () => { castRequested = true; },

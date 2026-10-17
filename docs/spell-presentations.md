@@ -24,8 +24,8 @@ are clamped. Profiles must use bounded loops and must not allocate timers.
 `sounds.pulse` is optional. Each layer uses `kind: 'tone' | 'noise'` and the
 existing Web Audio voice options: duration, gain, delay, frequency,
 endFrequency, type, cutoff, filterType, attack, and release. Up to eight layers
-play per cue on the existing SFX bus. Each layer lasts at most three seconds
-and starts within 1.5 seconds. Impact cues are limited to one per 120 ms per
+play per cue on the existing SFX bus. Each layer lasts at most 2.5 seconds
+and starts within two seconds. Impact cues are limited to one per 120 ms per
 spell, pulse cues to one per 280 ms. Rejected casts emit no cue.
 
 `Spellcasting.present` connects source visuals, successful casts, damage,

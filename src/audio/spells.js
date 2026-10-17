@@ -10,8 +10,8 @@ export function playSpellSound(engine, event) {
   return recipe.slice(0, 8).flatMap(spec => {
     if (!spec || !['tone', 'noise'].includes(spec.kind)) return [];
     const options = { ...spec, bus: 'sfx', x: event.x, y: event.y,
-      when: engine.context.currentTime + bounded(spec.delay, 0, 0, 1.5),
-      duration: bounded(spec.duration, 0.15, 0.01, 3), gain: bounded(spec.gain, 0.08, 0, 0.3) };
+      when: engine.context.currentTime + bounded(spec.delay, 0, 0, 2),
+      duration: bounded(spec.duration, 0.15, 0.01, 2.5), gain: bounded(spec.gain, 0.08, 0, 0.25) };
     const handle = (spec.kind === 'noise' ? noise : tone)(engine, options);
     return handle ? [handle] : [];
   });
