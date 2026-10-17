@@ -1,5 +1,8 @@
+import presentation from '../presentations/hand-cure.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "hand-cure",
   "name": "Hand Cure",
   "element": "cerrith",
