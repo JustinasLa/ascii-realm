@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/ice-shield.js';
+
 export default {
+  presentation,
   "id": "ice-shield",
   "name": "Ice Shield",
   "element": "seithr",
