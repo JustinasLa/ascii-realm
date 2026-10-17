@@ -1,5 +1,8 @@
+import presentation from '../presentations/bubble-shard.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "bubble-shard",
   "name": "Bubble Shard",
   "element": "mitlan",
