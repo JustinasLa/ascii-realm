@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/healing-orb.js';
+
 export default {
+  presentation,
   "id": "healing-orb",
   "name": "Healing Orb",
   "element": "cerrith",
