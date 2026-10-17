@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/temp-last-stand.js';
+
 export default {
+  presentation,
   "id": "temp-last-stand",
   "name": "Flight of the Gladiator",
   "element": "oseni",
