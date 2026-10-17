@@ -31,6 +31,13 @@ test('Fire Shard draws distinct angular launch, moving shard, and seven-ray impa
     signatures.push(JSON.stringify(points));
   }
   assert.equal(new Set(signatures).size, 3);
+  for (const stage of ['cast', 'impact']) {
+    const start = [], end = [];
+    paintPresentation(fireShard.presentation, { x: 0, y: 0, stage, age: 0, life: 0.55 }, (...p) => start.push(p));
+    paintPresentation(fireShard.presentation, { x: 0, y: 0, stage, age: 0.55, life: 0.55 }, (...p) => end.push(p));
+    assert.notDeepEqual(start, end, 'authored geometry moves over time');
+    assert.ok(end.every(p => p[4] === 0), 'casting and fracture fade completely');
+  }
 });
 
 test('presentation adapter rotates local metre geometry and bounds malformed output', () => {

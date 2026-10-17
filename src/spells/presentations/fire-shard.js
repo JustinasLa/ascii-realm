@@ -35,9 +35,9 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'noise', duration: 0.18, gain: 0.09, cutoff: 2100, filterType: 'highpass', attack: 0.025, release: 0.12 },
-      { kind: 'tone', type: 'sawtooth', frequency: 380, endFrequency: 1150, duration: 0.14, gain: 0.055, cutoff: 1900 },
-      { kind: 'tone', type: 'triangle', frequency: 1300, endFrequency: 440, delay: 0.06, duration: 0.17, gain: 0.04 },
+      { kind: 'noise', duration: 0.045, gain: 0.12, cutoff: 4100, filterType: 'highpass', attack: 0.001, release: 0.035 },
+      { kind: 'tone', type: 'triangle', frequency: 560, endFrequency: 1620, delay: 0.025, duration: 0.19, gain: 0.065 },
+      { kind: 'noise', delay: 0.04, duration: 0.14, gain: 0.045, cutoff: 1900, filterType: 'highpass' },
     ],
     impact: [
       { kind: 'noise', duration: 0.17, gain: 0.15, cutoff: 2600, filterType: 'bandpass', release: 0.14 },
