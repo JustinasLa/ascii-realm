@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/shielding-orb.js';
+
 export default {
+  presentation,
   "id": "shielding-orb",
   "name": "Shielding Orb",
   "element": "cerrith",
