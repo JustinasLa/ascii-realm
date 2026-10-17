@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/fire-breath.js';
+
 export default {
+  presentation,
   "id": "fire-breath",
   "name": "Fire Breath",
   "element": "oseni",
