@@ -1,5 +1,8 @@
+import presentation from '../presentations/restoration.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "restoration",
   "name": "Restoration",
   "element": "cerrith",
