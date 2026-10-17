@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/frozen-tomb.js';
+
 export default {
+  presentation,
   "id": "frozen-tomb",
   "name": "Frozen Tomb",
   "element": "seithr",
