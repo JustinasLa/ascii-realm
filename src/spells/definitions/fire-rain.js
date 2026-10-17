@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/fire-rain.js';
+
 export default {
+  presentation,
   "id": "fire-rain",
   "name": "Fire Rain",
   "element": "oseni",
