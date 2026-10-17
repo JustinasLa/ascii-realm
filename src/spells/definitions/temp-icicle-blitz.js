@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/temp-icicle-blitz.js';
+
 export default {
+  presentation,
   "id": "temp-icicle-blitz",
   "name": "Icicle Blitz",
   "element": "seithr",
