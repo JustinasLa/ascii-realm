@@ -1,5 +1,8 @@
+import presentation from '../presentations/temp-shock-wave.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "temp-shock-wave",
   "name": "Woodland Anvil",
   "element": "cerrith",
