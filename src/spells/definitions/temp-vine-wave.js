@@ -1,5 +1,8 @@
+import presentation from '../presentations/temp-vine-wave.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "temp-vine-wave",
   "name": "Vine Wave",
   "element": "cerrith",
