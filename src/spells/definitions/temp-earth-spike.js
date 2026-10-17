@@ -1,5 +1,8 @@
+import presentation from '../presentations/temp-earth-spike.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "temp-earth-spike",
   "name": "Earth Spike",
   "element": "cerrith",
