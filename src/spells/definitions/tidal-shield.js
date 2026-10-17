@@ -1,5 +1,8 @@
+import presentation from '../presentations/tidal-shield.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "tidal-shield",
   "name": "Tidal Shield",
   "element": "mitlan",
