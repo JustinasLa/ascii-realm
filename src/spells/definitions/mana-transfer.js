@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/mana-transfer.js';
+
 export default {
+  presentation,
   "id": "mana-transfer",
   "name": "Mana Transfer",
   "element": "cerrith",
