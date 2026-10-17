@@ -15,6 +15,7 @@ import { Music } from './music.js';
 import { ChargeHum, playSword } from './sword.js';
 import { playWaterSound, prepareWaterSounds } from './water.js';
 import { WeatherAudio } from './weather.js';
+import { playSpellSound } from './spells.js';
 import { WATER } from '../world/world.js';
 
 // The game hands over animation events before clearing them. Audio never
@@ -30,14 +31,27 @@ export class GameAudio {
     this.music = new Music(engine);
     this.charge = new ChargeHum(engine);
     this.effects = new Set();
+    this.spellEffects = new Map();
     this.weather = new WeatherAudio(engine);
     this.weather.onLightningSound = event => this.play({ ...event, type: 'lightning' });
   }
 
   play(event) {
+    if (event.type === 'spell-stop') { this.stopSpells(event.owner); return []; }
     if (this.engine.context?.state !== 'running') return;
+    for (const handle of this.effects) if (handle.ended) this.effects.delete(handle);
     let handles;
     switch (event.type) {
+      case 'spell': {
+        for (const [handle] of this.spellEffects) if (handle.ended) this.spellEffects.delete(handle);
+        handles = playSpellSound(this.engine, event);
+        for (const handle of handles) this.spellEffects.set(handle, event.owner);
+        while (this.spellEffects.size > 96) {
+          const handle = this.spellEffects.keys().next().value;
+          handle.stop(); this.spellEffects.delete(handle); this.effects.delete(handle);
+        }
+        break;
+      }
       case 'fire-stir':
         handles = this.fires.react(event);
         break;
@@ -87,6 +101,7 @@ export class GameAudio {
 
   update(dt, time, player, camera, fireflies, fires = []) {
     for (const handle of this.effects) if (handle.ended) this.effects.delete(handle);
+    for (const [handle] of this.spellEffects) if (handle.ended) this.spellEffects.delete(handle);
     this.engine.setListener(camera.x, camera.y);
     if (this.engine.context?.state !== 'running') {
       this.music.update({ night: nightAmount(time), time,
@@ -109,7 +124,14 @@ export class GameAudio {
     this.weather.update({ time, dt, water });
   }
 
+  stopSpells(owner) {
+    for (const [handle, caster] of this.spellEffects) if (owner === undefined || caster === owner) {
+      handle.stop(); this.spellEffects.delete(handle); this.effects.delete(handle);
+    }
+  }
+
   pause() {
+    this.stopSpells();
     for (const handle of this.effects) handle.stop();
     this.effects.clear();
     this.charge.pause();

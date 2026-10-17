@@ -673,6 +673,7 @@ function frame(now) {
   const held = isDown('KeyJ') || mouseHeld;
   const fromX = player.x, fromY = player.y, fromAir = player.air;
   const paused = debug.freeze || builder.enabled || playerDt === 0;
+  casting.setPresentationPaused(paused || document.hidden);
   // A bow draws while the attack is held and shoots on release; a spear or
   // javelin jabs on a tap and is thrown after a longer hold.
   const release = player.ranged.update(dt, ranged && held && !builder.enabled && !debug.freeze, weapon);

@@ -1,5 +1,6 @@
 import { arithmetic, mechanic } from './expression.js';
 import { SpellEffects } from './effects.js';
+import { hasPresentation } from './presentation.js';
 import { toCells, toMetres } from '../entities/monsters.js';
 
 const lower = value => String(value ?? '').toLowerCase();
@@ -23,6 +24,7 @@ export class Spellcasting {
     this.projectiles = [];
     this.zones = [];
     this.effects = new SpellEffects();
+    this.presentationCues = new Map();
     this.time = 0;
     this.generation = 0;
     this.characterClass = 'mage';
@@ -131,11 +133,37 @@ export class Spellcasting {
     s.manaDelay = this.time + 1;
     s.cooldowns.set(key, this.time + Math.max(0, ctx.modifiers.cooldown ?? 0));
     this.run(variant.root ?? spell.root, ctx);
-    this.effects.add(caster, { element: spell.element, shape: 'ward', radius: 0.8, life: 0.25 });
-    this.onSound({ type: 'draw', x: caster.x, y: caster.y });
+    this.present(ctx, caster, 'cast', { shape: 'ward', radius: 0.8, life: hasPresentation(spell) ? spell.presentation.duration : 0.25 });
+    if (!hasPresentation(spell)) this.onSound({ type: 'draw', x: caster.x, y: caster.y });
     if (!options.remote && !options.passive) this.onCast({ id, variant: variant.id, heading: ctx.heading, aim: options.aim,
       targetId: ctx.target?.spellId ?? null, characterClass: this.characterClass, level: this.level });
     return { ok: true };
+  }
+
+  present(ctx, point, stage, options = {}) {
+    const presentation = hasPresentation(ctx.spell) ? ctx.spell.presentation : null;
+    this.effects.add(point, { element: ctx.spell.element, presentation, stage, heading: ctx.heading,
+      owner: ctx.caster, ...options });
+    if (!presentation || this.effects.paused || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return;
+    const soundStage = stage === 'cast' ? 'cast' : stage === 'impact' || stage === 'aura' ? 'impact' : 'pulse';
+    const key = `${ctx.spell.id}:${soundStage}`;
+    if (soundStage !== 'cast' && (this.presentationCues.get(key) ?? -Infinity) > this.time) return;
+    this.presentationCues.set(key, this.time + (soundStage === 'pulse' ? 0.28 : 0.12));
+    // Keep peer casts and area hits from retaining a growing cue history.
+    if (this.presentationCues.size > 128) this.presentationCues.delete(this.presentationCues.keys().next().value);
+    this.onSound({ type: 'spell', spellId: ctx.spell.id, stage: soundStage,
+      presentation, x: point.x, y: point.y, owner: this });
+  }
+
+  setPresentationPaused(paused) {
+    paused = Boolean(paused);
+    if (paused && !this.effects.paused) this.clearPresentation();
+    this.effects.paused = paused;
+  }
+
+  clearPresentation() {
+    this.effects.clear(); this.presentationCues.clear();
+    this.onSound({ type: 'spell-stop', owner: this });
   }
 
   hasAura(entity, name) { return (this.state(entity).auras.get(lower(name))?.until ?? 0) > this.time; }
@@ -279,14 +307,15 @@ export class Spellcasting {
           const value = n('a', n('amount', 0));
           if (target.heal) target.heal(value);
           else if (target.health !== undefined) target.health = Math.min(maxHealth(target), target.health + value);
-          this.effects.add(target, { element: 'cerrith', shape: 'ward', radius: 1 });
+          this.present(ctx, target, 'impact', { element: 'cerrith', shape: 'ward', radius: 1 });
           break;
         }
         case 'potion': this.potion(target, a, ctx); break;
         case 'potionclear': if (a.type) s.potions.delete(lower(a.type)); else s.potions.clear(); break;
         case 'aura': this.aura(target, a, ctx); break;
         case 'auraremove': this.removeAura(target, a.aura ?? a.auraname); break;
-        case 'shield': s.shield = a.ms !== undefined ? Math.min(n('ms'), s.shield + n('a')) : s.shield + n('a'); break;
+        case 'shield': s.shield = a.ms !== undefined ? Math.min(n('ms'), s.shield + n('a')) : s.shield + n('a');
+          if (hasPresentation(ctx.spell)) this.present(ctx, target, 'aura', { shape: 'ward', radius: 1 }); break;
         case 'attribute': break; // Absorption's Bukkit maximum is represented by shieldUntil.
         case 'throw': case 'pull': case 'lunge': case 'disengage': case 'leap': this.motion(target, a, ctx, step.op); break;
         case 'teleport': case 'teleportto': {
@@ -327,7 +356,7 @@ export class Spellcasting {
         case 'remove': if (target.summoned) target.health = 0; break;
         case 'summon': this.summon(a, ctx, target); break;
         case 'actionmessage': case 'message': if (target === this.player && a.m) this.notify(a.m.replace(/<[^>]+>|&[0-9a-fklmnor]/gi, '')); break;
-        case 'visual': this.effects.add(target, { element: ctx.spell.element, shape: a.shape ?? 'burst', radius: n('radius', 2), life: n('life', 0.5) }); break;
+        case 'visual': this.present(ctx, target, 'pulse', { shape: a.shape ?? 'burst', radius: n('radius', 2), life: n('life', 0.5) }); break;
         default: throw new Error(`Unsupported spell mechanic: ${step.op}`);
       }
     }
@@ -342,6 +371,7 @@ export class Spellcasting {
       charges: this.number(args.charges, ctx, Infinity),
       stacks: Math.min(this.number(args.maxstacks, ctx, 1), (previous?.stacks ?? 0) + 1) };
     s.auras.set(name, entry);
+    if (hasPresentation(ctx.spell)) this.present(ctx, target, 'aura', { shape: 'ward', radius: 1, life: Math.min(1.5, entry.until - this.time) });
     if (args.os ?? args.onstart) this.run(args.os ?? args.onstart, { ...ctx, target });
   }
 
@@ -358,7 +388,7 @@ export class Spellcasting {
     if (!previous || previous.level <= level || previous.until < this.time) s.potions.set(name, { until: this.time + duration,
       level, next: this.time + (name === 'regeneration' ? 2.5 / 2 ** level : 1), ctx });
     if (name === 'absorption') { s.shield = Math.max(s.shield, 4 * (level + 1)); s.shieldUntil = this.time + duration; }
-    this.effects.add(target, { element: ctx.spell.element, shape: 'ward', radius: 1, life: 0.3 });
+    this.present(ctx, target, 'aura', { shape: 'ward', radius: 1, life: 0.3 });
   }
 
   incoming(entity, amount) {
@@ -395,8 +425,8 @@ export class Spellcasting {
         this.monsters.collect(target);
       }
     } else if (target.takeDamage) target.takeDamage(amount, ctx.caster);
-    this.effects.add(target, { element: ctx.spell.element, radius: 1 });
-    this.onSound({ type: 'slam', strength: 0.25, x: target.x, y: target.y });
+    this.present(ctx, target, 'impact', { radius: 1 });
+    if (!hasPresentation(ctx.spell)) this.onSound({ type: 'slam', strength: 0.25, x: target.x, y: target.y });
   }
 
   motion(target, a, ctx, op) {
@@ -458,13 +488,13 @@ export class Spellcasting {
       radius: Math.max(0.1, this.number(a.hr ?? a.r, ctx, 1)), count: 0 };
     this.zones.push(z);
     this.run(a.os ?? a.onstart, { ...ctx, origin: z });
-    this.effects.add(z, { element: ctx.spell.element, shape: 'vortex', radius: z.radius, life: Math.min(8, z.until - this.time), follow: z.follow });
+    this.present(ctx, z, 'zone', { shape: 'vortex', radius: z.radius, life: Math.min(8, z.until - this.time), follow: z.follow });
   }
 
   summon(a, ctx, target) {
     const name = lower(a.type);
     if (name.startsWith('tfmc_vfx') || !ctx.spell.summons?.[name]) {
-      this.effects.add(target, { element: ctx.spell.element, shape: name.includes('ward') ? 'ward' : 'burst', radius: 2 });
+      this.present(ctx, target, 'pulse', { shape: name.includes('ward') ? 'ward' : 'burst', radius: 2 });
       return;
     }
     this.summons ??= [];
@@ -480,7 +510,7 @@ export class Spellcasting {
         for (let at = interval; at <= 10; at += interval) this.schedule(at, () => { if (alive(mob)) this.step(step, copy); }, ctx);
       }
     }
-    this.effects.add(mob, { element: ctx.spell.element, shape: 'ward', radius: 0.8, life: 10, follow: mob });
+    this.present(ctx, mob, 'aura', { shape: 'ward', radius: 0.8, life: 10, follow: mob });
   }
 
   trigger(event, caster = this.player, target = null, amount = 0) {
@@ -513,6 +543,8 @@ export class Spellcasting {
 
   tick(dt) {
     this.time += dt;
+    if (!alive(this.player) && !this.presentationDead) this.clearPresentation();
+    this.presentationDead = !alive(this.player);
     this.sync();
     for (const [entity, s] of this.states) {
       if (!alive(entity)) continue;
@@ -643,8 +675,9 @@ export class Spellcasting {
 
   reset() {
     this.generation++;
+    this.presentationDead = false;
     this.tasks.length = 0; this.projectiles.length = 0; this.zones.length = 0;
-    this.summons = []; this.effects.clear();
+    this.summons = []; this.clearPresentation();
     for (const [entity] of this.states) {
       entity.magicSpeed = 1; entity.magicDamage = 0; entity.magicHaste = 1;
       entity.magicRooted = false; entity.magicStunned = false; entity.magicHidden = false; entity.magicLift = 0;
