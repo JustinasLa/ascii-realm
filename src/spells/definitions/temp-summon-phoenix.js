@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/temp-summon-phoenix.js';
+
 export default {
+  presentation,
   "id": "temp-summon-phoenix",
   "name": "Fire Phoneix",
   "element": "oseni",
