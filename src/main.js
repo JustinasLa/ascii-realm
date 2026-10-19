@@ -70,7 +70,7 @@ try {
   status.hidden = false;
   throw error;
 }
-const mobile = matchMedia('(any-pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
+const mobile = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
 const quality = new FrameQuality();
 
 const baseChunks = mobile ? 64 : 128;
