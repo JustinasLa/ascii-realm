@@ -1,5 +1,8 @@
+import presentation from '../presentations/temp-quickshot.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "temp-quickshot",
   "name": "Leaf Arrow",
   "element": "cerrith",
