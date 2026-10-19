@@ -40,6 +40,19 @@ test('Fire Shard draws distinct angular launch, moving shard, and seven-ray impa
   }
 });
 
+test('Fire Shard projectile head, facets, and ember wake fade throughout their final lifetime', () => {
+  const frames = [0, 0.999, 1].map(age => {
+    const points = [];
+    paintPresentation(fireShard.presentation, { x: 0, y: 0, stage: 'projectile', age, life: 1 }, (...point) => points.push(point));
+    return points;
+  });
+  assert.ok(frames[0].length > 10, 'test includes the head, facets, and both wake strands');
+  assert.ok(frames.every(frame => frame.length === frames[0].length));
+  assert.ok(frames[0].every(point => point[4] > 0), 'projectile is readable at launch');
+  assert.ok(frames[1].every((point, index) => point[4] > 0 && point[4] < frames[0][index][4] * 0.01), 'every glyph dims near expiry');
+  assert.ok(frames[2].every(point => point[4] === 0), 'no head, facet, or ember remains bright at expiry');
+});
+
 test('presentation adapter rotates local metre geometry and bounds malformed output', () => {
   const points = [];
   const profile = { duration: NaN, draw(state, plot) {
