@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/temp-blazing-barrage.js';
+
 export default {
+  presentation,
   "id": "temp-blazing-barrage",
   "name": "Blazing Barrage",
   "element": "oseni",
