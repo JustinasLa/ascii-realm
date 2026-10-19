@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/seithr-glyph.js';
+
 export default {
+  presentation,
   "id": "seithr-glyph",
   "name": "Seithr Glyph",
   "element": "seithr",
