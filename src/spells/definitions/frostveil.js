@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/frostveil.js';
+
 export default {
+  presentation,
   "id": "frostveil",
   "name": "Frostveil",
   "element": "seithr",
