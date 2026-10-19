@@ -1,5 +1,8 @@
+import presentation from '../presentations/cerrith-glyph.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "cerrith-glyph",
   "name": "Cerrith Glyph",
   "element": "cerrith",
