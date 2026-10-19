@@ -8,10 +8,10 @@ export default {
     if (effect.stage === 'projectile') {
       for (let i = 0; i < 10; i++) {
         const z = -i * 0.16, side = Math.sin(i * 1.8 + effect.age * 28) * i * 0.024;
-        plot(side, z, i < 3 ? '^' : ':', i < 3 ? white : orange, 1 - i * 0.075);
-        if (i > 3) plot(-side - 0.12, z - 0.12, '.', ember, 0.7 - i * 0.035);
+        plot(side, z, i < 3 ? '^' : ':', i < 3 ? white : orange, (1 - i * 0.075) * fade);
+        if (i > 3) plot(-side - 0.12, z - 0.12, '.', ember, (0.7 - i * 0.035) * fade);
       }
-      plot(-0.16, -0.2, '/', orange); plot(0.16, -0.2, '\\', orange); plot(0, 0.25, '^', white);
+      plot(-0.16, -0.2, '/', orange, fade); plot(0.16, -0.2, '\\', orange, fade); plot(0, 0.25, '^', white, fade);
       return;
     }
     if (effect.stage === 'impact') {
