@@ -8,10 +8,10 @@ export default {
     if (effect.stage === 'projectile') {
       for (let i = 0; i < 10; i++) {
         const z = -i * 0.16, side = Math.sin(i * 1.8 + effect.age * 28) * i * 0.024;
-        plot(side, z, i < 3 ? '^' : ':', i < 3 ? white : orange, 1 - i * 0.075);
-        if (i > 3) plot(-side - 0.12, z - 0.12, '.', ember, 0.7 - i * 0.035);
+        plot(side, z, i < 3 ? '^' : ':', i < 3 ? white : orange, (1 - i * 0.075) * fade);
+        if (i > 3) plot(-side - 0.12, z - 0.12, '.', ember, (0.7 - i * 0.035) * fade);
       }
-      plot(-0.16, -0.2, '/', orange); plot(0.16, -0.2, '\\', orange); plot(0, 0.25, '^', white);
+      plot(-0.16, -0.2, '/', orange, fade); plot(0.16, -0.2, '\\', orange, fade); plot(0, 0.25, '^', white, fade);
       return;
     }
     if (effect.stage === 'impact') {
@@ -35,9 +35,9 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'noise', duration: 0.18, gain: 0.09, cutoff: 2100, filterType: 'highpass', attack: 0.025, release: 0.12 },
-      { kind: 'tone', type: 'sawtooth', frequency: 380, endFrequency: 1150, duration: 0.14, gain: 0.055, cutoff: 1900 },
-      { kind: 'tone', type: 'triangle', frequency: 1300, endFrequency: 440, delay: 0.06, duration: 0.17, gain: 0.04 },
+      { kind: 'noise', duration: 0.045, gain: 0.12, cutoff: 4100, filterType: 'highpass', attack: 0.001, release: 0.035 },
+      { kind: 'tone', type: 'triangle', frequency: 560, endFrequency: 1620, delay: 0.025, duration: 0.19, gain: 0.065 },
+      { kind: 'noise', delay: 0.04, duration: 0.14, gain: 0.045, cutoff: 1900, filterType: 'highpass' },
     ],
     impact: [
       { kind: 'noise', duration: 0.17, gain: 0.15, cutoff: 2600, filterType: 'bandpass', release: 0.14 },
