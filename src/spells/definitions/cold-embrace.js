@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/cold-embrace.js';
+
 export default {
+  presentation,
   "id": "cold-embrace",
   "name": "Cold Embrace",
   "element": "seithr",
