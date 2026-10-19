@@ -1,5 +1,8 @@
+import presentation from '../presentations/scalding-wave.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "scalding-wave",
   "name": "Scalding Wave",
   "element": "mitlan",
