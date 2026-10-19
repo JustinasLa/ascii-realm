@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/temp-glacial-fan.js';
+
 export default {
+  presentation,
   "id": "temp-glacial-fan",
   "name": "Glacial Fan",
   "element": "seithr",
