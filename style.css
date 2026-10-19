@@ -229,9 +229,11 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .inventory-key-hint { display: inline-flex; align-items: center; gap: 5px; }
 .inventory-key-hint kbd { font-size: 10px; }
 
-/* Touch controls keep generous hit areas and the same square frame styling. */
+/* Touch controls keep generous hit areas and the same square frame styling.
+   They follow the primary pointer, so touchscreen laptops and narrow desktop
+   windows keep the mouse and keyboard layout. */
 #touch-controls { display: none; }
-@media (any-pointer: coarse), (max-width: 900px) {
+@media (pointer: coarse) {
   #hint { display: none; }
   #touch-controls { display: block; position: fixed; z-index: 12; inset: 0; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #touch-controls button, #move-pad { pointer-events: auto; touch-action: none; color: var(--ink); background: var(--surface); border: 1px solid var(--frame); }
