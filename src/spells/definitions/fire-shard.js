@@ -1,5 +1,8 @@
+import presentation from '../presentations/fire-shard.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "fire-shard",
   "name": "Fire Shard",
   "element": "oseni",

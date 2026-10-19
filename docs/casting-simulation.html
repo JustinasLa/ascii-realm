@@ -3,11 +3,12 @@
 <title>Casting simulation · ASCII Realm</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#0b1115;color:#dbe5df;font:14px/1.5 Consolas,monospace}main{max-width:1000px;margin:32px auto;padding:20px}h1{font-size:24px}a{color:#9ad7e4}button,select{font:inherit;padding:9px;background:#192a34;color:#dde7df;border:1px solid #4d6771;border-radius:3px;cursor:pointer}select{max-width:100%}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0}pre{overflow:auto;background:#0d1b21;color:#83d3cd;padding:16px;border:1px solid #354b53;line-height:1.2;font-size:13px}#stats{display:flex;gap:24px;flex-wrap:wrap}output{color:#b3d6ee}#log{height:70px;overflow:auto;color:#adc4b9}p{color:#9fb3b3}.legend{display:flex;gap:20px}label{display:flex;gap:8px;align-items:center}#description{min-height:40px}.source{font-size:11px}
-</style></head><body><main><a href="/">← Play ASCII Realm</a><h1>Casting simulation</h1>
+</style></head><body><main><a href="../">← Play ASCII Realm</a><h1>Casting simulation</h1>
 <p>Exercise the same casting and combat simulation used in the game. Targets stand still so timing, damage, shields and status effects are easy to inspect.</p>
 <div class="toolbar"><label>Spell <select id="spell"><option>Loading…</option></select></label><button id="cast">Cast · R</button><button id="reset">Reset</button><button id="hurt">Damage caster · 12</button><button id="advance">Advance 1 second</button><button id="pause">Pause</button></div>
 <div class="toolbar"><label><input id="wall" type="checkbox"> Wall in flight path</label><label><input id="near" type="checkbox"> Targets within 1.5 m</label><label><input id="ally-target" type="checkbox"> Aim at ally</label></div>
+<div class="toolbar"><button id="mute">Mute</button><label>Spell volume <input id="sfx-volume" type="range" min="0" max="1" step="0.05" value="0.8"></label><output id="sound-status">Cast to enable sound</output></div>
 <p id="description"></p><div id="stats"></div><pre id="arena" aria-label="ASCII casting arena"></pre>
 <div class="legend"><span>@ caster</span><span>X enemy</span><span>+ ally</span><span>* spell</span><span># wall</span></div><p id="log" role="status" aria-live="polite"></p>
-<p class="source">Rune values come from the TFMCMain01 configuration snapshot of 16 October 2026. Minecraft models and sound assets are rendered as ASCII effects. Class abilities are outside this batch.</p>
+<p class="source">Rune values come from the TFMCMain01 configuration snapshot of 16 October 2026. Spell presentations use ASCII geometry and synthesized sound on the game's effects bus. Class abilities are outside this batch.</p>
 <script type="module" src="../src/spells/simulation.js"></script></main></body></html>

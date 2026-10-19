@@ -425,6 +425,8 @@ const syncSpellPeers = () => {
 const casting = new Spellcasting({ player, world, monsters, peers: () => [...spellPeers.values()],
   notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e) });
 debug.casting = casting;
+document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
+window.addEventListener('pagehide', () => casting.clearPresentation());
 let castRequested = false;
 const spellControls = new SpellControls(casting, { root: document.getElementById('spell-controls'),
   dock: document.getElementById('panel-dock'), onCast: () => { castRequested = true; },
@@ -673,6 +675,7 @@ function frame(now) {
   const held = isDown('KeyJ') || mouseHeld;
   const fromX = player.x, fromY = player.y, fromAir = player.air;
   const paused = debug.freeze || builder.enabled || playerDt === 0;
+  casting.setPresentationPaused(paused || document.hidden);
   // A bow draws while the attack is held and shoots on release; a spear or
   // javelin jabs on a tap and is thrown after a longer hold.
   const release = player.ranged.update(dt, ranged && held && !builder.enabled && !debug.freeze, weapon);
