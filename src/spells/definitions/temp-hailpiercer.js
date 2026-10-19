@@ -1,5 +1,8 @@
 // Gameplay derived from TF's configured rune/class ability.
+import presentation from '../presentations/temp-hailpiercer.js';
+
 export default {
+  presentation,
   "id": "temp-hailpiercer",
   "name": "Hailpiercer",
   "element": "seithr",
