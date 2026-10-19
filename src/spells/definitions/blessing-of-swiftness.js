@@ -1,5 +1,8 @@
+import presentation from '../presentations/blessing-of-swiftness.js';
+
 // Gameplay derived from TF's configured rune/class ability.
 export default {
+  presentation,
   "id": "blessing-of-swiftness",
   "name": "Blessing of Swiftness",
   "element": "cerrith",
