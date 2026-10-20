@@ -196,6 +196,35 @@ test('Fire Breath jet glyphs never blink out between consecutive 60 fps frames',
   assert.ok(blinks <= 2, `${blinks} bright glyphs vanish for a single frame`);
 });
 
+test('Fire Breath fireballs never overrun their pool and clip sparks at the glyph cap', () => {
+  const life = presentation.duration;
+  const frame = (heading, x, y, progress) => {
+    const cells = new Map();
+    const count = paintPresentation(presentation, { stage: 'cast', x, y, age: progress * life, life, radius: 0.8, heading },
+      (cx, cy, char, color, brightness) => {
+        const cell = `${Math.floor(cx)},${Math.floor(cy)}`;
+        cells.set(cell, Math.max(brightness, cells.get(cell) ?? 0));
+      });
+    return { cells, count };
+  };
+  // The reported frames: heading pi/8 from (0.5, 0.5), where spark cell 31,6 was
+  // dropped at the cap for one frame because the fireballs took 94 of 90 glyphs.
+  for (const progress of [0.5227, 0.5228, 0.5229]) {
+    const { cells, count } = frame(Math.PI / 8, 0.5, 0.5, progress);
+    assert.ok(cells.get('31,6') > 0.8, `the spark stays lit at ${progress}`);
+    assert.ok(count < BUDGETS.cast, `${count} glyphs at ${progress}`);
+  }
+  // Nothing anywhere in the breath ever reaches the cap, so no glyph is clipped.
+  for (let heading = -Math.PI; heading < Math.PI; heading += Math.PI / 8) {
+    for (const [x, y] of [[0, 0], [0.5, 0.5], [4.3, 9.7]]) {
+      for (let progress = 0.15; progress < 0.75; progress += 0.005) {
+        const { count } = frame(heading, x, y, progress);
+        assert.ok(count < BUDGETS.cast, `heading ${heading.toFixed(3)} (${x}, ${y}) ${progress.toFixed(3)}: ${count}`);
+      }
+    }
+  }
+});
+
 test('Fire Breath draws are reentrant and keep no shared state', () => {
   const effect = Object.freeze({ stage: 'cast', age: 0.45, life: presentation.duration, progress: 0.42,
     radius: 0.8, heading: 0.7, x: 2.3, y: 5.1 });

@@ -84,17 +84,23 @@ function sweep(v, x0, x1, z0, z1, keep, salt, shade) {
         v.weight = smooth(0, BAND, keep - hash(c * 31 + r * 977, salt));
         if (v.weight <= 0) continue;
       }
-      if (shade((c + 0.5 - v.fracX) * CELL_X, wz)) covered++;
+      if (shade((c + 0.5 - v.fracX) * CELL_X, wz)) {
+        covered++;
+        if (v.ranks) v.ranks.push(hash(c * 31 + r * 977, salt));
+      }
     }
   }
   v.weight = 1;
   return covered;
 }
-// How many cells a shape covers, drawing nothing.
-function coverage(v, x0, x1, z0, z1, shade) {
+// How many cells a shape covers, drawing nothing. With `ranks`, also collects the
+// thinning rank of every covered cell (as `sweep` with `salt` would see them).
+function coverage(v, x0, x1, z0, z1, shade, salt = 0, ranks = null) {
   v.dry = true;
-  const covered = sweep(v, x0, x1, z0, z1, Infinity, 0, shade);
+  v.ranks = ranks;
+  const covered = sweep(v, x0, x1, z0, z1, Infinity, salt, shade);
   v.dry = false;
+  v.ranks = null;
   return covered;
 }
 // Threshold that draws at most `cells` glyphs of a shape covering `covered` cells
@@ -178,7 +184,7 @@ function cast(v, p, age) {
   // from yellow to red and erode into drifting smoke. They share whatever the
   // mouth and jet leave of the budget (sparks and motes are reserved), thinned by
   // one smooth factor, so the global glyph cap never has to clip a ball outright.
-  const balls = [];
+  const balls = [], margins = [];
   let wanted = 0;
   for (let i = 0; i < BALLS; i++) {
     const birth = 0.16 + i * 0.038 + 0.02 * hash(i, 1);
@@ -209,16 +215,27 @@ function cast(v, p, age) {
       return ink(v, localX(v, wx, wz), localZ(v, wx, wz), glyph(heat), heatColor(heat),
         envelope * rim * fadeIn * Math.sqrt(1 - a) * (0.45 + 0.55 * body));
     };
-    const covered = coverage(v, wcx - radius, wcx + radius, wcz - radius, wcz + radius, shade);
+    const ranks = [];
+    const covered = coverage(v, wcx - radius, wcx + radius, wcz - radius, wcz + radius, shade, 80 + i, ranks);
     if (covered === 0) continue;
-    balls.push({ i, wcx, wcz, radius, covered, shade });
+    balls.push({ i, wcx, wcz, radius, covered, shade, ranks });
     wanted += Math.min(covered * (1 + BAND), BALL_CELLS);
   }
   const pool = Math.max(0, BUDGET - v.used - SPARKS - (p < 0.17 ? MOTES : 0));
   const share = Math.min(1, pool / Math.max(1, wanted));
+  // A cell is drawn while its margin (keep - rank) is positive, fading to nothing
+  // as the margin reaches 0. The smooth share only fits the pool on average, so if
+  // more cells than the pool would survive, every ball's threshold drops by the
+  // margin of the first cell past the pool: exactly the pool's worth of cells stay,
+  // and the cells cut are the ones already faded to 0, so nothing pops.
+  for (const ball of balls) {
+    ball.keep = share * keepFor(BALL_CELLS, ball.covered);
+    for (const rank of ball.ranks) if (ball.keep > rank) margins.push(ball.keep - rank);
+  }
+  const cut = margins.length > pool ? margins.sort((a, b) => b - a)[pool] : 0;
   for (const ball of balls) {
     sweep(v, ball.wcx - ball.radius, ball.wcx + ball.radius, ball.wcz - ball.radius, ball.wcz + ball.radius,
-      share * keepFor(BALL_CELLS, ball.covered), 80 + ball.i, ball.shade);
+      ball.keep - cut, 80 + ball.i, ball.shade);
   }
 
   // Sparks spit from the flanks, outrun the flame, then die as embers.
