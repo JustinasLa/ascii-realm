@@ -119,6 +119,20 @@ test('glyphs move continuously between 60 fps frames', () => {
   }
 });
 
+test('gathering motes fade out instead of vanishing when the wind-up hands over to the bloom', () => {
+  // A bright glyph must still have a comparably bright glyph close by in the next frame.
+  const vanished = (from, to, reach) => {
+    const next = draw('cast', to);
+    return draw('cast', from).filter(q => q[4] > 0.15
+      && !next.some(r => Math.hypot(r[0] - q[0], r[1] - q[1]) < reach && r[4] > q[4] * 0.5));
+  };
+  assert.deepEqual(vanished(0.2999, 0.3001, 0.05), [], 'no motes drop out across the 0.3 release cutoff');
+  const step = 1 / 60 / LIVES.cast;
+  for (let progress = 0.2; progress < 0.45; progress += step) {
+    assert.deepEqual(vanished(progress, progress + step, 0.3), [], `bright glyphs vanish at ${progress.toFixed(3)}`);
+  }
+});
+
 test('descending harp droplets lead to a major healing chord and round two-note resolve', () => {
   const { cast, impact, pulse } = presentation.sounds;
   assert.ok(cast.every(v => v.kind === 'tone' && v.attack < 0.01 && v.release > v.duration * 0.8));

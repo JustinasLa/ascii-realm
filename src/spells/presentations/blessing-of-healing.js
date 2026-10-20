@@ -42,12 +42,14 @@ function braid(plot, { z0, z1, samples, amplitude, wavelength, twist, light, tap
 function drawCast(effect, plot) {
   const p = effect.progress, age = effect.age, end = clamp01((1 - p) * 3.2);
   // Anticipation: motes spiral inward and a faint ring sweeps closed around the caster.
-  const gather = clamp01(p / 0.3);
-  if (gather < 1) {
+  // Delayed motes (up to 0.21 behind) keep converging past the release until each fades out.
+  const gatherRaw = p / 0.3, gather = clamp01(gatherRaw);
+  if (gatherRaw < 1.21) {
     for (let i = 0; i < 14; i++) {
       const start = 1.55 + hash(i) * 0.5, a0 = i / 14 * TAU + hash(i + 40) * 0.4;
       for (let trail = 0; trail < 3; trail++) {
-        const t = clamp01(gather - trail * 0.045 - hash(i + 9) * 0.12);
+        const t = clamp01(gatherRaw - trail * 0.045 - hash(i + 9) * 0.12);
+        if (t >= 1) continue;
         const r = start * (1 - inCubic(t) * 0.94), a = a0 + t * 2.4;
         const level = (0.15 + 0.85 * smooth(0, 0.25, t)) * (1 - smooth(0.82, 1, t)) * (1 - trail * 0.32) * smooth(0, 0.06, p + 0.02);
         if (level > 0.02 || !trail) plot(Math.cos(a) * r, Math.sin(a) * r, trail ? '.' : glyph(0.35 + t * 0.5), heat(0.3 + t * 0.6), level);
