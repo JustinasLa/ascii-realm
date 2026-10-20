@@ -159,6 +159,43 @@ test('Fire Breath burns the jet down before dropping it', () => {
   assert.ok(vanished(0.678788) <= 3, 'the jet is already dark when it is dropped');
 });
 
+test('Fire Breath jet glyphs never blink out between consecutive 60 fps frames', () => {
+  // Thinning to the glyph budget follows the jet's coverage, which drifts every
+  // frame; a cell must fade in or out with it instead of vanishing for one frame.
+  const life = presentation.duration, step = 1 / 60 / life;
+  const frame = (heading, x, y, progress) => {
+    const cells = new Map();
+    paintPresentation(presentation, { stage: 'cast', x, y, age: progress * life, life, radius: 0.8, heading },
+      (cx, cy, char, color, brightness) => {
+        // Only the breath body by the mouth: fireballs and sparks streaming through
+        // a cell one after another are separate objects, not a blink.
+        const mx = (cx - x) * 0.6 / 13, mz = (cy - y) / 6.5;
+        if (mx * Math.sin(heading) + mz * Math.cos(heading) > 1.5) return;
+        const cell = `${Math.floor(cx)},${Math.floor(cy)}`;
+        cells.set(cell, Math.max(brightness, cells.get(cell) ?? 0));
+      });
+    return cells;
+  };
+  // The reported frames: heading 0.7 from (4.3, 9.7), where cell 13,13 used to blink out.
+  const [before, middle, after] = [0.405, 0.405 + step, 0.405 + 2 * step].map(progress => frame(0.7, 4.3, 9.7, progress));
+  assert.ok(before.get('13,13') > 0.8 && after.get('13,13') > 0.8);
+  assert.ok(middle.get('13,13') > 0.8, 'the jet core cell stays lit in between');
+  let blinks = 0;
+  for (const heading of [0.7, 0, Math.PI / 2, 2.5, -1.1, Math.PI]) {
+    for (const [x, y] of [[4.3, 9.7], [0, 0]]) {
+      const frames = [];
+      for (let progress = 0.405 - 13 * step; progress < 0.63; progress += step) frames.push(frame(heading, x, y, progress));
+      for (let i = 1; i + 1 < frames.length; i++) {
+        for (const [cell, brightness] of frames[i - 1]) {
+          if (brightness > 0.3 && !frames[i].has(cell) && (frames[i + 1].get(cell) ?? 0) > 0.3) blinks++;
+        }
+      }
+    }
+  }
+  // A spark may cross a cell another spark just left; the thinned jet never blinks.
+  assert.ok(blinks <= 2, `${blinks} bright glyphs vanish for a single frame`);
+});
+
 test('Fire Breath draws are reentrant and keep no shared state', () => {
   const effect = Object.freeze({ stage: 'cast', age: 0.45, life: presentation.duration, progress: 0.42,
     radius: 0.8, heading: 0.7, x: 2.3, y: 5.1 });

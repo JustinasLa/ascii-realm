@@ -42,12 +42,13 @@ const CELL_X = 0.6 / 13;
 const CELL_Z = 1 / 6.5;
 const BUDGET = 240;
 
-// Each draw() call builds its own view (sink, budget counter, heading and cell
-// phase) and threads it through every helper, so draws stay pure and reentrant.
+// Each draw() call builds its own view (sink, budget counter, heading, cell
+// phase and thinning weight) and threads it through every helper, so draws stay
+// pure and reentrant.
 function ink(v, x, z, char, color, level) {
-  const brightness = clamp(level, 0, 1);
+  const brightness = clamp(level, 0, 1) * v.weight;
   if (brightness <= 0.004) return false;
-  // Counting pass (or a cell thinned out of the shape): report coverage only.
+  // Counting pass: report coverage only.
   if (v.dry) return true;
   if (v.used >= BUDGET) return false;
   v.out(x, z, char, color, brightness);
@@ -60,50 +61,66 @@ const inkWorld = (v, wx, wz, char, color, level) =>
 const localX = (v, wx, wz) => wx * v.cosH - wz * v.sinH;
 const localZ = (v, wx, wz) => wx * v.sinH + wz * v.cosH;
 
-// Visit world cell centres inside a world box. `shade` returns true when the
-// cell is covered. A shape covering more than `limit` cells is thinned evenly over
-// its whole silhouette: a counting pass sets the keep fraction and each cell is
-// kept by a stable hash of its own world cell, so which cells survive never
-// depends on the heading or traversal order (`limit` is a target, not a clip).
-function lattice(v, x0, x1, z0, z1, limit, shade) {
-  const c0 = Math.floor(x0 / CELL_X + v.fracX), c1 = Math.floor(x1 / CELL_X + v.fracX);
-  const r0 = Math.floor(z0 / CELL_Z + v.fracZ), r1 = Math.floor(z1 / CELL_Z + v.fracZ);
-  if ((r1 - r0 + 1) * (c1 - c0 + 1) > 5000 || limit <= 0) return;
-  let keep = 1;
-  if ((r1 - r0 + 1) * (c1 - c0 + 1) > limit) {
-    let total = 0;
-    v.dry = true;
-    for (let r = r0; r <= r1; r++) {
-      const wz = (r + 0.5 - v.fracZ) * CELL_Z;
-      for (let c = c0; c <= c1; c++) if (shade((c + 0.5 - v.fracX) * CELL_X, wz)) total++;
-    }
-    v.dry = false;
-    if (total === 0) return;
-    keep = Math.min(1, limit / total);
-  }
+// Solid shapes visit the world cell centres inside a world box; `shade` returns
+// true when the cell is covered. A shape covering more cells than it may spend
+// is thinned evenly over its whole silhouette: every world cell has a fixed rank
+// (a stable hash of its position, never of heading or traversal order) and a
+// threshold `keep` decides which ranks survive. Cells whose rank sits within BAND
+// below the threshold are drawn dimmer the closer they are to it, so as the
+// coverage (and with it the threshold) drifts from frame to frame a cell fades in
+// or out over several frames instead of blinking. keep >= 1 + BAND draws all.
+const BAND = 0.25;
+const cellRange = (v, x0, x1, z0, z1) => [
+  Math.floor(x0 / CELL_X + v.fracX), Math.floor(x1 / CELL_X + v.fracX),
+  Math.floor(z0 / CELL_Z + v.fracZ), Math.floor(z1 / CELL_Z + v.fracZ)];
+function sweep(v, x0, x1, z0, z1, keep, salt, shade) {
+  const [c0, c1, r0, r1] = cellRange(v, x0, x1, z0, z1);
+  if ((r1 - r0 + 1) * (c1 - c0 + 1) > 5000 || keep <= 0) return 0;
+  let covered = 0;
   for (let r = r0; r <= r1; r++) {
     const wz = (r + 0.5 - v.fracZ) * CELL_Z;
     for (let c = c0; c <= c1; c++) {
-      v.dry = keep < 1 && hash(c * 31 + r * 977, 70) >= keep;
-      shade((c + 0.5 - v.fracX) * CELL_X, wz);
+      if (!v.dry && keep < 1 + BAND) {
+        v.weight = smooth(0, BAND, keep - hash(c * 31 + r * 977, salt));
+        if (v.weight <= 0) continue;
+      }
+      if (shade((c + 0.5 - v.fracX) * CELL_X, wz)) covered++;
     }
   }
+  v.weight = 1;
+  return covered;
+}
+// How many cells a shape covers, drawing nothing.
+function coverage(v, x0, x1, z0, z1, shade) {
+  v.dry = true;
+  const covered = sweep(v, x0, x1, z0, z1, Infinity, 0, shade);
   v.dry = false;
+  return covered;
+}
+// Threshold that draws at most `cells` glyphs of a shape covering `covered` cells
+// (the last BAND of them fading out), or all of them at full strength if they fit.
+const keepFor = (cells, covered) => Math.min(1 + BAND, cells / Math.max(1, covered));
+function lattice(v, x0, x1, z0, z1, limit, salt, shade) {
+  if (limit <= 0) return;
+  const [c0, c1, r0, r1] = cellRange(v, x0, x1, z0, z1);
+  const keep = (r1 - r0 + 1) * (c1 - c0 + 1) * (1 + BAND) <= limit ? 1 + BAND : keepFor(limit, coverage(v, x0, x1, z0, z1, shade));
+  sweep(v, x0, x1, z0, z1, keep, salt, shade);
 }
 // World box around a local-space box (the breath frame is rotated).
-function latticeLocal(v, x0, x1, z0, z1, limit, shade) {
+function latticeLocal(v, x0, x1, z0, z1, limit, salt, shade) {
   let wx0 = Infinity, wx1 = -Infinity, wz0 = Infinity, wz1 = -Infinity;
   for (let k = 0; k < 4; k++) {
     const x = k & 1 ? x1 : x0, z = k & 2 ? z1 : z0;
     const wx = x * v.cosH + z * v.sinH, wz = z * v.cosH - x * v.sinH;
     wx0 = Math.min(wx0, wx); wx1 = Math.max(wx1, wx); wz0 = Math.min(wz0, wz); wz1 = Math.max(wz1, wz);
   }
-  lattice(v, wx0, wx1, wz0, wz1, limit, shade);
+  lattice(v, wx0, wx1, wz0, wz1, limit, salt, shade);
 }
 
 // ---------------------------------------------------------------- cast
 const MOTES = 18;
 const BALLS = 10;
+const BALL_CELLS = 24;
 const SPARKS = 16;
 
 function cast(v, p, age) {
@@ -114,12 +131,12 @@ function cast(v, p, age) {
   const ignite = Math.max(0, 1 - Math.abs(p - 0.13) / 0.05);
   if (charge > 0.02) {
     const radius = 0.05 + 0.11 * charge + 0.06 * ignite;
-    lattice(v, -radius, radius, -radius * 0.6, radius * 1.4, 18, (wx, wz) => {
+    latticeLocal(v, -radius, radius, 0.05 - radius * 1.25, 0.05 + radius * 1.25, 18, 71, (wx, wz) => {
       const lx = localX(v, wx, wz), lz = localZ(v, wx, wz) - 0.05;
       const q = Math.hypot(lx, lz * 0.8) / radius;
       if (q >= 1) return false;
       const heat = clamp(0.62 + 0.38 * (1 - q * q) * charge + 0.3 * ignite + 0.05 * Math.sin(age * 37 + lx * 40), 0, 1);
-      return ink(v, lx, lz + 0.05, glyph(heat), heatColor(heat), (0.35 + 0.65 * (1 - q)) * charge);
+      return ink(v, lx, lz + 0.05, glyph(heat), heatColor(heat), (0.35 + 0.65 * (1 - q)) * charge * smooth(1, 0.75, q));
     });
   }
 
@@ -137,7 +154,7 @@ function cast(v, p, age) {
     const span = head - tail;
     const half = z => 0.06 + 0.22 * z;
     const reach = half(head) * 1.25;
-    latticeLocal(v, -reach, reach, tail, head, 110, (wx, wz) => {
+    latticeLocal(v, -reach, reach, tail, head, 110, 72, (wx, wz) => {
       const x = localX(v, wx, wz), z = localZ(v, wx, wz);
       if (z < tail || z > head) return false;
       const u = (z - tail) / span;
@@ -150,42 +167,58 @@ function cast(v, p, age) {
       const intensity = (1 - s * s) * lead * detach * power + texture;
       if (intensity < 0.14) return false;
       const heat = clamp(intensity * (1.08 - 0.3 * u - 0.25 * release), 0, 1);
-      return ink(v, x, z, glyph(heat), heatColor(heat), envelope * jetLevel * (0.45 + 0.55 * clamp(intensity, 0, 1)));
+      // Turbulence sweeps cells across the flame's edge every frame, so the edge
+      // fades out rather than blinking glyphs on and off.
+      return ink(v, x, z, glyph(heat), heatColor(heat),
+        envelope * jetLevel * smooth(0.14, 0.3, intensity) * smooth(1, 0.8, s) * (0.45 + 0.55 * clamp(intensity, 0, 1)));
     });
   }
 
   // Fireballs break off the jet tip, roll outward to the full cone, swell, cool
-  // from yellow to red and erode into drifting smoke.
+  // from yellow to red and erode into drifting smoke. They share whatever the
+  // mouth and jet leave of the budget (sparks and motes are reserved), thinned by
+  // one smooth factor, so the global glyph cap never has to clip a ball outright.
+  const balls = [];
+  let wanted = 0;
   for (let i = 0; i < BALLS; i++) {
     const birth = 0.16 + i * 0.038 + 0.02 * hash(i, 1);
-    const life = 0.3 + 0.1 * hash(i, 2);
-    const a = (p - birth) / life;
+    const a = (p - birth) / (0.3 + 0.1 * hash(i, 2));
     if (a <= 0 || a >= 1) continue;
     const angle = (hash(i, 3) + hash(i, 4) - 1) * 0.46;
-    const far = 4.5 + 1.5 * hash(i, 5);
-    const d = 1.7 + (far - 1.7) * easeOut(a, 2);
-    const roll = Math.sin(age * 5 + i * 2) * 0.12 * a;
-    const cx = Math.sin(angle) * d + roll, cz = Math.cos(angle) * d;
+    const d = 1.7 + (2.8 + 1.5 * hash(i, 5)) * easeOut(a, 2);
+    const cx = Math.sin(angle) * d + Math.sin(age * 5 + i * 2) * 0.12 * a, cz = Math.cos(angle) * d;
     const wcx = cx * v.cosH + cz * v.sinH, wcz = cz * v.cosH - cx * v.sinH;
     const radius = 0.14 + 0.18 * a;
     const heat0 = Math.pow(1 - a, 1.1) * (1 - 0.3 * Math.abs(angle));
     const fadeIn = Math.min(1, a / 0.12);
-    lattice(v, wcx - radius, wcx + radius, wcz - radius, wcz + radius, 19, (wx, wz) => {
+    const shade = (wx, wz) => {
       const dx = wx - wcx, dz = wz - wcz;
       const q = Math.hypot(dx, dz * 1.15) / radius;
       if (q >= 1) return false;
       const n = 0.22 * Math.sin(dx * 26 + age * 9 + i) * Math.sin(dz * 15 - age * 7 + i * 2);
       const body = 1 - q * q + n - 0.55 * a;
       if (body < 0.12) return false;
+      // The rim fades out, so cells crossing it as the ball wobbles never blink.
+      const rim = smooth(0.12, 0.4, body);
       if (heat0 < 0.2) {
         // Same silhouette as the flame it replaces; the thin fringe is dim.
         return ink(v, localX(v, wx, wz), localZ(v, wx, wz), (i + Math.floor(dx * 50)) % 2 ? '.' : ':', SMOKE,
-          envelope * (1 - a) * (0.2 + 0.6 * clamp(body, 0, 1)));
+          envelope * rim * (1 - a) * (0.2 + 0.6 * clamp(body, 0, 1)));
       }
       const heat = clamp(heat0 * (0.55 + 0.6 * body), 0, 1);
       return ink(v, localX(v, wx, wz), localZ(v, wx, wz), glyph(heat), heatColor(heat),
-        envelope * fadeIn * Math.sqrt(1 - a) * (0.45 + 0.55 * body));
-    });
+        envelope * rim * fadeIn * Math.sqrt(1 - a) * (0.45 + 0.55 * body));
+    };
+    const covered = coverage(v, wcx - radius, wcx + radius, wcz - radius, wcz + radius, shade);
+    if (covered === 0) continue;
+    balls.push({ i, wcx, wcz, radius, covered, shade });
+    wanted += Math.min(covered * (1 + BAND), BALL_CELLS);
+  }
+  const pool = Math.max(0, BUDGET - v.used - SPARKS - (p < 0.17 ? MOTES : 0));
+  const share = Math.min(1, pool / Math.max(1, wanted));
+  for (const ball of balls) {
+    sweep(v, ball.wcx - ball.radius, ball.wcx + ball.radius, ball.wcz - ball.radius, ball.wcz + ball.radius,
+      share * keepFor(BALL_CELLS, ball.covered), 80 + ball.i, ball.shade);
   }
 
   // Sparks spit from the flanks, outrun the flame, then die as embers.
@@ -226,7 +259,7 @@ function pulse(v, p, age, life, radius) {
   if (age < gather) {
     const t = age / gather;
     const r = 0.06 + 0.08 * t * t, rz = Math.max(r, 0.1);
-    lattice(v, -r, r, -rz, rz, 12, (wx, wz) => {
+    lattice(v, -r, r, -rz, rz, 12, 74, (wx, wz) => {
       const q = Math.hypot(wx / r, wz / rz);
       if (q >= 1) return false;
       const heat = clamp(0.5 + 0.45 * t - 0.25 * q, 0, 1);
@@ -241,7 +274,7 @@ function pulse(v, p, age, life, radius) {
   if (head - tail > 0.04) {
     const half = z => 0.05 + 0.34 * z;
     const width = half(head);
-    latticeLocal(v, -width, width, tail, head, 72, (wx, wz) => {
+    latticeLocal(v, -width, width, tail, head, 72, 75, (wx, wz) => {
       const x = localX(v, wx, wz), z = localZ(v, wx, wz);
       if (z < tail || z > head) return false;
       const u = (z - tail) / (head - tail);
@@ -267,7 +300,7 @@ function pulse(v, p, age, life, radius) {
 // Flame tongues stand up on screen (world -z) from a glowing bed at the feet.
 function flames(v, r, count, salt, age, sizeOf, level, limit) {
   const top = r * 1.45;
-  lattice(v, -0.66 * r, 0.66 * r, -top, 0.22 * r, limit, (wx, wz) => {
+  lattice(v, -0.66 * r, 0.66 * r, -top, 0.22 * r, limit, salt + 5, (wx, wz) => {
     const h = -wz;
     let best = 0;
     for (let k = 0; k < count; k++) {
@@ -382,7 +415,7 @@ function projectile(v, p, age) {
   // A compact fireball whose flames stream back into a cooling, curling trail.
   const envelope = smooth(0, 0.04, p) * (1 - smooth(0.85, 1, p));
   const radius = 0.13;
-  lattice(v, -radius, radius, -radius, radius, 14, (wx, wz) => {
+  lattice(v, -radius, radius, -radius, radius, 14, 77, (wx, wz) => {
     const q = Math.hypot(wx, wz) / radius;
     if (q >= 1) return false;
     const heat = clamp(1 - 0.45 * q * q + 0.06 * Math.sin(age * 40 + wx * 60), 0, 1);
@@ -412,7 +445,7 @@ function draw(effect, plot) {
   const radius = clamp(finite(effect.radius, 1), 0.2, 6);
   const heading = finite(effect.heading, 0);
   const x = finite(effect.x, 0), y = finite(effect.y, 0);
-  const v = { out: plot, used: 0, dry: false, cosH: Math.cos(heading), sinH: Math.sin(heading),
+  const v = { out: plot, used: 0, dry: false, weight: 1, cosH: Math.cos(heading), sinH: Math.sin(heading),
     fracX: x - Math.floor(x), fracZ: y - Math.floor(y) };
   switch (effect.stage) {
     case 'projectile': return projectile(v, progress, age);
