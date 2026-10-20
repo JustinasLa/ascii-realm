@@ -32,50 +32,96 @@ test('Icicle Blitz real casts render authored needles and emit spell cues while 
   assert.ok(!events.some(event => event.type === 'draw' || event.type === 'slam'));
 });
 
-test('Icicle Blitz opts into a staggered five-needle volley and a different shard splash', () => {
+const BUDGET = { cast: 200, projectile: 110, impact: 180, pulse: 90, aura: 160, zone: 160 };
+const peak = points => Math.max(0, ...points.map(point => point.brightness));
+
+test('Icicle Blitz nocks five quills that snap forward one at a time', () => {
   assert.equal(spell.presentation, presentation);
   assert.equal(presentation.id, spell.id);
-  const frames = [0.05, 0.2, 0.4, 0.58, 0.79].map(progress => sample('cast', progress));
-  const shafts = new Set(frames.flat().filter(point => point.char === '|').map(point => point.x));
-  assert.equal(shafts.size, 5, 'five staggered needle lanes appear over the cast');
-  assert.ok(frames.every(frame => frame.some(point => point.char === 'v')));
-  assert.ok(frames.flat().some(point => point.char === '+'));
-  assert.ok(frames.flat().some(point => point.char === '*'));
-  assert.notDeepEqual(frames[0], frames[2], 'needles launch and move between frames');
+  const tips = progress => sample('cast', progress).filter(point => point.char === 'v' && point.brightness > 0.05);
+  const lanes = new Set([0.02, 0.1, 0.18, 0.26, 0.34, 0.42, 0.5].flatMap(progress => tips(progress).map(point => point.x.toFixed(3))));
+  assert.equal(lanes.size, 5, 'five separate quill lanes over the cast');
 
-  const splash = sample('impact', 0.3);
-  assert.equal(splash.filter(point => point.char === '*').length, 3, 'three separate crystal contact points');
-  assert.ok(splash.some(point => point.char === '/'));
-  assert.ok(splash.some(point => point.char === '\\'));
-  assert.ok(!splash.some(point => point.char === 'v'));
-  const projectile = sample('projectile', 0.3);
-  assert.ok(projectile.some(point => point.char === 'v'));
-  assert.ok(projectile.some(point => point.char === ':'));
-  assert.ok(projectile.some(point => point.z < -0.8), 'flight retains a narrow dust trail');
-  assert.deepEqual(sample('cast', 0.3, 1, 0), sample('cast', 0.3, 1, Math.PI / 2), 'runtime owns heading rotation');
+  // Anticipation: before the first launch the quills form near the caster.
+  assert.ok(tips(0.04).every(point => point.z < 0.6), 'quills are nocked close in before launch');
+  const furthest = progress => Math.max(...tips(progress).map(point => point.z));
+  assert.ok(furthest(0.2) > furthest(0.04) + 0.8, 'the first quill shoots forward');
+  assert.ok(furthest(0.5) > 1.8, 'quills fly well out ahead of the caster');
+  assert.ok(sample('cast', 0.08).some(point => point.char === '*'), 'a muzzle burst marks each launch');
+  assert.ok(sample('cast', 0.15).filter(point => point.char === "'" || point.char === '.' || point.char === ':').length >= 5,
+    'frost motes condense around forming quills');
+  assert.ok(peak(sample('cast', 0.95)) < 0.1, 'the volley has dissipated by the end of the cast');
+
+  // Smooth motion: tips advance a little between adjacent frames, with no jumps.
+  const a = furthest(0.2), b = furthest(0.22);
+  assert.ok(b > a && b - a < 0.3, 'tips move continuously between frames');
+
+  // Glyph orientation follows the heading so a quill always reads as a quill.
+  const sideways = sample('cast', 0.3, 1, Math.PI / 2);
+  assert.ok(sideways.some(point => point.char === '>'));
+  assert.ok(sideways.some(point => point.char === '-'));
+  assert.ok(!sideways.some(point => point.char === 'v'));
+});
+
+test('Icicle Blitz flies as a single long quill with a frost wake', () => {
+  const flight = sample('projectile', 0.3, 0.65);
+  assert.equal(flight.filter(point => point.char === 'v').length, 1, 'one needle point');
+  const shaft = flight.filter(point => point.char === '|' && Math.abs(point.x) < 1e-9);
+  assert.ok(shaft.length >= 4, 'a continuous crystal shaft');
+  assert.ok(flight.some(point => point.char === '/') && flight.some(point => point.char === '\\'), 'barbed head');
+  assert.ok(flight.some(point => point.z < -0.9 && point.brightness > 0.05), 'powder wake streams behind');
+  assert.notDeepEqual(sample('projectile', 0.3, 0.65), sample('projectile', 0.32, 0.65), 'the wake animates');
+});
+
+test('Icicle Blitz impact flashes, blooms into an ice star, then crumbles away', () => {
+  const flash = sample('impact', 0.02);
+  assert.ok(flash.some(point => point.char === '@' && point.brightness > 0.9), 'white contact flash');
+
+  const star = sample('impact', 0.2).filter(point => /[|/\\-]/.test(point.char) && point.brightness > 0.5);
+  const sectors = new Set(star.map(point => Math.floor(((Math.atan2(point.x, point.z) - 0.2 + Math.PI / 8) / (Math.PI / 4) + 16) % 8)));
+  assert.equal(sectors.size, 8, 'eight crystal spikes stand around the hit');
+  const width = Math.max(...star.map(point => Math.abs(point.x))) * 26;
+  const height = Math.max(...star.map(point => Math.abs(point.z))) * 13;
+  assert.ok(width < height * 1.6, 'the star is balanced on screen rather than squashed into a bar');
+
+  const spikes = progress => sample('impact', progress).filter(point => /[|/\\-]/.test(point.char) && point.brightness > 0.5).length;
+  assert.ok(spikes(0.6) < spikes(0.2) * 0.5 && spikes(0.75) === 0, 'spikes crumble into fading chips');
+  assert.ok(peak(sample('impact', 0.9)) < peak(sample('impact', 0.2)) * 0.4);
+  assert.ok(sample('impact', 0.4).some(point => point.char === '*' || point.char === '+'), 'snowflakes settle after the hit');
+});
+
+test('Icicle Blitz pulse cracks the ground and aura orbits frost quills', () => {
+  const cracks = sample('pulse', 0.5);
+  assert.equal(cracks.filter(point => point.char === '*').length, 5, 'five fractures race out to bright ends');
+  assert.ok(peak(sample('pulse', 0.95)) < 0.1);
+
+  const orbit = sample('aura', 0.3, 1, 0);
+  assert.equal(orbit.filter(point => /[<>v^]/.test(point.char)).length, 3, 'three quills circle the bearer');
+  assert.ok(peak(sample('aura', 0.98)) < 0.05 && peak(sample('aura', 0.01)) < 0.2, 'aura eases in and out');
 });
 
 test('Icicle Blitz frames are deterministic, bounded, and fade away for every stage', () => {
   for (const stage of ['cast', 'impact', 'projectile', 'pulse', 'aura', 'zone']) {
     for (const radius of [0.1, 1, 12]) {
-      for (const progress of [0, 0.15, 0.4, 0.8, 0.99, 1]) {
-        const points = sample(stage, progress, radius);
-        assert.deepEqual(points, sample(stage, progress, radius));
-        assert.ok(points.length <= 96, `${stage} stays inside the plot budget`);
-        for (const point of points) {
-          assert.ok(Number.isFinite(point.x) && Number.isFinite(point.z));
-          assert.ok(Math.abs(point.x) <= 3 && Math.abs(point.z) <= 3);
-          assert.match(point.char, /^[\x20-\x7e]$/);
-          assert.equal(point.color.length, 3);
-          assert.ok(point.color.every(value => Number.isFinite(value) && value >= 0 && value <= 255));
-          assert.ok(Number.isFinite(point.brightness) && point.brightness >= 0 && point.brightness <= 1);
+      for (const heading of [0, 0.8, Math.PI / 2]) {
+        for (const progress of [0, 0.05, 0.15, 0.3, 0.4, 0.6, 0.8, 0.99, 1]) {
+          const points = sample(stage, progress, radius, heading);
+          assert.deepEqual(points, sample(stage, progress, radius, heading));
+          assert.ok(points.length <= BUDGET[stage], `${stage} stays inside the plot budget (${points.length})`);
+          for (const point of points) {
+            assert.ok(Number.isFinite(point.x) && Number.isFinite(point.z));
+            assert.ok(Math.abs(point.x) <= 3 && Math.abs(point.z) <= 3);
+            assert.match(point.char, /^[\x20-\x7e]$/);
+            assert.equal(point.color.length, 3);
+            assert.ok(point.color.every(value => Number.isFinite(value) && value >= 0 && value <= 255));
+            assert.ok(Number.isFinite(point.brightness) && point.brightness >= 0 && point.brightness <= 1);
+          }
         }
       }
     }
     assert.deepEqual(sample(stage, 1), [], `${stage} disappears at its end`);
+    assert.ok(peak(sample(stage, 0.999)) < 0.06, `${stage} is fully faded before it ends`);
   }
-  const peak = points => Math.max(0, ...points.map(point => point.brightness));
-  assert.ok(peak(sample('impact', 0.9)) < peak(sample('impact', 0.2)) * 0.4);
   assert.ok(peak(sample('projectile', 0.99)) < peak(sample('projectile', 0.2)) * 0.1);
 });
 
