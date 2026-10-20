@@ -43,6 +43,30 @@ test('Maelstrom zone is a three-arm whirlpool that spins around a dark throat an
   assert.ok(spout.length > 6 && spout.length <= 20 && spout.every(point => distance(point) < 2));
 });
 
+test('Maelstrom foam arms each run unbroken by the glyph cap from the throat out to the rim', () => {
+  // Arms are stroked first, one after another, each from the throat outward; flotsam ('o') follows them.
+  for (const radius of [0.7, 1, 2, 3, 5, 7, 9]) {
+    for (const heading of [0, 0.5, 1.1, 1.6, 2.4, 3.1, 4.2, 5.5]) {
+      for (const age of [1, 1.6, 2.2, 2.5, 3.1, 3.6]) {
+        const points = draw('zone', age, age / 5, radius, heading, 5);
+        const arms = [[]];
+        for (const point of points.slice(0, points.findIndex(p => p[2] === 'o'))) {
+          const previous = arms.at(-1).at(-1);
+          if (previous && distance(point) < distance(previous) - 0.3) arms.push([]);
+          arms.at(-1).push(point);
+        }
+        const where = `radius ${radius}, heading ${heading}, age ${age}`;
+        assert.equal(arms.length, 3, `three arms (${where})`);
+        for (const arm of arms) {
+          assert.ok(arm.length <= 30 && distance(arm[0]) < 0.6, `arm starts at the throat (${where})`);
+          // Within about one screen row (1/6.5 m) of the rim.
+          assert.ok(Math.max(...arm.map(distance)) > Math.min(9, radius) - 0.25, `arm reaches the rim (${where})`);
+        }
+      }
+    }
+  }
+});
+
 test('Maelstrom cast draws the sea up into an orb, flares white on release and flings spray forward', () => {
   const gather = at('cast', 0.15, 0.8), drawn = at('cast', 0.38, 0.8), flash = at('cast', 0.45, 0.8), thrown = at('cast', 0.8, 0.8);
   const mean = points => points.reduce((sum, point) => sum + distance(point), 0) / points.length;
