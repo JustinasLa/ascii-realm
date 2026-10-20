@@ -2,12 +2,18 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import presentation from '../../src/spells/presentations/fire-breath.js';
 import spell from '../../src/spells/definitions/fire-breath.js';
+import { paintPresentation } from '../../src/spells/presentation.js';
 import { runeScene } from '../../test-support/spells.js';
+
+const LIVES = { cast: presentation.duration, pulse: 0.4, impact: 0.6, aura: 1.5, zone: 4, projectile: 1 };
+const RADII = { cast: 0.8, pulse: 2, impact: 1, aura: 1, zone: 3, projectile: 1 };
+const BUDGETS = { cast: 240, pulse: 90, impact: 150, aura: 120, zone: 140, projectile: 60 };
 
 function capture(stage, progress, extra = {}) {
   const points = [];
-  const effect = Object.freeze({ stage, age: progress * presentation.duration,
-    life: presentation.duration, progress, radius: 1.2, heading: 0, ...extra });
+  const life = extra.life ?? LIVES[stage];
+  const effect = Object.freeze({ stage, age: progress * life, life, progress,
+    radius: RADII[stage], heading: 0, x: 0, y: 0, ...extra });
   presentation.draw(effect, (x, z, char, color, brightness = 1) => {
     points.push({ x, z, char, color, brightness });
   });
@@ -15,47 +21,221 @@ function capture(stage, progress, extra = {}) {
 }
 
 const width = points => Math.max(...points.map(point => point.x)) - Math.min(...points.map(point => point.x));
+const reach = points => Math.max(...points.map(point => Math.hypot(point.x, point.z)));
+const hot = point => point.color[1] > 200 && point.color[2] > 120;
+const dense = point => '@#%'.includes(point.char);
 
-test('Fire Breath opts into a forward cone of separate flame tongues and rolling heat', () => {
+test('Fire Breath draws breath in, ignites at the mouth and roars out as a widening jet', () => {
   assert.equal(spell.presentation, presentation);
   assert.equal(presentation.id, spell.id);
-  const early = capture('cast', 0.06), full = capture('cast', 0.43);
-  assert.ok(full.every(point => point.z > 0), 'the exhalation stays ahead of the caster');
-  const near = full.filter(point => point.z < 2);
-  const far = full.filter(point => point.z > 3.5);
-  assert.ok(width(far) > width(near) * 1.5, 'the silhouette widens with distance');
-  assert.ok(width(full) > width(early) * 1.4, 'the breath unfurls over time');
-  assert.equal(full.filter(point => point.char === '^').length, 7, 'each separated tongue has a visible tip');
-  assert.ok(full.some(point => point.char === '-') && full.some(point => point.char === ','));
-  assert.notDeepEqual(full, capture('cast', 0.62), 'licks and heat combs keep moving');
-  assert.deepEqual(full, capture('cast', 0.43, { heading: 2 }), 'world rotation belongs to the renderer');
+  // Anticipation: embers are sucked toward the mouth before anything is exhaled.
+  const inhale = capture('cast', 0.04), drawn = capture('cast', 0.1);
+  assert.ok(inhale.length > 0 && reach(inhale) < 2.6, 'the wind-up stays close to the caster');
+  const motes = points => points.filter(point => Math.hypot(point.x, point.z) > 0.3);
+  const mean = points => points.reduce((sum, point) => sum + Math.hypot(point.x, point.z), 0) / points.length;
+  assert.ok(mean(motes(drawn)) < mean(motes(inhale)), 'embers converge on the mouth');
+  // Ignition: a white-hot flash right at the mouth.
+  const ignite = capture('cast', 0.13);
+  assert.ok(ignite.some(point => hot(point) && point.char === '@' && Math.hypot(point.x, point.z) < 0.3));
+  // The jet: a solid, dense, forward wedge that widens with distance and grows over time.
+  const jet = capture('cast', 0.42), early = capture('cast', 0.2);
+  assert.ok(jet.every(point => point.z > -0.3), 'the exhalation stays ahead of the caster');
+  const near = jet.filter(point => point.z > 0.3 && point.z < 0.9 && point.brightness > 0.5);
+  const far = jet.filter(point => point.z > 1.4 && point.z < 2.2 && point.brightness > 0.5);
+  assert.ok(width(far) > width(near) * 1.5, 'the jet widens with distance');
+  assert.ok(reach(jet) > reach(early) + 1, 'the breath unfurls over time');
+  assert.ok(jet.filter(dense).length >= 12, 'the jet has a dense white-hot core');
+  assert.ok(new Set(jet.map(point => point.char)).size >= 6, 'glyph density ramps from core to edge');
+  // Fireballs roll out to the far end of the 6 m cone while the jet is still burning.
+  const rolling = capture('cast', 0.55);
+  assert.ok(rolling.some(point => point.z > 3.5 && point.brightness > 0.3));
+  assert.notDeepEqual(jet, capture('cast', 0.44), 'flames keep moving between frames');
 });
 
-test('Fire Breath has a compact travelling flame, charred impact and safe fading across stages', () => {
-  const projectile = capture('projectile', 0.3);
-  assert.ok(projectile.some(point => point.z > 0 && point.char === '^'));
-  assert.ok(projectile.some(point => point.z < -0.5 && point.char === '.'));
+test('Fire Breath releases the jet, cools to embers and smoke and fades out smoothly', () => {
+  const burning = capture('cast', 0.45), released = capture('cast', 0.75);
+  const nearMouth = points => points.filter(point => point.z < 1 && point.brightness > 0.25);
+  assert.ok(nearMouth(burning).length > 10 && nearMouth(released).length === 0, 'the tail detaches from the mouth');
+  const green = points => points.reduce((sum, point) => sum + point.color[1], 0) / points.length;
+  assert.ok(green(released) < green(burning) - 30, 'the fire cools from yellow to red and smoke');
+  assert.ok(released.length < burning.length / 2, 'the flame thins out rather than popping');
+  let previous = Infinity;
+  for (let progress = 0.7; progress < 1; progress += 0.05) {
+    const peak = Math.max(0, ...capture('cast', progress).map(point => point.brightness));
+    assert.ok(peak <= previous + 0.15, `brightness keeps falling at ${progress.toFixed(2)}`);
+    previous = peak;
+  }
+});
+
+test('Fire Breath mouth flare, burn ticks, Burnt aura and projectile read as fire', () => {
+  // The cast's FX visuals: a small glow, then a teardrop flare bursting forward.
+  const glow = capture('pulse', 0.15), flare = capture('pulse', 0.5);
+  assert.ok(glow.length > 0 && reach(glow) < 0.25);
+  assert.ok(flare.every(point => point.z > -0.15) && reach(flare) > 0.8);
+  assert.ok(flare.filter(point => point.z > 0.2 && point.z < 1.2).length > 25, 'the flare is a solid body');
+  // Burn tick: white flash, upright tongues (world up is -z at heading 0), crackle and ash.
+  const flash = capture('impact', 0.05), blaze = capture('impact', 0.35), ash = capture('impact', 0.8);
+  assert.ok(flash.some(point => point.char === '@' && hot(point)));
+  assert.ok(blaze.some(point => point.z < -0.5 && dense(point)), 'flame tongues stand up from the target');
+  assert.ok(ash.some(point => point.color[0] < 140), 'ash and smoke remain as it burns out');
+  // Upright fire stays upright whatever the heading of the effect.
+  const turned = capture('impact', 0.35, { heading: Math.PI });
+  const worldZ = turned.map(point => point.z * Math.cos(Math.PI) - point.x * Math.sin(Math.PI));
+  assert.ok(worldZ.some(z => z < -0.5) && turned.some(point => point.z > 0.5));
+  // Burnt aura: rekindling flames that change over time.
+  const aura = capture('aura', 0.3);
+  assert.ok(aura.some(point => point.z < -0.3 && dense(point)));
+  assert.notDeepEqual(aura, capture('aura', 0.5));
+  // Projectile: a compact fireball with a cooling trail streaming behind it.
+  const projectile = capture('projectile', 0.4);
+  assert.ok(projectile.some(point => Math.hypot(point.x, point.z) < 0.15 && dense(point)));
+  assert.ok(projectile.some(point => point.z < -0.6), 'the trail streams behind');
   assert.ok(width(projectile) < 1, 'the moving flame stays compact');
-  const impact = capture('impact', 0.6);
-  assert.ok(impact.some(point => point.z < 0) && impact.some(point => point.z > 0));
-  assert.ok(impact.some(point => point.char === "'") && impact.some(point => point.color[0] < 160));
-  assert.notDeepEqual(impact, capture('cast', 0.6));
-  for (const stage of ['cast', 'impact', 'pulse', 'aura', 'zone', 'projectile']) {
-    for (const progress of [0, 0.2, 0.5, 0.96]) {
-      const points = capture(stage, progress);
-      assert.ok(points.length > 0 && points.length <= 96);
-      for (const point of points) {
-        assert.ok([point.x, point.z, point.brightness, ...point.color].every(Number.isFinite));
-        assert.ok(Math.abs(point.x) <= 7 && Math.abs(point.z) <= 7);
-        assert.match(point.char, /^[\x21-\x7e]$/);
-        assert.ok(point.color.every(channel => channel >= 0 && channel <= 255));
-        assert.ok(point.brightness >= 0 && point.brightness <= 1);
+});
+
+test('Fire Breath stays within budget, valid and fully faded at every stage', () => {
+  for (const stage of Object.keys(LIVES)) {
+    for (const heading of [0, 0.9, -2.4]) {
+      for (const progress of [0.02, 0.15, 0.3, 0.5, 0.6, 0.8, 0.96]) {
+        const points = capture(stage, progress, { heading, x: 4.3, y: 9.7 });
+        assert.ok(points.length <= BUDGETS[stage], `${stage} ${progress} uses ${points.length}`);
+        for (const point of points) {
+          assert.ok([point.x, point.z, point.brightness, ...point.color].every(Number.isFinite));
+          assert.ok(Math.abs(point.x) <= 7 && Math.abs(point.z) <= 7);
+          assert.match(point.char, /^[\x20-\x7e]$/);
+          assert.ok(point.color.every(channel => channel >= 0 && channel <= 255));
+          assert.ok(point.brightness >= 0 && point.brightness <= 1);
+        }
       }
     }
-    assert.ok(Math.max(...capture(stage, 0.96).map(point => point.brightness)) < 0.2);
+    assert.ok(Math.max(0, ...capture(stage, 0.96).map(point => point.brightness)) < 0.2, `${stage} is nearly faded`);
     assert.deepEqual(capture(stage, 1), [], 'finished effects leave no persistent marks');
   }
   assert.deepEqual(capture('cast', 0.35), capture('cast', 0.35), 'rendering is deterministic');
+});
+
+test('Fire Breath shapes land on separate screen cells at any heading', () => {
+  for (const heading of [0, 0.6, Math.PI / 2, 2.5, -1.1]) {
+    const cells = new Set();
+    let count = 0;
+    paintPresentation(presentation, { stage: 'cast', x: 12.4, y: 30.7, age: 0.45, life: presentation.duration,
+      radius: 0.8, heading }, (x, y) => { count++; cells.add(`${Math.floor(x)},${Math.floor(y)}`); });
+    assert.ok(count > 150);
+    assert.ok(cells.size >= count * 0.85, `heading ${heading}: ${cells.size} cells for ${count} glyphs`);
+  }
+});
+
+test('Fire Breath keeps the same silhouette across cardinal heading boundaries', () => {
+  // Thinning to the glyph budget must not switch which side of the jet survives
+  // when the heading crosses an axis.
+  const screen = heading => {
+    const cells = new Map();
+    paintPresentation(presentation, { stage: 'cast', x: 0, y: 0, age: 0.42 * presentation.duration,
+      life: presentation.duration, progress: 0.42, radius: 0.8, heading }, (x, y, char, color, brightness) => {
+      cells.set(`${Math.floor(x)},${Math.floor(y)}`, brightness);
+    });
+    return cells;
+  };
+  for (const axis of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const before = screen(axis - 1e-6), after = screen(axis + 1e-6);
+    const replaced = [...before].filter(([cell, brightness]) => brightness > 0.5 && !after.has(cell));
+    assert.ok(before.size > 150);
+    assert.ok(replaced.length <= 2, `heading ${axis.toFixed(3)} replaces ${replaced.length} bright cells`);
+  }
+});
+
+test('Fire Breath burns the jet down before dropping it', () => {
+  // Near-identical consecutive frames never lose a bright glyph: the jet dims to
+  // nothing as the breath runs out instead of popping off.
+  const vanished = progress => {
+    const next = new Set(capture('cast', progress + 0.00002).map(point => `${point.x.toFixed(2)},${point.z.toFixed(2)}`));
+    return capture('cast', progress)
+      .filter(point => point.brightness > 0.1 && !next.has(`${point.x.toFixed(2)},${point.z.toFixed(2)}`)).length;
+  };
+  // Includes the exact frame pair where the jet used to vanish at about half brightness.
+  for (let progress = 0.6; progress < 0.72; progress += 0.0003) {
+    assert.ok(vanished(progress) <= 3, `bright glyphs vanish at ${progress.toFixed(5)}`);
+  }
+  assert.ok(vanished(0.678788) <= 3, 'the jet is already dark when it is dropped');
+});
+
+test('Fire Breath jet glyphs never blink out between consecutive 60 fps frames', () => {
+  // Thinning to the glyph budget follows the jet's coverage, which drifts every
+  // frame; a cell must fade in or out with it instead of vanishing for one frame.
+  const life = presentation.duration, step = 1 / 60 / life;
+  const frame = (heading, x, y, progress) => {
+    const cells = new Map();
+    paintPresentation(presentation, { stage: 'cast', x, y, age: progress * life, life, radius: 0.8, heading },
+      (cx, cy, char, color, brightness) => {
+        // Only the breath body by the mouth: fireballs and sparks streaming through
+        // a cell one after another are separate objects, not a blink.
+        const mx = (cx - x) * 0.6 / 13, mz = (cy - y) / 6.5;
+        if (mx * Math.sin(heading) + mz * Math.cos(heading) > 1.5) return;
+        const cell = `${Math.floor(cx)},${Math.floor(cy)}`;
+        cells.set(cell, Math.max(brightness, cells.get(cell) ?? 0));
+      });
+    return cells;
+  };
+  // The reported frames: heading 0.7 from (4.3, 9.7), where cell 13,13 used to blink out.
+  const [before, middle, after] = [0.405, 0.405 + step, 0.405 + 2 * step].map(progress => frame(0.7, 4.3, 9.7, progress));
+  assert.ok(before.get('13,13') > 0.8 && after.get('13,13') > 0.8);
+  assert.ok(middle.get('13,13') > 0.8, 'the jet core cell stays lit in between');
+  let blinks = 0;
+  for (const heading of [0.7, 0, Math.PI / 2, 2.5, -1.1, Math.PI]) {
+    for (const [x, y] of [[4.3, 9.7], [0, 0]]) {
+      const frames = [];
+      for (let progress = 0.405 - 13 * step; progress < 0.63; progress += step) frames.push(frame(heading, x, y, progress));
+      for (let i = 1; i + 1 < frames.length; i++) {
+        for (const [cell, brightness] of frames[i - 1]) {
+          if (brightness > 0.3 && !frames[i].has(cell) && (frames[i + 1].get(cell) ?? 0) > 0.3) blinks++;
+        }
+      }
+    }
+  }
+  // A spark may cross a cell another spark just left; the thinned jet never blinks.
+  assert.ok(blinks <= 2, `${blinks} bright glyphs vanish for a single frame`);
+});
+
+test('Fire Breath fireballs never overrun their pool and clip sparks at the glyph cap', () => {
+  const life = presentation.duration;
+  const frame = (heading, x, y, progress) => {
+    const cells = new Map();
+    const count = paintPresentation(presentation, { stage: 'cast', x, y, age: progress * life, life, radius: 0.8, heading },
+      (cx, cy, char, color, brightness) => {
+        const cell = `${Math.floor(cx)},${Math.floor(cy)}`;
+        cells.set(cell, Math.max(brightness, cells.get(cell) ?? 0));
+      });
+    return { cells, count };
+  };
+  // The reported frames: heading pi/8 from (0.5, 0.5), where spark cell 31,6 was
+  // dropped at the cap for one frame because the fireballs took 94 of 90 glyphs.
+  for (const progress of [0.5227, 0.5228, 0.5229]) {
+    const { cells, count } = frame(Math.PI / 8, 0.5, 0.5, progress);
+    assert.ok(cells.get('31,6') > 0.8, `the spark stays lit at ${progress}`);
+    assert.ok(count < BUDGETS.cast, `${count} glyphs at ${progress}`);
+  }
+  // Nothing anywhere in the breath ever reaches the cap, so no glyph is clipped.
+  for (let heading = -Math.PI; heading < Math.PI; heading += Math.PI / 8) {
+    for (const [x, y] of [[0, 0], [0.5, 0.5], [4.3, 9.7]]) {
+      for (let progress = 0.15; progress < 0.75; progress += 0.005) {
+        const { count } = frame(heading, x, y, progress);
+        assert.ok(count < BUDGETS.cast, `heading ${heading.toFixed(3)} (${x}, ${y}) ${progress.toFixed(3)}: ${count}`);
+      }
+    }
+  }
+});
+
+test('Fire Breath draws are reentrant and keep no shared state', () => {
+  const effect = Object.freeze({ stage: 'cast', age: 0.45, life: presentation.duration, progress: 0.42,
+    radius: 0.8, heading: 0.7, x: 2.3, y: 5.1 });
+  const solo = capture('cast', 0.42, effect);
+  const outer = [], inner = [];
+  presentation.draw(effect, (x, z, char, color, brightness) => {
+    if (outer.length === 0) presentation.draw(effect, (...point) => inner.push(point));
+    outer.push([x, z, char, color, brightness]);
+  });
+  assert.equal(outer.length, solo.length, 'the outer draw is not cut short by a nested one');
+  assert.deepEqual(inner, outer, 'nested and outer draws paint identical frames');
 });
 
 test('Fire Breath exhales overlapping air bursts over chest rumble and breaks into dry crackle', () => {
@@ -90,12 +270,12 @@ test('real Fire Breath casts paint the authored profile and emit typed breath cu
   const castEffect = scene.casting.effects.list.find(effect => effect.stage === 'cast');
   assert.equal(castEffect.presentation, presentation);
   assert.equal(castEffect.life, presentation.duration);
-  const points = [];
-  scene.casting.effects.paint((...point) => points.push(point));
-  assert.ok(points.some(point => point[2] === '^') && points.some(point => point[2] === '-'),
-    'the real effect stream contains flame tips and heat combs');
   scene.advance(0.2);
   assert.equal(scene.foe.health, 94);
+  const points = [];
+  scene.casting.effects.paint((...point) => points.push(point));
+  assert.ok(points.length > 60 && points.some(point => point[2] === '@'),
+    'the real effect stream contains the white-hot jet core');
   assert.equal(cues.filter(cue => cue.stage === 'cast').length, 1);
   assert.ok(cues.some(cue => cue.stage === 'impact'));
   assert.ok(cues.every(cue => cue.type === 'spell' && cue.spellId === spell.id && cue.presentation === presentation),
