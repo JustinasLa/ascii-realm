@@ -69,10 +69,11 @@ function tomb(effect, put) {
   const alive = (1 - shatter) ** 1.4;
   const glint = ((age - form) / 1.7 % 1 + 1) % 1;
   const band = -1.1 + 2.6 * glint;
-  let id = 0;
 
-  const shard = (x, z, h, char, light, bright) => {
-    id++;
+  // Every shard carries a stable id (feature base + sample index), so pieces keep
+  // their own scatter, glyph and thinning even when glint or crack samples come
+  // and go mid-burst.
+  const shard = (id, x, z, h, char, light, bright) => {
     if (shatter > 0) {
       // The tomb bursts: a white crack flash, slabs kick outward, then the
       // pieces fall under gravity and settle as glitter on the ground.
@@ -95,7 +96,7 @@ function tomb(effect, put) {
     if (z < DEPTH && Math.abs(x) < 0.34) continue;
     const char = slope(-Math.sin(a), Math.cos(a) * 0.9);
     const wobble = 0.5 + 0.5 * Math.sin(age * 1.7 + i * 1.9);
-    shard(x, z, 0, i % 3 === 1 ? '.' : char, 0.3 + 0.25 * wobble, (0.35 + 0.25 * wobble) * smooth(0, form * 0.5, age));
+    shard(100 + i, x, z, 0, i % 3 === 1 ? '.' : char, 0.3 + 0.25 * wobble, (0.35 + 0.25 * wobble) * smooth(0, form * 0.5, age));
   }
 
   // Front face: ice slabs grow up from the foot with a slight overshoot,
@@ -103,11 +104,11 @@ function tomb(effect, put) {
   const top = TOP * rise;
   for (let side = 0; side < FACE.length; side++) {
     const a = FACE[side], b = FACE[(side + 1) % FACE.length];
-    stroke(a[0], DEPTH, a[1] * rise, b[0], DEPTH, b[1] * rise, 20, (x, z, h, char, t) => {
+    stroke(a[0], DEPTH, a[1] * rise, b[0], DEPTH, b[1] * rise, 20, (x, z, h, char, t, i) => {
       const off = (x * 0.9 + h / TOP - band) / 0.16;
       const shine = Math.exp(-off * off) * (1 - seal);
       const foot = side === 0 ? 0.2 : 0;
-      shard(x, z, h, char, 0.55 + 0.45 * Math.max(seal, shine) - foot, 0.82 + 0.18 * Math.max(seal, shine));
+      shard(200 + side * 21 + i, x, z, h, char, 0.55 + 0.45 * Math.max(seal, shine) - foot, 0.82 + 0.18 * Math.max(seal, shine));
     });
   }
   // The lid: the coffin's top surface seen from above, a dim back edge joined
@@ -115,12 +116,12 @@ function tomb(effect, put) {
   if (rise > 0.75) {
     const lid = smooth(0.75, 1, rise);
     // A bevelled lid: the back edge is narrower, so the corners lean inward.
-    stroke(-0.2, -DEPTH, top, 0.2, -DEPTH, top, 12, (x, z, h, char, t) => {
-      shard(x, z, h, t === 0 || t === 1 ? '.' : '-', 0.45 + 0.3 * seal, 0.5 * lid);
+    stroke(-0.2, -DEPTH, top, 0.2, -DEPTH, top, 12, (x, z, h, char, t, i) => {
+      shard(400 + i, x, z, h, t === 0 || t === 1 ? '.' : '-', 0.45 + 0.3 * seal, 0.5 * lid);
     });
     for (const x of [-1, 1]) {
       for (const f of [0.3, 0.7]) {
-        shard(x * (0.3 - 0.1 * f), DEPTH - 2 * DEPTH * f, top, x < 0 ? '/' : '\\', 0.55 + 0.3 * seal, 0.6 * lid);
+        shard(421 + x + (f > 0.5 ? 1 : 0), x * (0.3 - 0.1 * f), DEPTH - 2 * DEPTH * f, top, x < 0 ? '/' : '\\', 0.55 + 0.3 * seal, 0.6 * lid);
       }
     }
   }
@@ -134,7 +135,7 @@ function tomb(effect, put) {
     const edge = 0.55 + 0.4 * hash(i * 4.7);
     const x = (i % 2 ? 1 : -1) * halfWidth(rest) * edge;
     const twinkle = 0.55 + 0.45 * Math.sin(age * 2.6 + i * 2.1);
-    shard(x, DEPTH, h, edge > 0.8 ? ':' : '.', 0.45 + 0.3 * twinkle, 0.3 + 0.35 * twinkle);
+    shard(500 + i, x, DEPTH, h, edge > 0.8 ? ':' : '.', 0.45 + 0.3 * twinkle, 0.3 + 0.35 * twinkle);
   }
 
   // Reflection streak riding the glint band across the face.
@@ -143,7 +144,7 @@ function tomb(effect, put) {
       const h = HEART + (band - 0.5) * 1.6 + (i - 2) * 0.16;
       const x = (band - 0.5) * 0.35 + (i - 2) * 0.05;
       if (h < 0.15 || h > TOP - 0.15 || Math.abs(x) > halfWidth(h) - 0.08) continue;
-      shard(x, DEPTH, h, '/', 0.95, 0.55 * (1 - Math.abs(i - 2) * 0.25));
+      shard(600 + i, x, DEPTH, h, '/', 0.95, 0.55 * (1 - Math.abs(i - 2) * 0.25));
     }
   }
 
@@ -158,7 +159,7 @@ function tomb(effect, put) {
         const len = reach / 6, a = base + (hash(c * 13 + s) - 0.5) * 1.3;
         const nx = x + Math.cos(a) * len * 0.8, nh = h + Math.sin(a) * len * 2.2;
         if (Math.abs(nx) > halfWidth(nh) - 0.04 || nh < 0.1 || nh > TOP - 0.1) break;
-        shard(nx, DEPTH, nh, slope(nx - x, -(nh - h) * LIFT), 0.9 - s * 0.06, 0.85 - s * 0.07);
+        shard(700 + c * 6 + s, nx, DEPTH, nh, slope(nx - x, -(nh - h) * LIFT), 0.9 - s * 0.06, 0.85 - s * 0.07);
         x = nx; h = nh;
       }
     }
