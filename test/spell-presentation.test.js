@@ -21,7 +21,7 @@ test('Fire Shard emits its authored cast/impact cues, never sword cues, and reje
   assert.ok(events.every(e => e.presentation === fireShard.presentation));
 });
 
-test('Fire Shard draws distinct angular launch, moving shard, and seven-ray impact geometry', () => {
+test('Fire Shard draws distinct snapping launch, moving shard, and fracture burst geometry', () => {
   const signatures = [];
   for (const stage of ['cast', 'projectile', 'impact']) {
     const points = [];
@@ -75,7 +75,7 @@ test('effects renderer uses projectile profiles and clears on pause/reset/death'
   scene.cast();
   const dots = [];
   scene.casting.effects.paint((...p) => dots.push(p), scene.casting.projectiles);
-  assert.ok(dots.some(p => p[2] === '^'));
+  assert.ok(dots.some(p => p[2] === 'v'), 'the shard tip points along its southward flight');
   scene.casting.setPresentationPaused(true);
   assert.equal(scene.casting.effects.list.length, 0);
   const pausedDots = [];
