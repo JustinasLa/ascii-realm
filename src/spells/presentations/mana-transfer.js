@@ -46,9 +46,11 @@ function gate(plot, view, cz, side, radius, color, light, inner = true) {
 // strand crossings glint, the strand behind is dimmer and drawn with dots.
 function braid(plot, view, t, z0, z1, a0, a1, amp, light, o) {
   if (z1 - z0 < 0.02) return;
-  const along = cells(view, 0, 1), step = (along < 13 ? 0.55 : 1.15) / along, cols = cells(view, 1, 0), span = a1 - a0, k = TAU / 0.85;
+  const along = cells(view, 0, 1), cols = cells(view, 1, 0), span = a1 - a0, k = TAU / 0.85;
   amp *= 26 / cols; // keep the twist equally wide on screen whatever the heading
-  const n = Math.min(o.max, Math.floor((z1 - z0) / step) + 1);
+  // Spread the samples over the whole strand when the cap bites, so both ends always draw.
+  const step = Math.max((along < 13 ? 0.55 : 1.15) / along, (z1 - z0) / (o.max - 1));
+  const n = Math.min(o.max, Math.floor((z1 - z0) / step + 1e-9) + 1);
   for (let i = 0; i < n; i++) {
     const z = z1 - i * step, u = clamp01((z - a0) / span);
     const a = amp * (0.3 + 0.7 * Math.sin(Math.PI * u) ** 0.6);
@@ -155,7 +157,7 @@ function aura(effect, plot, view) {
   gate(plot, view, 0, -1, R + 0.14, blue, env * 0.75, false);
   gate(plot, view, 0, 1, R + 0.14, green, env * 0.75, false);
   braid(plot, view, t, -0.95, 0.95, -0.95, 0.95, 0.11, env * 0.85,
-    { from: blue, to: green, twist: 9, speed: 1.2, packets: 4, max: 34, tail: 0.3, head: 0.3 });
+    { from: blue, to: green, twist: 9, speed: 1.2, packets: 4, max: 44, tail: 0.3, head: 0.3 });
   const beat = 0.5 + 0.5 * Math.sin(t * 9);
   plot(0, 0, beat > 0.6 ? 'O' : 'o', mix(teal, white, beat * 0.6), env * (0.6 + 0.4 * beat));
 }

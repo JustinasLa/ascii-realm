@@ -82,6 +82,13 @@ test('pulse swaps a blue and a green packet across expanding rings; aura comets 
   const comets = p => draw('aura', p).filter(q => (q[2] === 'O' || q[2] === '*') && Math.hypot(q[0], q[1]) > 0.3);
   assert.ok(comets(0.3).some(q => isBlue(q[3])) && comets(0.3).some(q => isGreen(q[3])), 'blue and green comets');
   assert.notDeepEqual(comets(0.3).map(q => q.slice(0, 2)), comets(0.45).map(q => q.slice(0, 2)), 'comets orbit');
+  // The aura braid spans giver to receiver at every heading; the sample cap never truncates the giver end.
+  for (let i = 0; i < 16; i++) {
+    const heading = i / 16 * Math.PI * 2;
+    const ends = lit(draw('aura', 0.25, { heading })).filter(q => Math.abs(q[1]) > 0.75).map(q => q[1]);
+    const [lo, hi] = [Math.min(...ends), Math.max(...ends)];
+    assert.ok(lo < -0.8 && hi > 0.8 && Math.abs(lo + hi) < 0.12, `aura braid spans both ends at heading ${heading.toFixed(2)}: ${lo}..${hi}`);
+  }
   const projectile = lit(draw('projectile', 0.4));
   assert.ok(projectile.some(q => q[2] === '@' && q[0] === 0 && q[1] === 0), 'bright packet core leads');
   assert.ok(projectile.some(q => q[1] < -0.6), 'braided wake trails behind');
