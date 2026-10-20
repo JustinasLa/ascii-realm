@@ -7,12 +7,20 @@ import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 
-function draw(stage, progress = 0.2, age = progress * profile.duration, radius = 1) {
+function draw(stage, progress = 0.2, age = progress * profile.duration, radius = 1, life = profile.duration, heading = 0) {
   const points = [];
-  const effect = Object.freeze({ stage, progress, age, life: profile.duration, radius, heading: 0 });
+  const effect = Object.freeze({ stage, progress, age, life, radius, heading });
   profile.draw(effect, (...point) => points.push(point));
   return points;
 }
+
+// Stage, life, radius and glyph budget as the rune presents them (plus unused stages).
+const CASES = [
+  ['cast', 0.9, 0.8, 250], ['projectile', 1, 0.65, 110], ['pulse', 0.25, 1, 24], ['pulse', 0.25, 3, 90],
+  ['aura', 0.6, 1, 160], ['aura', 0.3, 1, 100], ['impact', 0.9, 1, 230], ['zone', 3, 2, 160],
+];
+const extent = points => Math.max(...points.map(p => Math.hypot(p[0], p[1])));
+const lit = points => points.filter(p => p[4] > 0.05);
 
 test('Shielding Orb opts into its own profile and retains its TF ward parameters', () => {
   assert.equal(spell.presentation, profile);
@@ -23,15 +31,15 @@ test('Shielding Orb opts into its own profile and retains its TF ward parameters
   assert.equal(spell.source.sha256, 'c9f405f18142629574b33481eadbd1e219bd9e0ed27d41487977509c68af4129');
 });
 
-test('all ward stages remain bounded, deterministic, ASCII, and fade to darkness', () => {
-  for (const stage of ['cast', 'projectile', 'impact', 'pulse', 'aura', 'zone']) {
-    for (const progress of [0, 0.23, 0.7, 1]) {
-      const points = draw(stage, progress);
-      assert.ok(points.length >= 20 && points.length <= 96, `${stage} has a bounded visible motif`);
-      assert.deepEqual(points, draw(stage, progress), 'drawing is deterministic');
+test('all ward stages remain bounded, deterministic, ASCII, within budget and fade to darkness', () => {
+  for (const [stage, life, radius, budget] of CASES) {
+    for (let i = 0; i <= 40; i++) {
+      const progress = i / 40, points = draw(stage, progress, progress * life, radius, life, 0.7);
+      assert.ok(points.length <= budget, `${stage} r${radius} uses ${points.length} > ${budget} glyphs`);
+      assert.deepEqual(points, draw(stage, progress, progress * life, radius, life, 0.7), 'drawing is deterministic');
       for (const [x, z, char, color, brightness] of points) {
         assert.ok([x, z, brightness, ...color].every(Number.isFinite));
-        assert.ok(Math.abs(x) <= 3 && Math.abs(z) <= 3);
+        assert.ok(Math.abs(x) <= 6 && Math.abs(z) <= 6);
         assert.match(char, /^[\x20-\x7e]$/);
         assert.equal(color.length, 3);
         assert.ok(color.every(c => c >= 0 && c <= 255));
@@ -40,36 +48,63 @@ test('all ward stages remain bounded, deterministic, ASCII, and fade to darkness
       }
     }
   }
+  assert.ok(draw('pulse', 0.5, 0.12, 1, 0.25).length < draw('pulse', 0.5, 0.12, 3, 0.25).length / 3,
+    'projectile tick ripples stay far leaner than the landing seal');
 });
 
-test('two orbiting cores travel inside a lattice and leave a paired bead wake', () => {
-  for (const stage of ['cast', 'projectile']) {
-    const first = draw(stage, 0.2, 0), later = draw(stage, 0.2, 0.17);
-    const cores = points => points.filter(p => p[2] === 'o');
-    assert.equal(cores(first).length, 2);
-    assert.ok(Math.abs(cores(first)[0][0] + cores(first)[1][0]) < 1e-9);
-    assert.ok(Math.abs(cores(later)[0][1] + cores(later)[1][1]) < 1e-9);
-    assert.notDeepEqual(cores(first), cores(later), 'the double orb orbits independently of lifetime');
-    assert.ok(first.some(p => p[2] === '+') && first.some(p => p[2] === ':'), 'lattice has ties and connecting ribs');
-  }
-  const wake = draw('projectile').filter(p => p[2] === '.');
-  assert.ok(wake.length >= 6);
-  assert.ok(wake.every(p => p[1] < -0.4));
-  assert.ok(wake.some(p => p[0] < 0) && wake.some(p => p[0] > 0));
+test('cast gathers motes into the palm, blooms, reveals a spinning gyroscope and dissolves', () => {
+  const at = (p, extra = 0) => draw('cast', p, p * 0.9 + extra, 0.8);
+  const motes = p => at(p).filter(q => q[1] < -0.2 && (q[2] === ':' || q[2] === '*'));
+  const spread = pts => pts.reduce((sum, q) => sum + Math.hypot(q[0], (q[1] + 1.45) / 1.3), 0) / pts.length;
+  assert.ok(spread(motes(0.02)) > spread(motes(0.15)) * 1.5, 'motes spiral inward during the wind-up');
+  assert.ok(at(0.19).some(q => q[2] === '@' && q[3][0] > 240), 'a white-hot core gathers at the hand');
+  assert.ok(at(0.42).some(q => q[3].every(c => c > 230) && '-/\\|*'.includes(q[2])), 'the lattice snaps open with a white flash');
+  const strokes = pts => pts.filter(q => '-/\\|'.includes(q[2]) && q[1] < 0).length;
+  assert.ok(strokes(at(0.62)) > 40, 'the gyroscope rings read as continuous strokes');
+  assert.notDeepEqual(at(0.62), at(0.62, 0.05), 'rings spin with age');
+  const motesOut = p => at(p).filter(q => q[2] === "'" || q[2] === '.').length;
+  assert.ok(motesOut(0.92) > motesOut(0.5), 'the lattice dissolves into drifting motes');
+  assert.ok(lit(at(0.98)).length < lit(at(0.6)).length);
+  assert.ok(at(0.4).some(q => q[1] > 1 && q[2] === '+'), 'a ground sigil anchors the cast');
 });
 
-test('landing resolves the lattice into overlapping protective arcs with cross ties', () => {
-  const cast = draw('cast'), early = draw('impact', 0.1), late = draw('impact', 0.6);
-  assert.notDeepEqual(cast, early);
-  for (const stage of ['impact', 'aura', 'zone']) {
-    const points = draw(stage);
-    assert.ok(points.filter(p => p[2] === '(').length > 10);
-    assert.ok(points.filter(p => p[2] === ')').length > 10);
-    assert.ok(points.some(p => p[2] === '='), 'guard retains its lattice cross ties');
-  }
-  const extent = points => Math.max(...points.map(p => Math.hypot(p[0], p[1])));
-  assert.ok(extent(late) > extent(early), 'landing arcs spring outward');
-  assert.ok(draw('pulse').length < draw('aura').length, 'repeated source pulses use a lighter silhouette');
+test('projectile is a caged globe with two orbiting satellites and a trailing helix', () => {
+  const first = draw('projectile', 0.2, 0, 0.65, 1), later = draw('projectile', 0.2, 0.17, 0.65, 1);
+  const cores = points => points.filter(p => p[2] === 'o');
+  assert.equal(cores(first).length, 2);
+  assert.ok(Math.abs(cores(first)[0][0] + cores(first)[1][0]) < 1e-9, 'satellites orbit on opposite sides');
+  assert.notDeepEqual(cores(first), cores(later), 'satellites orbit independently of lifetime');
+  assert.equal(first.filter(p => p[2] === '@' && p[0] === 0 && p[1] === 0).length, 1, 'a bright core sits at the centre');
+  assert.ok(first.filter(p => p[2] === '(').length >= 2 && first.filter(p => p[2] === ')').length >= 2, 'round silhouette');
+  const wake = first.filter(p => p[1] < -0.4 && Math.abs(p[0]) < 0.4);
+  assert.ok(wake.length >= 12, 'the helix trails behind the orb');
+  assert.ok(wake.some(p => p[0] < -0.02) && wake.some(p => p[0] > 0.02), 'the two helix strands cross sides');
+  // Facing east, the adapter's rotation puts the wake to the west.
+  const h = Math.PI / 2, east = draw('projectile', 0.2, 0, 0.65, 1, h), c = Math.cos(h), s = Math.sin(h);
+  const world = east.map(p => [p[0] * c + p[1] * s, p[1] * c - p[0] * s]);
+  assert.ok(world.filter(p => p[0] < -0.4 && Math.abs(p[1]) < 0.4).length >= 12, 'the wake follows the projectile heading');
+});
+
+test('the ward lands as a sealing pearl bubble with a closing seal and corner-bracket pulse', () => {
+  const at = age => draw('aura', age / 0.6, age, 1, 0.6);
+  assert.ok(extent(at(0.3)) > extent(at(0.02)) * 1.4, 'the bubble springs outward');
+  assert.ok(at(0.02).some(p => p[3].every(c => c > 230)), 'it flashes white as it seals');
+  const settled = at(0.3);
+  assert.ok(settled.filter(p => p[2] === '(').length > 8 && settled.filter(p => p[2] === ')').length > 8);
+  assert.ok(settled.length >= 120, 'the rim is a dense continuous outline');
+  assert.equal(settled.filter(p => p[2] === 'O' || p[2] === 'o').length, 2, 'the twin cores keep orbiting the ward');
+  assert.ok(settled.some(p => p[1] > 0.6 && p[2] === '+'), 'a ground ring rests under the bubble');
+  // The short absorption aura closes a shell onto the bubble, then clasps it.
+  const seal = p => draw('aura', p, p * 0.3, 1, 0.3);
+  assert.ok(extent(seal(0.1)) > extent(seal(0.6)), 'the seal closes inward');
+  const stars = p => seal(p).filter(q => q[2] === '*').length;
+  assert.ok(stars(0.55) >= stars(0.2) + 4, 'four clasps glint once the shell has sealed');
+  const pulse = p => draw('pulse', p, p * 0.25, 3, 0.25);
+  assert.equal(pulse(0.3).filter(p => p[2] === '+').length, 6, 'the landing pulse is a six-cornered seal');
+  assert.ok(extent(pulse(0.8)) > extent(pulse(0.1)), 'the seal expands across the ward radius');
+  const tick = p => draw('pulse', p, p * 0.25, 1, 0.25);
+  assert.ok(extent(tick(0.8)) > extent(tick(0.1)) && extent(tick(0.9)) < 0.6, 'tick ripples stay small under the orb');
+  assert.ok(draw('impact', 0.3, 0.27, 1).some(p => p[2] === '`' || p[2] === ','), 'a direct impact flings petals');
 });
 
 test('paired beating bells lead a low rim hum and resilient falling impact thrum', () => {
@@ -104,7 +139,7 @@ test('real rune cast renders the authored projectile and ally ward with typed sp
   assert.equal(scene.casting.projectiles.length, 1);
   const castPoints = [];
   scene.casting.effects.paint((...p) => castPoints.push(p));
-  assert.ok(castPoints.some(p => p[2] === 'o') && castPoints.some(p => p[2] === ':'));
+  assert.ok(castPoints.filter(p => p[2] === ':').length >= 10, 'gathering motes start the cast');
   const projectilePoints = [];
   new SpellEffects().paint((...p) => projectilePoints.push(p), scene.casting.projectiles);
   assert.equal(projectilePoints.filter(p => p[2] === 'o').length, 2);
@@ -117,7 +152,7 @@ test('real rune cast renders the authored projectile and ally ward with typed sp
   assert.equal(ward?.presentation, profile);
   const landed = [];
   scene.casting.effects.paint((...p) => landed.push(p));
-  assert.ok(landed.some(p => p[2] === '='));
+  assert.ok(landed.some(p => p[2] === '(') && landed.some(p => p[2] === ')'), 'the pearl bubble seals around the ally');
   const cast = events.find(e => e.stage === 'cast'), impact = events.find(e => e.stage === 'impact');
   assert.ok(cast && impact);
   assert.ok(events.every(e => e.type === 'spell' && e.spellId === spell.id && e.presentation === profile));
