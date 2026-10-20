@@ -125,6 +125,53 @@ test('Fire Breath shapes land on separate screen cells at any heading', () => {
   }
 });
 
+test('Fire Breath keeps the same silhouette across cardinal heading boundaries', () => {
+  // Thinning to the glyph budget must not switch which side of the jet survives
+  // when the heading crosses an axis.
+  const screen = heading => {
+    const cells = new Map();
+    paintPresentation(presentation, { stage: 'cast', x: 0, y: 0, age: 0.42 * presentation.duration,
+      life: presentation.duration, progress: 0.42, radius: 0.8, heading }, (x, y, char, color, brightness) => {
+      cells.set(`${Math.floor(x)},${Math.floor(y)}`, brightness);
+    });
+    return cells;
+  };
+  for (const axis of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+    const before = screen(axis - 1e-6), after = screen(axis + 1e-6);
+    const replaced = [...before].filter(([cell, brightness]) => brightness > 0.5 && !after.has(cell));
+    assert.ok(before.size > 150);
+    assert.ok(replaced.length <= 2, `heading ${axis.toFixed(3)} replaces ${replaced.length} bright cells`);
+  }
+});
+
+test('Fire Breath burns the jet down before dropping it', () => {
+  // Near-identical consecutive frames never lose a bright glyph: the jet dims to
+  // nothing as the breath runs out instead of popping off.
+  const vanished = progress => {
+    const next = new Set(capture('cast', progress + 0.00002).map(point => `${point.x.toFixed(2)},${point.z.toFixed(2)}`));
+    return capture('cast', progress)
+      .filter(point => point.brightness > 0.1 && !next.has(`${point.x.toFixed(2)},${point.z.toFixed(2)}`)).length;
+  };
+  // Includes the exact frame pair where the jet used to vanish at about half brightness.
+  for (let progress = 0.6; progress < 0.72; progress += 0.0003) {
+    assert.ok(vanished(progress) <= 3, `bright glyphs vanish at ${progress.toFixed(5)}`);
+  }
+  assert.ok(vanished(0.678788) <= 3, 'the jet is already dark when it is dropped');
+});
+
+test('Fire Breath draws are reentrant and keep no shared state', () => {
+  const effect = Object.freeze({ stage: 'cast', age: 0.45, life: presentation.duration, progress: 0.42,
+    radius: 0.8, heading: 0.7, x: 2.3, y: 5.1 });
+  const solo = capture('cast', 0.42, effect);
+  const outer = [], inner = [];
+  presentation.draw(effect, (x, z, char, color, brightness) => {
+    if (outer.length === 0) presentation.draw(effect, (...point) => inner.push(point));
+    outer.push([x, z, char, color, brightness]);
+  });
+  assert.equal(outer.length, solo.length, 'the outer draw is not cut short by a nested one');
+  assert.deepEqual(inner, outer, 'nested and outer draws paint identical frames');
+});
+
 test('Fire Breath exhales overlapping air bursts over chest rumble and breaks into dry crackle', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const breaths = cast.filter(voice => voice.kind === 'noise' && voice.delay > 0);
