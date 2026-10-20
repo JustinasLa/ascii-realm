@@ -48,7 +48,7 @@ function pen(effect, plot) {
 // Walks a parametric curve (at(u) writes PT) and drops glyphs one screen cell
 // apart, in dashes of `dash` cells separated by gapAt(u) empty cells, so long
 // curves read as connected strokes instead of scattered dots.
-const PT = { x: 0, z: 0 }, LAST = { x: 0, z: 0 };
+const PT = { x: 0, z: 0 };
 function stroke(P, at, steps, cap, dash, gapAt, paint) {
   at(0);
   let px = PT.x, pz = PT.z, pcx = P.cx(px, pz), pcy = P.cy(px, pz), acc = 0, next = 0, run = 0, count = 0;
@@ -78,50 +78,43 @@ function ripple(P, r, cap, dash, spin, paint) {
   return stroke(P, u => { const a = spin + u * TAU; PT.x = Math.cos(a) * r; PT.z = Math.sin(a) * r; }, 64, cap, dash, () => gap, paint);
 }
 
-// Fits an arm's dashes to its glyph budget. Gaps widen with the on-screen
-// distance walked along the arm past the solid throat (1 + G * fraction of that
-// length). The arm is sampled exactly as stroke() walks it, and G is bisected
-// by replaying stroke()'s cell spacing, so `cap` glyphs always reach the rim.
-// Returns gapAt(u) for stroke(at, ARM_STEPS, ...).
-const ARM_STEPS = 96;
-const STEP = new Float64Array(ARM_STEPS + 1), ARC = new Float64Array(ARM_STEPS + 1);
-const FIT = { G: 0, s0: 0, len: 1 };
-const fitGap = u => {
-  const s = ARC[Math.round(u * ARM_STEPS)];
-  return s <= FIT.s0 ? 0 : 1 + FIT.G * (s - FIT.s0) / FIT.len;
-};
-// Glyphs stroke() needs to cover the whole arm with gap growth G (stops past cap).
-function strokeCount(G, cap, dash) {
-  FIT.G = G;
-  let acc = 0, next = 0, run = 0, count = 0;
-  for (let k = 1; k <= ARM_STEPS; k++) {
-    const d = STEP[k];
-    while (acc + d >= next) {
-      if (++count > cap) return count;
-      if (++run >= dash) { run = 0; next += 1 + fitGap(k / ARM_STEPS); } else next += 1;
-    }
-    acc += d;
-  }
-  return count;
-}
-function fitGaps(P, at, eyeR, span, solid, cap, dash) {
+// Lays `cap` glyphs along an arm in dashes of `dash` glyphs one screen cell
+// apart. Dash k aims for ground distance (k / last)^ARM_FLARE of the arm's
+// length, so the gaps widen smoothly outward, but never starts before the
+// previous dash ends, so the throat stays solid; the last dash ends on the rim.
+// Every glyph's place is a continuous function of the arm's shape, so nothing
+// jumps as the arm turns or grows, and glyphs only fade in or out at the tip
+// of an arm too short to hold them all. paint gets (x, z, u, vx, vy, index, fade).
+const ARM_STEPS = 96, ARM_FLARE = 1.6;
+const AX = new Float64Array(ARM_STEPS + 1), AZ = new Float64Array(ARM_STEPS + 1);
+const CELLS = new Float64Array(ARM_STEPS + 1), METRES = new Float64Array(ARM_STEPS + 1);
+function armStroke(P, at, cap, dash, paint) {
   at(0);
-  let pcx = P.cx(PT.x, PT.z), pcy = P.cy(PT.x, PT.z), s0 = 0;
+  AX[0] = PT.x; AZ[0] = PT.z;
   for (let k = 1; k <= ARM_STEPS; k++) {
-    const u = k / ARM_STEPS;
-    at(u);
-    const cx = P.cx(PT.x, PT.z), cy = P.cy(PT.x, PT.z);
-    STEP[k] = Math.max(Math.abs(cx - pcx), Math.abs(cy - pcy));
-    ARC[k] = ARC[k - 1] + STEP[k]; pcx = cx; pcy = cy;
-    if (eyeR + span * u ** 1.15 <= solid) s0 = ARC[k];
+    at(k / ARM_STEPS);
+    AX[k] = PT.x; AZ[k] = PT.z;
+    const dx = AX[k] - AX[k - 1], dz = AZ[k] - AZ[k - 1];
+    CELLS[k] = CELLS[k - 1] + Math.max(Math.abs(P.cx(dx, dz)), Math.abs(P.cy(dx, dz)));
+    METRES[k] = METRES[k - 1] + Math.hypot(dx, dz);
   }
-  FIT.s0 = s0; FIT.len = Math.max(1, ARC[ARM_STEPS] - s0);
-  if (strokeCount(0, cap, dash) <= cap) return fitGap;
-  let lo = 0, hi = 2;
-  while (hi < 4096 && strokeCount(hi, cap, dash) > cap) { lo = hi; hi *= 2; }
-  for (let it = 0; it < 12; it++) { const G = (lo + hi) / 2; if (strokeCount(G, cap, dash) > cap) lo = G; else hi = G; }
-  FIT.G = hi;
-  return fitGap;
+  const L = CELLS[ARM_STEPS], last = Math.ceil(cap / dash) - 1;
+  let start = -Infinity, m = 1, k = 1;
+  for (let d = 0, i = 0; d <= last; d++) {
+    // Cell position of the ground distance this dash aims for.
+    const share = d / last, v = METRES[ARM_STEPS] * share ** ARM_FLARE;
+    while (m < ARM_STEPS && METRES[m] < v) m++;
+    const run = METRES[m] - METRES[m - 1], g = run > 0 ? clamp01((v - METRES[m - 1]) / run) : 0;
+    start = Math.max(start + dash, CELLS[m - 1] + (CELLS[m] - CELLS[m - 1]) * g - (dash - 1) * share);
+    for (let j = 0; j < dash && i < cap; j++, i++) {
+      const want = start + j, fade = clamp01(L + 1 - want), s = Math.min(L, want);
+      if (fade <= 0) return;
+      while (k < ARM_STEPS && CELLS[k] < s) k++;
+      const seg = CELLS[k] - CELLS[k - 1], f = seg > 0 ? clamp01((s - CELLS[k - 1]) / seg) : 0;
+      const dx = AX[k] - AX[k - 1], dz = AZ[k] - AZ[k - 1];
+      paint(AX[k - 1] + dx * f, AZ[k - 1] + dz * f, (k - 1 + f) / ARM_STEPS, P.cx(dx, dz), P.cy(dx, dz), i, fade);
+    }
+  }
 }
 
 // A pinpoint vortex (the rune's display totem): spray and mist thrown up out
@@ -151,31 +144,22 @@ function whirlpool(P, effect) {
   const extent = R * (0.3 + 0.7 * grow) * (1 + 0.12 * calm);
   const curl = (R < 1.5 ? 3.4 : 4.2) * (1 - 0.35 * calm);
   const eyeR = Math.min(0.5, Math.max(0.14, R * 0.07)) * (0.6 + 0.4 * grow) * (1 - 0.45 * calm);
-  const span = extent - eyeR, solid = Math.min(extent, 0.45 + R * 0.12);
+  const span = extent - eyeR;
   // Three foam arms: solid strokes near the throat, breaking into ever sparser
-  // dashes outward; the gaps are fitted so every arm still reaches the rim.
-  const arms = 3, armCap = R < 1.5 ? 18 : R < 4 ? 28 : 30;
+  // dashes outward; the budget is spread along the whole arm out to the rim.
+  const arms = 3, armCap = R < 1.5 ? 18 : R < 4 ? 27 : 30;
   for (let arm = 0; arm < arms; arm++) {
     const base = rot + arm * TAU / arms;
     const at = u => {
       const r = eyeR + span * u ** 1.15, a = base + curl * (1 - u) ** 1.6 + 0.14 * Math.sin(age * 1.7 + arm * 2.1 + u * 6);
       PT.x = Math.cos(a) * r; PT.z = Math.sin(a) * r;
     };
-    const paint = (x, z, u, vx, vy, i) => {
-      LAST.x = x; LAST.z = z;
-      if (calm > 0 && hash(arm * 37 + i, 4) < calm * (0.4 + u)) return; // unravels as the sea calms
+    armStroke(P, at, armCap, 3, (x, z, u, vx, vy, i, fade) => {
+      // Unravels as the sea calms: each glyph dims out as calm sweeps past its own threshold.
+      if (calm > 0) fade *= clamp01((hash(arm * 37 + i, 4) - calm * (0.65 + u)) / 0.25 + 1);
       const crest = 0.78 + 0.22 * Math.sin(u * 11 - age * 5 + arm * 1.3), inner = (1 - u) ** 1.1;
-      P.dot(x, z, 0, P.flowCells(vx, vy), tone(0.34 + 0.62 * inner),
-        env * crest * (0.36 + 0.64 * inner));
-    };
-    const n = stroke(P, at, ARM_STEPS, armCap - 1, 3, fitGaps(P, at, eyeR, span, solid, armCap - 1, 3), paint);
-    // The last dash rarely lands exactly on the lip: cap the arm with a foam tip there.
-    at(1 - 1 / ARM_STEPS);
-    const bx = PT.x, bz = PT.z;
-    at(1);
-    if (Math.max(Math.abs(P.cx(PT.x - LAST.x, PT.z - LAST.z)), Math.abs(P.cy(PT.x - LAST.x, PT.z - LAST.z))) > 1.5) {
-      paint(PT.x, PT.z, 1, P.cx(PT.x - bx, PT.z - bz), P.cy(PT.x - bx, PT.z - bz), n);
-    }
+      P.dot(x, z, 0, P.flowCells(vx, vy), tone(0.34 + 0.62 * inner), env * fade * crest * (0.36 + 0.64 * inner));
+    });
   }
   // Flotsam is dragged in from the rim as short streaks, speeding up near the throat.
   const motes = Math.min(6, Math.max(4, Math.round(3 + R)));

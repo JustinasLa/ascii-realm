@@ -17,7 +17,7 @@ const at = (stage, progress, radius, life = presentation.duration) => draw(stage
 const distance = point => Math.hypot(point[0], point[1]);
 const luma = color => color[0] + color[1] + color[2];
 const WHITE = [238, 255, 253];
-const BUDGET = { cast: 160, impact: 160, projectile: 110, pulse: 90, aura: 160, zone: 170 };
+const BUDGET = { cast: 160, impact: 160, projectile: 110, pulse: 90, aura: 160, zone: 165 };
 
 test('Maelstrom zone is a three-arm whirlpool that spins around a dark throat and drags flotsam in', () => {
   const life = 5, early = at('zone', 0.5, 7, life), later = draw('zone', 2.5 + 0.02, (2.5 + 0.02) / life, 7, 0, life);
@@ -43,24 +43,62 @@ test('Maelstrom zone is a three-arm whirlpool that spins around a dark throat an
   assert.ok(spout.length > 6 && spout.length <= 20 && spout.every(point => distance(point) < 2));
 });
 
-test('Maelstrom foam arms each run unbroken by the glyph cap from the throat out to the rim', () => {
-  // Arms are stroked first, one after another, each from the throat outward; flotsam ('o') follows them.
-  for (const radius of [0.7, 1, 2, 3, 5, 7, 9]) {
-    for (const heading of [0, 0.5, 1.1, 1.6, 2.4, 3.1, 4.2, 5.5]) {
-      for (const age of [1, 1.6, 2.2, 2.5, 3.1, 3.6]) {
-        const points = draw('zone', age, age / 5, radius, heading, 5);
-        const arms = [[]];
-        for (const point of points.slice(0, points.findIndex(p => p[2] === 'o'))) {
-          const previous = arms.at(-1).at(-1);
-          if (previous && distance(point) < distance(previous) - 0.3) arms.push([]);
-          arms.at(-1).push(point);
-        }
-        const where = `radius ${radius}, heading ${heading}, age ${age}`;
+// Arms are stroked first, one after another, each from the throat outward; flotsam ('o') follows them.
+function foamArms(points) {
+  const arms = [[]];
+  for (const point of points.slice(0, points.findIndex(p => p[2] === 'o'))) {
+    const previous = arms.at(-1).at(-1);
+    if (previous && distance(point) < distance(previous) - 0.3) arms.push([]);
+    arms.at(-1).push(point);
+  }
+  return arms;
+}
+const RADII = [0.7, 1, 2, 3, 5, 7, 9], HEADINGS = [0, 0.5, 1.1, 1.6, 2.4, 3.1, 4.2, 5.5];
+// Steady-state ages, plus the two frames a review caught with a broken arm.
+const AGES = [...Array.from({ length: 55 }, (_, i) => 1 + i * 0.05), 1.814779613, 3.5];
+
+test('Maelstrom foam arms spread their glyph budget evenly from the throat out to the rim', () => {
+  for (const radius of RADII) {
+    for (const heading of HEADINGS) {
+      for (const age of AGES) {
+        const arms = foamArms(draw('zone', age, age / 5, radius, heading, 5)), where = `radius ${radius}, heading ${heading}, age ${age}`;
         assert.equal(arms.length, 3, `three arms (${where})`);
         for (const arm of arms) {
-          assert.ok(arm.length <= 30 && distance(arm[0]) < 0.6, `arm starts at the throat (${where})`);
+          assert.ok(arm.length >= (radius < 1.5 ? 12 : 27) && arm.length <= 30, `each arm uses its budget (${arm.length}, ${where})`);
+          assert.ok(distance(arm[0]) < 0.6, `arm starts at the throat (${where})`);
           // Within about one screen row (1/6.5 m) of the rim.
-          assert.ok(Math.max(...arm.map(distance)) > Math.min(9, radius) - 0.25, `arm reaches the rim (${where})`);
+          assert.ok(distance(arm.at(-1)) > Math.min(9, radius) - 0.25, `arm ends on the rim (${where})`);
+          // Dashes of three: no gap may be wider than twice the mean dash period, so the
+          // budget covers the interior instead of leaving a stub and a lone tip.
+          let length = 0, widest = 0;
+          for (let i = 1; i < arm.length; i++) {
+            const gap = Math.hypot(arm[i][0] - arm[i - 1][0], arm[i][1] - arm[i - 1][1]);
+            length += gap; widest = Math.max(widest, gap);
+          }
+          assert.ok(widest <= 2 * length * 3 / arm.length, `no hole along the arm (${widest.toFixed(2)} of ${length.toFixed(2)} m, ${where})`);
+        }
+      }
+    }
+  }
+});
+
+test('Maelstrom foam arms move continuously: no bright glyph pops in or out between adjacent frames', () => {
+  // From the grow-in through the calm; dt is a fraction of a 60 fps frame.
+  const ages = [...Array.from({ length: 87 }, (_, i) => 0.3 + i * 0.05), 1.814279613, 1.814779613, 3.4995];
+  for (const radius of RADII) {
+    for (const heading of HEADINGS) {
+      for (const age of ages) {
+        const frames = [age, age + 0.002].map(t => foamArms(draw('zone', t, t / 5, radius, heading, 5)).flat());
+        for (const [from, to] of [frames, [frames[1], frames[0]]]) {
+          for (const glyph of from) {
+            // A glyph must still be there (within 0.1 m, at nearly the same brightness) or be fading already.
+            let change = glyph[4];
+            for (const other of to) {
+              if (Math.hypot(glyph[0] - other[0], glyph[1] - other[1]) < 0.1) change = Math.min(change, Math.abs(glyph[4] - other[4]));
+            }
+            assert.ok(change <= 0.05, `glyph at ${distance(glyph).toFixed(2)} m (brightness ${glyph[4].toFixed(2)}) pops `
+              + `(radius ${radius}, heading ${heading}, age ${age})`);
+          }
         }
       }
     }
