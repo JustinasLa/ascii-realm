@@ -251,16 +251,6 @@ function impact(g, e) {
   const crush = span(p, 0, 0.14);
   if (crush < 1) shard(g, 0, -0.45 * (1 - easeOut(crush)), 0.8 * (1 - 0.6 * crush), 0.15, (1 - crush) * end);
 
-  const flash = span(p, 0, 0.3), I = 1 - flash;
-  if (flash < 1) {
-    g.plot(0, 0, FLASH[Math.min(5, Math.floor(I * 6))], heat(0.4 + 0.6 * I), I * end);
-    for (let i = 0; i < 10; i++) {
-      const a = i / 10 * TAU, d = 0.12 + 0.5 * easeOut(flash) * (0.75 + 0.25 * hash(i + 90));
-      dotW(g, 0, 0, Math.cos(a) * d, Math.sin(a) * 2 * d, flash < 0.3 ? '*' : flash < 0.65 ? '+' : '.',
-        heat(1 - flash * 0.6), I * end);
-    }
-  }
-
   const shatter = span(p, 0.04, 0.68), tau = Math.max(0, age - 0.04 * life);
   for (let i = 0; i < 10 && shatter < 1; i++) {
     const th = i < 7 ? (hash(i + 100) - 0.5) * 3.6 : Math.PI + (hash(i + 100) - 0.5) * 1.6;
@@ -306,6 +296,17 @@ function impact(g, e) {
     riser(g, (hash(i + 170) - 0.5) * 0.9, (hash(i + 180) - 0.5) * 0.4, 0.8 * easeOut(u),
       Math.sin(age * 6 + i) * 0.05 * u, (0.05 + 0.05 * hash(i + 190)) * easeOutBack(span(u, 0, 0.35)),
       0.8 * end, span(p, popAt, popAt + 0.12) || (u >= 1 ? 1e-6 : 0), i + 30);
+  }
+  // The flash goes last: the renderer keeps the last glyph in a cell, and the
+  // slivers and crown droplets all start at the centre.
+  const flash = span(p, 0, 0.3), I = 1 - flash;
+  if (flash < 1) {
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * TAU, d = 0.12 + 0.5 * easeOut(flash) * (0.75 + 0.25 * hash(i + 90));
+      dotW(g, 0, 0, Math.cos(a) * d, Math.sin(a) * 2 * d, flash < 0.3 ? '*' : flash < 0.65 ? '+' : '.',
+        heat(1 - flash * 0.6), I * end);
+    }
+    g.plot(0, 0, FLASH[Math.min(5, Math.floor(I * 6))], heat(0.4 + 0.6 * I), I * end);
   }
 }
 

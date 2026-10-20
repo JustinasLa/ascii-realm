@@ -4,6 +4,7 @@ import presentation from '../../src/spells/presentations/bubble-shard.js';
 import spell from '../../src/spells/definitions/bubble-shard.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { toCells } from '../../src/entities/monsters.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 
@@ -17,6 +18,15 @@ function draw(stage, progress, { heading = 0, radius = 1, life = presentation.du
     (...p) => points.push(p));
   return points;
 }
+// What the renderer actually shows: one glyph per cell, the last plot wins.
+function cellAt(stage, age, life, mx, mz, heading = 0) {
+  const cells = new Map();
+  paintPresentation(presentation, { x: 0, y: 0, stage, age, life, radius: 1, heading },
+    (x, y, char, color, brightness) => cells.set(`${Math.floor(x)},${Math.floor(y)}`, { char, color, brightness }));
+  const [x, y] = toCells(mx * Math.cos(heading) + mz * Math.sin(heading), mz * Math.cos(heading) - mx * Math.sin(heading));
+  return cells.get(`${Math.floor(x)},${Math.floor(y)}`);
+}
+const shown = cell => cell && cell.color.every(c => c >= 225) && cell.brightness > 0.65;
 const at = (stage, age, options = {}) => draw(stage, age / LIFE[stage], { ...options, life: LIFE[stage] });
 const lit = points => points.filter(p => p[4] > 0.05);
 const glyphs = (points, chars) => lit(points).filter(p => chars.includes(p[2]));
@@ -57,8 +67,12 @@ test('Bubble Shard cast inflates a screen-round film around a crystallising shar
 test('Bubble Shard release punches through the film with a flash, then sprays, rises, and pops', () => {
   const before = glyphs(draw('cast', 0.11), ['v'])[0], after = glyphs(draw('cast', 0.25), ['v'])[0];
   assert.ok(after[1] - before[1] > 0.5, 'the shard launches forward with easing');
-  const flash = lit(draw('cast', 0.135)).filter(p => Math.hypot(p[0], p[1] - G) < 0.01);
-  assert.ok(flash.some(p => '@#'.includes(p[2]) && white(p) && p[4] > 0.8), 'white release flash at the muzzle');
+  for (const heading of [0, 1.3, -2.4]) {
+    for (const p of [0.13, 0.135, 0.15]) {
+      const cell = cellAt('cast', p * LIFE.cast, LIFE.cast, 0, G, heading);
+      assert.ok('@#'.includes(cell?.char) && shown(cell), `white release flash shows at the muzzle (${heading}, ${p})`);
+    }
+  }
   assert.equal(glyphs(draw('cast', 0.35), ['v']).length, 0, 'the shard has left the cast effect');
   const fast = glyphs(draw('cast', 0.25), ['/', '\\', '|', '-']).filter(p => Math.hypot(p[0], p[1] - G) > 0.5);
   assert.ok(fast.length >= 12, 'torn film streaks outward while it is fast');
@@ -91,7 +105,13 @@ test('Bubble Shard flight is a shard leading a wobbling film and a wake of bubbl
 
 test('Bubble Shard impact flashes, shatters, bursts the shell, splashes a crown, and ripples', () => {
   const hit = at('impact', 0);
-  assert.ok(hit.some(p => p[0] === 0 && p[1] === 0 && p[2] === '@' && white(p)), 'white impact frame');
+  for (const heading of [0, 1.3, -2.4]) {
+    for (const frame of [0, 1, 2, 3]) {
+      const cell = cellAt('impact', frame / 60, LIFE.impact, 0, 0, heading);
+      assert.ok('@#'.includes(cell?.char) && shown(cell),
+        `the white impact flash survives the slivers and droplets on screen (${heading}, frame ${frame}: ${cell?.char})`);
+    }
+  }
   assert.ok(glyphs(hit, ['(', ')']).length >= 2, 'the bubble shell is still whole on contact');
   const shatter = at('impact', 0.25);
   assert.ok(glyphs(shatter, ['/', '\\', '|', '-']).filter(p => Math.hypot(p[0], p[1]) > 0.3).length >= 8,
