@@ -175,6 +175,24 @@ test('every stage stays finite, deterministic and within its draw budget, then f
   }
 });
 
+test('turned strokes sample more cells but every stage stays within budget at any heading', () => {
+  for (const stage of STAGES) {
+    for (let h = 0; h < 64; h++) {
+      const heading = h / 64 * Math.PI * 2;
+      for (let step = 0; step <= 40; step++) {
+        const progress = step / 40;
+        for (const radius of [GAME[stage].radius, 0.3, 1.5, 4, 8]) {
+          const count = frame(stage, progress, { heading, radius }).length;
+          assert.ok(count <= BUDGET[stage], `${stage} budget at heading ${heading}, progress ${progress}, radius ${radius} (${count})`);
+        }
+      }
+    }
+  }
+  // The reviewed worst cases: impact at heading 9pi/32 and projectile at 7pi/16.
+  assert.ok(frame('impact', 0.2, { heading: 9 * Math.PI / 32 }).length <= BUDGET.impact);
+  assert.ok(frame('projectile', 0, { heading: 7 * Math.PI / 16 }).length <= BUDGET.projectile);
+});
+
 test('age fallback and unusual radii and headings remain safe without mutating the effect', () => {
   assert.deepEqual(frame('cast', NaN, { age: 0.575 }), frame('cast', 0.5));
   for (const stage of STAGES) {

@@ -83,8 +83,10 @@ function stroke(view, curve, spacing, maxPoints, emit) {
 
 // One crescent arm of ice: an outer edge, a thinner inner edge and hooked claw
 // fingers at both tips. `side` -1 draws '(' on the left, 1 draws ')' on the right.
+// `caps` bounds the samples of the outer and inner edge: turned arms span more
+// on-screen cells, so each stage caps them to keep its total within budget.
 function drawArm(view, dot, side, o) {
-  const { gap, depth, height, span, heat, dissolve = 0, spacing = 1, salt = 0, claws = 1, light = 1 } = o;
+  const { gap, depth, height, span, heat, dissolve = 0, spacing = 1, salt = 0, claws = 1, light = 1, caps = [30, 22] } = o;
   if (span <= 0.02) return;
   const keep = (i, layer) => hash(i + layer * 97, salt + side) >= dissolve;
   const layers = [[1, 1, 1], [0.7, 0.88, 0.82]];
@@ -95,7 +97,7 @@ function drawArm(view, dot, side, o) {
       const phi = (t * 2 - 1) * reach;
       out.x = side * (gap + Math.cos(phi) * depth * dx);
       out.z = Math.sin(phi) * height * hz;
-    }, spacing * (layer ? 1.3 : 1), layer ? 22 : 30, (x, z, glyph, t, i) => {
+    }, spacing * (layer ? 1.3 : 1), caps[layer], (x, z, glyph, t, i) => {
       if (!keep(i, layer)) return;
       const tip = Math.abs(t * 2 - 1);
       const glow = layer ? 0.55 + tip * 0.15 : 0.7 + tip * 0.3;
@@ -204,7 +206,8 @@ function drawProjectile(effect, p, view, dot) {
   for (const side of [-1, 1]) {
     drawArm(view, dot, side, {
       gap: 0.06 + snap * 0.06, depth: 0.2, height: 0.34, span: 1.2, heat: 0.75,
-      spacing: 0.75, salt: 3, claws: 0.6,
+      // Worst case 2 x (17 + 12) arm + 24 claw + 28 core/trail glyphs = 110.
+      spacing: 0.75, salt: 3, claws: 0.6, caps: [16, 11],
     });
   }
   dot(0, 0.02, '@', WHITE, 1);
@@ -232,7 +235,8 @@ function drawImpact(effect, p, view, dot) {
   for (const side of [-1, 1]) {
     drawArm(view, dot, side, {
       gap, depth: 0.62 * k, height: 0.95 * k, span: 1.25, heat: 0.55 + flash * 0.45 - dissolve * 0.3,
-      dissolve, spacing: 1.1, salt: 21, claws: 1 - dissolve,
+      // Worst case 2 x (28 + 19) arm + 24 claw + 45 band + 13 flash/crack + 40 shard + 33 ring = 249.
+      dissolve, spacing: 1.1, salt: 21, claws: 1 - dissolve, caps: [27, 18],
     });
   }
   if (p < SNAP) return;
