@@ -7,56 +7,122 @@ import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { runeScene } from '../../test-support/spells.js';
 
-function points(stage, progress = 0.4, heading = 0) {
+function points(stage, progress = 0.4, heading = 0, { life = profile.duration, radius = 1 } = {}) {
   const output = [];
-  profile.draw({ stage, progress, age: progress * profile.duration, life: profile.duration, radius: 1, heading },
+  profile.draw({ stage, progress, age: progress * life, life, radius, heading },
     (...p) => output.push(p));
   return output;
 }
+const lit = frame => frame.filter(p => p[4] > 0.05);
+const reach = frame => Math.max(0, ...frame.map(p => Math.hypot(p[0], p[1])));
+const at = seconds => seconds / profile.duration;
+const white = p => String(p[3]) === '255,255,255';
+const SLASHES = new Set(['/', '\\', '|', '-']);
 
-test('Glacial Fan unfolds five separate triangular tips along a symmetric bowed contour', () => {
+test('Glacial Fan gathers frost, sweeps five blades open left to right and hurls them in volley order', () => {
   assert.equal(spell.presentation, profile);
-  const cast = points('cast'), tips = cast.filter(p => p[2] === '^');
-  assert.equal(tips.length, 5, 'five outlined frost blades match the staggered gameplay fan');
-  assert.ok(cast.filter(p => p[2] === '/').length > 5 && cast.filter(p => p[2] === '\\').length > 5);
-  assert.ok(tips.every(p => p[1] > 0), 'the fan opens forward');
-  const radii = tips.map(p => Math.hypot(p[0], p[1]));
-  assert.ok(radii.every(r => Math.abs(r - radii[2]) < 1e-9), 'all tips follow one bowed rim');
-  assert.ok(tips[2][1] > tips[0][1] && tips[2][1] > tips[4][1], 'centre bows beyond the outer tips');
-  assert.ok(Math.abs(tips[0][0] + tips[4][0]) < 1e-9);
-  assert.ok(tips.slice(1).every((p, i) => p[0] - tips[i][0] > 0.4), 'blades remain separated');
-  const earlyWidth = Math.max(...points('cast', 0.05).map(p => Math.abs(p[0])));
-  const lateWidth = Math.max(...points('cast', 0.65).map(p => Math.abs(p[0])));
-  assert.ok(lateWidth > earlyWidth * 2, 'the fan visibly unfolds with time');
+  const motes = seconds => lit(points('cast', at(seconds))).filter(p => p[2] === '.' || p[2] === '+');
+  const spread = frame => frame.reduce((sum, p) => sum + Math.hypot(p[0], p[1] - 0.3), 0) / frame.length;
+  assert.ok(motes(0.03).length > 8 && reach(lit(points('cast', at(0.03)))) < 1.7, 'anticipation precedes the blades');
+  assert.ok(spread(motes(0.03)) > spread(motes(0.1)) * 2, 'frost motes spiral into a seed in front of the caster');
+  const late = lit(points('cast', at(0.22)));
+  assert.ok(reach(late) > 2, 'blades unfold well beyond the gathering point');
+
+  const sweep = lit(points('cast', at(0.14)));
+  const side = (frame, sign) => reach(frame.filter(p => p[0] * sign > 0.3));
+  assert.ok(side(sweep, -1) > side(sweep, 1) + 0.4, 'the left blade unfolds first, matching the -45 degree first shot');
+
+  const open = lit(points('cast', at(0.3)));
+  const angles = open.filter(p => Math.hypot(p[0], p[1]) > 1).map(p => Math.atan2(p[0], p[1]));
+  assert.ok(Math.min(...angles) < -0.7 && Math.max(...angles) > 0.7, 'the fan spans the full 90 degree volley');
+  assert.ok(open.every(p => p[1] > -0.2), 'the fan opens forward');
+  assert.ok(open.filter(p => SLASHES.has(p[2])).length > 60, 'blades are outlined with faceted edges, not loose dots');
+  assert.ok(open.some(p => p[2] === ':' && p[4] < 0.5), 'blade bodies carry a dim frosted fill');
+
+  const release = points('cast', at(0.23));
+  assert.ok(release.some(p => p[2] === '@' && white(p) && p[4] > 0.8 && p[0] < 0), 'the first release flashes white at its root');
+  const flying = lit(points('cast', at(0.45)));
+  assert.ok(side(flying, -1) > side(flying, 1) + 0.3, 'released left blades streak outward before the right ones');
+  const lastHeld = lit(points('cast', at(0.6))).filter(p => p[0] > 0.6 && SLASHES.has(p[2]) && p[4] > 0.5);
+  assert.ok(lastHeld.length > 8, 'the rightmost blade is still held until the end of the volley');
+
+  const fading = lit(points('cast', 0.9));
+  assert.ok(fading.length < lit(points('cast', 0.3)).length / 4, 'the cast dissolves into a sparse rime');
+  assert.ok(fading.every(p => [".", "'", '+'].includes(p[2])), 'only drifting frost motes remain at the end');
 });
 
-test('Glacial Fan fragments on impact and carries a compact triangular projectile with a frost trail', () => {
-  const impact = points('impact'), projectile = points('projectile');
-  assert.equal(impact.filter(p => p[2] === '*').length, 5);
-  assert.equal(impact.filter(p => p[2] === 'x').length, 5, 'each detached blade sheds a fracture');
-  assert.equal(impact.filter(p => p[2] === '^').length, 0);
-  const radius = progress => Math.max(...points('impact', progress).map(p => Math.hypot(p[0], p[1])));
-  assert.ok(radius(0.75) > radius(0.1) * 2, 'shatter chips travel outward');
-  assert.equal(projectile.filter(p => p[2] === '^').length, 1);
-  assert.ok(projectile.some(p => p[2] === ':' && p[1] < -0.6));
-  assert.ok(Math.max(...projectile.map(p => Math.abs(p[0]))) < 0.3, 'individual shots remain slender');
-  assert.notDeepEqual(projectile, points('projectile', 0.65), 'frost dust changes in flight');
+test('Glacial Fan shots are slender shards with a shimmering wake', () => {
+  const shot = points('projectile', 0.4, 0, { life: 0.32, radius: 0.65 });
+  const body = shot.filter(p => p[1] > -0.4), wake = shot.filter(p => p[1] <= -0.4);
+  const width = Math.max(...body.map(p => Math.abs(p[0]))), depth = Math.max(...body.map(p => p[1])) - Math.min(...body.map(p => p[1]));
+  assert.ok(depth > width * 5, 'the shard is long and narrow along its flight');
+  const tip = body.reduce((a, b) => (b[1] > a[1] ? b : a));
+  assert.equal(tip[2], '*', 'a bright glint leads the shard');
+  assert.ok(tip[4] >= Math.max(...body.map(p => p[4])) - 1e-9);
+  assert.ok(wake.length >= 12 && wake.some(p => p[2] === ':') && Math.min(...wake.map(p => p[1])) < -1);
+  assert.ok(shot.length <= 110, 'shots stay lean');
+  const later = points('projectile', 0.6, 0, { life: 0.32, radius: 0.65 });
+  assert.notDeepEqual(wake, later.filter(p => p[1] <= -0.4), 'the frost wake streams continuously');
+});
+
+test('Glacial Fan hits flash white, burst into a forward crystal star and shatter into chips', () => {
+  const flash = points('impact', 0.12, 0, { life: 0.6 });
+  assert.ok(flash.some(p => p[2] === '@' && white(p) && p[4] > 0.6 && Math.hypot(p[0], p[1]) < 1e-9));
+  assert.equal(flash.filter(p => p[2] === '*').length, 8, 'eight crystal spikes');
+  const ahead = Math.max(...flash.map(p => p[1])), behind = -Math.min(...flash.map(p => p[1]));
+  assert.ok(ahead > behind + 0.2, 'the starburst is thrown along the shot direction');
+  const shattered = lit(points('impact', 0.6, 0, { life: 0.6 }));
+  assert.ok(!shattered.some(p => p[2] === '@' || p[2] === '*'), 'spikes and flash are gone');
+  const chips = shattered.filter(p => SLASHES.has(p[2]));
+  assert.ok(chips.length >= 20, 'chips tumble away');
+  assert.ok(reach(chips) > reach(lit(flash)) * 1.2, 'chips fly beyond the spikes');
+  assert.ok(Math.max(...chips.map(p => p[4])) < Math.max(...flash.map(p => p[4])), 'chips cool as they fly');
+});
+
+test('Glacial Spikes pulse erupts crystals in the gaps between fan blades', () => {
+  const frame = points('pulse', 0.35, 0, { life: 0.6, radius: 2 });
+  const tips = frame.filter(p => p[2] === '*');
+  assert.equal(tips.length, 8);
+  for (const p of tips) {
+    const slot = Math.atan2(p[0], p[1]) / (Math.PI / 16);
+    assert.ok(Math.abs(slot - Math.round(slot)) < 0.05 && Math.abs(Math.round(slot)) % 2 === 1, 'tips sit between blade angles');
+  }
+  assert.ok(frame.length <= 90);
+  const retract = lit(points('pulse', 0.85, 0, { life: 0.6, radius: 2 }));
+  assert.ok(retract.length < lit(frame).length / 2, 'spikes melt back down');
 });
 
 test('all Glacial Fan stages stay deterministic, bounded, atlas compatible, and fade away', () => {
-  for (const stage of ['cast', 'impact', 'projectile', 'pulse', 'aura', 'zone']) {
-    for (const progress of [0, 0.1, 0.5, 0.9, 1]) {
+  const budget = { cast: 256, impact: 200, projectile: 110, pulse: 90, aura: 160, zone: 160 };
+  for (const stage of Object.keys(budget)) {
+    for (const progress of [0, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
       const frame = points(stage, progress);
-      assert.ok(frame.length > 10 && frame.length <= 96, `${stage} respects the draw budget`);
+      if (progress > 0 && progress < 0.8) assert.ok(lit(frame).length > 10, `${stage} is visible mid-life`);
+      assert.ok(frame.length <= budget[stage], `${stage} respects the draw budget (${frame.length})`);
       assert.ok(frame.every(p => p.length === 5 && Number.isFinite(p[0]) && Number.isFinite(p[1])
         && Math.abs(p[0]) < 5 && Math.abs(p[1]) < 5 && /^[\x20-\x7e]$/.test(p[2])
         && p[3].length === 3 && p[3].every(c => Number.isFinite(c) && c >= 0 && c <= 255)
         && Number.isFinite(p[4]) && p[4] >= 0 && p[4] <= 1));
       if (progress === 1) assert.ok(frame.every(p => p[4] === 0), `${stage} fades completely`);
       assert.deepEqual(frame, points(stage, progress), 'no random geometry or persistent state');
-      assert.deepEqual(frame, points(stage, progress, 1.7), 'the runtime owns heading rotation');
+      // The runtime owns rotation: geometry, colour and light ignore heading;
+      // only the edge glyph is re-picked so slashes follow the on-screen slope.
+      const turned = points(stage, progress, 1.7);
+      assert.deepEqual(turned.map(p => [p[0], p[1], p[3], p[4]]), frame.map(p => [p[0], p[1], p[3], p[4]]));
+      assert.ok(turned.every((p, i) => p[2] === frame[i][2] || (SLASHES.has(p[2]) && SLASHES.has(frame[i][2]))));
     }
   }
+  for (const stage of ['projectile', 'impact', 'pulse']) {
+    const life = stage === 'projectile' ? 0.32 : stage === 'impact' ? 0.6 : 0.3;
+    assert.ok(points(stage, 1, 0, { life, radius: 0.6 }).every(p => p[4] === 0), `${stage} fades at gameplay life`);
+  }
+});
+
+test('slashes follow the on-screen slope of a blade whatever the heading', () => {
+  const edges = heading => points('projectile', 0.5, heading, { life: 0.32, radius: 0.65 })
+    .filter(p => p[1] > -0.3 && SLASHES.has(p[2])).map(p => p[2]);
+  assert.ok(edges(0).filter(c => c === '|').length > edges(0).length / 2, 'a shot flying down the screen is vertical');
+  assert.ok(edges(Math.PI / 2).every(c => c === '-'), 'a shot flying across the screen is horizontal');
 });
 
 test('Glacial Fan sound is three accelerating air cuts followed by a wide shatter chord', () => {
