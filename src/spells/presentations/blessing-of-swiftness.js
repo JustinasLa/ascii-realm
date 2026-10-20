@@ -28,38 +28,45 @@ const mote = v => MOTE[Math.min(MOTE.length - 1, Math.floor(clamp01(v) * MOTE.le
 
 // Line glyphs follow the on-screen direction of a local vector, so leaf edges,
 // gust arcs and speed lines read correctly at any heading. TILT halves depth.
-let hc = 1, hs = 0;
-function screen(dx, dz) { return [dx * hc + dz * hs, (dz * hc - dx * hs) * 0.5]; }
-function line(dx, dz) {
-  const sx = dx * hc + dz * hs, sy = (dz * hc - dx * hs) * 0.5, ax = Math.abs(sx), ay = Math.abs(sy);
-  if (ay < ax * 0.47) return '-';
-  if (ax < ay * 0.36) return '|';
-  return (sx > 0) === (sy > 0) ? '\\' : '/';
-}
-function arrow(dx, dz) {
-  const sx = dx * hc + dz * hs, sy = (dz * hc - dx * hs) * 0.5;
-  return Math.abs(sx) >= Math.abs(sy) ? (sx > 0 ? '>' : '<') : (sy > 0 ? 'v' : '^');
+// The basis is built per draw from effect.heading and passed down, so draw
+// stays stateless even when calls interleave.
+function view(heading) {
+  const hc = Math.cos(heading), hs = Math.sin(heading);
+  const screen = (dx, dz) => [dx * hc + dz * hs, (dz * hc - dx * hs) * 0.5];
+  return {
+    screen,
+    line(dx, dz) {
+      const [sx, sy] = screen(dx, dz), ax = Math.abs(sx), ay = Math.abs(sy);
+      if (ay < ax * 0.47) return '-';
+      if (ax < ay * 0.36) return '|';
+      return (sx > 0) === (sy > 0) ? '\\' : '/';
+    },
+    arrow(dx, dz) {
+      const [sx, sy] = screen(dx, dz);
+      return Math.abs(sx) >= Math.abs(sy) ? (sx > 0 ? '>' : '<') : (sy > 0 ? 'v' : '^');
+    },
+  };
 }
 
 // Ovate leaf: broad near the stem, drawn to a point. Outline glyphs follow
 // the edge tangent, a midrib runs to an arrow tip and sparse fill sits between.
 const leafWidth = t => (t <= 0 || t >= 1 ? 0 : Math.sin(Math.PI * t) ** 0.7 * (1 - 0.35 * t));
-function leaf(plot, bx, bz, angle, length, width, brightness, warmth) {
+function leaf(plot, v, bx, bz, angle, length, width, brightness, warmth) {
   if (brightness <= 0.003 || length <= 0.02) return;
   const ux = Math.sin(angle), uz = Math.cos(angle), nx = uz, nz = -ux;
-  const [ax, ay] = screen(ux, uz), [nxs, nys] = screen(nx, nz);
+  const [ax, ay] = v.screen(ux, uz), [nxs, nys] = v.screen(nx, nz);
   const cells = length * Math.max(Math.abs(ax) * 26, Math.abs(ay) * 13);
   const rows = Math.max(3, Math.min(9, Math.round(cells / 1.3)));
   const across = Math.max(Math.abs(nxs) * 26, Math.abs(nys) * 13);
-  const rib = line(ux, uz), ribColor = tone(LEAF, 0.72 + warmth * 0.28);
+  const rib = v.line(ux, uz), ribColor = tone(LEAF, 0.72 + warmth * 0.28);
   for (let k = 0; k <= rows; k++) {
     const t = k / rows, x = bx + ux * length * t, z = bz + uz * length * t;
-    if (k === rows) { plot(x, z, arrow(ux, uz), tone(FLASH, 0.3 + warmth * 0.7), brightness); break; }
+    if (k === rows) { plot(x, z, v.arrow(ux, uz), tone(FLASH, 0.3 + warmth * 0.7), brightness); break; }
     plot(x, z, rib, ribColor, brightness * (0.95 - t * 0.3));
     if (k === 0) continue;
     const w = width * leafWidth(t), slope = width * (leafWidth(t + 0.02) - leafWidth(t - 0.02)) / 0.04;
     for (let side = -1; side <= 1; side += 2) {
-      plot(x + nx * w * side, z + nz * w * side, line(ux * length + nx * slope * side, uz * length + nz * slope * side),
+      plot(x + nx * w * side, z + nz * w * side, v.line(ux * length + nx * slope * side, uz * length + nz * slope * side),
         tone(LEAF, 0.45 + warmth * 0.4 - t * 0.15), brightness);
       if (w * across > 3.4) plot(x + nx * w * 0.52 * side, z + nz * w * 0.52 * side, t < 0.55 ? ':' : '.',
         tone(LEAF, 0.2 + warmth * 0.3), brightness * 0.45);
@@ -68,9 +75,9 @@ function leaf(plot, bx, bz, angle, length, width, brightness, warmth) {
 }
 
 // Speed line: bright head, thinning tail running back along -dir.
-function streak(plot, x, z, dx, dz, length, brightness, steps = 4) {
+function streak(plot, v, x, z, dx, dz, length, brightness, steps = 4) {
   if (brightness <= 0.003) return;
-  const glyph = line(dx, dz), flat = glyph === '-';
+  const glyph = v.line(dx, dz), flat = glyph === '-';
   for (let i = 0; i < steps; i++) {
     const t = i / (steps - 1);
     plot(x - dx * length * t, z - dz * length * t, i === 0 && flat ? '=' : glyph,
@@ -79,14 +86,14 @@ function streak(plot, x, z, dx, dz, length, brightness, steps = 4) {
 }
 
 // Open gust arcs: two counter-placed ribbons swept around the feet.
-function gust(plot, radius, spin, sweep, brightness, points, depth = 0) {
+function gust(plot, v, radius, spin, sweep, brightness, points, depth = 0) {
   if (brightness <= 0.003) return;
   for (let ribbon = 0; ribbon < 2; ribbon++) {
     for (let i = 0; i < points; i++) {
       const t = i / (points - 1), a = spin + ribbon * Math.PI + t * sweep;
       const r = radius * (0.86 + t * 0.14), x = Math.cos(a) * r, z = Math.sin(a) * r + depth;
       const tx = -Math.sin(a), tz = Math.cos(a);
-      plot(x, z, i === points - 1 ? arrow(tx, tz) : t > 0.55 ? line(tx, tz) : '~',
+      plot(x, z, i === points - 1 ? v.arrow(tx, tz) : t > 0.55 ? v.line(tx, tz) : '~',
         tone(WIND, 0.25 + t * 0.75), brightness * (0.2 + t * 0.8));
     }
   }
@@ -94,7 +101,7 @@ function gust(plot, radius, spin, sweep, brightness, points, depth = 0) {
 
 // Cast and impact share one choreography: gather -> seed flash -> unfurl and
 // stride forward -> drift and thin out. `gatherEnd` sets the anticipation.
-function stride(effect, plot, gatherEnd, power) {
+function stride(effect, plot, v, gatherEnd, power) {
   const p = effect.progress, life = effect.life, R = Math.min(1.4, Math.max(0.6, effect.radius));
   const fadeOut = 1 - smooth(span(p, 0.68, 1));
 
@@ -108,7 +115,7 @@ function stride(effect, plot, gatherEnd, power) {
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       const pa = a0 + s * 2.6, pr = r0 * (1 - Math.max(0, s)) ** 1.4 + 0.05;
       const b = Math.min(1, smooth(q * 5) * (1 - smooth(span(q, 0.8, 1))) * (1 - i * 0.07) * power);
-      plot(x, z, i === 0 ? '*' : line(x - Math.cos(pa) * pr, z - Math.sin(pa) * pr), tone(WIND, 0.35 + q * 0.6 - i * 0.03), b);
+      plot(x, z, i === 0 ? '*' : v.line(x - Math.cos(pa) * pr, z - Math.sin(pa) * pr), tone(WIND, 0.35 + q * 0.6 - i * 0.03), b);
     }
   }
 
@@ -122,7 +129,7 @@ function stride(effect, plot, gatherEnd, power) {
     }
     for (let i = 0; i < 8; i++) {
       const a = (i + 0.5) / 8 * TAU - p * 2, r = 0.16 + 0.14 * knot;
-      plot(Math.cos(a) * r, Math.sin(a) * r, line(Math.cos(a), Math.sin(a)), tone(LEAF, 0.6 + knot * 0.4), knot * 0.6);
+      plot(Math.cos(a) * r, Math.sin(a) * r, v.line(Math.cos(a), Math.sin(a)), tone(LEAF, 0.6 + knot * 0.4), knot * 0.6);
     }
   }
 
@@ -133,7 +140,7 @@ function stride(effect, plot, gatherEnd, power) {
   if (leafLight > 0.003) {
     const length = (0.38 + 0.72 * open) * power, drift = 0.3 * glide + 0.32 * smooth(span(p, 0.55, 1));
     for (let side = -1; side <= 1; side += 2) {
-      leaf(plot, side * 0.03 * glide, 0.05 + drift, side * (Math.PI - 0.14 - 0.5 * open), length,
+      leaf(plot, v, side * 0.03 * glide, 0.05 + drift, side * (Math.PI - 0.14 - 0.5 * open), length,
         length * 0.36, leafLight, 1 - u * 0.75);
     }
   }
@@ -144,7 +151,7 @@ function stride(effect, plot, gatherEnd, power) {
     if (q <= 0 || q >= 1) continue;
     const lane = (i / 8 - 0.5) * 1.7 * R + (hash(i + 30) - 0.5) * 0.18;
     const head = -0.35 + (0.85 + hash(i + 50) * 0.5) * easeOut(q) * R;
-    streak(plot, lane, head - Math.abs(lane) * 0.35, 0, 1, (0.18 + 0.5 * (1 - q)) * R,
+    streak(plot, v, lane, head - Math.abs(lane) * 0.35, 0, 1, (0.18 + 0.5 * (1 - q)) * R,
       smooth(q * 6) * (1 - smooth(span(q, 0.55, 1))) * 0.85 * fadeOut);
   }
 
@@ -153,9 +160,9 @@ function stride(effect, plot, gatherEnd, power) {
   if (flight > 0) {
     const drag = 1 - Math.exp(-3.2 * flight);
     for (let i = 0; i < 14; i++) {
-      const a = (hash(i + 60) - 0.5) * 2.7, v = (1.4 + hash(i + 70) * 1.5) * R / 3.2;
+      const a = (hash(i + 60) - 0.5) * 2.7, speed = (1.4 + hash(i + 70) * 1.5) * R / 3.2;
       const flutter = Math.sin(effect.age * 7 + i * 1.9);
-      const x = Math.sin(a) * v * drag + flutter * 0.05 * drag, z = Math.cos(a) * v * drag - 0.1 * flight * flight;
+      const x = Math.sin(a) * speed * drag + flutter * 0.05 * drag, z = Math.cos(a) * speed * drag - 0.1 * flight * flight;
       const b = smooth(flight * 12) * (0.5 + 0.5 * hash(i + 90)) * fadeOut;
       plot(x, z, b > 0.6 ? '*' : flutter > 0 ? "'" : ',', tone(LEAF, 0.35 + b * 0.6), b);
     }
@@ -164,13 +171,13 @@ function stride(effect, plot, gatherEnd, power) {
   // 6. A gust ring rolls outward from the flash and thins away.
   const w = span(p, gatherEnd - 0.02, gatherEnd + 0.5);
   if (w > 0 && w < 1) {
-    gust(plot, R * (0.3 + 1.25 * easeOut(w)), effect.age * 5, 1.9, (1 - w) ** 1.4 * 0.85 * power * fadeOut, 12);
+    gust(plot, v, R * (0.3 + 1.25 * easeOut(w)), effect.age * 5, 1.9, (1 - w) ** 1.4 * 0.85 * power * fadeOut, 12);
   }
 }
 
 // Aura: the quickening winds around the blessed feet, tightening while a
 // small leaf pair flicks open and chevrons skip ahead.
-function quicken(effect, plot) {
+function quicken(effect, plot, v) {
   const p = effect.progress, R = Math.min(1.4, Math.max(0.6, effect.radius));
   const env = smooth(p / 0.14) * (1 - smooth(span(p, 0.5, 1)));
   if (env <= 0) return;
@@ -180,13 +187,13 @@ function quicken(effect, plot) {
       if (s < 0) continue;
       const a = ribbon * Math.PI + s * TAU * 1.05 + 0.6, r = R * (1.1 - 0.55 * easeOut(s));
       const tx = -Math.sin(a), tz = Math.cos(a);
-      plot(Math.cos(a) * r, Math.sin(a) * r, i === 13 ? arrow(tx, tz) : t > 0.4 ? line(tx, tz) : '~',
+      plot(Math.cos(a) * r, Math.sin(a) * r, i === 13 ? v.arrow(tx, tz) : t > 0.4 ? v.line(tx, tz) : '~',
         tone(WIND, 0.25 + t * 0.75), env * (0.15 + 0.85 * t ** 1.2));
     }
   }
   const open = easeOutBack(span(p, 0, 0.55));
   for (let side = -1; side <= 1; side += 2) {
-    leaf(plot, side * 0.04, -0.12 + 0.12 * open, side * (0.15 + 0.38 * open), (0.25 + 0.27 * open) * R,
+    leaf(plot, v, side * 0.04, -0.12 + 0.12 * open, side * (0.15 + 0.38 * open), (0.25 + 0.27 * open) * R,
       0.17 * R * (0.6 + 0.4 * open), env, 1 - p);
   }
   for (let j = 0; j < 3; j++) {
@@ -194,11 +201,11 @@ function quicken(effect, plot) {
     const b = Math.sin(Math.PI * q) * env * (1 - j * 0.2);
     if (b <= 0.003) continue;
     const z = (0.55 + 0.75 * easeOut(q)) * R;
-    plot(0, z, arrow(0, 1), tone(FLASH, 0.6), b);
+    plot(0, z, v.arrow(0, 1), tone(FLASH, 0.6), b);
     for (let k = 1; k <= 3; k++) {
       for (let side = -1; side <= 1; side += 2) {
         const dx = side * 0.075 * k, dz = -0.16 * k;
-        plot(dx, z + dz, line(-dx, -dz), tone(WIND, 0.85 - k * 0.15), b * (1 - k * 0.2));
+        plot(dx, z + dz, v.line(-dx, -dz), tone(WIND, 0.85 - k * 0.15), b * (1 - k * 0.2));
       }
     }
   }
@@ -210,7 +217,7 @@ function quicken(effect, plot) {
 }
 
 // Pulse: the speed tick, a quick starburst of wind lines and flicked leaflets.
-function burst(effect, plot) {
+function burst(effect, plot, v) {
   const p = effect.progress, R = Math.min(1.4, Math.max(0.6, effect.radius));
   const env = 1 - smooth(span(p, 0.35, 1)), reach = easeOut(p);
   const flash = 1 - smooth(span(p, 0, 0.35));
@@ -224,7 +231,7 @@ function burst(effect, plot) {
   for (let i = 0; i < 12; i++) {
     const a = (i + hash(i) * 0.5) / 12 * TAU, dx = Math.cos(a), dz = Math.sin(a);
     const r = (0.18 + (0.75 + hash(i + 3) * 0.35) * reach) * R;
-    streak(plot, dx * r, dz * r, dx, dz, (0.32 * (1 - p) + 0.08) * R, env * (0.6 + 0.4 * hash(i + 9)));
+    streak(plot, v, dx * r, dz * r, dx, dz, (0.32 * (1 - p) + 0.08) * R, env * (0.6 + 0.4 * hash(i + 9)));
   }
   for (let i = 0; i < 8; i++) {
     const a = (i + 0.5) / 8 * TAU + 0.2, r = (0.12 + 0.6 * reach) * R;
@@ -235,15 +242,15 @@ function burst(effect, plot) {
 
 // Zone: a lingering swift-wind grove: open gust ribbons circle while four
 // leaves ride the current and loose petals drift through it.
-function grove(effect, plot) {
+function grove(effect, plot, v) {
   const p = effect.progress, age = effect.age, R = Math.min(2.2, Math.max(0.6, effect.radius));
   const env = smooth(p / 0.12) * (1 - smooth(span(p, 0.72, 1)));
   if (env <= 0) return;
-  gust(plot, R * (0.95 + 0.05 * Math.sin(age * 2.3)), age * 2.4, 2.3, env * 0.8, 17);
+  gust(plot, v, R * (0.95 + 0.05 * Math.sin(age * 2.3)), age * 2.4, 2.3, env * 0.8, 17);
   for (let j = 0; j < 4; j++) {
     const a = age * 1.7 + j / 4 * TAU, r = R * 0.62;
     const x = Math.cos(a) * r, z = Math.sin(a) * r, heading = Math.atan2(-Math.sin(a), Math.cos(a));
-    leaf(plot, x, z, heading + Math.sin(age * 4 + j) * 0.25, 0.46, 0.16, env * 0.9, 0.35 + 0.3 * Math.sin(age * 3 + j));
+    leaf(plot, v, x, z, heading + Math.sin(age * 4 + j) * 0.25, 0.46, 0.16, env * 0.9, 0.35 + 0.3 * Math.sin(age * 3 + j));
   }
   for (let i = 0; i < 18; i++) {
     const phase = (age * (0.35 + hash(i) * 0.3) + hash(i + 11)) % 1;
@@ -255,18 +262,18 @@ function grove(effect, plot) {
 
 // Projectile: a compact leaf pair skims forward on two sinuous wind trails,
 // shedding petals that peel away behind it.
-function dart(effect, plot) {
+function dart(effect, plot, v) {
   const p = effect.progress, age = effect.age;
   const env = 1 - smooth(span(p, 0.84, 1));
   if (env <= 0) return;
   const sway = Math.sin(age * 10) * 0.06;
   for (let side = -1; side <= 1; side += 2) {
-    leaf(plot, side * 0.03, 0.22, side * (Math.PI - 0.32 - sway), 0.52, 0.18, env, 0.55);
+    leaf(plot, v, side * 0.03, 0.22, side * (Math.PI - 0.32 - sway), 0.52, 0.18, env, 0.55);
     for (let i = 0; i < 10; i++) {
       const t = i / 9, z = -0.3 - i * 0.1;
       const x = side * (0.18 + 0.1 * t) + Math.sin(age * 14 - i * 0.85 + side) * 0.06 * t;
       const nx = side * 0.1 / 9 + Math.cos(age * 14 - i * 0.85 + side) * -0.85 * 0.06 * t;
-      plot(x, z, i < 2 ? '~' : line(nx, -0.1), tone(WIND, 0.95 - t * 0.7), env * (0.85 - t * 0.7));
+      plot(x, z, i < 2 ? '~' : v.line(nx, -0.1), tone(WIND, 0.95 - t * 0.7), env * (0.85 - t * 0.7));
     }
   }
   for (let i = 0; i < 10; i++) {
@@ -282,14 +289,14 @@ export default {
   duration: 0.9,
   draw(effect, plot) {
     const heading = Number.isFinite(effect.heading) ? effect.heading : 0;
-    hc = Math.cos(heading); hs = Math.sin(heading);
+    const v = view(heading);
     switch (effect.stage) {
-      case 'projectile': dart(effect, plot); break;
-      case 'impact': stride(effect, plot, 0.16, 1.1); break;
-      case 'aura': quicken(effect, plot); break;
-      case 'pulse': burst(effect, plot); break;
-      case 'zone': grove(effect, plot); break;
-      default: stride(effect, plot, 0.36, 1);
+      case 'projectile': dart(effect, plot, v); break;
+      case 'impact': stride(effect, plot, v, 0.16, 1.1); break;
+      case 'aura': quicken(effect, plot, v); break;
+      case 'pulse': burst(effect, plot, v); break;
+      case 'zone': grove(effect, plot, v); break;
+      default: stride(effect, plot, v, 0.36, 1);
     }
   },
   sounds: {

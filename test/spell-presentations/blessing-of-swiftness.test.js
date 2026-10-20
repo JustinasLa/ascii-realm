@@ -65,6 +65,23 @@ test('stroke and arrow glyphs follow the on-screen heading', () => {
   assert.ok(flat(Math.PI / 2) > flat(0), 'speed lines lie flat when heading sideways');
 });
 
+test('draw is stateless when another heading draws from inside plot', () => {
+  for (const stage of ['cast', 'impact', 'aura', 'pulse', 'zone', 'projectile']) {
+    const life = LIVES[stage], effect = { stage, age: 0.6 * life, life, progress: 0.6, radius: RADII[stage], heading: 0.4 };
+    const solo = [], nested = [];
+    presentation.draw(effect, (...p) => solo.push(p));
+    let first = true;
+    presentation.draw(effect, (...p) => {
+      if (first) {
+        first = false;
+        presentation.draw({ ...effect, heading: 2.1 }, () => {});
+      }
+      nested.push(p);
+    });
+    assert.deepEqual(nested, solo, `${stage}: an interleaved draw at another heading leaves the outer draw unchanged`);
+  }
+});
+
 test('the aura winds a tightening gust around the feet and sends chevrons ahead', () => {
   const early = lit(draw('aura', 0.2)), late = lit(draw('aura', 0.5));
   const gust = points => points.filter(p => Math.hypot(p[0], p[1]) > 0.45 && (p[2] === '~' || LINES.test(p[2])) && p[1] < 0.5);
