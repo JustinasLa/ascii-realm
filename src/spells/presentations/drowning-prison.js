@@ -66,15 +66,17 @@ function shell(put, cx, cz, rx, rz, age, light, { step = 1, reveal = 1, flash = 
 }
 
 // Front meridians of the cage rotate around the vertical axis; they grow from the base.
+// Each bar dims smoothly to nothing as it turns towards the rim, so none pops off.
 function bars(put, cx, cz, rx, rz, turn, light, count = 8, samples = 16, reveal = 1) {
   for (let i = 0; i < count; i++) {
     const phi = i * TAU / count + turn, sf = Math.sin(phi), cf = Math.cos(phi);
-    if (cf <= 0.08 || Math.abs(sf) > 0.92) continue;
+    const edge = cf > 0 ? smooth((0.92 - Math.abs(sf)) / 0.3) : 0;
+    if (edge <= 0) continue;
     for (let j = 0; j < samples; j++) {
       if ((samples - j) / samples > reveal + 1e-9) continue;
       const lat = -Math.PI / 2 + (j + 1) * Math.PI / (samples + 1), cl = Math.cos(lat), sl = Math.sin(lat);
       put(cx + rx * sf * cl * 0.96, cz + rz * sl * 0.96, slant(-rx * sf * sl, rz * cl),
-        tone(0.35 + 0.35 * cf), light * (0.3 + 0.5 * cf) * (0.75 + 0.25 * cl));
+        tone(0.35 + 0.35 * cf), light * edge * (0.3 + 0.5 * cf) * (0.75 + 0.25 * cl));
     }
   }
 }

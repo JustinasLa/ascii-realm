@@ -59,6 +59,18 @@ test('the hold seals a rotating barred water globe around the target', () => {
   assert.ok(height('O') < height('.'), 'large bubbles sit above small ones');
 });
 
+test('cage bars fade out at the rim instead of popping off as the globe turns', () => {
+  // A popping bar used to drop about 16 glyphs and 7 units of light within 5 ms.
+  const light = age => capture('hold', age / 4).reduce((sum, point) => sum + point.brightness, 0);
+  let previous = light(0.5), worst = 0;
+  for (let age = 0.505; age < 3.4; age += 0.005) {
+    const current = light(age);
+    worst = Math.max(worst, Math.abs(current - previous));
+    previous = current;
+  }
+  assert.ok(worst < 1, `the settled globe changes by at most ${worst.toFixed(2)} light per 5 ms`);
+});
+
 test('the globe builds from the ground up, then bursts into falling droplets', () => {
   const forming = lit(capture('hold', 0.03)), held = lit(capture('hold', 0.5));
   assert.ok(forming.length > 10 && forming.length < held.length * 0.7, 'the walls are still climbing');
