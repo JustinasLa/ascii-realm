@@ -90,9 +90,12 @@ function cast(p, age, put, side) {
     const wave = cell.r < -1 ? Math.exp(-(((cell.order - flow) / 0.12) ** 2)) * 0.5 : 0;
     const shimmer = 0.07 * Math.sin(age * 9 + cell.seed * 6.3);
     const glow = clamp01((core * 0.62 + flash * 0.4) * (1 - d) ** 1.4 + wave + shimmer) * (1 - k);
-    if (glow < 0.16) continue;
+    // Dim cells fade all the way to black before they are culled, so the palm
+    // thins out smoothly as it dissolves instead of dropping lit cells.
+    const fade = smooth((glow - 0.06) / 0.14);
+    if (fade <= 0) continue;
     put(ax + side * cell.c + 0.5, ay + cell.r + 0.5 - k * 2.5, GLOW[Math.min(GLOW.length - 1, Math.floor(glow * GLOW.length))],
-      tint(0.25 + glow * 0.75), (0.35 + 0.65 * glow) * smooth((front - cell.order) / 0.08));
+      tint(0.25 + glow * 0.75), (0.35 + 0.65 * glow) * fade * smooth((front - cell.order) / 0.08));
   }
   // Fingertip glints sparkle once the light reaches them.
   for (const cell of outline) {

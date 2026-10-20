@@ -22,6 +22,7 @@ function cells(stage, progress, heading = 0, radius = 1) {
     (x, y, char, color, brightness) => { if (brightness > 0.05) result.push({ x, y, col: Math.floor(x), row: Math.floor(y), char, color, brightness }); });
   return result;
 }
+const GLOW_CHARS = '.,:;+*#@';
 const mean = values => values.reduce((sum, v) => sum + v, 0) / values.length;
 
 test('Hand Cure cast forms an upright hand of light beside the caster', () => {
@@ -60,6 +61,33 @@ test('Hand Cure cast traces light from the wrist up, glows, then lifts away', ()
   assert.ok(late.length > 10, 'motes remain as the hand lifts away');
   assert.ok(mean(late.map(c => c.row)) < mean(full.map(c => c.row)), 'dissolving light drifts upward');
   for (const p of points('cast', 1)) assert.equal(p[4], 0);
+});
+
+test('Hand Cure palm and outline cells fade to black before they disappear', () => {
+  // Track every lit cell across fine steps of the glow and dissolve: whatever is
+  // still visibly lit must be found, nearly as bright, in the very next frame.
+  // (Starts after the hand's last one-row settle at progress 0.148.)
+  const step = 4e-4, index = list => {
+    const map = new Map();
+    for (const c of list) { const key = `${c.col},${c.row}`; (map.get(key) ?? map.set(key, []).get(key)).push(c); }
+    return map;
+  };
+  let previous = cells('cast', 0.16), checked = 0;
+  for (let progress = 0.16 + step; progress < 0.98; progress += step) {
+    const current = cells('cast', progress), near = index(current);
+    for (const c of previous) {
+      if (c.brightness < 0.08) continue;
+      checked++;
+      const found = [-1, 0, 1].some(dc => [-1, 0, 1].some(dr => (near.get(`${c.col + dc},${c.row + dr}`) ?? [])
+        .some(n => Math.abs(n.x - c.x) < 0.5 && Math.abs(n.y - c.y) < 0.5 && n.brightness >= c.brightness - 0.06)));
+      assert.ok(found, `'${c.char}' at ${c.col},${c.row} (brightness ${c.brightness.toFixed(3)}) pops out at progress ${progress.toFixed(4)}`);
+    }
+    previous = current;
+  }
+  assert.ok(checked > 5000);
+  // The palm's last cells are dim specks just before they go.
+  const palm = progress => cells('cast', progress).filter(c => GLOW_CHARS.includes(c.char) && Math.abs(c.col - 19) <= 4 && Math.abs(c.row + 13) <= 6);
+  assert.ok(palm(0.5).length > palm(0.8).length, 'the palm thins out as it dissolves');
 });
 
 test('Hand Cure art stays upright for every heading', () => {
