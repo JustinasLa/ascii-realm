@@ -39,9 +39,9 @@ export class Fog {
     };
   }
 
-  // `walkers` lists who is moving through the fog this frame, each as
-  // { id, x, y } in world cells with their feet at y.
-  update(dt, weather, walkers = []) {
+  // `walkers` lists who is moving through the fog this frame and `spells`
+  // the bursts and whirls spells make in it (see FogWake.update).
+  update(dt, weather, walkers = [], spells = {}) {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.1, dt)) : 0;
     const want = Fog.target(weather?.preset, weather?.intensity);
     const k = 1 - Math.exp(-EASE * dt);
@@ -51,7 +51,7 @@ export class Fog {
     this.driftX += (CREEP[0] + wind * WIND_PUSH) * dt;
     this.driftY += (CREEP[1] + Math.abs(wind) * WIND_PUSH * 0.15) * dt;
     this.time += dt;
-    this.wake.update(dt, walkers, this);
+    this.wake.update(dt, walkers, this, spells);
   }
 
   // What the renderer needs to shade the fog over the current view.

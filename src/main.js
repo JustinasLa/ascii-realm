@@ -32,6 +32,7 @@ import { Dust } from './world/dust.js';
 import { Fires } from './world/fire.js';
 import { Fireflies } from './world/fireflies.js';
 import { Fog } from './world/fog.js';
+import { SpellFogStirs } from './world/fog-spells.js';
 import { MAX_WALKERS } from './world/fog-wake.js';
 import { Footprints } from './world/footprints.js';
 import { drawGround } from './world/ground.js';
@@ -187,6 +188,7 @@ window.addEventListener('pageshow', (event) => {
 // With ?debug in the URL the game state is reachable from the console, and
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const fog = new Fog();
+const fogSpells = new SpellFogStirs();
 const debug = { player, camera, world, grass, splashes, weather, fog, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
   harvesting,
@@ -496,10 +498,11 @@ ModelFigure.load('assets/ual1.glb')
 // The name floating above the character's head; `top` is the highest row
 // the character covers.
 // Everyone who stirs the ground fog: the player first, then friends, then
-// the living monsters nearest the player, as many as the fog follows.
-function fogWalkers(view) {
+// spells in flight, then the living monsters nearest the player, as many as
+// the fog follows.
+function fogWalkers(view, missiles) {
   const walkers = [{ id: 'self', x: player.x, y: player.y },
-    ...remotePlayers.visible(view).map((peer) => ({ id: peer, x: peer.player.x, y: peer.player.y }))];
+    ...remotePlayers.visible(view).map((peer) => ({ id: peer, x: peer.player.x, y: peer.player.y })), ...missiles];
   const near = (m) => Math.hypot((m.x - player.x) * ASPECT, m.y - player.y);
   const foes = monsters.living.sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
   for (const m of foes) walkers.push({ id: m, x: m.x, y: m.y, size: figureScale(m.kind.id) });
@@ -815,7 +818,8 @@ function frame(now) {
 
   const view = camera.view(renderer);
   weather.update(dt, time, world, view, sound.weather);
-  fog.update(dt, weather, fogWalkers(view));
+  const spellFog = fogSpells.collect(casting);
+  fog.update(dt, weather, fogWalkers(view, spellFog.walkers), spellFog);
   if (wasTapped('KeyL') || summonLightning) {
     const bolt = weather.summon(world, view, player);
     if (bolt) sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });

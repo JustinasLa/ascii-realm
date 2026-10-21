@@ -94,7 +94,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Fires: inert(),
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
-    Fog: inert(), MAX_WALKERS: 12, figureScale: () => 1,
+    Fog: inert(), MAX_WALKERS: 20, figureScale: () => 1,
+    SpellFogStirs: class { collect() { return { walkers: [], bursts: [], whirls: [] }; } },
     fireWeatherWind: () => 0,
     Splashes: class {
       react() {} update() {} precipitate() {}

@@ -167,7 +167,9 @@ short version see the [README](../README.md).
   never lost: anyone walking through it, player or monster, shoves the mist
   ahead of them aside into the fog around their path, where it piles up
   thicker and paler, and drags it along into the gap behind them in eddies;
-  a troll parts a wider patch than a goblin. Standing still only
+  a troll parts a wider patch than a goblin. Spells push it too: a spell in
+  flight cuts a narrow channel, casts, pulses and impacts throw it outward in
+  a ragged ring, and lasting zones and auras whirl it around them. Standing still only
   nudges it, and over a few seconds the piles spread back out. The Fog
   preset rolls in thick, wide banks over a few seconds, and drizzle thickens
   them a little.
