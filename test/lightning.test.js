@@ -172,7 +172,8 @@ test('ground strikes burn connected vegetation after the bolt fades, then exhaus
   assert.equal(weather.lightning.bolts.length, 0);
   assert.ok(fires.list.length > 0, 'the vegetation fire survives the lightning afterglow');
   fires.update(120, 120, world);
-  for (let frame = 0; frame < 256 && fires.list.length; frame++) {
+  // Unbroken meadow carries a grass fire a good way before it runs out.
+  for (let frame = 0; frame < 1024 && fires.list.length; frame++) {
     fires.update(0.25, 120 + (frame + 1) / 4, world);
   }
   assert.equal(fires.list.length, 0, 'a lightning fire cannot keep growing after its connected fuel burns');

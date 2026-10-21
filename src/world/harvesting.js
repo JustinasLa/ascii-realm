@@ -49,8 +49,10 @@ function inStrike(player, event, node) {
 // Without a store for loose items nothing is gathered: the sword still mows
 // grass and fells trees, but they drop nothing.
 export class Harvesting {
-  constructor(world, groundItems) {
+  // `wild: false` keeps the land free of grass tufts and berry bushes.
+  constructor(world, groundItems, { wild = true } = {}) {
     this.world = world;
+    this.wild = wild;
     this.groundItems = groundItems;
     this.gathering = Boolean(groundItems);
     this.strikes = new WeakSet();
@@ -59,7 +61,7 @@ export class Harvesting {
   resourcesOf(cx, cy) {
     const chunk = this.world.chunk(cx, cy);
     if (!chunk.resources) {
-      chunk.resources = generateResources(this.world, cx, cy);
+      chunk.resources = this.wild ? generateResources(this.world, cx, cy) : [];
       // Gathering preserves berry leaves; burning consumes the whole plant.
       // Both states survive regeneration after chunk eviction.
       for (const node of chunk.resources) {

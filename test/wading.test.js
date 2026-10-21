@@ -12,19 +12,19 @@ const lake = { isWalkable: () => true, typeAt: () => WATER, waterDepthAt: () => 
 
 test('every lake is fordable while solid props still block movement', () => {
   const world = new World(1);
-  assert.equal(world.typeAt(18.5, 61.5), WATER);
-  assert.equal(world.isWalkable(18.5, 61.5), true);
-  world.propsIn = () => [{ x: 18.5, y: 61.5, footW: 2, footH: 1 }];
-  assert.equal(world.isWalkable(18.5, 61.5), false);
-  assert.equal(world.isWalkable(22.5, 61.5), true);
+  assert.equal(world.typeAt(0.5, 70.5), WATER);
+  assert.equal(world.isWalkable(0.5, 70.5), true);
+  world.propsIn = () => [{ x: 0.5, y: 70.5, footW: 2, footH: 1 }];
+  assert.equal(world.isWalkable(0.5, 70.5), false);
+  assert.equal(world.isWalkable(4.5, 70.5), true);
 });
 
 test('water rises from the bank to at most knee depth, including the lowest terrain', () => {
   const world = new World(1);
   assert.equal(world.waterDepthAt(world.spawn.x, world.spawn.y), 0);
-  const shallow = world.waterDepthAt(18.5, 53.5);
+  const shallow = world.waterDepthAt(0.5, 64.5);
   assert.ok(shallow > 0 && shallow < 0.1);
-  assert.equal(world.waterDepthAt(18.5, 85.5), MAX_WATER_DEPTH);
+  assert.equal(world.waterDepthAt(0.5, 85.5), MAX_WATER_DEPTH);
   for (let y = -70; y <= 100; y += 5) {
     for (let x = -70; x <= 70; x += 7) {
       const depth = world.waterDepthAt(x + 0.5, y + 0.5);
@@ -39,7 +39,8 @@ test('walking crosses the shore, produces wet footfalls, and recovers on returni
   world.propsIn = () => [];
   const p = new Player(world.spawn.x, world.spawn.y);
   let wetSteps = 0;
-  for (let i = 0; i < 480; i++) {
+  // Wade out into the deep middle of the spawn lake, short of its far bank.
+  for (let i = 0; i < 480 && p.y < 95; i++) {
     p.update(dt, world, { x: 0, y: 1 }, false);
     wetSteps += p.events.filter((e) => e.type === 'step' && world.typeAt(e.x, e.y) === WATER).length;
     p.events.length = 0;

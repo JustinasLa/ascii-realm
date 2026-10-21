@@ -24,7 +24,9 @@ export const WATER_LEVEL = 0.4;
 // All lakes are fordable: even their lowest beds are only knee deep.
 export const MAX_WATER_DEPTH = 0.42;
 const SHORE_LEVEL = 0.415;
-const STONE_LEVEL = 0.7;
+// Raises the whole landscape, so only about a twelfth of it lies under water.
+const LAND_LIFT = 0.09;
+const LAKE_SHELF = 1.6;
 const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78];
 const cellKey = (x, y) => `${x},${y}`;
 const chunkKey = (cx, cy) => `${cx},${cy}`;
@@ -36,8 +38,10 @@ const smoothRange = (a, b, x) => {
 export class World {
   constructor(seed = 1, options = {}) {
     // A bare number is the chunk cache size.
-    const { season = 'summer', maxChunks = 128 } = typeof options === 'number' ? { maxChunks: options } : options;
+    // `flora` brings back the wild flowers, ferns and cattails among the grass.
+    const { season = 'summer', maxChunks = 128, flora = false } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
+    this.flora = flora;
     this.season = ['spring', 'summer', 'autumn', 'winter'].includes(season) ? season : 'summer';
     this.maxChunks = Math.max(16, Math.floor(maxChunks));
     this.clock = 0;
@@ -88,7 +92,7 @@ export class World {
     c.used = ++this.clock;
     // Edits and burns mark the grass for regrowing once, not per cell.
     if (c.stale) {
-      c.blades = grassRoots(c, this.seed, CHUNK);
+      c.blades = grassRoots(c, this.seed, CHUNK, { flora: this.flora });
       c.stale = false;
     }
     return c;
@@ -120,36 +124,37 @@ export class World {
         const nx = x * ASPECT;
         const i = ly * CHUNK + lx;
 
-        const e = fbm(nx * 0.011, y * 0.011, s, 5);
-        const path = Math.abs(fbm(nx * 0.004, y * 0.004, s + 77, 3) - 0.5);
+        // The land is lifted so only the deepest hollows hold a lake. It is
+        // a meadow throughout: no dirt tracks or bare stone, just grass
+        // around the odd lake.
+        let e = fbm(nx * 0.011, y * 0.011, s, 5) + LAND_LIFT;
+        // The fewer, smaller lakes shelve away more steeply, so they still
+        // open onto deep water rather than being shallows from bank to bank.
+        if (e < WATER_LEVEL) e = WATER_LEVEL - (WATER_LEVEL - e) * LAKE_SHELF;
 
         let t = GRASS;
         if (e < WATER_LEVEL) t = WATER;
         else if (e < SHORE_LEVEL) t = SHORE;
-        else if (e > STONE_LEVEL) t = STONE;
-        else if (path < 0.009) t = DIRT;
 
         type[i] = t;
         elev[i] = e;
         shade[i] = fbm(nx * 0.05, y * 0.05, s + 31, 3);
         rnd[i] = hash2(x, y, s + 5);
         if (t === GRASS || t === SHORE) {
-          // Blend the verge into the meadow instead of cutting out a lawn
-          // at one noise threshold. Fractional heights are dithered per root
-          // when drawn, so even the cell grid has no hard height bands.
+          // Fractional heights are dithered per root when drawn, so even the
+          // cell grid has no hard height bands.
           const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
           const wet = 1 - smoothRange(0.41, 0.45, e);
           const lush = smoothRange(0.35, 0.68, meadow);
           let reed = false;
           if (t === GRASS) {
-            const verge = smoothRange(0.009, 0.035, path);
             const fieldHeight = 2.6 + lush * 1.3;
             const bank = wet * smoothRange(0.35, 0.6, meadow);
             const target = fieldHeight + (4.7 - fieldHeight) * bank;
-            grassHeight[i] = 2 + (target - 2) * verge;
-            grassDensity[i] = 0.22 + verge * (0.035 + lush * 0.025);
-            reed = wet > 0.5 && meadow > 0.48 && verge > 0.3;
+            grassHeight[i] = target;
+            grassDensity[i] = 0.255 + lush * 0.025;
           } else if (meadow > 0.43) {
+            // Reeds fringe the lakes.
             grassHeight[i] = 3.3 + lush * 1.3;
             grassDensity[i] = 0.15 + lush * 0.06;
             reed = true;
@@ -173,7 +178,7 @@ export class World {
       }
     }
     for (const i of this.bareGround.get(chunkKey(cx, cy))?.keys() ?? []) grassHeight[i] = 0;
-    chunk.blades = grassRoots(chunk, s, CHUNK);
+    chunk.blades = grassRoots(chunk, s, CHUNK, { flora: this.flora });
     return chunk;
   }
 

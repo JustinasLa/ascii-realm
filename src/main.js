@@ -146,7 +146,8 @@ inventory.equip(0);
 inventory.assignHotbar(0, 'shortSword');
 inventory.events.length = 0;
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
-const harvesting = new Harvesting(world, null);
+// The land holds only grass, trees, rocks and lakes: no wild plants to pick.
+const harvesting = new Harvesting(world, null, { wild: false });
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
@@ -156,7 +157,6 @@ const footprints = new Footprints();
 const grass = new Grass();
 const splashes = new Splashes();
 const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
-fires.addStarter(world);
 const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
 const sound = new GameAudio(world);

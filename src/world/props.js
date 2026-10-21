@@ -4,7 +4,7 @@ import { putCell } from '../render/cells.js';
 import { dg, LAYER, over } from '../render/glyphs.js';
 import { MOSS, STONE_MID } from '../render/palette.js';
 import { makeCampProp } from './camp-props.js';
-import { deadwoodBlocks, deadwoodInClearing, makeDeadwood } from './deadwood.js';
+import { deadwoodBlocks } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
 import { bakeSurface, cellBounds, makeCell, ringGlyph } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
@@ -505,13 +505,12 @@ export function deadwoodConditionAt(world, x, y) {
   return null;
 }
 
-// A big rock now and then, then two layers: widely spaced mature trees,
-// with a smaller understorey grid.
-// Their independent random streams keep groves repeatable across seasons.
+// Only trees and rocks: a big rock now and then, and a sparse grid of
+// mature trees. No bushes, saplings or deadwood.
 export function generateProps(world, cx, cy, size) {
   const props = [];
   const seed = world.seed;
-  // Big rocks first, at most one per chunk, so trees and bushes keep clear.
+  // Big rocks first, at most one per chunk, so trees keep clear.
   const rocks = [];
   {
     const rand = mulberry32(Math.floor(hash2(cx, cy, seed + 2203) * 2 ** 32));
@@ -539,46 +538,26 @@ export function generateProps(world, cx, cy, size) {
       }
     }
   }
-  for (let layer = 0; layer < 2; layer++) {
-    const stepX = layer === 0 ? 42 : 14;
-    const stepY = layer === 0 ? 28 : 12;
-    for (let gy = 0; gy < size; gy += stepY) {
-      for (let gx = 0; gx < size; gx += stepX) {
-        const ox = cx * size + gx;
-        const oy = cy * size + gy;
-        const rand = mulberry32(Math.floor(hash2(ox, oy, seed + 61 + layer * 1031) * 2 ** 32));
-        // The last grid slot can be smaller than stepX. Keep every base in
-        // its owning chunk so collision queries still find it near a seam.
-        const x = ox + Math.floor(rand() * Math.min(stepX, size - gx));
-        const y = oy + Math.floor(rand() * Math.min(stepY, size - gy));
-        if (world.typeAt(x, y) !== GRASS) continue;
-        // Keep the spawn clearing open.
-        if (Math.hypot((x + 0.5 - world.spawn.x) * ASPECT, y + 0.5 - world.spawn.y) < 36) continue;
-        if (rocks.length && underBigRock(rocks, x + 0.5, y + 0.5)) continue;
+  // Widely spaced trees, standing alone or in small loose groups.
+  const stepX = 42;
+  const stepY = 28;
+  for (let gy = 0; gy < size; gy += stepY) {
+    for (let gx = 0; gx < size; gx += stepX) {
+      const ox = cx * size + gx;
+      const oy = cy * size + gy;
+      const rand = mulberry32(Math.floor(hash2(ox, oy, seed + 61) * 2 ** 32));
+      // The last grid slot can be smaller than stepX. Keep every base in
+      // its owning chunk so collision queries still find it near a seam.
+      const x = ox + Math.floor(rand() * Math.min(stepX, size - gx));
+      const y = oy + Math.floor(rand() * Math.min(stepY, size - gy));
+      if (world.typeAt(x, y) !== GRASS) continue;
+      // Keep the spawn clearing open.
+      if (Math.hypot((x + 0.5 - world.spawn.x) * ASPECT, y + 0.5 - world.spawn.y) < 36) continue;
+      if (rocks.length && underBigRock(rocks, x + 0.5, y + 0.5)) continue;
 
-        const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
-        const roll = rand();
-        if (layer === 0 && roll < Math.max(0, forest - 0.44) * 1.0) {
-          const species = treeSpeciesAt(world, x, y);
-          const condition = deadwoodConditionAt(world, x, y);
-          if (condition) {
-            const remains = makeDeadwood(x + 0.5, y + 0.5, rand, { condition, species, seed });
-            // A log's far end must also stay outside the spawn clearing.
-            if (!deadwoodInClearing(remains, world.spawn)) props.push(remains);
-          } else {
-            props.push(makeTree(x + 0.5, y + 0.5, rand, { species, season: world.season, seed }));
-          }
-        } else if (layer === 1 && roll < 0.015 + Math.max(0, forest - 0.44) * 0.3) {
-          // Keep seedlings out of the mature trunks without recursively
-          // generating neighboring props. Bushes stay soft and walkable.
-          if (props.some((p) => (p.kind === 'tree' &&
-            Math.hypot((p.x - x) * ASPECT, p.y - y) < p.footW * ASPECT + 4) ||
-            (p.kind === 'deadwood' && deadwoodBlocks(p, x, y)))) continue;
-          const species = treeSpeciesAt(world, x, y);
-          const options = { species, season: world.season, seed };
-          props.push(rand() < 0.35 ? makeTree(x + 0.5, y + 0.5, rand, { ...options, growth: 'sapling' }) :
-            makeBush(x + 0.5, y + 0.5, rand, options));
-        }
+      const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
+      if (rand() < Math.max(0, forest - 0.44) * 1.0) {
+        props.push(makeTree(x + 0.5, y + 0.5, rand, { species: treeSpeciesAt(world, x, y), season: world.season, seed }));
       }
     }
   }

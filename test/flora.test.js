@@ -123,7 +123,7 @@ test('ferns unfurl several fronds from one root', () => {
 });
 
 test('wild flowers grow in drifts of a species, matched to their ground', () => {
-  const world = new World(19);
+  const world = new World(19, { flora: true });
   const species = new Set();
   let windows = 0;
   let dominated = 0;

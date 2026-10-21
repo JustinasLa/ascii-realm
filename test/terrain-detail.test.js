@@ -31,6 +31,14 @@ test('shore sand is soaked beside the water and dry at the top of the bank', () 
   assert.ok(wetness(chunk, 300) > 0.9);
 });
 
+// Paints a w x h block of terrain at (x, y); with a second type, the
+// block's right half takes it.
+function paintPatch(world, x, y, w, h, type, right = type) {
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) world.setTerrain(x + dx, y + dy, dx < w / 2 ? type : right);
+  }
+}
+
 test('bare ground is shaded deterministically, independent of time and the order chunks are visited', () => {
   const shadeChunk = (world, cx, cy, t) => {
     const c = world.chunk(cx, cy);
@@ -50,6 +58,8 @@ test('bare ground is shaded deterministically, independent of time and the order
   const a = new World(1);
   const b = new World(1);
   b.chunk(3, 3);
+  // The wild is all meadow and lakes; paint a rock outcrop and a path.
+  for (const world of [a, b]) paintPatch(world, 4, 4, 24, 24, STONE, DIRT);
   const seen = new Set();
   for (const [cx, cy] of [[-1, 0], [0, 0], [2, 0], [-1, -1]]) {
     const first = shadeChunk(a, cx, cy, 0);
@@ -64,6 +74,7 @@ test('bare ground is shaded deterministically, independent of time and the order
 
 test('stone slabs are drawn as light characters weighted by their light, with joints left dark', () => {
   const world = new World(1);
+  paintPatch(world, -60, 4, 40, 40, STONE);
   const c = world.chunk(-1, 0);
   const n = CHUNK_SIZE * CHUNK_SIZE;
   const out = { fg: new Uint8ClampedArray(n * 4), bg: new Uint8ClampedArray(n * 4), ov: new Uint8ClampedArray(n * 4) };

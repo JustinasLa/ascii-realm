@@ -73,18 +73,18 @@ test('scaled prop collision crosses chunk boundaries and erase undo restores it'
 
 test('procedural props keep their original seed identity regardless of paint and load order', () => {
   const { world, scene } = fixture();
-  const original = world.propsOf(2, 1).slice();
+  const original = world.propsOf(0, 1).slice();
   assert.ok(original.length > 1);
   const [kept, removed] = original;
   scene.paint(kept.x, kept.y, 0, WATER);
-  assert.ok(world.propsOf(2, 1).includes(kept), 'terrain painting should preserve original props');
+  assert.ok(world.propsOf(0, 1).includes(kept), 'terrain painting should preserve original props');
   scene.erase(removed.x, removed.y, 0);
   scene.place('bush', 130.5, 130.5, { scale: 1.25, seed: 27 });
   const saved = scene.serialize();
   const restored = fixture();
   restored.scene.load(JSON.parse(JSON.stringify(saved)));
   assert.deepEqual(restored.scene.serialize(), saved);
-  const visible = restored.world.propsOf(2, 1);
+  const visible = restored.world.propsOf(0, 1);
   assert.deepEqual(visible.map((p) => p.id), original.filter((p) => p.id !== removed.id).map((p) => p.id));
   assert.deepEqual(visible.find((p) => p.id === kept.id).cells, kept.cells);
   assert.equal(restored.world.typeAt(kept.x, kept.y), WATER);
