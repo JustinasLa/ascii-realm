@@ -13,7 +13,8 @@ import { createScene, scenarios } from '../bench/scene.js';
 // when the ground was dimmed and rocks and the player brightened for clarity,
 // and after trees and monsters were thinned out to declutter the screen and
 // scattered stones gave way to big boulders, and once more when the wild
-// was pared down to grass, trees, rocks and a few lakes.
+// was pared down to grass, trees, rocks and a few lakes, then when trees
+// grew five times rarer.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
@@ -21,18 +22,18 @@ const reference = [
     '506d87cfb81a647c06b7784f7e08be99d6041fd3e00a86806836ee16c281ab70',
     '43dc4cc0f518ec5f20254af9853223291730624d5897e973957a951db3568fba',
     'fad97ba0a60a9789731d3bc83fef12e7ee88bae4b7df527b69dee050b804d899'],
-  ['93115575ec85a5b2becdc28874d579d821a11e7ffd36fdebda749f76c4fe98c2',
-    '8a119ba2b6cc0ffad8432fb5e10e73428463e43c07a6c0ce17454009c3191f63',
-    '3f9e815d5586d85026cd2f1dc54fc4bec821f6573aef1d7a7b60270e5d63790a',
-    'd5131c63bce038267446b678590a5949f78a5fe7c7f871767e47074ecb8fe997'],
-  ['c1d9814cd5e9ead91ee070028aab2d4845db3bed3d5633fca23f260757575257',
-    'cb97772f6b3752dd421434b0414a28ab92a64b5c89eb2d3fb5b52a3b1e7a22e5',
-    'e74dab6c163acd094b949d507c0cd384a90f04175876e86cef457a722393ec8c',
-    'e63ca64bf2777538bbec555090c082e3c727c5446670c0135f98380deff9c1d0'],
-  ['90e24f76d954c35a7bc919aea77b579bf7c4294ed5bd5e5a14515a239f6e6964',
-    '04ad72133bfba3c87011f83c9cf66c3616c8f6e89a634b14b14821852db80d0d',
-    '0088e5f5e54ed87112ec5b2a6a88bee5944e626148339d7ec0f3a0a881ffc446',
-    'ff9defad2d4f77a367a57c8300dacffb8328afde971a682b19ef7aa593c6251d'],
+  ['a128b6a9665c74cd7fd0a62ed631ac873a802dbb28b55a1d0cbbf395618fa209',
+    '89409934cf159e239bef6875426b84a4f26603db97bb1954b9214897b448c71a',
+    'f9bf2a54bacdc3a2e31107d09ab3aa40bffad433ec6d13238cd377798e2c9b65',
+    'd69dfe5329889fb5ad10f7ff145fa12b6b7435777367b3a582d1df4aec8dfb64'],
+  ['52a428682e2ccb026347f8e0742ba9286c51d5cad43085c87173718d7bd3052e',
+    '8503f8d288e0b3e82fb922cdce6055b92bc8233d3920f518066bc38894c30c42',
+    'cbe2604d8d358a22e26d8f5e93d644c488105df4ab0c5942e662dedbb7ab911b',
+    '58af74de929929b130a52e90e5f0fc360695ca310663ad40ab8707fb64c29318'],
+  ['7f9232efc65c4f68a8d2e7e871419eee72762dd0165616a0057e32a579d3d7a8',
+    '9a6485baf8fc962e649e5a811cc6ca3a9365274a50ef36b0e7f081071b361a54',
+    '249dc41bfc8b284f41fc7b53fcb9b0afc5d9d2fb716aceb2fb0c3d1037c512b8',
+    '51657d46d891460257f2af2c4d95e3b96eef337f1dae1b0ba12b3e0411699b62'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.

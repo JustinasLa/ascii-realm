@@ -13,15 +13,18 @@ function evict(world, cx, cy) {
 test('felled trees stay felled after their chunk is unloaded and generated again', () => {
   const world = new World(7, { maxChunks: 16 });
   let found = null;
-  for (let cx = -3; cx <= 3 && !found; cx++) {
-    const tree = world.propsOf(cx, 2).find((p) => p.kind === 'tree');
-    if (tree) found = { cx, tree };
+  // Trees are few and far between; look over a wider patch of land.
+  for (let cy = -3; cy <= 3 && !found; cy++) {
+    for (let cx = -3; cx <= 3 && !found; cx++) {
+      const tree = world.propsOf(cx, cy).find((p) => p.kind === 'tree');
+      if (tree) found = { cx, cy, tree };
+    }
   }
   assert.ok(found, 'the fixture has a tree');
   for (let i = 0; i < TREE_HITS; i++) world.hitTree(found.tree);
   assert.equal(found.tree.chopped, true);
-  evict(world, found.cx, 2);
-  const again = world.propsOf(found.cx, 2).find((p) => p.id === found.tree.id);
+  evict(world, found.cx, found.cy);
+  const again = world.propsOf(found.cx, found.cy).find((p) => p.id === found.tree.id);
   assert.notEqual(again, found.tree, 'the prop was generated again');
   assert.equal(again.chopped, true);
 });

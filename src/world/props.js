@@ -556,7 +556,7 @@ export function generateProps(world, cx, cy, size) {
       if (rocks.length && underBigRock(rocks, x + 0.5, y + 0.5)) continue;
 
       const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
-      if (rand() < Math.max(0, forest - 0.44) * 1.0) {
+      if (rand() < Math.max(0, forest - 0.44) * 0.2) {
         props.push(makeTree(x + 0.5, y + 0.5, rand, { species: treeSpeciesAt(world, x, y), season: world.season, seed }));
       }
     }

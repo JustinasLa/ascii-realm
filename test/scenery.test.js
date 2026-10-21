@@ -94,13 +94,13 @@ test('procedural props keep their original seed identity regardless of paint and
 test('procedural props are queryable and erasable from their own chunk', () => {
   const { world, scene } = fixture();
   // Forest generation keeps every base inside the chunk that owns it.
-  const prop = world.propsOf(-6, -6).find((p) => Math.floor(p.x / 64) === -6 && Math.floor(p.y / 64) === -6);
+  const prop = world.propsOf(-6, -7).find((p) => Math.floor(p.x / 64) === -6 && Math.floor(p.y / 64) === -7);
   assert.ok(prop, 'seed fixture should contain a procedural prop');
   assert.ok(world.propsIn(prop.x, prop.y, prop.x, prop.y).some((p) => p.id === prop.id));
   assert.equal(scene.erase(prop.x, prop.y, 0), 1);
-  assert.ok(!world.propsOf(-6, -6).some((p) => p.id === prop.id));
+  assert.ok(!world.propsOf(-6, -7).some((p) => p.id === prop.id));
   scene.undo();
-  assert.ok(world.propsOf(-6, -6).some((p) => p.id === prop.id));
+  assert.ok(world.propsOf(-6, -7).some((p) => p.id === prop.id));
 });
 
 test('reset, grouped history, no-op edits, and branching redo preserve scene state', () => {

@@ -376,8 +376,13 @@ test('burning trampled grass removes its green footprint mat instead of painting
 
 test('burning trees survive chunk eviction as active fuel and leave persistent charred stumps', () => {
   const world = new World(19, 16);
-  const tree = [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [0, -1], [2, 0], [0, 2]].flatMap(([cx, cy]) => world.propsOf(cx, cy))
-    .find(p => p.kind === 'tree' && world.typeAt(p.x, p.y) !== WATER);
+  // Trees are few and far between; look over a wider patch of land.
+  let tree = null;
+  for (let cy = -3; cy <= 3 && !tree; cy++) {
+    for (let cx = -3; cx <= 3 && !tree; cx++) {
+      tree = world.propsOf(cx, cy).find(p => p.kind === 'tree' && world.typeAt(p.x, p.y) !== WATER) ?? null;
+    }
+  }
   assert.ok(tree);
   const fuel = vegetationFuel(world, tree.x, tree.y);
   assert.equal(fuel?.prop, tree);

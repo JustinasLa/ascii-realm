@@ -110,8 +110,8 @@ test('factory calls return independent cells and accept finite fractional seeds'
 
 test('adding builder props preserves existing procedural tree and rock generation', () => {
   const world = { seed: 7, spawn: { x: -1000, y: -1000 }, typeAt: () => 2 };
-  const props = generateProps(world, -4, -5, 64);
-  assert.equal(props.length, 4);
+  const props = generateProps(world, -13, -4, 64);
+  assert.equal(props.length, 2);
   assert.ok(props.every(({ kind }) => kind === 'tree' || kind === 'rock'), 'the wild holds only trees and rocks');
   assert.ok(props.some(({ kind }) => kind === 'tree'));
   assert.ok(props.some(({ kind, footW }) => kind === 'rock' && footW > 15), 'a big rock stands in this chunk');
@@ -119,5 +119,5 @@ test('adding builder props preserves existing procedural tree and rock generatio
   // generated props are (their placement and random stream) must not change.
   const digest = createHash('sha256').update(JSON.stringify(props.map(({ kind, x, y, footW, footH, species, condition }) =>
     ({ kind, x, y, footW, footH, species, condition })))).digest('hex');
-  assert.equal(digest, 'be17d4975def16997c5f3dae7ef23c3547e4121f01a1687ebba3c6e8344bc271');
+  assert.equal(digest, '918691d6a90f33711a5daf51b12094714932069651b46b61658b65801498985b');
 });
