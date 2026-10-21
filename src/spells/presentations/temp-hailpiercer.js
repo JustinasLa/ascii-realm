@@ -19,22 +19,25 @@ const DUSK = [44, 88, 158];
 
 // Volley cadence, mirroring the definition as the runtime runs it:
 // TEMP_Hailpiercer_CAST runs TEMP_Hailpiercer_PRO with `repeat: 5`, i.e. once
-// plus five repeats. The runtime spaces repeats by `repeatinterval` (default one
-// tick); it doesn't read the authored `repeati` alias, so the harpoons leave one
-// tick apart. (The definition imports this module, so it can't be imported here.)
+// plus five repeats, `repeati: 5` ticks apart, so the harpoons leave a quarter
+// second apart. (The definition imports this module, so it can't be imported here.)
 const TICK = 1 / 20;
 const REPEAT = 5;
-const REPEAT_TICKS = 1;
+const REPEAT_TICKS = 5;
 // Seconds after the cast at which each harpoon launches.
 export const LAUNCHES = Object.freeze(Array.from({ length: REPEAT + 1 }, (_, i) => i * REPEAT_TICKS * TICK));
 
-const DURATION = 1.45;
-const SHOTS = LAUNCHES.map(t => t / DURATION); // launches in cast progress
+// The volley, then a fixed-length follow-through (refill, shatter, fade).
+const DURATION = LAUNCHES[LAUNCHES.length - 1] + 1.1;
+const sec = t => t / DURATION; // seconds to cast progress
+const SHOTS = LAUNCHES.map(sec); // launches in cast progress
 const LAST = SHOTS[SHOTS.length - 1];
-const KICK = 0.6 * REPEAT_TICKS * TICK / DURATION; // crystal recoil, shorter than the gap between shots
-const BURST = 0.06; // muzzle burst length in progress (~0.09 s)
-const REFILL = 0.62; // the emptied crystal has drawn its hail back in
-const SHATTER = 0.7; // ...and bursts into falling hail as the sigil evaporates
+const KICK = sec(Math.min(0.15, 0.6 * REPEAT_TICKS * TICK)); // crystal recoil, shorter than the gap between shots
+const BURST = sec(0.09); // muzzle burst length
+const OPEN = LAST + sec(0.045); // hail starts rising into the emptied crystal
+const REFILL = LAST + sec(0.55); // the emptied crystal has drawn its hail back in
+const SHATTER = REFILL + sec(0.12); // ...and bursts into falling hail as the sigil evaporates
+export const PHASES = Object.freeze({ refill: REFILL, shatter: SHATTER });
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = v => { v = clamp01(v); return v * v * (3 - 2 * v); };
@@ -113,7 +116,7 @@ function spear(v, x, z, height, width, b, heat, lean = 0, glint = -1) {
 // its crystal recoils and drains with every shot, draws hail back in from the
 // ground, then shatters as the sigil evaporates.
 function cast(v, p) {
-  const end = clamp01((1 - p) / 0.08);
+  const end = clamp01((1 - p) / sec(0.12));
   let kick = 0;
   for (const s of SHOTS) {
     const d = p - s;
@@ -121,16 +124,16 @@ function cast(v, p) {
   }
 
   // Sigil ring drawn from the front around to the back, then evaporating upward.
-  const R = 0.95, sweep = easeOut(p / 0.14), N = 56;
-  const base = 0.4 + 0.3 * smooth(p / 0.25) + 0.3 * kick;
+  const R = 0.95, sweep = easeOut(p / sec(0.2)), N = 56;
+  const base = 0.4 + 0.3 * smooth(p / sec(0.36)) + 0.3 * kick;
   for (let k = 0; k < N; k++) {
     const phi = (k / N) * Math.PI * 2 - Math.PI;
     const edge = sweep * Math.PI - Math.abs(phi);
     if (edge < 0) continue;
-    const w = clamp01((p - 0.7 - hash(k + 11) * 0.22) / 0.1);
+    const w = clamp01((p - SHATTER - hash(k + 11) * sec(0.32)) / sec(0.145));
     if (w >= 1) continue;
     const glint = sweep < 1 && edge < 0.3 ? 1 - edge / 0.3 : 0;
-    const I = clamp01(base * (0.82 + 0.18 * Math.sin(phi * 5 + p * 18)) + glint * 0.5);
+    const I = clamp01(base * (0.82 + 0.18 * Math.sin(phi * 5 + p * DURATION * 12.4)) + glint * 0.5);
     const x = Math.sin(phi) * R, z = Math.cos(phi) * R;
     const char = w > 0.5 ? '.' : w > 0.1 ? ':' : v.line(Math.cos(phi), -Math.sin(phi));
     v.dot(x, z, 0.55 * easeIn(w), 0, char, frost(I + 0.15 * w), (0.35 + 0.65 * I) * (1 - w) * end);
@@ -139,19 +142,19 @@ function cast(v, p) {
   for (let k = 0; k < 6; k++) {
     const phi = k * Math.PI / 3 + Math.PI / 6 - Math.PI;
     if (sweep * Math.PI < Math.abs(phi)) continue;
-    const w = clamp01((p - 0.66 - hash(k + 70) * 0.2) / 0.1);
+    const w = clamp01((p - SHATTER + sec(0.06) - hash(k + 70) * sec(0.29)) / sec(0.145));
     v.dot(Math.sin(phi) * 0.7, Math.cos(phi) * 0.7, 0.4 * w, 0, k % 2 ? '+' : '*', frost(base),
       (0.3 + 0.5 * base) * (1 - w) * end);
   }
-  const chevron = smooth(p / 0.06) * (1 - smooth((p - 0.72) / 0.12)) * end;
+  const chevron = smooth(p / sec(0.09)) * (1 - smooth((p - SHATTER - sec(0.03)) / sec(0.17))) * end;
   v.dot(0, R + 0.16, 0, 0, v.arrow(0, 1), frost(0.7 + 0.3 * kick), chevron);
   for (const side of [-1, 1]) v.dot(side * 0.12, R + 0.05, 0, 0, v.line(side * -0.12, 0.11), frost(0.6 + 0.3 * kick), chevron * 0.8);
 
   // After the volley, hail is inhaled from the ground and spirals up into the
   // emptied crystal, every mote arriving before it refills.
-  const lift0 = 1.25, z0 = 0.3, open = LAST + 0.03;
+  const lift0 = 1.25, z0 = 0.3, open = OPEN;
   for (let m = 0; m < 24; m++) {
-    const span = 0.12 + hash(m + 5) * 0.1;
+    const span = sec(0.17 + hash(m + 5) * 0.145);
     const u = (p - open - hash(m + 3) * (REFILL - open - span)) / span;
     if (u <= 0 || u >= 1) continue;
     const spin = (m % 2 ? 1 : -1) * 1.4, phi = hash(m) * Math.PI * 2, r0 = 1.4 + hash(m + 9);
@@ -170,7 +173,7 @@ function cast(v, p) {
   for (const s of SHOTS) if (p >= s) fired += 1 / SHOTS.length;
   const drain = Math.min(fired, smooth(p / (LAST + KICK)));
   const fill = p < SHATTER ? 1 - 0.7 * drain + 0.7 * smooth((p - open) / (REFILL - open))
-    : (1 - smooth((p - SHATTER) / 0.05));
+    : (1 - smooth((p - SHATTER) / sec(0.07)));
   if (fill > 0.02) {
     const color = mix(frost(0.6 + 0.4 * fill), WHITE, kick), b = (0.55 + 0.45 * Math.max(fill, kick)) * end;
     v.dot(0, z0, lift0, 0, fill > 0.65 ? '#' : fill > 0.35 ? '*' : '+', color, b);
@@ -213,7 +216,7 @@ function cast(v, p) {
   // Follow-through: the recharged crystal shatters into falling hail, the
   // pieces breaking away a few frames apart.
   for (let j = 0; j < 14; j++) {
-    const at = SHATTER + 0.02 + 0.05 * hash(j + 43), u = (p - at) / (1 - at);
+    const at = SHATTER + sec(0.03 + 0.07 * hash(j + 43)), u = (p - at) / (1 - at);
     if (u > 0) {
       const a = (j / 14) * Math.PI * 2 + hash(j + 31), out = (0.5 + 0.8 * hash(j + 37)) * easeOut(u);
       const up = 0.35 + 0.5 * hash(j + 41), height = (t, o) => Math.max(0, lift0 + up * t - 2.4 * t * t + o);

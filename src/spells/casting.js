@@ -278,7 +278,7 @@ export class Spellcasting {
       const extra = this.number(step.args.delay, ctx) / 20;
       const repeats = clamp(Math.floor(this.number(step.args.repeat, ctx)), 0, 100);
       for (let i = 0; i <= repeats; i++) {
-        const at = delay + extra + i * this.number(step.args.repeatinterval, ctx, 1) / 20;
+        const at = delay + extra + i * this.number(step.args.repeatinterval ?? step.args.repeati ?? step.args.ri, ctx, 1) / 20;
         if (at > 0) this.schedule(at, () => this.step(step, nested), ctx);
         else this.step(step, nested);
       }
