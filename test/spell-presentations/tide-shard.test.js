@@ -125,6 +125,35 @@ test('all stages animate smoothly, stay within budget and fade without invalid v
   }
 });
 
+test('delayed ripple rings swell in instead of popping into view', () => {
+  // Ring starts: impact's second ripple at 0.25, cast ripples at 0.1 and 0.26.
+  const sum = points => points.reduce((s, p) => s + p[4], 0);
+  for (const [stage, start] of [['impact', 0.25], ['cast', 0.1], ['cast', 0.26]]) {
+    for (const heading of [0, 1.2]) {
+      const before = draw(stage, start - 0.00125, { heading }), after = draw(stage, start + 0.00125, { heading });
+      assert.ok(after.length > before.length, `${stage} adds its ripple glyphs at ${start}`);
+      assert.ok(Math.abs(lit(after).length - lit(before).length) <= 2,
+        `${stage} ${start}: ${lit(before).length} -> ${lit(after).length} lit glyphs`);
+      assert.ok(Math.abs(sum(after) - sum(before)) < 1.5, `${stage} ${start}: brightness jumps by ${sum(after) - sum(before)}`);
+    }
+  }
+});
+
+test('a draw nested inside the plot callback does not change the outer draw', () => {
+  for (const stage of ['cast', 'projectile', 'impact', 'pulse', 'aura', 'zone']) {
+    const life = LIFE[stage] ?? presentation.duration, expected = draw(stage, 0.3, { heading: 0.7 });
+    const outer = [];
+    let nested = 0;
+    presentation.draw(Object.freeze({ stage, progress: 0.3, age: 0.3 * life, life, radius: RADIUS[stage], heading: 0.7 }), (...point) => {
+      outer.push(point);
+      // Re-enter with a different stage and heading on every plotted glyph.
+      presentation.draw(Object.freeze({ stage: 'impact', progress: 0.5, age: 0.3, life: 0.6, radius: 1, heading: -2 }), () => nested++);
+    });
+    assert.deepEqual(outer, expected, `${stage} keeps every outer glyph in its own callback`);
+    assert.equal(nested, expected.length * draw('impact', 0.5, { heading: -2, age: 0.3 }).length, `${stage} nested draws stay complete`);
+  }
+});
+
 test('the paint adapter keeps every stage under its glyph cap', () => {
   for (const stage of ['cast', 'projectile', 'impact', 'pulse', 'aura', 'zone']) {
     const life = LIFE[stage] ?? presentation.duration;
