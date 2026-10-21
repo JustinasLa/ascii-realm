@@ -41,7 +41,9 @@ function stroke(dx, dz) {
 // comes from the upper left: a pale lit face, a ridge, and a dark shaded face.
 function spike(put, gx, gz, length, half, rise, lean, seed, b, crumble, flash) {
   if (rise < ROW * 0.6 || b <= 0) return;
-  const rows = Math.min(24, Math.floor(rise / ROW));
+  // The tallest rock (impact: 2 m with ~10% overshoot) is ~29 rows; the bound
+  // only guards the loop and must never cut the base off above the ground.
+  const rows = Math.min(32, Math.floor(rise / ROW));
   let prev = 0;
   for (let k = 0; k <= rows; k++) {
     const depth = k * ROW, h = rise - depth, t = Math.min(1, depth / length);
@@ -116,14 +118,18 @@ function dust(put, gx, gz, count, radius, b, seed) {
 }
 
 // A handful of moss leaves fluttering off the stone: the cerrith signature.
-function leaves(put, gx, gz, count, t, spread, seed, b) {
+// With `loop`, `clock` runs freely: each leaf repeats its flight on its own
+// staggered phase and fades out and back in around the wrap, so none jumps.
+function leaves(put, gx, gz, count, clock, spread, seed, b, loop = false) {
   for (let i = 0; i < count; i++) {
     const side = i % 2 ? 1 : -1;
+    const t = loop ? (clock + i / count) % 1 : clock;
+    const fade = loop ? Math.sin(Math.PI * t) : 1;
     const drift = t * (0.5 + hash(seed + i) * 0.6);
     const x = gx + side * (0.15 + drift * spread) + Math.sin(t * 7 + i * 1.9) * 0.08;
     const h = 0.25 + hash(seed + i * 5) * 0.9 + drift * 0.8 - drift * drift * 0.9;
     put(x, gz - h * HEIGHT, Math.sin(t * 9 + i) > 0 ? (side < 0 ? '(' : ')') : "'",
-      tint(LEAF, BUD, hash(seed + i * 3)), b * (0.55 + hash(seed + i * 7) * 0.45));
+      tint(LEAF, BUD, hash(seed + i * 3)), b * fade * (0.55 + hash(seed + i * 7) * 0.45));
   }
 }
 
@@ -192,8 +198,8 @@ function drawPulse(effect, plot) {
   }
   const burst = (p - 0.1) * effect.life;
   if (burst > 0) {
-    dust(put, 0, 0.02, 8, 0.3 + easeOut(clamp01(burst / 0.4)) * 0.85, out * (1 - clamp01(burst / 0.5) * 0.5), 7);
-    debris(put, 0, 0, 6, burst, 0.85, 13, out, STONE);
+    dust(put, 0, 0.02, 6, 0.3 + easeOut(clamp01(burst / 0.4)) * 0.85, out * (1 - clamp01(burst / 0.5) * 0.5), 7);
+    debris(put, 0, 0, 4, burst, 0.85, 13, out, STONE);
   }
 }
 
@@ -276,7 +282,7 @@ function drawProjectile(effect, plot) {
     plot(ox + lx + lift * s, oz + lz - lift * c, h > 0.05 ? (i % 3 ? "'" : 'o') : '.',
       tint(SOIL, DUST, tt), fade * (1 - tt) * 0.9);
   }
-  leaves(put, 0, 0, 4, (age * 1.3) % 1, 0.8, 51, fade * 0.7);
+  leaves(put, 0, 0, 4, age * 1.3, 0.8, 51, fade * 0.7, true);
 }
 
 function drawField(effect, plot, ring) {
@@ -300,7 +306,7 @@ function drawField(effect, plot, ring) {
     spike(put, Math.cos(a) * r, Math.sin(a) * r * 0.55, ring ? 0.5 : 0.9, ring ? 0.1 : 0.15, rise,
       Math.cos(a) * 0.15, i * 11 + cycle, out, smooth(0.55, 1, local), 1 - smooth(0, 0.2, local));
   }
-  leaves(put, 0, 0, ring ? 6 : 4, (age * 0.5) % 1, radius, 61, out * 0.6);
+  leaves(put, 0, 0, ring ? 6 : 4, age * 0.5, radius, 61, out * 0.6, true);
 }
 
 export default {

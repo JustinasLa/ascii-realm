@@ -72,6 +72,44 @@ test('Earth Spike impact skewers the target with a crown of spikes, cracks, debr
   assert.ok(Math.max(...late.map(p => p[4])) < Math.max(...crown.map(p => p[4])), 'everything settles and fades');
 });
 
+test('Earth Spike impact spikes stay rooted in the ground through the whole rise, overshoot included', () => {
+  // Stone glyphs only: greyish colours (soil and leaves are strongly tinted) and outline/ridge characters.
+  const stone = points => points.filter(p => '^/\\|:+%#'.includes(p[2]) && Math.abs(p[3][0] - p[3][1]) < 20);
+  const rowStep = 2 / 13; // one text row of height in local ground metres
+  for (const progress of [0.06, 0.1, 0.14, 0.2, 0.25, 0.35, 0.5]) {
+    const column = stone(draw('impact', progress)).filter(p => Math.abs(p[0]) < 0.25 && p[1] < 0.03).map(p => p[1]).sort((a, b) => a - b);
+    const tip = column[0], base = column[column.length - 1];
+    assert.ok(tip < -3, `the central spike towers at ${progress}`);
+    assert.ok(base > -rowStep * 1.5, `the central spike reaches the ground at ${progress} (base ${base.toFixed(2)})`);
+    for (let i = 1; i < column.length; i++) {
+      assert.ok(column[i] - column[i - 1] < rowStep * 1.5, `no gap in the central spike at ${progress}`);
+    }
+  }
+});
+
+test('Earth Spike looping leaves fade around each cycle instead of jumping', () => {
+  const leafGlyphs = (stage, age, life) => {
+    const points = [];
+    presentation.draw({ stage, age, life, progress: age / life, radius: 2, heading: 0 }, (...p) => points.push(p));
+    return points.filter(p => p[3][1] > p[3][0] + 30);
+  };
+  for (const [stage, life] of [['projectile', 3], ['aura', 6], ['zone', 6]]) {
+    const dt = 1 / 120;
+    let prev = leafGlyphs(stage, 0.4, life);
+    for (let age = 0.4 + dt; age < 2.6; age += dt) {
+      const next = leafGlyphs(stage, age, life);
+      for (const [from, to] of [[prev, next], [next, prev]]) {
+        for (const leaf of to) {
+          if (leaf[4] < 0.06) continue;
+          const near = Math.min(Infinity, ...from.map(p => Math.hypot(p[0] - leaf[0], p[1] - leaf[1])));
+          assert.ok(near < 0.2, `${stage} leaf at ${age.toFixed(3)}s jumps ${near.toFixed(2)} m at brightness ${leaf[4].toFixed(2)}`);
+        }
+      }
+      prev = next;
+    }
+  }
+});
+
 test('Earth Spike cast winds up, stomps, fans out shards and tears a fissure toward the target', () => {
   const radius = points => points.reduce((sum, p) => sum + Math.hypot(p[0], p[1]), 0) / points.length;
   const gather = draw('cast', 0.03), drawn = draw('cast', 0.22);
