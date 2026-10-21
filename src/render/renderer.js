@@ -6,13 +6,20 @@
 // uploaded as textures and the fragment shader looks up the glyphs in the
 // atlas for every pixel, so cost is independent of how many characters are
 // on screen.
+//
+// Ground fog is shaded in the same pass, per pixel rather than per cell, so
+// it fills the dark between characters as well as veiling them.
 
+import { mulberry32 } from '../core/rng.js';
+import { ASPECT } from '../world/world.js';
 import { BLANK_GLYPH, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
-import { NIGHT, VIGNETTE } from './palette.js';
+import { FOG, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
 
 // An rgb triple as a GLSL vec3 literal.
 // How much of a cell's ground colour shows behind its glyph.
 const BG_KEEP = 0.12;
+// Side of the tiling random texture the fog noise is built from.
+const NOISE_SIZE = 256;
 const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
 
 const VERT = `#version 300 es
@@ -33,7 +40,50 @@ uniform vec2 uAtlasCols;
 uniform vec2 uAtlasCell;
 uniform float uAtlasPad;
 uniform vec2 uAtlasSize;
+uniform sampler2D uNoise;
+uniform vec2 uWorld;
+uniform vec2 uFogDrift;
+uniform vec3 uFog;
+uniform float uDpr;
 out vec4 outColor;
+
+const float NOISE = ${NOISE_SIZE.toFixed(1)};
+
+// Smooth value noise from one filtered lookup of the random texture: easing
+// the fraction before the hardware interpolates hides the lattice.
+float noise(vec2 x) {
+  vec2 i = floor(x);
+  vec2 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return texture(uNoise, (i + f + 0.5) / NOISE).r;
+}
+
+const mat2 TURN = mat2(1.6, 1.2, -1.2, 1.6);
+
+float fbm(vec2 x) {
+  float sum = 0.5 * noise(x);
+  x = TURN * x + 17.3;
+  sum += 0.25 * noise(x);
+  x = TURN * x + 31.7;
+  sum += 0.125 * noise(x);
+  x = TURN * x + 5.9;
+  sum += 0.0625 * noise(x);
+  return sum / 0.9375;
+}
+
+// How thick the fog is at a point on the ground, in rows. Broad banks are
+// warped by a second noise so their edges curl into wisps, and fine streaks
+// inside them keep any bank from reading as a flat smear.
+float fogAt(vec2 w) {
+  float t = uFog.z;
+  vec2 q = (w + uFogDrift) / 28.0;
+  vec2 warp = vec2(fbm(q * 1.7 + vec2(0.0, t * 0.021)), fbm(q * 1.7 + vec2(5.2, 1.3) - t * 0.017));
+  float bank = fbm(q + 1.4 * warp + vec2(t * 0.006, 0.0));
+  float edge = 0.52 - 0.22 * uFog.y;
+  float thick = smoothstep(edge, edge + 0.34, bank);
+  float streak = fbm(vec2((w.x + uFogDrift.x * 1.35) / 5.5, (w.y + uFogDrift.y) / 2.4) + 2.5 * warp);
+  return thick * (0.35 + 1.1 * streak);
+}
 
 float coverage(float g, vec2 local) {
   vec2 gcell = vec2(mod(g, uAtlasCols.x), floor(g / uAtlasCols.x));
@@ -68,6 +118,19 @@ void main() {
   // of the scene and the edges stay night rather than plain black.
   vec2 uv = gl_FragCoord.xy / uView - 0.5;
   uv.x *= uView.x / uView.y;
+  if (uFog.x > 0.0) {
+    // The ground under this pixel, with columns scaled to rows.
+    vec2 w = (uWorld + p / uCell) * vec2(${ASPECT.toFixed(4)}, 1.0);
+    float f = fogAt(w) * uFog.x;
+    // Mist is grainy, not smooth: speckles about two pixels across, carried
+    // along with the drifting fog so they do not crawl over the scene.
+    vec2 speck = floor((w + uFogDrift) * uCell.y / (2.0 * uDpr));
+    float grain = texelFetch(uNoise, ivec2(mod(speck, NOISE)), 0).r;
+    f *= 0.6 + 0.75 * grain;
+    f = clamp(f, 0.0, 1.0);
+    color = mix(color, mix(${vec3(FOG_THIN)}, ${vec3(FOG)}, f), f * 0.58);
+  }
+
   float vignette = 1.0 - smoothstep(0.35, 1.05, length(uv)) * 0.7;
   outColor = vec4(mix(${vec3(VIGNETTE)}, color, vignette), 1.0);
 }
@@ -118,7 +181,7 @@ export class AsciiRenderer {
     this.prog = prog;
     this.u = {};
     for (const name of ['uFg', 'uBg', 'uOv', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
-      'uAtlasCell', 'uAtlasPad', 'uAtlasSize']) {
+      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uDpr']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
 
@@ -145,6 +208,21 @@ export class AsciiRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+    // A fixed field of random values that tiles, so the fog's noise costs
+    // one texture read per octave instead of hashing every corner.
+    const random = mulberry32(0xf06);
+    const values = new Uint8Array(NOISE_SIZE * NOISE_SIZE);
+    for (let i = 0; i < values.length; i++) values[i] = Math.floor(random() * 256);
+    this.noiseTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, NOISE_SIZE, NOISE_SIZE, 0, gl.RED, gl.UNSIGNED_BYTE, values);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+
     this.fgTex = dataTexture(gl);
     this.bgTex = dataTexture(gl);
     this.ovTex = dataTexture(gl);
@@ -153,6 +231,7 @@ export class AsciiRenderer {
     gl.uniform1i(this.u.uBg, 1);
     gl.uniform1i(this.u.uAtlas, 2);
     gl.uniform1i(this.u.uOv, 3);
+    gl.uniform1i(this.u.uNoise, 4);
     gl.uniform2f(this.u.uAtlasCols, atlas.cols, atlas.rows);
     gl.uniform2f(this.u.uAtlasCell, atlas.cellW, atlas.cellH);
     gl.uniform1f(this.u.uAtlasPad, atlas.pad);
@@ -276,8 +355,11 @@ export class AsciiRenderer {
   }
 
   // offsetX/offsetY: how far (in device px) the grid is scrolled into its
-  // first cell, so the camera can move smoothly between cells.
-  draw(offsetX = 0, offsetY = 0) {
+  // first cell, so the camera can move smoothly between cells. `fog` places
+  // the ground fog: the world cell in the grid's corner (x0, y0), its
+  // density, coverage, drift and age (see world/fog.js). Without it the
+  // scene is drawn clear.
+  draw(offsetX = 0, offsetY = 0, fog = null) {
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.fgTex);
@@ -291,8 +373,15 @@ export class AsciiRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.ovTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE,
       this.ov);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
+
+    gl.uniform3f(this.u.uFog, fog?.density ?? 0, fog?.coverage ?? 0, fog?.time ?? 0);
+    gl.uniform2f(this.u.uWorld, fog?.x0 ?? 0, fog?.y0 ?? 0);
+    gl.uniform2f(this.u.uFogDrift, fog?.driftX ?? 0, fog?.driftY ?? 0);
+    gl.uniform1f(this.u.uDpr, this.dpr ?? 1);
 
     gl.uniform2f(this.u.uView, this.canvas.width, this.canvas.height);
     gl.uniform2f(this.u.uCell, this.cellW, this.cellH);

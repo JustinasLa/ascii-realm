@@ -94,6 +94,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Fires: inert(),
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
+    Fog: inert(),
     fireWeatherWind: () => 0,
     Splashes: class {
       react() {} update() {} precipitate() {}

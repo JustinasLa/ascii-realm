@@ -9,7 +9,7 @@ import { ASPECT, WATER } from './world.js';
 // Fall speeds and wind are in rows per second; all particles stay in the world.
 export const WEATHER_EFFECTS = Object.freeze({
   clear: {},
-  drizzle: { kind: 'rain', density: 0.008, fall: 43, wind: 0.08, haze: 0.07, shade: 0.04, impact: 0.28, streak: 1 },
+  drizzle: { kind: 'rain', density: 0.008, fall: 43, wind: 0.08, haze: 0.07, shade: 0.04, impact: 0.28, streak: 1, fog: 0.35 },
   rain: { kind: 'rain', density: 0.016, fall: 56, wind: 0.18, haze: 0.045, shade: 0.07, impact: 0.65, streak: 3 },
   'heavy-rain': { kind: 'rain', density: 0.040, fall: 90, wind: 0.35, haze: 0.10, shade: 0.20, impact: 0.9, streak: 4 },
   thunderstorm: { kind: 'rain', density: 0.036, fall: 83, wind: 0.85, haze: 0.10, shade: 0.24, impact: 1, streak: 4, lightning: 0.18 },
@@ -23,7 +23,7 @@ export const WEATHER_EFFECTS = Object.freeze({
   gale: { kind: 'leaf', density: 0.003, fall: 8, wind: 1, haze: 0.02, shade: 0.15 },
   sandstorm: { kind: 'sand', density: 0.014, fall: 9, wind: 1, haze: 0.45, shade: 0.13, tint: [143, 109, 70] },
   'ocean-storm': { kind: 'rain', density: 0.026, fall: 76, wind: 1, haze: 0.20, shade: 0.18, impact: 0.75, streak: 4 },
-  fog: { haze: 0.6 },
+  fog: { haze: 0.25, fog: 1 },
   'ice-storm': { kind: 'rain', density: 0.016, fall: 68, wind: 0.45, haze: 0.16, shade: 0.16, impact: 0.7, streak: 2 },
   'forest-squall': { kind: 'leaf', density: 0.006, fall: 7, wind: 0.9, haze: 0.08, shade: 0.13 },
 });
