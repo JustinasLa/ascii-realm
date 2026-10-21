@@ -16,6 +16,8 @@ const hash = seed => { const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453; re
 const lerp = (a, b, t) => a + (b - a) * t;
 const finite = (value, fallback) => Number.isFinite(value) ? value : fallback;
 const cycle = value => value - Math.floor(value);
+// Distance to the nearest repeat of a looping sweep, so periodic pulses stay continuous at the wrap.
+const loopGap = (value, period = 1) => { const g = cycle(value / period) * period; return Math.min(g, period - g); };
 
 // 0 is the deep rune blue of a cold stave, 1 is white frost catching the light.
 function frost(value) {
@@ -58,7 +60,7 @@ function pen(plot, thin, seed) {
 // Six-armed frost sigil inscribed in a hexagon with a rune on each face.
 function sigil(put, eye, o) {
   const { R, turn, light, heat = 0, reveal, ring = 1, rune, step = 1, maxN = 12, edgeN = maxN,
-    branches = 2, glint = -1 } = o;
+    branches = 2, glint = null, glintLight = 1 } = o;
   // Arms lie along 0/60/120 degrees so the tilted ground reads as clean - / \ strokes.
   const vertex = arm => turn + arm * TAU / 6;
   for (let arm = 0; arm < 6; arm++) {
@@ -73,7 +75,8 @@ function sigil(put, eye, o) {
       const d = inner + (R - inner) * (i + 0.5) / n;
       if (d > reach) break;
       const along = d / R;
-      const shine = glint >= 0 ? Math.exp(-(((along - glint) / 0.11) ** 2)) : 0;
+      // The glint loops over 1.4 arm lengths, so it slips off the tips and back in at the core.
+      const shine = glint === null ? 0 : glintLight * Math.exp(-((loopGap(along - glint, 1.4) / 0.11) ** 2));
       put(arm * 97 + i, ux * d, uz * d, shine > 0.55 ? '+' : spine,
         frost(0.9 - along * 0.4 + heat + shine * 0.5), light * (0.95 - along * 0.28 + shine * 0.45));
     }
@@ -303,9 +306,10 @@ function auraStage(plot, eye, effect, p, radius) {
     const behind = bz < 0 ? 0.65 : 1;
     const char = eye.stroke(...eye.local(lean, -1));
     const n = Math.max(1, Math.min(6, Math.round(height * 6.5)));
-    const climb = (age * 1.4 + hash(k + 29)) % 1;
+    // The glint loops over 1.6 crystal heights, so it climbs off the tip and back in at the base.
+    const climb = (age * 1.4 + hash(k + 29)) * 1.6 - 0.3;
     for (let i = 1; i <= n; i++) {
-      const t = i / n, shine = Math.exp(-(((t - climb) / 0.2) ** 2));
+      const t = i / n, shine = Math.exp(-((loopGap(t - climb, 1.6) / 0.2) ** 2));
       at(bx + lean * height * t, bz - height * t, i === n ? '^' : char,
         frost(0.55 + t * 0.35 + shine * 0.3), fade * behind * Math.min(1, 0.55 + t * 0.3 + shine * 0.2));
     }
@@ -362,8 +366,9 @@ function zoneStage(plot, eye, effect, p, radius) {
   sigil(pen(plot, 1 - end, 17), eye, {
     R, turn: age * 0.06, light: fade * breathe, heat: 0.18,
     reveal: arm => easeOut(age * 1.7 - arm * 0.06), ring: clamp(age * 1.5 - 0.45),
-    rune: edge => clamp(age * 2 - 1.1 - edge * 0.1) * (0.6 + 0.4 * Math.exp(-((cycle(age * 0.7 - edge / 6) / 0.12) ** 2))),
-    step: Math.max(1.2, R * 0.9), maxN: 8, edgeN: 7, branches: 1, glint: age > 1.2 ? cycle(age * 0.45) * 1.4 : -1,
+    rune: edge => clamp(age * 2 - 1.1 - edge * 0.1) * (0.6 + 0.4 * Math.exp(-((loopGap(age * 0.7 - edge / 6) / 0.12) ** 2))),
+    step: Math.max(1.2, R * 0.9), maxN: 8, edgeN: 7, branches: 1,
+    glint: age * 0.63, glintLight: smooth(span(age, 1.2, 1.6)),
   });
   // The armed perimeter: frost motes circle slowly at the trap's reach, twinkling.
   const settle = smooth(span(age, 0.55, 1.4));

@@ -133,6 +133,38 @@ test('the armed glyph etches at the landing spot, holds with runes and a perimet
     'the brief spawn totem only gathers frost before the glyph arms');
 });
 
+test('looping rune pulses and glints stay continuous across their wraps', () => {
+  const at = (stage, age, radius) => frame(stage, age / 8, { radius, life: 8, age, heading: 0.7 });
+  const rune = (points, char) => points.find(point => point.char === char)?.brightness ?? 0;
+  // The pulse of rune I wraps at age 1 / 0.7; it used to jump from about 0.45 to 0.75 there.
+  const wrap = 1 / 0.7;
+  assert.ok(Math.abs(rune(at('zone', wrap - 1e-4, 4), 'I') - rune(at('zone', wrap + 1e-4, 4), 'I')) < 0.005);
+  const pulse = Array.from({ length: 30 }, (_, step) => rune(at('zone', 2 + step / 21, 4), 'I'));
+  assert.ok(Math.max(...pulse) - Math.min(...pulse) > 0.15, 'the runes still pulse');
+  // The arm glint fades in instead of appearing mid-arm at full strength.
+  assert.ok(Math.abs(light(at('zone', 1.2 - 1e-4, 4)) - light(at('zone', 1.2 + 1e-4, 4))) < 0.05);
+
+  const steps = (stage, from, to, radius) => {
+    let previous = null, total = 0, runes = 0;
+    for (let step = 0; from + step * 0.005 <= to; step++) {
+      const points = at(stage, from + step * 0.005, radius);
+      const now = { light: light(points), runes: RUNES.map(char => rune(points, char)) };
+      if (previous) {
+        total = Math.max(total, Math.abs(now.light - previous.light));
+        runes = Math.max(runes, ...now.runes.map((value, index) => Math.abs(value - previous.runes[index])));
+      }
+      previous = now;
+    }
+    return { total, runes };
+  };
+  const zone = steps('zone', 1, 7, 4);
+  assert.ok(zone.runes < 0.03, `held runes never pop: ${zone.runes}`);
+  assert.ok(zone.total < 0.4, `the held glyph never pops: ${zone.total}`);
+  // Each crystal glint climbs off its tip before restarting at the base.
+  const aura = steps('aura', 0.5, 5, 1);
+  assert.ok(aura.total < 0.12, `crystal glints never pop: ${aura.total}`);
+});
+
 test('every stage stays finite, bounded, deterministic and fades to clear terrain', () => {
   for (const stage of ['cast', 'impact', 'pulse', 'aura', 'zone', 'projectile']) {
     for (const radius of [0.65, 1, 3, 4, 6]) {
