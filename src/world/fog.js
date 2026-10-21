@@ -43,7 +43,6 @@ export class Fog {
   // { id, x, y } in world cells with their feet at y.
   update(dt, weather, walkers = []) {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.1, dt)) : 0;
-    this.wake.update(dt, walkers);
     const want = Fog.target(weather?.preset, weather?.intensity);
     const k = 1 - Math.exp(-EASE * dt);
     this.density += (want.density - this.density) * k;
@@ -52,6 +51,7 @@ export class Fog {
     this.driftX += (CREEP[0] + wind * WIND_PUSH) * dt;
     this.driftY += (CREEP[1] + Math.abs(wind) * WIND_PUSH * 0.15) * dt;
     this.time += dt;
+    this.wake.update(dt, walkers, this);
   }
 
   // What the renderer needs to shade the fog over the current view.

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { FogWake, REFILL, SWEEP, WAKE_SIZE } from '../src/world/fog-wake.js';
+import { fbm, fogAt, noise, NOISE, NOISE_SIZE } from '../src/world/fog-banks.js';
+import { CELL, FogWake, REFILL } from '../src/world/fog-wake.js';
 import { AMBIENT_FOG, Fog } from '../src/world/fog.js';
 import { ASPECT } from '../src/world/world.js';
 
@@ -49,56 +50,67 @@ test('disabled fog is drawn clear', () => {
   assert.equal(fog.uniforms(view).density, 0);
 });
 
-// The field works in rows with columns scaled by ASPECT; walkers are given
-// in world cells with their feet at y, the body a few rows above.
-const sweptNear = (wake, x, y) => wake.clearedAt(x * ASPECT, y - 3);
+// Walkers are given in world cells with their feet at y; the field works in
+// rows with columns scaled by ASPECT, the body a few rows above the feet.
+const still = { driftX: 0, driftY: 0, time: 0, coverage: 1 };
+const even = () => new FogWake({ banks: () => 0.6 });
+const body = (wake, x, y) => wake.fogAt(x * ASPECT, y - 3);
 
-test('a standing walker sweeps a ragged, not round, patch of fog clear', () => {
-  const wake = new FogWake();
-  for (let i = 0; i < 60; i++) wake.update(1 / 60, [{ id: 'self', x: 100, y: 50 }]);
-  assert.ok(sweptNear(wake, 100, 50) > 0.6);
-  assert.equal(sweptNear(wake, 100 + 40 / ASPECT, 50), 0);
-  // Where the patch ends differs with direction around the body.
-  const reach = (ux, uy) => {
-    let d = 0;
-    while (d < SWEEP * 3 && wake.clearedAt(100 * ASPECT + ux * d, 47 + uy * d) > 0.3) d += 0.25;
-    return d;
-  };
-  const reaches = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7]].map(([ux, uy]) => reach(ux, uy));
-  assert.ok(Math.max(...reaches) - Math.min(...reaches) > 1, `edge varies: ${reaches}`);
+test('walking through fog pushes it aside without losing any', () => {
+  const wake = even();
+  let x = 100;
+  wake.update(1 / 60, [{ id: 'self', x, y: 50 }], still);
+  const before = wake.total();
+  for (let i = 0; i < 120; i++) {
+    x += 0.25;
+    wake.update(1 / 60, [{ id: 'self', x, y: 50 }], still);
+  }
+  assert.ok(Math.abs(wake.total() - before) < before * 0.005, `${before} -> ${wake.total()}`);
+  assert.ok(body(wake, x, 50) < 0.15, 'the walker is in a gap');
+  assert.ok(Math.max(...wake.fog) > 1, 'the fog they moved piled up nearby');
 });
 
-test('a walker leaves a trail of thinned fog that fills back in', () => {
-  const wake = new FogWake();
-  let x = 0;
-  for (let i = 0; i < 90; i++) {
-    x += 0.6;
-    wake.update(1 / 30, [{ id: 'self', x, y: 0 }]);
+test('standing still only nudges the fog, and pushed fog settles back', () => {
+  const standing = even();
+  for (let i = 0; i < 120; i++) standing.update(1 / 60, [{ id: 'self', x: 100, y: 50 }], still);
+  const walking = even();
+  let x = 100;
+  for (let i = 0; i < 120; i++) {
+    x += 0.25;
+    walking.update(1 / 60, [{ id: 'self', x, y: 50 }], still);
   }
-  const behind = sweptNear(wake, x - 15 / ASPECT, 0);
-  assert.ok(behind > 0.2, `trail behind: ${behind}`);
-  assert.ok(sweptNear(wake, x - 15 / ASPECT, 0) > sweptNear(wake, x - 40 / ASPECT, 0));
-  // The swept air was dragged along, so it keeps moving after the walker.
-  const centre = (WAKE_SIZE / 2) * WAKE_SIZE + WAKE_SIZE / 2;
-  assert.ok(Math.max(...wake.vx.slice(centre - 20, centre + 20)) > 0);
-  // Once everyone has gone, the fog closes up again.
-  for (let i = 0; i < 50 * REFILL; i++) wake.update(0.1, []);
-  assert.ok(Math.max(...wake.bytes) < 3);
+  assert.ok(body(standing, 100, 50) > 2 * body(walking, x, 50));
+  for (let i = 0; i < 40 * REFILL; i++) walking.update(0.1, [], still);
+  assert.ok(walking.fog.every((v) => Math.abs(v - 0.6) < 0.02));
 });
 
 test('the field follows the player in whole cells and ignores bad input', () => {
-  const wake = new FogWake();
-  wake.update(1 / 60, [{ id: 'self', x: 0, y: 0 }]);
+  const wake = even();
+  wake.update(1 / 60, [{ id: 'self', x: 0, y: 0 }], still);
   const ox = wake.ox;
-  wake.update(1 / 60, [{ id: 'self', x: 3, y: 0 }]);
+  wake.update(1 / 60, [{ id: 'self', x: 3, y: 0 }], still);
   assert.equal(wake.ox, ox, 'small steps do not move the field');
-  wake.update(1 / 60, [{ id: 'self', x: 200, y: 400 }]);
-  assert.ok(Number.isInteger(wake.ox) && Number.isInteger(wake.oy));
-  assert.ok(Math.abs(wake.ox + WAKE_SIZE / 2 - 200 * ASPECT) <= 1);
-  wake.update(NaN, [{ id: 'self', x: NaN, y: 0 }, null]);
+  wake.update(1 / 60, [{ id: 'self', x: 200, y: 400 }], still);
+  assert.equal(wake.ox % CELL, 0);
+  assert.ok(Math.abs(wake.ox + wake.size / 2 - 200 * ASPECT) <= CELL);
+  wake.update(NaN, [{ id: 'self', x: NaN, y: 0 }, null], still);
   wake.update(1 / 60, [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 1, y: 1 }, { id: 'c', x: 2, y: 2 },
-    { id: 'd', x: 3, y: 3 }, { id: 'e', x: 4, y: 4 }]);
+    { id: 'd', x: 3, y: 3 }, { id: 'e', x: 4, y: 4 }], still);
   assert.ok(wake.tracks.size <= 4);
-  assert.ok(wake.bytes.every((v) => Number.isFinite(v)));
-  assert.equal(new FogWake().clearedAt(0, 0), 0);
+  assert.ok(wake.texels.every((v) => Number.isFinite(v) && v >= 0));
+  assert.equal(even().fogAt(0, 0), null);
+});
+
+test('the banks the game reads match the shader noise and stay in range', () => {
+  assert.equal(NOISE.length, NOISE_SIZE * NOISE_SIZE);
+  // Whole coordinates land exactly on a texel, as the shader's lookup does.
+  assert.equal(noise(3, 5), NOISE[5 * NOISE_SIZE + 3] / 255);
+  assert.equal(noise(3 + NOISE_SIZE, 5 - NOISE_SIZE), noise(3, 5));
+  for (let i = 0; i < 200; i++) {
+    const v = fbm(i * 1.37, -i * 0.91);
+    assert.ok(v >= 0 && v <= 1);
+    const f = fogAt(i * 3.1, i * 1.7, { ...still, coverage: 1 });
+    assert.ok(f >= 0 && f <= 1.45);
+  }
+  assert.equal(fogAt(0, 0, { ...still, coverage: 0 }) <= fogAt(0, 0, still), true);
 });
