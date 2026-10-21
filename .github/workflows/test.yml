@@ -4,14 +4,35 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: Tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
         with:
-          node-version: 22
-      - run: npm ci
-      - run: npm test
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Run tests
+        run: mkdir -p test-results && npm test -- --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/node.xml
+      - name: Upload test report
+        if: ${{ !cancelled() && hashFiles('test-results/node.xml') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: tests-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/node.xml

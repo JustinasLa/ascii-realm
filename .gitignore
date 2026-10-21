@@ -1,4 +1,31 @@
+# Dependencies
 node_modules/
+
+# Test reports
+test-results/
+
+# Python caches and environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+
+# Logs and temporary files
+*.log
+*.bak
+*.swp
+*.tmp
+*~
+
+# Operating system files
 .DS_Store
 Thumbs.db
-*.log
+Desktop.ini
+
+# Local investigation notes and test artifacts
+/.scratch/
