@@ -451,10 +451,13 @@ const casting = new Spellcasting({ player, world, monsters, peers: () => [...spe
 debug.casting = casting;
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
 window.addEventListener('pagehide', () => casting.clearPresentation());
-let castRequested = false;
+// Holding the middle mouse button opens the rune wheel; the chosen rune is
+// bound to R. ?spell=ID binds one up front instead of the last one chosen.
 const spellControls = new SpellControls(casting, { root: document.getElementById('spell-controls'),
-  dock: document.getElementById('panel-dock'), onCast: () => { castRequested = true; },
-  onFocus: () => canvas.focus({ preventScroll: true }) });
+  surface: canvas, touchButton: document.getElementById('touch-runes'),
+  canOpen: () => !builder.enabled && !debug.freeze && !isGameplayBlocked(),
+  onBind: spell => hud.notify(`${spell.name} bound to R`, 'spell'),
+  onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell') });
 loadSpells().then(spells => {
   casting.spells = new Map(spells.map(s => [s.id, s]));
   casting.selected = casting.spells.has(params.get('spell')) ? params.get('spell') : spells[0]?.id ?? '';
@@ -674,8 +677,7 @@ function frame(now) {
   const torchKey = wasTapped('KeyT');
   const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
-  const cast = wasTapped('KeyR') || castRequested || rightClicked;
-  castRequested = false;
+  const cast = wasTapped('KeyR') || rightClicked;
   rightClicked = false;
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
@@ -975,7 +977,7 @@ function frame(now) {
   hud.setFoes(woundedFoes(monsterCells));
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
-  spellControls.update(paused || isGameplayBlocked());
+  spellControls.update();
   const workMs = performance.now() - started;
   if (quality.sample(workMs, dt)) resize();
   debug.metrics.frames++;

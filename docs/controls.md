@@ -13,8 +13,8 @@
 | `T` | Stow the torch or draw a fresh lit torch |
 | `G` | Throw the carried torch in the direction faced; dry ground ignites on landing |
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
-| `R` / right click / Cast button | Cast the selected rune spell towards the cursor; the caster turns to face it |
-| Rune spells panel | Filter runes by element and choose the one to cast |
+| `R` / right click | Cast the rune bound to `R` towards the cursor; the caster turns to face it |
+| Hold middle mouse | Open the rune wheel: point at a school (Oseni, Seithr, Cerrith, Mitlan), then at a rune, and let go to bind it to `R`. Pushing out through a school opens it in one motion; letting go on a school keeps its runes open for a click. Right click or the centre goes back, `Escape` closes |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
 | Weather & seasons panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
@@ -36,7 +36,8 @@
 
 On a phone, drag the left pad to walk and push it to the outer edge to run.
 Use **JUMP**, **STRIKE**, **DRAW** and **CAST** with your other thumb; repeated
-strikes chain a combo, and spells cast on touch follow your facing. The upper
+strikes chain a combo, and spells cast on touch follow your facing. Hold
+**RUNES**, slide to a school and lift, then tap a rune to bind it to **CAST**. The upper
 **− / +** buttons zoom. Controls support multiple fingers and reset when a touch
 is cancelled or the page is backgrounded. They appear only when touch is the
 primary input; touchscreen laptops keep the keyboard and mouse layout.

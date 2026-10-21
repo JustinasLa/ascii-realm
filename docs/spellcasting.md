@@ -3,7 +3,9 @@
 The casting simulation is the prerequisite PR. Each rune adds one definition,
 one catalog entry and its own behaviour test in a separate PR.
 
-`R`, the Cast button and the touch Cast action use the selected rune. The pointer
+Holding the middle mouse button (or RUNES on touch) opens a two-stage rune
+wheel, school then rune; the chosen rune is bound to `R` and remembered.
+`R`, right click and the touch Cast action use the bound rune. The pointer
 sets its heading; keyboard/touch casting follows the character's facing. Support
 projectiles require another player to intercept them. Close support spells also
 check the target's distance before consuming mana. The simulation arena provides
