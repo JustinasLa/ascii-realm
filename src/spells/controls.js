@@ -87,8 +87,7 @@ export class SpellControls {
     this.canvas = tag('canvas', 'spell-wheel-art');
     this.canvas.setAttribute('role', 'img');
     this.ctx = this.canvas.getContext?.('2d') ?? null;
-    this.hint = tag('p', 'spell-wheel-hint');
-    this.ring.append(this.canvas, this.hint);
+    this.ring.append(this.canvas);
     this.wheel.append(this.ring);
     document.body.append(this.wheel);
   }
@@ -97,10 +96,9 @@ export class SpellControls {
     if (!this.menu.open(held)) return false;
     Object.assign(this, { source, pointerId });
     const vw = innerWidth, vh = innerHeight;
-    // Leave room under the ring for the hint line, and keep clear of the
-    // rune bar and hotbar when the screen is tall enough.
-    this.scale = Math.min(1, (vw - 16) / (BOX * 2), (vh - 56) / (BOX * 2));
-    const half = BOX * this.scale, below = vh - half * 2 > 300 ? 150 : 48;
+    // Keep clear of the rune bar and hotbar when the screen is tall enough.
+    this.scale = Math.min(1, (vw - 16) / (BOX * 2), (vh - 16) / (BOX * 2));
+    const half = BOX * this.scale, below = vh - half * 2 > 300 ? 150 : 8;
     const clamp = (v, lo, hi) => lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v));
     this.cx = clamp(x, half + 8, vw - half - 8);
     this.cy = clamp(y, half + 8, vh - half - below);
@@ -146,11 +144,6 @@ export class SpellControls {
   drawWheel() {
     const menu = this.menu, entries = menu.entries, count = entries.length;
     this.wheel.dataset.stage = menu.stage;
-    this.hint.innerHTML = menu.stage === 'groups'
-      ? `Point at a school · ${this.source === 'touch' ? 'lift' : 'release or click'} to open`
-      : menu.held ? 'Release on a rune to bind it to <kbd>R</kbd> · centre: back'
-        : this.source === 'touch' ? 'Tap a rune to bind it to CAST · centre: back · outside: close'
-          : 'Click a rune to bind it to <kbd>R</kbd> · right-click: back · <kbd>Esc</kbd> close';
     this.waiting = entries.map(() => false);
     this.artKey = null;
     if (!this.ctx) return;

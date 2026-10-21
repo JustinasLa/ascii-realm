@@ -356,5 +356,3 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .spell-wheel-ring { position: absolute; transform-origin: 50% 50%; animation: spell-wheel-in 110ms ease-out; }
 @keyframes spell-wheel-in { from { opacity: 0; } }
 .spell-wheel-art { position: absolute; inset: 0; width: 100%; height: 100%; }
-.spell-wheel-hint { position: absolute; left: 50%; top: calc(100% + 4px); transform: translateX(-50%); margin: 0; padding: 3px 8px;
-  width: max-content; max-width: 460px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); font-size: 11px; }
