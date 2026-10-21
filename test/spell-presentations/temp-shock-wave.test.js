@@ -87,7 +87,7 @@ test('pulse cracks open and grass sprouts in the fresh fissures', () => {
 });
 
 test('all stages remain finite, bounded, ASCII, deterministic, and fade completely', () => {
-  const budget = { cast: 250, impact: 220, projectile: 110, pulse: 90, aura: 160, zone: 160 };
+  const budget = { cast: 240, impact: 215, projectile: 110, pulse: 90, aura: 160, zone: 160 };
   for (const stage of Object.keys(budget)) {
     for (const radius of [1, 2, 3]) for (let i = 0; i <= 40; i++) {
       const progress = i / 40, points = draw(stage, progress, { radius });
@@ -95,7 +95,7 @@ test('all stages remain finite, bounded, ASCII, deterministic, and fade complete
       for (const [x, z, char, color, brightness = 1] of points) {
         assert.ok([x, z, brightness, ...color].every(Number.isFinite));
         assert.ok(Math.abs(x) < 8 && Math.abs(z) < 8);
-        assert.match(char, /^[\x20-\x7e]$/);
+        assert.match(char, /^[ -~]$/);
         assert.equal(color.length, 3);
         assert.ok(color.every(value => value >= 0 && value <= 255));
         assert.ok(brightness >= 0 && brightness <= 1);
@@ -105,6 +105,29 @@ test('all stages remain finite, bounded, ASCII, deterministic, and fade complete
     assert.deepEqual(draw(stage, 0.35), draw(stage, 0.35));
     assert.notDeepEqual(draw(stage, 0.1), draw(stage, 0.95), `${stage} evolves with time`);
   }
+});
+
+test('glyph budgets hold for every heading, progress, and effect life the game uses', () => {
+  // Line glyph counts follow on-screen length, so they depend on the cast heading.
+  const budget = { cast: 240, impact: 215, projectile: 110, pulse: 90, aura: 160, zone: 160 };
+  const lives = { cast: [presentation.duration], impact: [0.6, presentation.duration], projectile: [1, 10],
+    pulse: [0.25, 0.5], aura: [0.3, 1, 1.5], zone: [1, 8] };
+  const radii = { cast: [0.8], impact: [1], projectile: [0.65], pulse: [1, 2], aura: [0.8, 1], zone: [1, 3] };
+  for (const stage of Object.keys(budget)) {
+    let peak = 0;
+    for (let h = 0; h < 48; h++) for (const life of lives[stage]) for (const radius of radii[stage]) {
+      for (let i = 0; i <= 160; i++) {
+        const heading = (h - 24) * Math.PI / 24, progress = i / 160;
+        peak = Math.max(peak, draw(stage, progress, { heading, radius, life }).length);
+      }
+    }
+    assert.ok(peak <= budget[stage], `${stage} peaks at ${peak} glyphs (budget ${budget[stage]})`);
+  }
+  // The reviewer's case: nothing is dropped by the shared adapter's 256 cap.
+  const heading = 5 * Math.PI / 24, life = presentation.duration, raw = draw('cast', 0.6375, { heading, life }).length;
+  const painted = paintPresentation(presentation, { x: 0, y: 0, stage: 'cast', age: 0.6375 * life, life, radius: 1, heading }, () => {});
+  assert.equal(painted, raw);
+  assert.ok(raw <= budget.cast);
 });
 
 test('motion is smooth between neighbouring frames', () => {

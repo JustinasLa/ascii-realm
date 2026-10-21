@@ -73,7 +73,7 @@ function anvil(plot, cx, cz, k, b, grow, glow) {
 }
 
 // A jagged fissure from (cx, cz) at angle `ang`; `grow` reveals it and `hot` sets its light.
-function crack(plot, cx, cz, ang, len, grow, seed, b, hot, segments = 5) {
+function crack(plot, cx, cz, ang, len, grow, seed, b, hot, segments = 5, gap = 2.1) {
   if (b <= 0 || grow <= 0) return;
   const ux = Math.sin(ang), uz = Math.cos(ang);
   let px = cx, pz = cz;
@@ -85,7 +85,7 @@ function crack(plot, cx, cz, ang, len, grow, seed, b, hot, segments = 5) {
     nx = px + (nx - px) * reveal; nz = pz + (nz - pz) * reveal;
     // The newest stretch of the fissure is hottest; the origin cools first.
     const t = clamp01(hot * (0.55 + 0.45 * k / segments));
-    line(plot, px, pz, nx, nz, 2.1, 3, heat(t), b * (0.55 + 0.45 * t));
+    line(plot, px, pz, nx, nz, gap, 3, heat(t), b * (0.55 + 0.45 * t));
     px = nx; pz = nz;
   }
 }
@@ -154,12 +154,12 @@ function cast(effect, plot) {
   else if (p < 0.45) h = 1.7 + 0.18 * Math.sin((p - 0.4) / 0.05 * Math.PI / 2);
   else if (p < AT) h = 1.88 * (1 - easeIn((p - 0.45) / (AT - 0.45)));
   else h = 0.28 * Math.sin(Math.min(1, after / 0.22) * Math.PI) * (1 - after);
-  const mallet = smooth(0.02, 0.12, p) * (1 - smooth(0.06, 0.22, after)) * end;
-  if (mallet > 0) {
+  const mallet = smooth(0.02, 0.12, p) * (1 - smooth(0.04, 0.16, after)) * end;
+  if (mallet > 0.03) {
     const mx = liftX(h), mz = cz + 0.05 + liftZ(h), w = 0.4, d = 0.17;
     const body = mix(woodDark, wood, 0.4 + 0.6 * smooth(0, 0.3, p));
-    line(plot, mx - w, mz + d, mx + w, mz + d, 1.3, 14, body, mallet);
-    line(plot, mx - w, mz - d, mx + w, mz - d, 1.3, 14, body, mallet);
+    line(plot, mx - w, mz + d, mx + w, mz + d, 1.6, 11, body, mallet);
+    line(plot, mx - w, mz - d, mx + w, mz - d, 1.6, 11, body, mallet);
     line(plot, mx - w, mz - d, mx - w, mz + d, 1.3, 4, body, mallet);
     line(plot, mx + w, mz - d, mx + w, mz + d, 1.3, 4, body, mallet);
     for (const s of [-1, 1]) plot(mx + s * w, mz, '#', mix(wood, gold, struck), mallet);
@@ -171,9 +171,9 @@ function cast(effect, plot) {
       for (const s of [-0.75, 0, 0.75]) plot(mx + s * w + liftX(k * 0.28), mz + liftZ(k * 0.28),
         stroke(liftX(1), liftZ(1)), gold, mallet * (0.7 - k * 0.18) * smooth(0.45, 0.5, p));
     }
-    // Shadow sharpens as the head comes down.
+    // Shadow sharpens as the head comes down; the head covers it once it lands.
     const sh = Math.max(0, 1 - h / 2.2);
-    for (let i = 0; i < 9; i++) {
+    if (p < AT) for (let i = 0; i < 9; i++) {
       const a = TAU * i / 9, rx = 0.3 + 0.16 * h, rz = 0.14 + 0.07 * h;
       plot(Math.sin(a) * rx, cz + 0.05 + Math.cos(a) * rz, sh > 0.7 ? ':' : '.', soilDark, mallet * (0.2 + 0.5 * sh));
     }
@@ -191,13 +191,13 @@ function cast(effect, plot) {
   }
   // Shockwave ring rolls out across the clearing.
   const ringB = end * (1 - smooth(0.15, 0.95, after)) ** 1.1;
-  if (ringB > 0) ring(plot, 0, cz, 0.55 + 2.3 * easeOut(after * 1.25), 36, 16, ringB,
+  if (ringB > 0) ring(plot, 0, cz, 0.55 + 2.3 * easeOut(after * 1.25), 32, 12, ringB,
     after < 0.12 ? flash : mix(leafLight, soil, smooth(0.1, 0.7, after)), soil, 0.035, 3);
   // Fissures split from the anvil feet; they glow, then cool to soil.
   for (let i = 0; i < 6; i++) {
     const a = TAU * (i + 0.5 + (hash(i, 11) - 0.5) * 0.5) / 6;
     crack(plot, Math.sin(a) * 0.45, cz + Math.cos(a) * 0.3, a, 1.3 + 0.9 * hash(i, 12), easeOut(after / 0.3), i + 20,
-      end * (1 - 0.4 * after), 1 - smooth(0, 0.8, after), 4);
+      end * (1 - 0.4 * after), 1 - smooth(0, 0.8, after), 4, 2.6);
   }
   clods(plot, 0, cz, 14, t, 30, end, 2.6, 3.4);
   leaves(plot, 0, cz, 10, after, effect.age, 40, end, 0.9, 1.5);
@@ -264,7 +264,7 @@ function impact(effect, plot) {
       line(plot, Math.sin(a) * r0, Math.cos(a) * r0, Math.sin(a) * (r0 + len), Math.cos(a) * (r0 + len), 2, 2, mix(gold, flash, burst), burst);
     }
   }
-  ring(plot, 0, 0, 0.35 + 1.9 * easeOut(p / 0.8), 40, 24, end * (1 - smooth(0.2, 0.9, p)),
+  ring(plot, 0, 0, 0.35 + 1.9 * easeOut(p / 0.8), 36, 16, end * (1 - smooth(0.2, 0.9, p)),
     p < 0.1 ? flash : mix(leafLight, soil, smooth(0.1, 0.6, p)), soil, 0.05, 5);
   for (let i = 0; i < 6; i++) {
     const a = TAU * (i + hash(i, 80) * 0.6) / 6;
