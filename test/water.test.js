@@ -83,8 +83,13 @@ test('cached calm water stays fixed in wind and becomes animated when edited int
   chunk.elev[i] = 0.399;
   chunk.version = (chunk.version ?? 0) + 1;
   assert.equal(animated(chunk, i, i & 63, 64 + (i >> 6), world.seed), true, 'editing the bank invalidates the calm-water cache');
-  shade(out, o, chunk, i, i & 63, 64 + (i >> 6), world.seed, 13, 1);
-  assert.ok(FLOATING[glyphOf(out, i)], 'the new bank carries lapping foam');
+  // A ripple or rise can cover the foam for a moment, so watch a while.
+  let foam = false;
+  for (let t = 0; t <= 13 && !foam; t += 0.5) {
+    shade(out, o, chunk, i, i & 63, 64 + (i >> 6), world.seed, t, 1);
+    foam = Boolean(FLOATING[glyphOf(out, i)]);
+  }
+  assert.ok(foam, 'the new bank carries lapping foam');
 });
 
 test('reflections, the moon and stars pass under floating lily pads', () => {

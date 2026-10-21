@@ -68,7 +68,7 @@ export const KINDS = freeze({
     flee: 0,
     // Where it may appear, in metres from the player, and how many seconds
     // pass before the first and between the next.
-    spawn: freeze({ near: 14, far: 26, first: 3, every: 9 }),
+    spawn: freeze({ near: 14, far: 26, first: 6, every: 18 }),
     // Its stride, in metres, walking and running.
     stride: freeze({ walk: 0.6, run: 0.95 }),
     // Sounds for its being hurt, dying, rising and noticing the player.
@@ -108,7 +108,7 @@ export const KINDS = freeze({
     backOff: 3.2,
     panic: 0.45,
     flee: 2.6,
-    spawn: freeze({ near: 20, far: 28, first: 12, every: 14 }),
+    spawn: freeze({ near: 20, far: 28, first: 20, every: 28 }),
     stride: freeze({ walk: 0.4, run: 0.7 }),
     sounds: freeze({ hurt: 'goblin-hit', death: 'goblin-death', spot: 'goblin-spot' }),
   }),
@@ -148,7 +148,7 @@ export const KINDS = freeze({
     skirmishAfter: 0,
     panic: 0,
     flee: 0,
-    spawn: freeze({ near: 24, far: 32, first: 40, every: 50 }),
+    spawn: freeze({ near: 24, far: 32, first: 60, every: 90 }),
     stride: freeze({ walk: 1.0, run: 1.4 }),
     sounds: freeze({ hurt: 'troll-hit', death: 'troll-death', spot: 'troll-roar', enrage: 'troll-roar' }),
   }),
@@ -193,7 +193,7 @@ export const KINDS = freeze({
     // how far ahead of a moving player it aims (at most, in seconds of
     // their movement), and how often it may back away.
     ranged: freeze({ near: 3.5, far: 8, draw: 0.85, cooldown: 1.3, speed: 16, damage: 9, lead: 0.6, kiteEvery: 3 }),
-    spawn: freeze({ near: 22, far: 30, first: 25, every: 22 }),
+    spawn: freeze({ near: 22, far: 30, first: 40, every: 45 }),
     stride: freeze({ walk: 0.7, run: 1.1 }),
     sounds: freeze({ hurt: 'elf-hit', death: 'elf-death', spot: 'elf-spot', shoot: 'elf-shoot' }),
   }),
@@ -591,7 +591,7 @@ export class Monster {
 // hits, and clears away the fallen. Events carry the monster they came from.
 export class Monsters {
   // `counts` caps how many of each kind are about at once.
-  constructor({ counts = { skeleton: 3, goblin: 2, troll: 1, elf: 1 }, seed = 1, first = null, every = null } = {}) {
+  constructor({ counts = { skeleton: 2, goblin: 1, troll: 1, elf: 1 }, seed = 1, first = null, every = null } = {}) {
     this.list = [];
     this.counts = { ...counts };
     this.random = mulberry32((seed * 7919) ^ 0x5eed);

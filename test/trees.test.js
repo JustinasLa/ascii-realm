@@ -234,7 +234,7 @@ test('chunk visitation order preserves props, grass ownership, and the actual sp
     }
   }
   assert.ok(props > 0 && trees > 0, 'placement fixture exercises populated chunks');
-  assert.deepEqual(growths, new Set(['mature', 'sapling', 'bush']), 'forests generate all three growth layers');
+  assert.deepEqual(growths, new Set(['mature']), 'the meadow grows only mature trees, no saplings or bushes');
   for (const [cx, cy] of [...chunks].reverse()) {
     assert.deepEqual(reverse.propsOf(cx, cy), generated.get(`${cx},${cy}`), `${cx},${cy} reversed visitation`);
   }

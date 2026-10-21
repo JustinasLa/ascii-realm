@@ -109,9 +109,22 @@ test('campfires choose a clear hearth instead of building beneath foreground res
   const world = new World(1);
   const harvesting = new Harvesting(world, new GroundItems(world));
   const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
-  assert.equal(fires.add(world, 36.5, 39.5), null, 'the original starter location is hidden by a berry bush');
-  const fire = fires.addStarter(world);
-  assert.ok(fire, 'the starter still finds a nearby clearing');
+  const { x, y } = world.spawn;
+  const bushes = harvesting.resourcesIn(x - 60, y - 40, x + 60, y + 40).filter(n => n.kind === 'bush');
+  assert.ok(bushes.length > 0, 'the meadow around the spawn has berry bushes');
+  assert.equal(fires.add(world, bushes[0].x, bushes[0].y), null, 'a hearth is never built beneath a berry bush');
+  // Build in a clear spot just beside one of them.
+  let fire = null;
+  for (const bush of bushes) {
+    for (let r = 3; r < 9 && !fire; r++) {
+      for (let k = 0; k < 16 && !fire; k++) {
+        const a = k * Math.PI / 8;
+        fire = fires.add(world, Math.floor(bush.x + Math.cos(a) * r / 0.6) + 0.5, Math.floor(bush.y + Math.sin(a) * r) + 0.5);
+      }
+    }
+    if (fire) break;
+  }
+  assert.ok(fire, 'a clear hearth is found nearby');
   const nearby = harvesting.resourcesIn(fire.x - 14, fire.y - 12, fire.x + 14, fire.y + 12);
   assert.ok(nearby.some(n => n.kind === 'bush'), 'the campsite remains in the same planted meadow');
   const fireView = { x0: Math.floor(fire.x) - 40, y0: Math.floor(fire.y) - 40, cols: 80, rows: 80 };

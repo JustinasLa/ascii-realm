@@ -137,7 +137,8 @@ export function flowerAt(wx, wy, seed, style, height, elev) {
 // Everything about a root that does not move is settled here, once per
 // chunk: its height, its flower or seed head, and its own shade of green,
 // which drifts from clump to clump so neighbouring tufts differ.
-export function grassRoots(chunk, seed, size) {
+// Without `flora` the meadow is grass alone: no flowers, ferns or cattails.
+export function grassRoots(chunk, seed, size, { flora = true } = {}) {
   const roots = [];
   const present = new Uint8Array(size * size);
   const rows = new Uint16Array(size + 1);
@@ -160,7 +161,7 @@ export function grassRoots(chunk, seed, size) {
       // Reject bare ground before the more expensive habitat lookups.
       if (hash2(wx, wy, seed + 1322) >= patchAt(wx, wy, seed)) continue;
       const elev = chunk.elev?.[i] ?? 0.55;
-      const flower = flowerAt(wx, wy, seed, style, grass, elev);
+      const flower = flora ? flowerAt(wx, wy, seed, style, grass, elev) : 0;
       const density = chunk.grassDensity[i] * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1) *
         clumpAt(wx, wy, seed);
       // Flowers grow mostly within the clumps; a few stand alone in the
@@ -175,7 +176,8 @@ export function grassRoots(chunk, seed, size) {
       heights.push(height);
       variations.push(variation);
       flowers.push(flower);
-      extras.push(flower ? 0 : extraAt(wx, wy, seed, style, height, elev, chunk.shade?.[i] ?? 0.5, variation));
+      const extra = flower ? 0 : extraAt(wx, wy, seed, style, height, elev, chunk.shade?.[i] ?? 0.5, variation);
+      extras.push(!flora && (extra === FERN || extra === CATTAIL) ? 0 : extra);
       // Clump-sized patches run a little brighter or darker, warmer or
       // cooler, so the meadow is not one flat green.
       const [r, g, b] = PALETTES[style];

@@ -122,7 +122,6 @@ test('grass biome heights are cached and deterministic, with reeds on shoreline 
     }
   }
   assert.equal(MAX_GRASS_HEIGHT, 8, 'drawn blades outgrow the five-cell profile, leaving room for a flower');
-  assert.ok([...heights].some((h) => h >= 2 && h < 2.4), 'verges retain multi-cell grass');
   assert.ok([...heights].some((h) => h > 2.6 && h < 3.6), 'the field includes ordinary grass');
   assert.ok([...heights].some((h) => h > 3.7), 'the meadow includes fuller patches');
   assert.ok(reeds > 0, 'the sampled shore includes reeds');
@@ -144,25 +143,21 @@ test('wind moves upper blade geometry while the root and reflection base stay fi
   assert.ok(shapes.size > 1, 'wind changes blade geometry, beyond colour shimmer');
 });
 
-test('path verges blend in height and density without one-cell lawn or height cliffs', () => {
+test('the wild meadow has no paths or bare stone, and no height or density cliffs', () => {
   const world = new World(19);
-  const sample = (x, y) => {
-    const { c, i } = world.locate(x, y);
-    return { type: c.type[i], h: c.grassHeight[i], density: c.grassDensity[i] };
-  };
-  const heights = [];
-  for (let x = -70; x <= -46; x++) {
-    const a = sample(x, -92);
-    const b = sample(x + 1, -92);
-    if (a.type !== GRASS) continue;
-    assert.ok(a.h >= 2 && a.h <= 5);
-    heights.push(a.h);
-    if (b.type !== GRASS) continue;
-    assert.ok(Math.abs(a.h - b.h) < 0.4, `height cliff at ${x}`);
-    assert.ok(Math.abs(a.density - b.density) < 0.025, `density cliff at ${x}`);
+  for (let y = -120; y <= 120; y += 3) {
+    for (let x = -160; x < 160; x++) {
+      const { c, i } = world.locate(x, y);
+      const type = c.type[i];
+      assert.ok(type !== DIRT && type !== STONE, `bare ground at ${x},${y}`);
+      const { c: nc, i: ni } = world.locate(x + 1, y);
+      // Ground under a rock or trunk is cleared of grass on purpose.
+      if (type !== GRASS || nc.type[ni] !== GRASS || !c.grassHeight[i] || !nc.grassHeight[ni]) continue;
+      assert.ok(c.grassHeight[i] > 2.55 && c.grassHeight[i] <= 5);
+      assert.ok(Math.abs(c.grassHeight[i] - nc.grassHeight[ni]) < 0.4, `height cliff at ${x},${y}`);
+      assert.ok(Math.abs(c.grassDensity[i] - nc.grassDensity[ni]) < 0.025, `density cliff at ${x},${y}`);
+    }
   }
-  assert.ok(Math.max(...heights) - Math.min(...heights) > 0.5, 'the verge transitions into the field');
-  assert.ok(heights.some((h) => h > 2.2 && h < 2.6), 'intermediate-height grass fills the transition');
 });
 
 test('player contact visibly flattens a short blade, then restores its wind-driven pose', () => {
@@ -583,8 +578,10 @@ test('meadow roots grow in clumps with dark gaps between them', () => {
   assert.ok(bloom > 0.02 && bloom < 0.2, `flowers on ${bloom} of roots`);
 });
 
-test('broad grass patches retain about one fifth of the former roots across seeded terrain', () => {
+test('broad grass patches retain about a quarter of the former roots across seeded terrain', () => {
   // These same 75 chunks held 62,345 roots before the patch-density change.
+  // Since then the lakes shrank to a third, leaving more meadow: about a
+  // quarter of that count now.
   const before = 62345;
   let roots = 0;
   let bare = 0;
@@ -603,7 +600,7 @@ test('broad grass patches retain about one fifth of the former roots across seed
       }
     }
   }
-  assert.ok(roots / before > 0.18 && roots / before < 0.22, `${roots} of the former ${before} roots`);
+  assert.ok(roots / before > 0.23 && roots / before < 0.28, `${roots} of the former ${before} roots`);
   assert.ok(bare > 100000, 'large regions of the meadow are open ground');
 });
 
@@ -670,7 +667,7 @@ test('the body parts the grass around it, shades the hollow and lets it spring b
 });
 
 test('flowers bloom on meadow roots, sway with the wind and are pushed aside by the body', () => {
-  const world = new World(19);
+  const world = new World(19, { flora: true });
   let found = null;
   for (let cy = 0; cy < 3 && !found; cy++) {
     for (let cx = 0; cx < 3 && !found; cx++) {

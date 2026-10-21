@@ -146,7 +146,8 @@ inventory.equip(0);
 inventory.assignHotbar(0, 'shortSword');
 inventory.events.length = 0;
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
-const harvesting = new Harvesting(world, null);
+// The land holds only grass, trees, rocks and lakes: no wild plants to pick.
+const harvesting = new Harvesting(world, null, { wild: false });
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
@@ -156,7 +157,6 @@ const footprints = new Footprints();
 const grass = new Grass();
 const splashes = new Splashes();
 const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
-fires.addStarter(world);
 const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
 const sound = new GameAudio(world);
@@ -428,7 +428,7 @@ const countOf = (name, fallback) => {
   return Number.isFinite(n) ? Math.max(0, Math.min(8, Math.floor(n))) : fallback;
 };
 const monsters = new Monsters({ seed,
-  counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2), troll: countOf('trolls', 1),
+  counts: { skeleton: countOf('skeletons', 2), goblin: countOf('goblins', 1), troll: countOf('trolls', 1),
     elf: countOf('elves', 1) } });
 const spellPeers = new Map();
 const syncSpellPeers = () => {
