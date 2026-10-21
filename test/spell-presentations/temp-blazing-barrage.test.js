@@ -128,6 +128,22 @@ test('impacts flash white, swell into a solid fireball, burn out hollow and thro
   assert.ok(!body.some(p => cells.has(`${Math.round(p.x * 26) + 1},${Math.round((p.z + lift) * 6.5)}`)),
     'neighbouring columns stay open so the glow never blooms into a blob');
 
+  // As the ball swells, the checkerboard stays anchored: growth only adds perimeter cells.
+  const bodyCells = p => {
+    const rise = 0.75 * 0.35 * p * p;
+    return new Set(frame('impact', p, 1, 0)
+      .filter(q => onGrid(q.x * 26) && onGrid((q.z + rise) * 6.5) && Math.abs(q.x) < 0.6)
+      .map(q => `${Math.round(q.x * 26)},${Math.round((q.z + rise) * 6.5)}`));
+  };
+  for (let i = 0; i < 60; i++) {
+    const before = bodyCells(0.05 + i * 0.005), after = bodyCells(0.05 + i * 0.005 + 0.001);
+    const shared = [...before].filter(cell => after.has(cell)).length;
+    assert.ok(shared >= 0.8 * Math.min(before.size, after.size),
+      `consecutive growth frames share the body lattice (${shared}/${before.size} at ${0.05 + i * 0.005})`);
+  }
+  const [early, later] = [bodyCells(0.134), bodyCells(0.135)];
+  assert.ok([...early].filter(cell => later.has(cell)).length > 40, 'the 0.134 -> 0.135 step keeps the body in place');
+
   const spread = points => Math.max(...points.filter(p => p.char === '*' || p.char === '+' || p.char === ':')
     .map(p => Math.hypot(p.x, p.z)));
   assert.ok(spread(frame('impact', 0.4, 1, 0)) > spread(frame('impact', 0.1, 1, 0)), 'embers fly outwards');

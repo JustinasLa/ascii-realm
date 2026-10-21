@@ -195,10 +195,12 @@ function impact(pen) {
   }
   // The fireball body: a solid, churning, round ball filled cell by cell
   // (every other column, staggered by row, so the glow never blooms into a blob).
+  // The checkerboard is anchored to absolute cells (col + row even), so as the ball
+  // grows it only gains perimeter cells and the existing body never shifts sideways.
   // White-hot in the middle at first, then the core burns out into a hollow shell.
   const rows = Math.ceil(halfRows * 1.3), cols = Math.ceil(halfCols * 1.3);
   for (let row = -rows; row <= rows; row++) {
-    for (let col = -cols + ((row + rows) & 1); col <= cols; col += 2) {
+    for (let col = -cols + ((row - cols) & 1); col <= cols; col += 2) {
       const nx = col / halfCols, ny = row / halfRows, d = Math.hypot(nx, ny), a = Math.atan2(ny, nx);
       const edge = 1 + 0.1 * Math.sin(5 * a + 1.7 + age * 2) + 0.07 * Math.sin(8 * a - age * 9)
         + Math.max(0, ny) * 0.18 * p;
