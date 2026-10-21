@@ -7,13 +7,13 @@
 | `W A S D` / arrow keys | Walk |
 | `Shift` | Run |
 | `Space` | Jump; again in the air for a trick (a barrel roll when running) |
-| `J` / left click | Strike with the sword: repeat for a combo, run for a thrust, jump for a plunge; cuts fell trees and mow tall grass |
+| `J` / left click | Strike with the sword (a click turns and cuts towards the cursor; `J` cuts the way you face): repeat for a combo, run for a thrust, jump for a plunge; cuts fell trees and mow tall grass |
 | Hold `J` / left click | Charge, then release for a spinning slash |
 | `F` | Draw or sheathe the sword |
 | `T` | Stow the torch or draw a fresh lit torch |
 | `G` | Throw the carried torch in the direction faced; dry ground ignites on landing |
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
-| `R` / Cast button | Cast the selected rune spell towards the pointer |
+| `R` / right click / Cast button | Cast the selected rune spell towards the cursor; the caster turns to face it |
 | Rune spells panel | Filter runes by element and choose the one to cast |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |

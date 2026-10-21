@@ -6,8 +6,8 @@ short version see the [README](../README.md).
 - **Rune casting.** 40 rune spells across four elements: 8 Oseni (fire), 12
   Seithr (ice), 12 Cerrith (life) and 8 Mitlan (water), from Fire Shard and
   Meteor to Frozen Tomb, Vine Wave, Maelstrom and Drowning Prison. Open the
-  Rune spells panel, filter by element, choose a rune, aim with the pointer
-  and press `R` or Cast. The panel shows each rune's mana cost, cooldown and
+  Rune spells panel, filter by element, choose a rune, aim with the cursor
+  and right click, or press `R` or Cast. The panel shows each rune's mana cost, cooldown and
   damage or healing, and the mana bar and cooldown stay on screen. Mana
   refills slowly a second after the last cast. Projectiles, waves, zones, shields, heals,
   status effects, summons and channels share one simulation that strikes the

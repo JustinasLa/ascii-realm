@@ -24,7 +24,8 @@ const inert = () => class {
 
 async function loadGame(move = { x: 0, y: 0 }) {
   const taps = new Set();
-  const canvas = Object.assign(new EventTarget(), { classList: { add: noop, remove: noop, toggle: noop } });
+  const canvas = Object.assign(new EventTarget(), { classList: { add: noop, remove: noop, toggle: noop },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) });
   const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
