@@ -39,7 +39,12 @@ const ROCK_LIFT = 1.8;
 // cut into flat facets, each lit by the moon at its own angle. Cracks,
 // moss on the upturned faces, lichen rosettes and a scatter of pebbles at
 // the foot are decided once, so the rock never shimmers.
-function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCoverage: moss, grit = 0.5 }) {
+// Big boulders add what only a large rock shows: sedimentary bedding
+// across the face (`strata`), a shadowed undercut where the base tucks in
+// (`undercut`), more and wider fissures that fork (`cracks`, `crackWidth`)
+// and a skirt of scree (`talus`).
+function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCoverage: moss, grit = 0.5,
+  strata = 0, undercut = 0, cracks: crackCount = null, crackWidth = 0.32, talus = 0 }) {
   const stone = base.map((v) => Math.min(255, v * ROCK_LIFT));
   // Moss takes over the characters it grows on, so a little goes a long way.
   const mossCoverage = moss * 0.5;
@@ -47,7 +52,9 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
   const offset = rand() * Math.PI * 2;
   const corners = Array.from({ length: sides }, (_, i) => {
     const angle = offset + i * Math.PI * 2 / sides + (rand() - 0.5) * 0.4;
-    const radius = roundness + rand() * (1 - roundness);
+    let radius = roundness + rand() * (1 - roundness);
+    // A big rock sits on a broad foot: its lower corners stay out wide.
+    if (strata && Math.sin(angle) > 0.2) radius = Math.max(radius, 0.92 + rand() * 0.08);
     return [Math.cos(angle) * rx * radius, -ry + Math.sin(angle) * ry * radius];
   });
   const bottom = Math.max(...corners.map((c) => c[1]));
@@ -70,17 +77,37 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
     const lit = Math.max(0, (n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]) / k);
     return { u, v, lit, up: n[1] / k };
   });
-  const cracks = Array.from({ length: rand() < 0.75 ? 1 + Math.floor(rand() * 2) : 0 }, () => {
+  // Tall faces get proportionally shorter crack segments, so they wander.
+  const [crackStep, crackJitter] = crackCount ? [Math.min(0.35, 4 / ry), Math.min(0.2, 2.4 / ry)] : [0.35, 0.2];
+  const cracks = Array.from({ length: crackCount ?? (rand() < 0.75 ? 1 + Math.floor(rand() * 2) : 0) }, () => {
     const pts = [];
     let u = (rand() - 0.5) * 1.2;
     let v = -0.9;
     while (v < 1) {
       pts.push([u * rx, -ry + v * ry - bottom]);
       u += (rand() - 0.5) * 0.5;
-      v += 0.35 + rand() * 0.2;
+      v += crackStep + rand() * crackJitter;
     }
     return pts;
   });
+  // On a big rock a fissure forks: a shorter branch leaves part way down.
+  if (crackCount) {
+    for (const main of cracks.slice()) {
+      if (main.length < 4 || rand() < 0.3) continue;
+      const from = main[1 + Math.floor(rand() * (main.length - 3))];
+      const side = rand() < 0.5 ? -1 : 1;
+      const branch = [from];
+      for (let i = 0; i < 3; i++) {
+        const [x, y] = branch[branch.length - 1];
+        branch.push([x + side * rx * (0.08 + rand() * 0.1), y + ry * (0.1 + rand() * 0.12)]);
+      }
+      cracks.push(branch);
+    }
+  }
+  // Bedding planes dip gently across the rock, one way or the other.
+  // Only big rocks draw these, so small ones keep their random stream.
+  const dip = strata ? (rand() - 0.5) * 0.25 : 0;
+  const bedPhase = strata ? rand() : 0;
   const inside = (px, py) => {
     let hit = false;
     for (let i = 0, j = sides - 1; i < sides; j = i++) {
@@ -95,6 +122,7 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
   const ridges = [0, 1, 2, 3].map((a) => dg(`props.ridge.${a}`));
   const lichenGlyphs = [0, 1, 2, 3].map((i) => dg(`props.lichen.${i}`));
   const lichen = lift(rand() < 0.5 ? [168, 170, 122] : [176, 128, 82]);
+  const seamGlyph = dg('props.seam.0');
   const sample = (px, py) => {
     if (py > 0 || !inside(px, py)) return null;
     const u = px / rx;
@@ -111,7 +139,10 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
     const n = dome(u, v);
     const smooth = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
     const grain = (hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 17) - 0.5) * 0.08;
-    const l = Math.max(0, Math.min(1, (best.lit * 0.55 + smooth * 0.55 - 0.5) * 1.5 + 0.48 + grain));
+    let l = Math.max(0, Math.min(1, (best.lit * 0.55 + smooth * 0.55 - 0.5) * 1.5 + 0.48 + grain));
+    // The face tucks in under itself near the ground, out of the light.
+    const low = undercut ? Math.max(0, 1 + py / (ry * 2 * undercut)) : 0;
+    if (low > 0) l *= 1 - low * 0.65;
     const s = { m: 'stone', l, c: stone };
     for (const pts of cracks) {
       for (let i = 1; i < pts.length; i++) {
@@ -120,7 +151,7 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
         const vx = bx - ax;
         const vy = by - ay;
         const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)));
-        if (Math.hypot(px - ax - vx * t, py - ay - vy * t) < 0.32) {
+        if (Math.hypot(px - ax - vx * t, py - ay - vy * t) < crackWidth) {
           const a = (Math.round(-Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 4;
           s.acc = { g: fissures[a][i % 2], c: STONE_GAP };
           return s;
@@ -137,7 +168,18 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
       const deep = 0.7 + patch * 0.5;
       s.acc = { g: mossGlyphs[Math.floor(hash2(Math.floor(px * 3), Math.floor(py), seed) * 6)],
         c: lift([MOSS[0] * deep * (0.7 + l * 0.6), MOSS[1] * deep * (0.7 + l * 0.6), MOSS[2] * deep * (0.6 + l * 0.5)]) };
-    } else if (ridgeEdge) {
+      return s;
+    }
+    if (strata && v > -0.35 && low < 0.5) {
+      // A bedding line where the layered rock splits; it breaks off here
+      // and there, as weathered seams do.
+      const bed = (py + px * dip) / strata + bedPhase + valueNoise(px * 0.12, 0, seed + 53) * 0.6;
+      if (Math.abs(bed - Math.round(bed)) * strata < 0.5 && valueNoise(px * 0.3, Math.round(bed), seed + 59) > 0.42) {
+        s.acc = { g: seamGlyph, c: stone.map((x) => x * (0.45 + l * 0.35)) };
+        return s;
+      }
+    }
+    if (ridgeEdge) {
       const a = (Math.round(-Math.atan2(gx, -gy) / (Math.PI / 4)) + 8) % 4;
       s.acc = { g: ridges[a], c: stone.map((x) => x * (0.85 + l * 0.55)) };
     } else if (hash2(Math.floor(px * 1.7), Math.floor(py), seed + 41) < 0.05 * grit + (l > 0.5 ? 0.03 : 0)) {
@@ -158,6 +200,14 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
     const name = rand() < 0.6 ? `pebble.${Math.floor(rand() * 8)}` : `gravel.${Math.floor(rand() * 8)}`;
     extras.push({ dx, dy, g: dg(name), c: stone.map((x) => x * light) });
   }
+  // Scree: stones that broke off and rolled out along the foot.
+  for (let i = 0; i < talus; i++) {
+    const dx = Math.round((rand() * 2 - 1) * half * 1.05);
+    const dy = rand() < 0.55 ? 0 : 1 + Math.floor(rand() * 2);
+    const light = 0.5 + rand() * 0.4;
+    const name = rand() < 0.45 ? `pebble.${Math.floor(rand() * 8)}` : `gravel.${Math.floor(rand() * 8)}`;
+    if (!extras.some((e) => e.dx === dx && e.dy === dy)) extras.push({ dx, dy, g: dg(name), c: stone.map((x) => x * light) });
+  }
   return { sample, w: Math.ceil(rx / ASPECT) + 1, top: -Math.ceil(ry * 2) - 1, extras,
     shadow: { rx: rx * 1.15, ry: Math.max(1, ry * 0.25), ox: rx * 0.25 } };
 }
@@ -175,6 +225,28 @@ function makeRock(x, y, rand, seed = x * 17 + y, bakeFn = bake) {
     mossCoverage: 0.25 + rand() * 0.35 });
   const cells = bakeBoulder(rock, seed, bakeFn);
   return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4, bounds: cellBounds(cells), cells };
+}
+
+// A landmark boulder, many times a scattered rock's size: a broad, jagged
+// mass with bedding lines, forked fissures, a mossy crown, a dark undercut
+// and scree at its foot.
+function makeBigRock(x, y, rand, seed = x * 23 + y) {
+  const rx = 12 + rand() * 8;
+  const ry = rx * (0.58 + rand() * 0.22);
+  const lavender = rand();
+  // A little paler than a small rock, so the mass holds its own at night.
+  const stone = STONE_MID.map((v, i) => (v * (0.9 + lavender * 0.2) + [8, 5, -6][i] * (1 - lavender)) * 1.2);
+  const rock = boulder(rand, seed, { rx, ry, sides: 13 + Math.floor(rand() * 6), roundness: 0.5, stone,
+    mossCoverage: 0.4 + rand() * 0.4, grit: 1, strata: 3.6 + rand() * 1.8, undercut: 0.16,
+    cracks: 2 + Math.floor(rand() * 2), crackWidth: 0.36, talus: 10 + Math.floor(rand() * 8) });
+  const cells = bake(rock.w, rock.top, 0, rock.sample, seed, { shadow: rock.shadow, extras: rock.extras });
+  return { kind: 'rock', x, y, footW: rx * 0.9 / ASPECT, footH: Math.max(2, ry * 0.3), bounds: cellBounds(cells), cells };
+}
+
+// Where a big rock stands nothing else grows: its face and a margin around
+// its foot.
+function underBigRock(rocks, x, y) {
+  return rocks.some((r) => Math.abs(x - r.x) < r.footW + 4 && y > r.y + r.bounds.minY - 2 && y < r.y + r.footH + 3);
 }
 
 // The builder's original broadleaf, kept so saved scenes look the same.
@@ -433,11 +505,40 @@ export function deadwoodConditionAt(world, x, y) {
   return null;
 }
 
-// Two layers: widely spaced mature trees, with a smaller understorey grid.
+// A big rock now and then, then two layers: widely spaced mature trees,
+// with a smaller understorey grid.
 // Their independent random streams keep groves repeatable across seasons.
 export function generateProps(world, cx, cy, size) {
   const props = [];
   const seed = world.seed;
+  // Big rocks first, at most one per chunk, so trees and bushes keep clear.
+  const rocks = [];
+  {
+    const rand = mulberry32(Math.floor(hash2(cx, cy, seed + 2203) * 2 ** 32));
+    if (rand() < 0.3) {
+      // A base well inside the chunk, so the whole rock stays near its owner.
+      const x = cx * size + 12 + Math.floor(rand() * (size - 24));
+      const y = cy * size + 8 + Math.floor(rand() * (size - 12));
+      const rock = makeBigRock(x + 0.5, y + 0.5, rand);
+      const reach = rock.footW;
+      const ground = [[0, 0], [-reach, 0], [reach, 0], [-reach * 0.5, -rock.footH], [reach * 0.5, -rock.footH],
+        [0, rock.bounds.minY * 0.5]].every(([dx, dy]) => world.typeAt(Math.floor(x + dx), Math.floor(y + dy)) === GRASS);
+      const clear = Math.hypot((x + 0.5 - world.spawn.x) * ASPECT, y + 0.5 - world.spawn.y) > 36 + reach * ASPECT + 8;
+      if (ground && clear) {
+        rocks.push(rock);
+        props.push(rock);
+        // One or two smaller boulders that split off lie against its foot.
+        const fragments = 1 + Math.floor(rand() * 2);
+        for (let i = 0; i < fragments; i++) {
+          const side = rand() < 0.5 ? -1 : 1;
+          const fx = x + side * (reach * (0.85 + rand() * 0.3) + 2);
+          const fy = y + 1 + Math.floor(rand() * 3);
+          const inChunk = Math.floor(fx / size) === cx && Math.floor(fy / size) === cy;
+          if (inChunk && world.typeAt(Math.floor(fx), Math.floor(fy)) === GRASS) props.push(makeRock(Math.floor(fx) + 0.5, fy + 0.5, rand));
+        }
+      }
+    }
+  }
   for (let layer = 0; layer < 2; layer++) {
     const stepX = layer === 0 ? 42 : 14;
     const stepY = layer === 0 ? 28 : 12;
@@ -453,6 +554,7 @@ export function generateProps(world, cx, cy, size) {
         if (world.typeAt(x, y) !== GRASS) continue;
         // Keep the spawn clearing open.
         if (Math.hypot((x + 0.5 - world.spawn.x) * ASPECT, y + 0.5 - world.spawn.y) < 36) continue;
+        if (rocks.length && underBigRock(rocks, x + 0.5, y + 0.5)) continue;
 
         const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
         const roll = rand();
@@ -476,8 +578,6 @@ export function generateProps(world, cx, cy, size) {
           const options = { species, season: world.season, seed };
           props.push(rand() < 0.35 ? makeTree(x + 0.5, y + 0.5, rand, { ...options, growth: 'sapling' }) :
             makeBush(x + 0.5, y + 0.5, rand, options));
-        } else if (layer === 1 && roll > 0.965) {
-          props.push(makeRock(x + 0.5, y + 0.5, rand));
         }
       }
     }

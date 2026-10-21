@@ -11,26 +11,27 @@ import { createScene, scenarios } from '../bench/scene.js';
 // the sparse water and grass-patch density pass, then the fine leaf sprays
 // and branch-grown crowns reviewed against the tree video, and once more
 // when the ground was dimmed and rocks and the player brightened for clarity,
-// and after trees and monsters were thinned out to declutter the screen.
+// and after trees and monsters were thinned out to declutter the screen and
+// scattered stones gave way to big boulders.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
-  ['ebb4de31445ae88f481d23d1161f03fc5c3bf8a69bd6c6a940a3a4589bfbd27e',
-    'bac5f5336971f09caca25aa83918b7d196cac3d8a71cb9ce35e11d82023d736b',
-    '68e966c2deccf3cf0b9903aef568bed58ed41e1a4b2eea7c5fd76bd3d9f41f93',
-    '871350899edf589090bc6d844f2d263205f76ebc1401c8736db6ac41183ca722'],
-  ['2b6243423b1229bad58c7cfe99127a2ca48e0217778efa8d5a16c86dc2e96fdb',
-    '84db7d2379bc21e6d3c0315af40f822c30b1deab66c0c8b9c2af3b0d8df60f95',
-    '23f1af3ded62a63dc6dfe5c384e4206fa29329b9989685b852b3e4a8049fa759',
-    'cee594c7b1edf26146712163f2497677a8488f28aeb1b97e85be4ce3e45ccdb8'],
-  ['9bf4e3b8edac2f48a2502c54b8d5828f4aeff9280e49ad9ef8152c066fad46f6',
-    '1a06882e45ba1b969a6c135c6c7be567ce386af06991769a11dd1d4ba0fc7cf6',
-    '8cccb8b8526588f6e59c445277cf5c6fc1a8a1ac5294ee40020af1e036ce546d',
-    '01a08a274083e5912363738390b06e2ffc8d5f82932dc53ec30104a5a5c4b453'],
-  ['5af0382609f07fa57387d48d9286228523da6ecb450b63ebb2d25720c6b80b87',
-    '38e2a5dc656ef176ea6d0f195f43419b436cb267aaa0effbd5b58d161c083c4d',
-    'f2d48ab4ad3e2caa4f090605cae14bf2230c970dfa67170f4312f3b55d544754',
-    '7c67e17cbce1ca12a8e21452cb1be72aafaabe5b3e541854e23be6c353290c5e'],
+  ['2c4120f68539b7662e0b73a1e965bc7084bda3012fddbcdd46178e7bf400c201',
+    '9cf1b6f5c0541dc5bb0b99d96831900b1d1242717415d2c7dbfe88088ddbb8b7',
+    '972745552f204a3b0fb58a12484c28972940781e6f0fa7656f84993140a663dd',
+    'f7b0251a173261befcb8082703f915a8b0b524559aac43e9415d0878ae359c94'],
+  ['136f58dab568eee425b285eb9f4dabeac81b4d1c823d29ebea3e702fba4d5640',
+    '06a87a7a94113258672bca77564f898f96c922c876f475bd2052986559785fed',
+    '109a1dff601d5881d02c6dd352a6da508957de350f848b76cfe6e7b89ee45221',
+    '303201acff2fb0eb073372dfc94b0850ceb3b52283b4af57d9ed54d7d4f9d42f'],
+  ['28607cbd6f917a349134fb5643b652d5a1bb0f61820116e577049bd47503611f',
+    'bcf26ce851fe1e9129c2da525f410190fed1377fdcb6e4e7113dea7a07205f16',
+    '0a22f221602606bc5dbb70d9dce84b922aa0418ad2ab0166270a33b50e5edbb8',
+    'b49f9c733e09a750fe68f279f99c7529cd4e0e58e5e21d98365612a49ffc2f53'],
+  ['601b28f6392ccb24211c176158bcde88d9d47ec970d3487b4c735c2f08b3e64a',
+    '2f11ffea31723e6aaf6990e88ae6f17f9c2df0b0c8fb115ef330e2625ac608a1',
+    'cb5c684f0af0361b45508a785b2c9b0bcca165ecdb025856c616cbfb0f5fdd5e',
+    '9be288d3d2bb36b3c63e3158254c069f4097b320af07917ed04cdc59b6517fcb'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.
