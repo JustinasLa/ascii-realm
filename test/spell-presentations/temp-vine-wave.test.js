@@ -119,6 +119,18 @@ test('every Vine Wave stage stays finite, ASCII, within budget, deterministic an
     assert.deepEqual(capture(stage), capture(stage), 'draw is deterministic');
     assert.notDeepEqual(capture(stage, 0.1), capture(stage, 0.6), `${stage} animates`);
   }
+  // Draw keeps no module state: a nested draw issued from inside the plot callback
+  // (different stage and heading) leaves the outer draw's output unchanged.
+  for (const stage of Object.keys(BUDGET)) {
+    const outer = { stage, progress: 0.5, age: 0.5, life: 1.05, radius: 1, heading: 0.7 };
+    const plain = [], nested = [];
+    presentation.draw(outer, (...p) => plain.push(p));
+    presentation.draw(outer, (...p) => {
+      nested.push(p);
+      presentation.draw({ stage: stage === 'impact' ? 'cast' : 'impact', progress: 0.95, age: 0.3, life: 0.6, radius: 2, heading: -2.6 }, () => {});
+    });
+    assert.deepEqual(nested, plain, `${stage} is unaffected by a nested draw`);
+  }
   // Malformed clocks never throw or emit non-finite geometry.
   for (const stage of Object.keys(BUDGET)) {
     const dots = [];
