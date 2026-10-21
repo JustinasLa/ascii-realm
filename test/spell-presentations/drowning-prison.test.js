@@ -202,7 +202,7 @@ test('a real rune cast renders its profile and emits spell cues while preserving
   const scene = runeScene(spell, { range: 20 }), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false);
+  assert.equal(scene.castWithoutMana().ok, false);
   assert.equal(events.filter(event => event.stage === 'cast').length, 1);
   const flying = [];
   scene.casting.effects.paint((...point) => flying.push(point), scene.casting.projectiles);

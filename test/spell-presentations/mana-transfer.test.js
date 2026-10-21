@@ -155,9 +155,6 @@ test('real rune cast renders its profile and emits typed transfer cues while pre
   const events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  const eventCount = events.length;
-  assert.equal(scene.cast().ok, false, 'cooldown rejects the duplicate cast');
-  assert.equal(events.length, eventCount, 'rejected casts stay silent');
   scene.advance(0.4);
   const points = [];
   scene.casting.effects.paint((...point) => points.push(point), scene.casting.projectiles);
@@ -171,6 +168,10 @@ test('real rune cast renders its profile and emits typed transfer cues while pre
   assert.ok(events.some(e => e.type === 'spell' && e.stage === 'impact'), 'aura activation uses receiving sound');
   assert.ok(events.every(e => e.type === 'spell' && e.presentation === profile));
   assert.ok(events.every(e => !['draw', 'slam'].includes(e.type)));
+  const eventCount = events.length;
+  assert.equal(scene.cast().stopped, true, 'recasting ends the channel instead of starting another');
+  assert.equal(scene.aura(scene.player, 'Mana_Transfer_Active'), false);
+  assert.equal(events.length, eventCount, 'ending the channel replays no cast cue');
 });
 
 test('all authored cues schedule their layers through spatial SFX without invalid audio values', () => {

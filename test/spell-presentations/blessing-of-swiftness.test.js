@@ -165,8 +165,8 @@ test('real Swiftness casts render the profile and emit typed cues without changi
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
   const acceptedEvents = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, acceptedEvents, 'cooldown rejection is silent');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, acceptedEvents, 'mana rejection is silent');
   assert.equal(scene.casting.mana, 94);
   scene.advance(0.1);
   const dots = [];

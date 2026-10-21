@@ -35,7 +35,7 @@ export class Spellcasting {
 
   state(entity = this.player) {
     if (!this.states.has(entity)) {
-      this.states.set(entity, { auras: new Map(), potions: new Map(), vars: new Map(), cooldowns: new Map(),
+      this.states.set(entity, { auras: new Map(), potions: new Map(), vars: new Map(),
         shield: 0, shieldUntil: 0, mana: 100, maxMana: 100, manaDelay: 0, timer: new Map(), motion: null });
     }
     return this.states.get(entity);
@@ -119,8 +119,6 @@ export class Spellcasting {
     const ctx = this.context(spell, variant, caster, options);
     const s = this.state(caster);
     if (this.hasAura(caster, 'Silenced')) return { ok: false, reason: 'Silenced.' };
-    const key = `${id}:${variant.id ?? variant.class ?? 'rune'}`;
-    if ((s.cooldowns.get(key) ?? 0) > this.time) return { ok: false, reason: `Ready in ${Math.ceil(s.cooldowns.get(key) - this.time)}s.` };
     const root = spell.nodes[lower(variant.root ?? spell.root)];
     if (!root) return { ok: false, reason: 'Spell definition missing.' };
     if (!ctx.target) ctx.target = this.aimTarget(caster, options.aim, spell.supportive);
@@ -131,7 +129,6 @@ export class Spellcasting {
     if (s.mana < cost) return { ok: false, reason: 'Not enough mana.' };
     s.mana -= cost;
     s.manaDelay = this.time + 1;
-    s.cooldowns.set(key, this.time + Math.max(0, ctx.modifiers.cooldown ?? 0));
     this.run(variant.root ?? spell.root, ctx);
     this.present(ctx, caster, 'cast', { shape: 'ward', radius: 0.8, life: hasPresentation(spell) ? spell.presentation.duration : 0.25 });
     if (!hasPresentation(spell)) this.onSound({ type: 'draw', x: caster.x, y: caster.y });

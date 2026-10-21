@@ -32,7 +32,7 @@ function reset() {
 function choose() {
   casting.selected = $('spell').value;
   const spell = casting.spells.get(casting.selected), p = casting.modifiers(casting.variant(spell));
-  $('description').textContent = `${spell.name} · ${spell.element} · ${p.mana ?? 0} mana · ${p.cooldown ?? 0}s cooldown`
+  $('description').textContent = `${spell.name} · ${spell.element} · ${p.mana ?? 0} mana`
     + (p.damage ? ` · ${p.damage} damage` : '') + (p.heal ? ` · ${p.heal} heal` : '')
     + (p.burnt_damage ? ` · ${p.burnt_damage} damage each second for ${p.burnt_duration}s` : '');
   const url = new URL(location.href); url.searchParams.set('spell', spell.id); history.replaceState(null, '', url);

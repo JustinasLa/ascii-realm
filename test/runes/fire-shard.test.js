@@ -10,6 +10,6 @@ test('Fire Shard hits once for 12 damage and costs four mana', () => {
   advance(0.5);
   assert.equal(foe.health, 88);
   assert.equal(casting.mana, 96);
-  assert.equal(cast().ok, false);
-  assert.equal(casting.projectiles.length, 0);
+  assert.equal(cast().ok, true, 'recasting is limited by mana, not time');
+  assert.equal(casting.mana, 92);
 });

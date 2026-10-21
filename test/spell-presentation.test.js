@@ -12,7 +12,7 @@ test('Fire Shard emits its authored cast/impact cues, never sword cues, and reje
   const scene = runeScene(fireShard), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false);
+  assert.equal(scene.castWithoutMana().ok, false);
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
   scene.advance(0.3);
   assert.equal(scene.foe.health, 88, 'presentation preserves TF damage');

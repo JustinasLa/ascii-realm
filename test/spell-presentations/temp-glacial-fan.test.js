@@ -185,7 +185,7 @@ test('a real Glacial Fan cast renders this profile and emits typed cast/impact c
   const mana = scene.casting.state(scene.player).mana;
   assert.equal(scene.cast().ok, true);
   assert.equal(scene.casting.state(scene.player).mana, mana - 8);
-  assert.equal(scene.cast().ok, false, 'existing cooldown rejects repeat casts');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects repeat casts');
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
   const castEffect = scene.casting.effects.list.find(e => e.stage === 'cast');
   assert.equal(castEffect.presentation, profile);

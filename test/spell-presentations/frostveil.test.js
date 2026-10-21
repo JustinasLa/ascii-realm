@@ -128,7 +128,7 @@ test('the real Frostveil rune renders its profile and sends typed spell cues whi
   const scene = runeScene(spell, { range: 20 }), sounds = [];
   scene.casting.onSound = event => sounds.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false);
+  assert.equal(scene.castWithoutMana().ok, false);
   assert.equal(sounds.filter(e => e.stage === 'cast').length, 1);
   const launch = [];
   scene.casting.effects.paint((...p) => launch.push(p), scene.casting.projectiles);

@@ -189,7 +189,7 @@ test('real Mitlan Glyph cast renders the profile and emits typed cast/impact cue
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
   assert.equal(scene.casting.mana, 92);
-  assert.equal(scene.cast().ok, false);
+  assert.equal(scene.castWithoutMana().ok, false);
   assert.equal(events.filter(e => e.stage === 'cast').length, 1, 'rejected recasts stay silent');
   assert.ok(scene.casting.effects.list.some(e => e.presentation === presentation && e.stage === 'cast'));
   const moving = [];

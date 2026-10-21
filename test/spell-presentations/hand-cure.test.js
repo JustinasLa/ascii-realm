@@ -204,8 +204,8 @@ test('real Hand Cure cast heals unchanged and routes authored profiles and typed
   assert.ok(events.every(e => e.type === 'spell' && e.spellId === 'hand-cure' && e.presentation === presentation));
   assert.ok(events.every(e => !['draw', 'slam'].includes(e.type)));
   const before = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, before, 'cooldown rejection has no new sound');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, before, 'mana rejection has no new sound');
   const rendered = [], expected = [];
   scene.casting.effects.paint((...p) => rendered.push(p));
   for (const effect of scene.casting.effects.list) {

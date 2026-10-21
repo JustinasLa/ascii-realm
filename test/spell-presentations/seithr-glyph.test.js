@@ -218,7 +218,7 @@ test('real Seithr Glyph casts render the authored runes and emit typed crystal c
   const events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejects a repeat cast without another cue');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a repeat cast without another cue');
   assert.equal(events.filter(event => event.stage === 'cast').length, 1);
   assert.ok(scene.casting.effects.list.some(effect =>
     effect.stage === 'cast' && effect.presentation === presentation));

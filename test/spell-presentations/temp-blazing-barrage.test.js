@@ -188,7 +188,7 @@ test('real casts render the barrage profile and emit its typed cast/impact cues'
   const scene = runeScene(spell, { range: 6 }), sounds = [];
   scene.casting.onSound = cue => sounds.push(cue);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejects a second cast');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a second cast');
   assert.equal(sounds.filter(cue => cue.stage === 'cast').length, 1);
   assert.ok(scene.casting.effects.list.some(effect => effect.stage === 'cast' && effect.presentation === presentation));
 

@@ -142,7 +142,7 @@ test('real Healing Orb casts render the profile and emit typed heal cues without
   const scene = runeScene(spell, { range: 12, allyInPath: true }), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejection stays silent');
+  assert.equal(scene.castWithoutMana().ok, false, 'mana rejection stays silent');
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
   assert.equal(scene.casting.projectiles.length, 1);
   const flight = [];

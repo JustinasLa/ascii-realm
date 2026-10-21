@@ -43,13 +43,12 @@ test('solid scenery stops a projectile before a target behind it', () => {
   assert.equal(casting.projectiles.length, 0);
 });
 
-test('mana, cooldown and silence reject recasts without consuming resources', () => {
+test('recasts are limited by mana, not time; mana and silence reject without consuming resources', () => {
   const { casting, player } = scene();
   assert.equal(casting.cast('practice-bolt').ok, true);
   assert.equal(casting.mana, 96);
-  assert.equal(casting.cast('practice-bolt').ok, false);
-  assert.equal(casting.mana, 96);
-  casting.update(1);
+  assert.equal(casting.cast('practice-bolt').ok, true, 'an immediate recast only needs mana');
+  assert.equal(casting.mana, 92);
   casting.state().mana = 3;
   assert.equal(casting.cast('practice-bolt').ok, false);
   casting.state().mana = 20;

@@ -154,7 +154,7 @@ test('real Crashing Wave casts render the breaker and emit typed spell cues whil
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejection produces no second cast');
+  assert.equal(scene.castWithoutMana().ok, false, 'mana rejection produces no second cast');
   const cast = events.filter(e => e.type === 'spell' && e.stage === 'cast');
   assert.equal(cast.length, 1);
   assert.equal(cast[0].presentation, profile);

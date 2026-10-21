@@ -137,7 +137,7 @@ test('a real Cerrith cast renders its profile, emits spell cues and retains dela
   const scene = runeScene(spell, { range: 15, allyInPath: true, allyRange: 1.5 }), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejection stays silent');
+  assert.equal(scene.castWithoutMana().ok, false, 'mana rejection stays silent');
   const cast = events.filter(e => e.stage === 'cast');
   assert.equal(cast.length, 1);
   assert.equal(scene.casting.mana, 92);
