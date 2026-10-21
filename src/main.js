@@ -428,7 +428,7 @@ const countOf = (name, fallback) => {
   return Number.isFinite(n) ? Math.max(0, Math.min(8, Math.floor(n))) : fallback;
 };
 const monsters = new Monsters({ seed,
-  counts: { skeleton: countOf('skeletons', 3), goblin: countOf('goblins', 2), troll: countOf('trolls', 1),
+  counts: { skeleton: countOf('skeletons', 2), goblin: countOf('goblins', 1), troll: countOf('trolls', 1),
     elf: countOf('elves', 1) } });
 const spellPeers = new Map();
 const syncSpellPeers = () => {

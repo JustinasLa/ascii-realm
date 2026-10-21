@@ -456,7 +456,7 @@ export function generateProps(world, cx, cy, size) {
 
         const forest = fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
         const roll = rand();
-        if (layer === 0 && roll < Math.max(0, forest - 0.38) * 1.6) {
+        if (layer === 0 && roll < Math.max(0, forest - 0.44) * 1.0) {
           const species = treeSpeciesAt(world, x, y);
           const condition = deadwoodConditionAt(world, x, y);
           if (condition) {
@@ -466,7 +466,7 @@ export function generateProps(world, cx, cy, size) {
           } else {
             props.push(makeTree(x + 0.5, y + 0.5, rand, { species, season: world.season, seed }));
           }
-        } else if (layer === 1 && roll < 0.04 + Math.max(0, forest - 0.38) * 0.7) {
+        } else if (layer === 1 && roll < 0.015 + Math.max(0, forest - 0.44) * 0.3) {
           // Keep seedlings out of the mature trunks without recursively
           // generating neighboring props. Bushes stay soft and walkable.
           if (props.some((p) => (p.kind === 'tree' &&
