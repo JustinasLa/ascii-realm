@@ -5,10 +5,13 @@ short version see the [README](../README.md).
 
 - **Rune casting.** 40 rune spells across four elements: 8 Oseni (fire), 12
   Seithr (ice), 12 Cerrith (life) and 8 Mitlan (water), from Fire Shard and
-  Meteor to Frozen Tomb, Vine Wave, Maelstrom and Drowning Prison. Open the
-  Rune spells panel, filter by element, choose a rune, aim with the cursor
-  and right click, or press `R` or Cast. The panel shows each rune's mana cost, cooldown and
-  damage or healing, and the mana bar and cooldown stay on screen. Mana
+  Meteor to Frozen Tomb, Vine Wave, Maelstrom and Drowning Prison. Hold the
+  middle mouse button to open the rune wheel, point at a school and then at
+  one of its runes, and let go: that rune stays bound to `R` until another is
+  chosen, even across reloads. Aim with the cursor and press `R` or right
+  click. The wheel shows each rune's mana cost, cooldown and damage or
+  healing, and the bound rune, its cooldown and the mana bar stay on screen.
+  On touch screens, hold RUNES to open the wheel and tap CAST. Mana
   refills slowly a second after the last cast. Projectiles, waves, zones, shields, heals,
   status effects, summons and channels share one simulation that strikes the
   monsters in the world. Every rune has its own ASCII animation for casting,
