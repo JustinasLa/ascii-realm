@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AMBIENT_FOG, Fog, POCKET, STIRS, WAKE_LIFE } from '../src/world/fog.js';
+import { FogWake, REFILL, SWEEP, WAKE_SIZE } from '../src/world/fog-wake.js';
+import { AMBIENT_FOG, Fog } from '../src/world/fog.js';
+import { ASPECT } from '../src/world/world.js';
 
 const view = { x0: 12, y0: -40, cols: 80, rows: 40 };
 
@@ -47,55 +49,56 @@ test('disabled fog is drawn clear', () => {
   assert.equal(fog.uniforms(view).density, 0);
 });
 
-const calm = { preset: 'clear', intensity: 0, wind: 0 };
-const marks = (fog) => {
-  const s = fog.stirs();
-  const out = [];
-  for (let i = 0; i < s.length; i += 4) if (s[i + 3] > 0) out.push([...s.slice(i, i + 4)]);
-  return out;
-};
+// The field works in rows with columns scaled by ASPECT; walkers are given
+// in world cells with their feet at y, the body a few rows above.
+const sweptNear = (wake, x, y) => wake.clearedAt(x * ASPECT, y - 3);
 
-test('a standing walker clears a full-strength pocket around them', () => {
-  const fog = new Fog();
-  fog.update(1 / 60, calm, [{ id: 'self', x: 40, y: 20 }]);
-  const [pocket, ...rest] = marks(fog);
-  assert.equal(rest.length, 0);
-  assert.equal(pocket[0], 40);
-  assert.ok(pocket[1] < 20, 'centred on the body, above the feet');
-  assert.ok(Math.abs(pocket[2] - POCKET) < 1e-6);
-  assert.equal(pocket[3], 1);
+test('a standing walker sweeps a ragged, not round, patch of fog clear', () => {
+  const wake = new FogWake();
+  for (let i = 0; i < 60; i++) wake.update(1 / 60, [{ id: 'self', x: 100, y: 50 }]);
+  assert.ok(sweptNear(wake, 100, 50) > 0.6);
+  assert.equal(sweptNear(wake, 100 + 40 / ASPECT, 50), 0);
+  // Where the patch ends differs with direction around the body.
+  const reach = (ux, uy) => {
+    let d = 0;
+    while (d < SWEEP * 3 && wake.clearedAt(100 * ASPECT + ux * d, 47 + uy * d) > 0.3) d += 0.25;
+    return d;
+  };
+  const reaches = [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7]].map(([ux, uy]) => reach(ux, uy));
+  assert.ok(Math.max(...reaches) - Math.min(...reaches) > 1, `edge varies: ${reaches}`);
 });
 
-test('walking leaves a wake that weakens and closes up', () => {
-  const fog = new Fog();
+test('a walker leaves a trail of thinned fog that fills back in', () => {
+  const wake = new FogWake();
   let x = 0;
-  for (let i = 0; i < 60; i++) {
-    x += 0.5;
-    fog.update(1 / 30, calm, [{ id: 'self', x, y: 0 }]);
+  for (let i = 0; i < 90; i++) {
+    x += 0.6;
+    wake.update(1 / 30, [{ id: 'self', x, y: 0 }]);
   }
-  const wake = marks(fog).slice(1);
-  assert.ok(wake.length >= 3);
-  assert.ok(wake.every((m) => m[0] < x));
-  // Older marks (further behind) are fainter and narrower.
-  assert.ok(wake[0][3] < wake.at(-1)[3] && wake[0][2] < wake.at(-1)[2]);
-  for (let i = 0; i < 40; i++) fog.update(0.1, calm, [{ id: 'self', x, y: 0 }]);
-  assert.equal(fog.wake.length, 0);
-  assert.ok(WAKE_LIFE < 4);
+  const behind = sweptNear(wake, x - 15 / ASPECT, 0);
+  assert.ok(behind > 0.2, `trail behind: ${behind}`);
+  assert.ok(sweptNear(wake, x - 15 / ASPECT, 0) > sweptNear(wake, x - 40 / ASPECT, 0));
+  // The swept air was dragged along, so it keeps moving after the walker.
+  const centre = (WAKE_SIZE / 2) * WAKE_SIZE + WAKE_SIZE / 2;
+  assert.ok(Math.max(...wake.vx.slice(centre - 20, centre + 20)) > 0);
+  // Once everyone has gone, the fog closes up again.
+  for (let i = 0; i < 50 * REFILL; i++) wake.update(0.1, []);
+  assert.ok(Math.max(...wake.bytes) < 3);
 });
 
-test('the wake stays within the renderer limit and a teleport leaves no trail', () => {
-  const fog = new Fog();
-  let x = 0;
-  for (let i = 0; i < 200; i++) {
-    x += 10;
-    fog.update(1 / 60, calm, [{ id: 'self', x, y: 0 }, { id: 'peer', x: -x, y: 5 }]);
-  }
-  assert.ok(marks(fog).length <= STIRS);
-  assert.equal(fog.stirs().length, STIRS * 4);
-  const teleported = new Fog();
-  teleported.update(1 / 60, calm, [{ id: 'self', x: 0, y: 0 }]);
-  teleported.update(1 / 60, calm, [{ id: 'self', x: 5000, y: 300 }]);
-  assert.equal(teleported.wake.length, 0);
-  teleported.update(1 / 60, calm, [{ id: 'self', x: NaN, y: 0 }]);
-  assert.equal(marks(teleported).length, 0);
+test('the field follows the player in whole cells and ignores bad input', () => {
+  const wake = new FogWake();
+  wake.update(1 / 60, [{ id: 'self', x: 0, y: 0 }]);
+  const ox = wake.ox;
+  wake.update(1 / 60, [{ id: 'self', x: 3, y: 0 }]);
+  assert.equal(wake.ox, ox, 'small steps do not move the field');
+  wake.update(1 / 60, [{ id: 'self', x: 200, y: 400 }]);
+  assert.ok(Number.isInteger(wake.ox) && Number.isInteger(wake.oy));
+  assert.ok(Math.abs(wake.ox + WAKE_SIZE / 2 - 200 * ASPECT) <= 1);
+  wake.update(NaN, [{ id: 'self', x: NaN, y: 0 }, null]);
+  wake.update(1 / 60, [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 1, y: 1 }, { id: 'c', x: 2, y: 2 },
+    { id: 'd', x: 3, y: 3 }, { id: 'e', x: 4, y: 4 }]);
+  assert.ok(wake.tracks.size <= 4);
+  assert.ok(wake.bytes.every((v) => Number.isFinite(v)));
+  assert.equal(new FogWake().clearedAt(0, 0), 0);
 });

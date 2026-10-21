@@ -13,7 +13,6 @@
 // over the finished scene without touching the cell buffers.
 
 import { mulberry32 } from '../core/rng.js';
-import { STIRS } from '../world/fog.js';
 import { ASPECT } from '../world/world.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
 import { FOG, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
@@ -27,7 +26,6 @@ const NOISE_SIZE = 256;
 // pile up over one spot.
 const FOG_GLYPH = glyph('o');
 const FOG_LAYERS = 5;
-const NO_STIRS = new Float32Array(STIRS * 4);
 const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
 
 const VERT = `#version 300 es
@@ -52,9 +50,11 @@ uniform sampler2D uNoise;
 uniform vec2 uWorld;
 uniform vec2 uFogDrift;
 uniform vec3 uFog;
-// Where walkers have parted the fog: x, y (world cells), radius (rows) and
-// strength for each, as packed by world/fog.js.
-uniform vec4 uStir[${STIRS}];
+// How much fog walkers have swept from the ground around the player (see
+// world/fog-wake.js), and where that field lies: its corner and side, in
+// rows with columns scaled to rows.
+uniform sampler2D uSwept;
+uniform vec3 uSweptArea;
 out vec4 outColor;
 
 const float NOISE = ${NOISE_SIZE.toFixed(1)};
@@ -107,58 +107,39 @@ float random(vec2 slot, float salt) {
   return texelFetch(uNoise, ivec2(mod(slot + vec2(salt * 61.0, salt * 23.0), NOISE)), 0).r;
 }
 
-// The few stirs near the pixel being shaded, gathered once per pixel so each
-// fog character can be shoved by them without walking the whole list.
-const int NEAR = 3;
-vec4 near[NEAR];
-int nearCount = 0;
-
-// How far walkers shove a fog character sitting at a point, in world cells.
-// Mist inside a pocket is thrown out toward its rim and the shove dies away
-// a little beyond it, so the characters bunch up around the clearing. It
-// eases to nothing at the very centre, where its direction would flip, and
-// is capped so overlapping wake marks cannot fling characters out of reach.
-vec2 shove(vec2 at) {
-  vec2 ground = at * vec2(${ASPECT.toFixed(4)}, 1.0);
-  vec2 sum = vec2(0.0);
-  for (int i = 0; i < NEAR; i++) {
-    if (i >= nearCount) break;
-    vec4 stir = near[i];
-    vec2 away = ground - stir.xy * vec2(${ASPECT.toFixed(4)}, 1.0);
-    float dist = max(length(away), 0.001);
-    sum += away / dist * stir.w * stir.z * 0.22 * smoothstep(0.0, stir.z * 0.5, dist)
-      * (1.0 - smoothstep(stir.z * 0.5, stir.z * 1.8, dist));
-  }
-  float size = length(sum);
-  if (size > 2.5) sum *= 2.5 / size;
-  return sum / vec2(${ASPECT.toFixed(4)}, 1.0);
+// How much fog has been swept from a point of the ground. The field is
+// coarse, so it is read through a wandering, slowly boiling offset that
+// frays its edges into wisps instead of smooth blobs.
+float sweptAt(vec2 ground) {
+  vec2 uv = (ground - uSweptArea.xy) / uSweptArea.z;
+  if (any(lessThan(uv, vec2(-0.05))) || any(greaterThan(uv, vec2(1.05)))) return 0.0;
+  float t = uFog.z;
+  vec2 fray = vec2(fbm(ground / 3.2 + vec2(t * 0.31, -t * 0.12)),
+    fbm(ground / 3.2 + vec2(-t * 0.17, t * 0.27) + 7.3)) - 0.5;
+  uv += fray * (3.4 / uSweptArea.z);
+  return texture(uSwept, uv).r;
 }
 
 // One layer of fog characters around a point, in world cells. Each slot of
 // the layer's grid holds one 'o', nudged off the grid, sized a little up or
-// down and swaying on its own, then shoved whole by any walker nearby, so
-// the characters move aside without being bent out of shape. Only the four
-// slots that land nearest the point can reach it, or the nine nearest where
-// a shove may have carried a character in from further off. Every character fades with
-// the fog's thickness and with its own slow pulse, so banks churn rather than
-// slide. Returns the colour after laying the layer's characters over it.
-vec3 fogLayer(vec3 color, vec2 at, vec2 pushed, float layer, float thick, vec3 tint) {
+// down and swaying on its own; only the four slots nearest the point can
+// reach it. Every character fades with the fog's thickness and with its own
+// slow pulse, so banks churn rather than slide. Returns the colour after
+// laying the layer's characters over it.
+vec3 fogLayer(vec3 color, vec2 at, float layer, float thick, vec3 tint) {
   float t = uFog.z;
   vec2 shift = vec2(uFogDrift.x / ${ASPECT.toFixed(4)}, uFogDrift.y) * (0.75 + 0.18 * layer)
     - vec2(layer * 0.37, layer * 0.61);
   vec2 q = at - shift;
-  bool stirred = nearCount > 0;
-  vec2 base = stirred ? floor(q - pushed) - 1.0 : floor(q - 0.5);
-  int span = stirred ? 3 : 2;
-  for (int k = 0; k < span * span; k++) {
-    vec2 slot = base + vec2(float(k % span), float(k / span));
+  vec2 base = floor(q - 0.5);
+  for (int k = 0; k < 4; k++) {
+    vec2 slot = base + vec2(float(k & 1), float(k >> 1));
     float r1 = random(slot, layer);
     float r2 = random(slot, layer + 4.0);
     float r3 = random(slot, layer + 8.0);
     float phase = r1 * 6.2832;
     vec2 centre = slot + 0.5 + (vec2(r1, r2) - 0.5) * 0.6
       + 0.12 * vec2(sin(t * 0.5 + phase), cos(t * 0.4 + phase * 1.7));
-    if (stirred) centre += shove(centre + shift);
     float size = 0.8 + 0.5 * r3;
     vec2 local = (q - centre) / size + 0.5;
     if (any(lessThan(local, vec2(0.0))) || any(greaterThan(local, vec2(1.0)))) continue;
@@ -195,29 +176,12 @@ void main() {
     // once for the pixel and shared by every character over it.
     vec2 at = uWorld + p / uCell;
     vec2 ground = at * vec2(${ASPECT.toFixed(4)}, 1.0);
-    // Walkers clear a pocket in the fog, which bunches up thicker around
-    // it, and their wake closes up behind them.
-    float open = 1.0;
-    float bunch = 0.0;
-    for (int i = 0; i < ${STIRS}; i++) {
-      vec4 stir = uStir[i];
-      if (stir.w <= 0.0) continue;
-      float dist = length(ground - stir.xy * vec2(${ASPECT.toFixed(4)}, 1.0));
-      if (dist > stir.z * 1.8) continue;
-      open *= 1.0 - stir.w * (1.0 - smoothstep(stir.z * 0.4, stir.z, dist));
-      bunch += stir.w * smoothstep(stir.z * 0.6, stir.z, dist) * (1.0 - smoothstep(stir.z, stir.z * 1.8, dist));
-      if (nearCount < NEAR) {
-        near[nearCount] = stir;
-        nearCount++;
-      }
-    }
-    float thick = clamp(fogAt(ground) * uFog.x * (1.0 + 0.25 * bunch), 0.0, 1.5) * open;
+    // Fog that walkers have swept away, thinning raggedly toward clear.
+    float swept = sweptAt(ground);
+    float thick = clamp(fogAt(ground) * uFog.x, 0.0, 1.5) * (1.0 - smoothstep(0.05, 0.85, swept));
     if (thick > 0.01) {
       vec3 tint = mix(${vec3(FOG_THIN)}, ${vec3(FOG)}, clamp(thick, 0.0, 1.0));
-      vec2 pushed = nearCount > 0 ? shove(at) : vec2(0.0);
-      for (int layer = 0; layer < ${FOG_LAYERS}; layer++) {
-        color = fogLayer(color, at, pushed, float(layer), thick, tint);
-      }
+      for (int layer = 0; layer < ${FOG_LAYERS}; layer++) color = fogLayer(color, at, float(layer), thick, tint);
     }
   }
 
@@ -275,7 +239,7 @@ export class AsciiRenderer {
     this.prog = prog;
     this.u = {};
     for (const name of ['uFg', 'uBg', 'uOv', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
-      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uStir']) {
+      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uSwept', 'uSweptArea']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
 
@@ -317,6 +281,11 @@ export class AsciiRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
 
+    // The swept-fog field is smooth, so it is read with filtering.
+    this.sweptTex = dataTexture(gl);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
     this.fgTex = dataTexture(gl);
     this.bgTex = dataTexture(gl);
     this.ovTex = dataTexture(gl);
@@ -326,6 +295,7 @@ export class AsciiRenderer {
     gl.uniform1i(this.u.uAtlas, 2);
     gl.uniform1i(this.u.uOv, 3);
     gl.uniform1i(this.u.uNoise, 4);
+    gl.uniform1i(this.u.uSwept, 5);
     gl.uniform2f(this.u.uAtlasCols, atlas.cols, atlas.rows);
     gl.uniform2f(this.u.uAtlasCell, atlas.cellW, atlas.cellH);
     gl.uniform1f(this.u.uAtlasPad, atlas.pad);
@@ -475,7 +445,18 @@ export class AsciiRenderer {
     gl.uniform3f(this.u.uFog, fog?.density ?? 0, fog?.coverage ?? 0, fog?.time ?? 0);
     gl.uniform2f(this.u.uWorld, fog?.x0 ?? 0, fog?.y0 ?? 0);
     gl.uniform2f(this.u.uFogDrift, fog?.driftX ?? 0, fog?.driftY ?? 0);
-    gl.uniform4fv(this.u.uStir, fog?.stirs ?? NO_STIRS);
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, this.sweptTex);
+    const wake = fog?.wake;
+    if (wake && !Number.isNaN(wake.ox)) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, wake.size, wake.size, 0, gl.RED, gl.UNSIGNED_BYTE, wake.bytes);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.uniform3f(this.u.uSweptArea, wake.ox, wake.oy, wake.size);
+    } else {
+      // Nothing swept: an area too small to reach any pixel.
+      gl.uniform3f(this.u.uSweptArea, -1e6, -1e6, 1);
+    }
 
     gl.uniform2f(this.u.uView, this.canvas.width, this.canvas.height);
     gl.uniform2f(this.u.uCell, this.cellW, this.cellH);

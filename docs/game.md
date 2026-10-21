@@ -163,10 +163,10 @@ short version see the [README](../README.md).
 - **Ground fog.** Banks of mist made of pale `o` characters lie over the
   land in any weather and creep along with the wind, thinning to clear
   ground between them. The characters float free of the grid in several
-  drifting layers that overlap and pulse, so thick fog piles up dense. Fog
-  parts around anyone walking through it: they stand in a clear pocket, the
-  characters around it are shoved aside and bunch up at its edge, and the
-  path behind them stays open for a few seconds before the mist closes. The Fog
+  drifting layers that overlap and pulse, so thick fog piles up dense. Anyone
+  walking through it sweeps a ragged patch thin and drags the air along with
+  them; the swept fog trails behind, curls into eddies and fills back in over
+  a few seconds. The Fog
   preset rolls in thick, wide banks over a few seconds, and drizzle thickens
   them a little.
 - **Skeletons.** The dead climb out of the ground a short way off, run at the
