@@ -29,10 +29,9 @@ test('a lasting zone turns the fog around itself', () => {
     run(wake, 30, () => ({ whirls: [{ x: 100, y: 30, radius: 12, spin, strength: 1 }] }));
     // Air to the right of the middle moves down the screen for a clockwise
     // turn and up for an anticlockwise one.
-    const n = wake.cells;
-    const i = Math.floor((60 + 8 - wake.ox) / 2);
-    const j = Math.floor((30 - wake.oy) / 2);
-    assert.equal(Math.sign(wake.vy[j * n + i]), spin);
+    const i = Math.floor((60 + 8 - wake.ox) / wake.cell);
+    const j = Math.floor((30 - wake.oy) / wake.cell);
+    assert.equal(Math.sign(wake.vy[j * wake.w + i]), spin);
   }
 });
 

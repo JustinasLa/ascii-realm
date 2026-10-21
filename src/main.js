@@ -819,7 +819,7 @@ function frame(now) {
   const view = camera.view(renderer);
   weather.update(dt, time, world, view, sound.weather);
   const spellFog = fogSpells.collect(casting);
-  fog.update(dt, weather, fogWalkers(view, spellFog.walkers), spellFog);
+  fog.update(dt, weather, fogWalkers(view, spellFog.walkers), spellFog, view);
   if (wasTapped('KeyL') || summonLightning) {
     const bolt = weather.summon(world, view, player);
     if (bolt) sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });

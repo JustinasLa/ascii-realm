@@ -9,6 +9,7 @@
 
 import { FogWake } from './fog-wake.js';
 import { WEATHER_EFFECTS } from './weather.js';
+import { ASPECT } from './world.js';
 
 // A thin, patchy mist lies over the land in any weather.
 export const AMBIENT_FOG = { density: 0.75, coverage: 0.4 };
@@ -40,8 +41,10 @@ export class Fog {
   }
 
   // `walkers` lists who is moving through the fog this frame and `spells`
-  // the bursts and whirls spells make in it (see FogWake.update).
-  update(dt, weather, walkers = [], spells = {}) {
+  // the bursts and whirls spells make in it (see FogWake.update). `view`
+  // (x0, y0, cols, rows in world cells) is what is on screen, so the fog
+  // reacts everywhere the player can see.
+  update(dt, weather, walkers = [], spells = {}, view = null) {
     dt = Number.isFinite(dt) ? Math.max(0, Math.min(0.1, dt)) : 0;
     const want = Fog.target(weather?.preset, weather?.intensity);
     const k = 1 - Math.exp(-EASE * dt);
@@ -51,7 +54,8 @@ export class Fog {
     this.driftX += (CREEP[0] + wind * WIND_PUSH) * dt;
     this.driftY += (CREEP[1] + Math.abs(wind) * WIND_PUSH * 0.15) * dt;
     this.time += dt;
-    this.wake.update(dt, walkers, this, spells);
+    const area = view ? { x: view.x0 * ASPECT, y: view.y0, w: view.cols * ASPECT, h: view.rows } : null;
+    this.wake.update(dt, walkers, this, spells, area);
   }
 
   // What the renderer needs to shade the fog over the current view.

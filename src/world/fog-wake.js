@@ -1,25 +1,38 @@
 // How walkers push the ground fog around: a small fluid-like field, laid on
-// the ground around the player, holding how much fog each patch really has.
+// the ground under the whole view, holding how much fog each patch really
+// has.
 //
 // Fog is never destroyed. A walker moving through it shoves the fog ahead
 // of them aside like a bow wave and drags the air behind along with them;
 // the fog rides that air, so it piles up thicker in the fog around their
 // path and curls into the gap behind them in eddies. Standing still, they
-// only nudge it gently, so the fog creeps back around their legs. Over a few seconds the piles spread back and the
-// patches fill in, until the fog lies as the undisturbed banks would.
+// only nudge it gently, so the fog creeps back around their legs. Over a few
+// seconds the piles spread back and the patches fill in, until the fog lies
+// as the undisturbed banks would.
 //
 // The field stores the fog as a difference from the undisturbed banks (see
 // fog-banks.js), so the banks keep drifting and churning everywhere else.
-// It is square in rows (columns are scaled by ASPECT), CELL rows per cell,
-// and moves with the player in whole cells so it never smears.
+// It works in rows (columns are scaled by ASPECT) and covers the view with a
+// margin beyond every edge, where it fades back into the banks out of
+// sight. It moves with the view a cell at a time so it never smears, and
+// its cells are coarser when zoomed out so its cost stays bounded.
 
 import { valueNoise } from '../core/noise.js';
 import { fogAt } from './fog-banks.js';
 import { ASPECT } from './world.js';
 
-// Cells across the field and their side in rows.
-export const WAKE_CELLS = 48;
-export const CELL = 2;
+// The side of a cell in rows, finest first, and the most cells the field
+// may have; the finest size that fits is used.
+export const CELL_SIZES = [2, 3, 4, 6, 8];
+export const MAX_CELLS = 6000;
+// Cells of margin beyond each edge of the view: the fade and a little room.
+const MARGIN = 7;
+// Where nothing gives the view, the field is this many rows each way around
+// the first walker.
+const DEFAULT_SPAN = 96;
+// The undisturbed banks drift slowly, so a third of the rows are worked out
+// afresh each frame.
+const REFRESH = 3;
 // How far above the feet a walker's body is centred, and the rough radius of
 // the patch a walker shoves the fog out of, in rows.
 const BODY_LIFT = 3;
@@ -38,7 +51,7 @@ const SETTLE = 0.9;
 const SPREAD = 4;
 export const REFILL = 5;
 // The field blends back into the undisturbed banks over this many cells at
-// its edge, so its border never shows.
+// its edge, which lies beyond the view.
 const BORDER = 5;
 // The player, friends, spells in flight and the nearest monsters all stir
 // the fog.
@@ -56,11 +69,23 @@ const FLING = 26;
 
 export class FogWake {
   // `banks` gives the undisturbed fog at a point (see fog-banks.js).
-  constructor({ cells = WAKE_CELLS, banks = fogAt } = {}) {
-    this.cells = cells;
-    this.size = cells * CELL;
+  constructor({ banks = fogAt, maxCells = MAX_CELLS } = {}) {
     this.banks = banks;
-    const n = cells * cells;
+    this.maxCells = maxCells;
+    // The side of a cell in rows.
+    this.cell = CELL_SIZES[0];
+    // The ground (in rows) under the field's first cell's corner.
+    this.ox = NaN;
+    this.oy = NaN;
+    this.time = 0;
+    this.frame = 0;
+    this.tracks = new Map();
+    this.allocate(0, 0);
+  }
+
+  // Makes room for a field `w` cells across and `h` down.
+  allocate(w, h) {
+    const n = w * h;
     // The fog's difference from the undisturbed banks, and the air's motion.
     this.delta = new Float32Array(n);
     this.vx = new Float32Array(n);
@@ -73,25 +98,33 @@ export class FogWake {
     // Per cell, the fog as it now lies and as the banks alone would put it,
     // for the renderer's texture.
     this.texels = new Float32Array(n * 2);
-    // The ground (in rows) under the field's first cell's corner.
-    this.ox = NaN;
-    this.oy = NaN;
-    this.time = 0;
-    this.tracks = new Map();
+    this.w = w;
+    this.h = h;
   }
+
+  // The field's extent in rows.
+  get width() { return this.w * this.cell; }
+  get height() { return this.h * this.cell; }
 
   // `walkers` lists who is moving through the fog, each as { id, x, y } in
   // world cells with their feet at y, optionally `size` (1 for the player)
   // and `lift`, how far above y the fog is pushed from (the body's middle
-  // unless given); the first is the player, whom the field follows. `state`
-  // places the banks: driftX, driftY, time and coverage. `spells` lists what
-  // spells do to the fog this frame: `bursts` and `whirls`, each { x, y }
-  // in world cells with a `radius` in rows and a `strength` (1 is full);
-  // whirls also have a `spin`, positive clockwise on screen.
-  update(dt, walkers, state, spells = {}) {
+  // unless given). `state` places the banks: driftX, driftY, time and
+  // coverage. `spells` lists what spells do to the fog this frame: `bursts`
+  // and `whirls`, each { x, y } in world cells with a `radius` in rows and a
+  // `strength` (1 is full); whirls also have a `spin`, positive clockwise on
+  // screen. `area` is the ground the view shows, { x, y, w, h } in rows;
+  // without it the field centres on the first walker.
+  update(dt, walkers, state, spells = {}, area = null) {
     this.time += dt;
+    this.frame++;
     const live = (walkers ?? []).filter((w) => Number.isFinite(w?.x) && Number.isFinite(w?.y)).slice(0, MAX_WALKERS);
-    if (live.length) this.follow(live[0].x * ASPECT, live[0].y - BODY_LIFT * sizeOf(live[0]));
+    if (!validArea(area) && live.length) {
+      const gx = live[0].x * ASPECT;
+      const gy = live[0].y - BODY_LIFT * sizeOf(live[0]);
+      area = { x: gx - DEFAULT_SPAN / 2, y: gy - DEFAULT_SPAN / 2, w: DEFAULT_SPAN, h: DEFAULT_SPAN };
+    }
+    if (validArea(area)) this.cover(area, state);
     if (Number.isNaN(this.ox)) return;
     this.measure(state);
     const seen = new Set();
@@ -119,44 +152,101 @@ export class FogWake {
     this.pack();
   }
 
-  // Keeps the player near the middle, shifting the field by whole cells.
-  follow(gx, gy) {
-    const ox = Math.round((gx - this.size / 2) / CELL) * CELL;
-    const oy = Math.round((gy - this.size / 2) / CELL) * CELL;
+  // Lays the field over the view and its margin, in whole cells of the
+  // finest size that fits. Panning shifts what is already there; a new cell
+  // size or shape carries it over by resampling.
+  cover(area, state) {
+    const pad = 2 * MARGIN;
+    const cell = CELL_SIZES.find((c) => (Math.ceil(area.w / c) + pad) * (Math.ceil(area.h / c) + pad) <= this.maxCells)
+      ?? CELL_SIZES.at(-1);
+    // Rounded up so a little zooming does not remake the field every frame.
+    const w = Math.ceil((Math.ceil(area.w / cell) + pad) / 4) * 4;
+    const h = Math.ceil((Math.ceil(area.h / cell) + pad) / 4) * 4;
+    const ox = Math.floor((area.x + area.w / 2) / cell - w / 2) * cell;
+    const oy = Math.floor((area.y + area.h / 2) / cell - h / 2) * cell;
     if (Number.isNaN(this.ox)) {
+      this.cell = cell;
+      this.allocate(w, h);
       this.ox = ox;
       this.oy = oy;
+      this.refresh(state, 0, h);
       return;
     }
-    const dx = (ox - this.ox) / CELL;
-    const dy = (oy - this.oy) / CELL;
-    if (Math.abs(dx) < this.cells / 8 && Math.abs(dy) < this.cells / 8) return;
-    const n = this.cells;
-    for (const field of ['delta', 'vx', 'vy']) {
+    if (cell !== this.cell || w !== this.w || h !== this.h) {
+      this.regrid(cell, w, h, ox, oy, state);
+      return;
+    }
+    const dx = (ox - this.ox) / cell;
+    const dy = (oy - this.oy) / cell;
+    if (!dx && !dy) return;
+    for (const field of ['delta', 'vx', 'vy', 'base']) {
       const from = this[field];
       const to = this._a;
       to.fill(0);
-      for (let j = Math.max(0, -dy); j < Math.min(n, n - dy); j++) {
-        for (let i = Math.max(0, -dx); i < Math.min(n, n - dx); i++) to[j * n + i] = from[(j + dy) * n + i + dx];
+      for (let j = Math.max(0, -dy); j < Math.min(h, h - dy); j++) {
+        for (let i = Math.max(0, -dx); i < Math.min(w, w - dx); i++) to[j * w + i] = from[(j + dy) * w + i + dx];
       }
       this[field] = to;
       this._a = from;
     }
     this.ox = ox;
     this.oy = oy;
+    // The banks under the cells that just came into the field.
+    if (Math.abs(dx) >= w || Math.abs(dy) >= h) {
+      this.refresh(state, 0, h);
+      return;
+    }
+    if (dy > 0) this.refresh(state, h - dy, h);
+    if (dy < 0) this.refresh(state, 0, -dy);
+    if (dx) {
+      const from = dx > 0 ? w - dx : 0;
+      const to = dx > 0 ? w : -dx;
+      for (let j = 0; j < h; j++) {
+        for (let i = from; i < to; i++) this.base[j * w + i] = this.bankAt(i, j, state);
+      }
+    }
+  }
+
+  // Remakes the field at a new cell size or shape, carrying the pushed fog
+  // and the moving air over.
+  regrid(cell, w, h, ox, oy, state) {
+    const old = { w: this.w, h: this.h, cell: this.cell, ox: this.ox, oy: this.oy,
+      delta: this.delta, vx: this.vx, vy: this.vy };
+    this.cell = cell;
+    this.allocate(w, h);
+    this.ox = ox;
+    this.oy = oy;
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const x = (ox + (i + 0.5) * cell - old.ox) / old.cell - 0.5;
+        const y = (oy + (j + 0.5) * cell - old.oy) / old.cell - 0.5;
+        if (x < -0.5 || y < -0.5 || x > old.w - 0.5 || y > old.h - 0.5) continue;
+        const c = j * w + i;
+        this.delta[c] = sample(old.delta, old.w, old.h, x, y);
+        this.vx[c] = sample(old.vx, old.w, old.h, x, y);
+        this.vy[c] = sample(old.vy, old.w, old.h, x, y);
+      }
+    }
+    this.refresh(state, 0, h);
+  }
+
+  bankAt(i, j, state) {
+    return this.banks(this.ox + (i + 0.5) * this.cell, this.oy + (j + 0.5) * this.cell, state);
+  }
+
+  // Works out the undisturbed banks afresh for rows `from` up to `to`.
+  refresh(state, from, to) {
+    for (let j = from; j < to; j++) {
+      for (let i = 0; i < this.w; i++) this.base[j * this.w + i] = this.bankAt(i, j, state);
+    }
   }
 
   // The fog every cell holds: the undisturbed banks plus what was pushed.
+  // The banks drift slowly, so each frame only every REFRESH-th row of them
+  // is worked out again.
   measure(state) {
-    const n = this.cells;
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const c = j * n + i;
-        const b = this.banks(this.ox + (i + 0.5) * CELL, this.oy + (j + 0.5) * CELL, state);
-        this.base[c] = b;
-        this.fog[c] = Math.max(0, b + this.delta[c]);
-      }
-    }
+    for (let j = this.frame % REFRESH; j < this.h; j += REFRESH) this.refresh(state, j, j + 1);
+    for (let c = 0; c < this.w * this.h; c++) this.fog[c] = Math.max(0, this.base[c] + this.delta[c]);
   }
 
   // A walker blows the air in a ragged patch around them outward and drags
@@ -201,51 +291,43 @@ export class FogWake {
   }
 
   stamp(gx, gy, { track, reach, held, moving, fast, fx, fy, pull }) {
-    const n = this.cells;
     const t = this.time * 0.6;
-    const lx = (gx - this.ox) / CELL;
-    const ly = (gy - this.oy) / CELL;
-    const span = (reach * 1.4) / CELL;
-    for (let j = Math.max(0, Math.floor(ly - span)); j <= Math.min(n - 1, Math.ceil(ly + span)); j++) {
-      for (let i = Math.max(0, Math.floor(lx - span)); i <= Math.min(n - 1, Math.ceil(lx + span)); i++) {
-        const ax = (i + 0.5 - lx) * CELL;
-        const ay = (j + 0.5 - ly) * CELL;
-        const d = Math.hypot(ax, ay);
-        // The patch's edge wanders with direction and time, so it is never
-        // round; right under the body the fog goes the way the walker faces
-        // or, standing, some way the noise picks.
-        const angle = d > 0.5 ? Math.atan2(ay, ax) : Math.atan2(track.vy, track.vx) || t;
-        const ux = Math.cos(angle);
-        const uy = Math.sin(angle);
-        const r = reach * (0.5 + 1.0 * valueNoise(ux * 1.6 + t + track.seed, uy * 1.6 - t * 0.7, 913));
-        const within = 1 - smooth(r * 0.9, r * 1.4, d);
-        if (within <= 0) continue;
-        // Fog ahead is shoved forward and aside; fog behind is not pushed
-        // but dragged along into the gap the walker leaves.
-        const ahead = ux * fx + uy * fy;
-        const bow = moving * Math.max(0, 0.35 + ahead);
-        const blow = PUSH * (STANDING_PUSH + bow) * (1 - smooth(r * 0.55, r * 1.15, d));
-        const drag = DRAG * (1 - smooth(r * 0.3, r * 1.1, d));
-        const px = ux + fx * 0.6 * moving;
-        const py = uy + fy * 0.6 * moving;
-        const c = j * n + i;
-        this.vx[c] += (px * blow + track.vx * held * drag - this.vx[c]) * within * pull;
-        this.vy[c] += (py * blow + track.vy * held * drag - this.vy[c]) * within * pull;
-        if (fast > 0) {
-          // Flung straight out from the path, added to whatever the air is
-          // already doing so later stamps cannot undo it.
-          const sx = ux - ahead * fx;
-          const sy = uy - ahead * fy;
-          const side = Math.hypot(sx, sy);
-          if (side > 1e-3) {
-            const fling = FLING * fast * within * (1 - smooth(r * 0.5, r * 1.2, d)) / side;
-            this.vx[c] += sx * fling;
-            this.vy[c] += sy * fling;
-            limit(this.vx, this.vy, c);
-          }
+    this.around(gx, gy, reach * 1.4, (c, ux, uy, d) => {
+      // The patch's edge wanders with direction and time, so it is never
+      // round; right under the body the fog goes the way the walker faces
+      // or, standing, some way the noise picks.
+      if (d <= 0.5) {
+        const angle = Math.atan2(track.vy, track.vx) || t;
+        ux = Math.cos(angle);
+        uy = Math.sin(angle);
+      }
+      const r = reach * (0.5 + 1.0 * valueNoise(ux * 1.6 + t + track.seed, uy * 1.6 - t * 0.7, 913));
+      const within = 1 - smooth(r * 0.9, r * 1.4, d);
+      if (within <= 0) return;
+      // Fog ahead is shoved forward and aside; fog behind is not pushed
+      // but dragged along into the gap the walker leaves.
+      const ahead = ux * fx + uy * fy;
+      const bow = moving * Math.max(0, 0.35 + ahead);
+      const blow = PUSH * (STANDING_PUSH + bow) * (1 - smooth(r * 0.55, r * 1.15, d));
+      const drag = DRAG * (1 - smooth(r * 0.3, r * 1.1, d));
+      const px = ux + fx * 0.6 * moving;
+      const py = uy + fy * 0.6 * moving;
+      this.vx[c] += (px * blow + track.vx * held * drag - this.vx[c]) * within * pull;
+      this.vy[c] += (py * blow + track.vy * held * drag - this.vy[c]) * within * pull;
+      if (fast > 0) {
+        // Flung straight out from the path, added to whatever the air is
+        // already doing so later stamps cannot undo it.
+        const sx = ux - ahead * fx;
+        const sy = uy - ahead * fy;
+        const side = Math.hypot(sx, sy);
+        if (side > 1e-3) {
+          const fling = FLING * fast * within * (1 - smooth(r * 0.5, r * 1.2, d)) / side;
+          this.vx[c] += sx * fling;
+          this.vy[c] += sy * fling;
+          limit(this.vx, this.vy, c);
         }
       }
-    }
+    });
   }
 
   // A spell going off throws the fog outward from a point, hardest a little
@@ -287,55 +369,55 @@ export class FogWake {
   // Calls `each(cell, ux, uy, distance)` for every cell within `reach` rows
   // of a point of the ground, with the unit direction out from it.
   around(gx, gy, reach, each) {
-    const n = this.cells;
-    const lx = (gx - this.ox) / CELL;
-    const ly = (gy - this.oy) / CELL;
-    const span = reach / CELL;
-    for (let j = Math.max(0, Math.floor(ly - span)); j <= Math.min(n - 1, Math.ceil(ly + span)); j++) {
-      for (let i = Math.max(0, Math.floor(lx - span)); i <= Math.min(n - 1, Math.ceil(lx + span)); i++) {
-        const ax = (i + 0.5 - lx) * CELL;
-        const ay = (j + 0.5 - ly) * CELL;
+    const { w, h, cell } = this;
+    const lx = (gx - this.ox) / cell;
+    const ly = (gy - this.oy) / cell;
+    const span = reach / cell;
+    for (let j = Math.max(0, Math.floor(ly - span)); j <= Math.min(h - 1, Math.ceil(ly + span)); j++) {
+      for (let i = Math.max(0, Math.floor(lx - span)); i <= Math.min(w - 1, Math.ceil(lx + span)); i++) {
+        const ax = (i + 0.5 - lx) * cell;
+        const ay = (j + 0.5 - ly) * cell;
         const d = Math.hypot(ax, ay);
         if (d > reach) continue;
-        each(j * n + i, d > 1e-6 ? ax / d : 1, d > 1e-6 ? ay / d : 0, d);
+        each(j * w + i, d > 1e-6 ? ax / d : 1, d > 1e-6 ? ay / d : 0, d);
       }
     }
   }
 
   // Eddies: a slowly turning curl of noise, only where the air is moving.
   swirl(dt) {
-    const n = this.cells;
+    const { w, h, cell } = this;
     const t = this.time * 0.35;
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const c = j * n + i;
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const c = j * w + i;
         const moving = Math.hypot(this.vx[c], this.vy[c]);
         if (moving < 0.3) continue;
-        const gx = (this.ox + (i + 0.5) * CELL) * 0.14;
-        const gy = (this.oy + (j + 0.5) * CELL) * 0.14;
+        const gx = (this.ox + (i + 0.5) * cell) * 0.14;
+        const gy = (this.oy + (j + 0.5) * cell) * 0.14;
         const e = 0.5;
         const dny = valueNoise(gx, gy + e + t, 377) - valueNoise(gx, gy - e + t, 377);
         const dnx = valueNoise(gx + e - t, gy, 377) - valueNoise(gx - e - t, gy, 377);
-        const w = SWIRL * Math.min(1, moving / 6) * dt / e;
-        this.vx[c] += dny * w;
-        this.vy[c] -= dnx * w;
+        const k = SWIRL * Math.min(1, moving / 6) * dt / e;
+        this.vx[c] += dny * k;
+        this.vy[c] -= dnx * k;
       }
     }
   }
 
   // The air carries itself along and settles.
   carryAir(dt) {
-    const n = this.cells;
+    const { w, h, cell } = this;
     const calm = Math.exp(-dt / SETTLE);
     const vx = this._a;
     const vy = this._b;
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const c = j * n + i;
-        const bx = i - (this.vx[c] * dt) / CELL;
-        const by = j - (this.vy[c] * dt) / CELL;
-        vx[c] = sample(this.vx, n, bx, by) * calm;
-        vy[c] = sample(this.vy, n, bx, by) * calm;
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const c = j * w + i;
+        const bx = i - (this.vx[c] * dt) / cell;
+        const by = j - (this.vy[c] * dt) / cell;
+        vx[c] = sample(this.vx, w, h, bx, by) * calm;
+        vy[c] = sample(this.vy, w, h, bx, by) * calm;
       }
     }
     this._a = this.vx;
@@ -347,16 +429,16 @@ export class FogWake {
   // The air carries the fog. Each cell hands a share of its fog to the
   // neighbours downwind, so fog is only ever moved, never lost.
   carryFog(dt) {
-    const n = this.cells;
+    const { w, h, cell } = this;
     const fog = this.fog;
     const next = this._c;
     next.set(fog);
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const c = j * n + i;
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const c = j * w + i;
         if (fog[c] <= 0) continue;
-        let ax = (this.vx[c] * dt) / CELL;
-        let ay = (this.vy[c] * dt) / CELL;
+        let ax = (this.vx[c] * dt) / cell;
+        let ay = (this.vy[c] * dt) / cell;
         const out = Math.abs(ax) + Math.abs(ay);
         if (out > 0.45) {
           ax *= 0.45 / out;
@@ -364,15 +446,15 @@ export class FogWake {
         }
         const ti = i + Math.sign(ax);
         const tj = j + Math.sign(ay);
-        if (ax !== 0 && ti >= 0 && ti < n) {
+        if (ax !== 0 && ti >= 0 && ti < w) {
           const m = fog[c] * Math.abs(ax);
           next[c] -= m;
-          next[j * n + ti] += m;
+          next[j * w + ti] += m;
         }
-        if (ay !== 0 && tj >= 0 && tj < n) {
+        if (ay !== 0 && tj >= 0 && tj < h) {
           const m = fog[c] * Math.abs(ay);
           next[c] -= m;
-          next[tj * n + i] += m;
+          next[tj * w + i] += m;
         }
       }
     }
@@ -382,18 +464,18 @@ export class FogWake {
 
   // Piles of pushed fog spread out and everything eases back to the banks.
   settle(dt) {
-    const n = this.cells;
+    const { w, h, cell } = this;
     const delta = this._a;
-    for (let c = 0; c < n * n; c++) delta[c] = this.fog[c] - this.base[c];
-    const spread = Math.min(0.2, (SPREAD * dt) / (CELL * CELL));
+    for (let c = 0; c < w * h; c++) delta[c] = this.fog[c] - this.base[c];
+    const spread = Math.min(0.2, (SPREAD * dt) / (cell * cell));
     const ease = Math.exp(-dt / REFILL);
     const next = this.delta;
-    for (let j = 0; j < n; j++) {
-      for (let i = 0; i < n; i++) {
-        const c = j * n + i;
+    for (let j = 0; j < h; j++) {
+      for (let i = 0; i < w; i++) {
+        const c = j * w + i;
         const d = delta[c];
-        const around = (i > 0 ? delta[c - 1] : d) + (i < n - 1 ? delta[c + 1] : d)
-          + (j > 0 ? delta[c - n] : d) + (j < n - 1 ? delta[c + n] : d);
+        const around = (i > 0 ? delta[c - 1] : d) + (i < w - 1 ? delta[c + 1] : d)
+          + (j > 0 ? delta[c - w] : d) + (j < h - 1 ? delta[c + w] : d);
         next[c] = (d + spread * (around - 4 * d)) * ease;
       }
     }
@@ -401,12 +483,12 @@ export class FogWake {
   }
 
   pack() {
-    const n = this.cells;
-    for (let j = 0; j < n; j++) {
-      const ej = Math.min(j, n - 1 - j);
-      for (let i = 0; i < n; i++) {
-        const edge = Math.min(1, Math.min(ej, i, n - 1 - i) / BORDER);
-        const c = j * n + i;
+    const { w, h } = this;
+    for (let j = 0; j < h; j++) {
+      const ej = Math.min(j, h - 1 - j);
+      for (let i = 0; i < w; i++) {
+        const edge = Math.min(1, Math.min(ej, i, w - 1 - i) / BORDER);
+        const c = j * w + i;
         const base = this.base[c];
         this.texels[c * 2] = Math.max(0, base + this.delta[c] * edge);
         this.texels[c * 2 + 1] = base;
@@ -417,7 +499,7 @@ export class FogWake {
   // How much fog lies at a point of the ground (rows), as now pushed about.
   fogAt(gx, gy) {
     if (Number.isNaN(this.ox)) return null;
-    return sample(this.fog, this.cells, (gx - this.ox) / CELL - 0.5, (gy - this.oy) / CELL - 0.5);
+    return sample(this.fog, this.w, this.h, (gx - this.ox) / this.cell - 0.5, (gy - this.oy) / this.cell - 0.5);
   }
 
   // All the fog in the field, which pushing never changes.
@@ -430,6 +512,8 @@ export class FogWake {
 
 // Spell radii are held to what the field can show.
 const clampRadius = (r) => (Number.isFinite(r) && r > 0 ? Math.min(r, 30) : 0);
+
+const validArea = (a) => a && [a.x, a.y, a.w, a.h].every(Number.isFinite) && a.w > 0 && a.h > 0;
 
 function limit(vx, vy, c) {
   const speed = Math.hypot(vx[c], vy[c]);
@@ -445,16 +529,16 @@ function smooth(a, b, x) {
   return t * t * (3 - 2 * t);
 }
 
-// Bilinear sample at a cell position, clamped to the field.
-function sample(field, n, x, y) {
-  x = Math.max(0, Math.min(n - 1, x));
-  y = Math.max(0, Math.min(n - 1, y));
-  const x0 = Math.min(n - 2, Math.floor(x));
-  const y0 = Math.min(n - 2, Math.floor(y));
+// Bilinear sample at a cell position, clamped to a field `w` by `h` cells.
+function sample(field, w, h, x, y) {
+  x = Math.max(0, Math.min(w - 1, x));
+  y = Math.max(0, Math.min(h - 1, y));
+  const x0 = Math.max(0, Math.min(w - 2, Math.floor(x)));
+  const y0 = Math.max(0, Math.min(h - 2, Math.floor(y)));
   const tx = x - x0;
   const ty = y - y0;
-  const c = y0 * n + x0;
+  const c = y0 * w + x0;
   const top = field[c] + (field[c + 1] - field[c]) * tx;
-  const bottom = field[c + n] + (field[c + n + 1] - field[c + n]) * tx;
+  const bottom = field[c + w] + (field[c + w + 1] - field[c + w]) * tx;
   return top + (bottom - top) * ty;
 }
