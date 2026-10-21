@@ -15,8 +15,7 @@ Technical and player documentation for [ASCII Realm](../README.md).
 - [Running and hosting](running.md) — solo play on a static server, the
   multiplayer lobby server, LAN and internet hosting, URL parameters.
 - [Performance](performance.md) — frame budgets, the CPU benchmark and
-  browser measurements, including a
-  [phone run from 2026-10-13](performance-phone-2026-10-13.md).
+  browser measurements.
 
 ## Systems
 

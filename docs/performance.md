@@ -52,10 +52,7 @@ The 4× and 6× stress cases remain below 30 FPS at full-screen detail. These
 results show lower work and memory use, rather than a guarantee that every old
 PC will run smoothly. The normal-speed P95 also varies between runs.
 
-Raw samples and browser assertions are in [performance.json](performance.json).
-The earlier grass-only measurements remain in the
-[archived phone report](performance-phone-2026-10-13.md); its adaptation and
-cell budgets describe that older build, rather than the current game.
+Raw samples and earlier phone measurements are kept in Git history.
 
 ## Reproduce
 
