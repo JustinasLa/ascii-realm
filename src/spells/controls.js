@@ -1,4 +1,5 @@
-import { RadialMenu, sectorPath, WHEEL } from './radial.js';
+import { RadialMenu, WHEEL } from './radial.js';
+import { wheelCells, wrap } from './wheel-art.js';
 
 export const SCHOOLS = [
   { id: 'oseni', name: 'Oseni', kind: 'Fire', sigil: '^', color: '#e9965f' },
@@ -9,7 +10,11 @@ export const SCHOOLS = [
 const STORAGE_KEY = 'ascii-realm:rune';
 // The wheel's drawing box, in wheel units around its centre.
 const BOX = WHEEL.outer + 20;
-const NS = 'http://www.w3.org/2000/svg';
+// Its character cell: the interface font size and a line height, in pixels.
+const FONT_SIZE = 12, LINE = 14;
+const HUB_WIDTH = 16;
+const SURFACE = 'rgba(6, 9, 10, 0.9)';
+
 
 const tag = (name, className, text) => {
   const node = document.createElement(name);
@@ -68,6 +73,8 @@ export class SpellControls {
   }
 
   // --- The wheel ---------------------------------------------------------
+  // Drawn in characters on a grid, like the world: line characters for the
+  // rims and spokes, and labels written into whole cells.
 
   buildWheel() {
     this.wheel = tag('div');
@@ -76,13 +83,11 @@ export class SpellControls {
     this.wheel.setAttribute('role', 'dialog');
     this.wheel.setAttribute('aria-label', 'Rune wheel');
     this.ring = tag('div', 'spell-wheel-ring');
-    this.svg = document.createElementNS(NS, 'svg');
-    this.svg.setAttribute('viewBox', `${-BOX} ${-BOX} ${BOX * 2} ${BOX * 2}`);
-    this.svg.setAttribute('aria-hidden', 'true');
-    this.labels = tag('div', 'spell-wheel-labels');
-    this.hub = tag('div', 'spell-wheel-hub');
-    this.hint = tag('p', 'spell-wheel-hint');
-    this.ring.append(this.svg, this.labels, this.hub, this.hint);
+    this.ring.style.width = this.ring.style.height = `${BOX * 2}px`;
+    this.canvas = tag('canvas', 'spell-wheel-art');
+    this.canvas.setAttribute('role', 'img');
+    this.ctx = this.canvas.getContext?.('2d') ?? null;
+    this.ring.append(this.canvas);
     this.wheel.append(this.ring);
     document.body.append(this.wheel);
   }
@@ -91,10 +96,9 @@ export class SpellControls {
     if (!this.menu.open(held)) return false;
     Object.assign(this, { source, pointerId });
     const vw = innerWidth, vh = innerHeight;
-    // Leave room under the ring for the hint line, and keep clear of the
-    // rune bar and hotbar when the screen is tall enough.
-    this.scale = Math.min(1, (vw - 16) / (BOX * 2), (vh - 56) / (BOX * 2));
-    const half = BOX * this.scale, below = vh - half * 2 > 300 ? 150 : 48;
+    // Keep clear of the rune bar and hotbar when the screen is tall enough.
+    this.scale = Math.min(1, (vw - 16) / (BOX * 2), (vh - 16) / (BOX * 2));
+    const half = BOX * this.scale, below = vh - half * 2 > 300 ? 150 : 8;
     const clamp = (v, lo, hi) => lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v));
     this.cx = clamp(x, half + 8, vw - half - 8);
     this.cy = clamp(y, half + 8, vh - half - below);
@@ -125,88 +129,145 @@ export class SpellControls {
 
   at(e) { return [(e.clientX - this.cx) / this.scale, (e.clientY - this.cy) / this.scale]; }
 
+  // The character cell and palette, read once from the interface styles.
+  grid() {
+    if (this.cell) return this.cell;
+    const family = getComputedStyle(this.wheel).fontFamily;
+    this.ctx.font = `${FONT_SIZE}px ${family}`;
+    const cw = this.ctx.measureText('M').width || FONT_SIZE * 0.6;
+    const css = getComputedStyle(document.documentElement), v = name => css.getPropertyValue(name).trim();
+    this.colors = { ink: v('--ink'), muted: v('--muted'), quiet: v('--quiet') };
+    this.cells = new Map();
+    return this.cell = { family, cw, lh: LINE, cols: 2 * Math.floor(BOX / cw) + 1, rows: 2 * Math.floor(BOX / LINE) + 1 };
+  }
+
   drawWheel() {
     const menu = this.menu, entries = menu.entries, count = entries.length;
-    const step = Math.PI * 2 / count, gap = Math.min(0.03, step * 0.08);
-    const mid = (WHEEL.inner + WHEEL.outer) / 2;
-    const width = Math.min(116, Math.max(80, 2 * mid * Math.sin(Math.min(step, Math.PI) / 2) * 0.96));
     this.wheel.dataset.stage = menu.stage;
-    this.wheel.style.setProperty('--school', menu.group?.color ?? 'var(--ink)');
-    this.sectors = entries.map((entry, i) => {
-      const path = document.createElementNS(NS, 'path');
-      const a = i * step - step / 2 + gap, b = (i + 1) * step - step / 2 - gap;
-      path.setAttribute('d', count === 1 ? sectorPath(0, 0, WHEEL.inner + 4, WHEEL.outer, -Math.PI + 0.001, Math.PI)
-        : sectorPath(0, 0, WHEEL.inner + 4, WHEEL.outer, a, b));
-      path.style.setProperty('--tint', (menu.group ?? entry).color);
-      return path;
-    });
-    this.svg.replaceChildren(...this.sectors);
-    this.cells = entries.map((entry, i) => {
-      const cell = tag('div', 'spell-wheel-label');
-      const t = i * step;
-      cell.style.left = `${BOX + mid * Math.sin(t)}px`;
-      cell.style.top = `${BOX - mid * Math.cos(t)}px`;
-      cell.style.width = `${width}px`;
-      cell.style.setProperty('--tint', (menu.group ?? entry).color);
-      if (menu.stage === 'groups') {
-        cell.append(tag('span', 'spell-wheel-sigil', entry.sigil), tag('strong', '', entry.name),
-          tag('span', 'spell-wheel-meta', `${entry.kind} · ${entry.items.length} rune${entry.items.length === 1 ? '' : 's'}`));
-      } else {
-        cell.append(tag('strong', '', entry.name), tag('span', 'spell-wheel-meta', this.stats(entry)[0]),
-          tag('span', 'spell-wheel-status'));
-      }
-      return cell;
-    });
-    this.labels.replaceChildren(...this.cells);
-    this.hint.innerHTML = menu.stage === 'groups'
-      ? `Point at a school · ${this.source === 'touch' ? 'lift' : 'release or click'} to open`
-      : menu.held ? 'Release on a rune to bind it to <kbd>R</kbd> · centre: back'
-        : this.source === 'touch' ? 'Tap a rune to bind it to CAST · centre: back · outside: close'
-          : 'Click a rune to bind it to <kbd>R</kbd> · right-click: back · <kbd>Esc</kbd> close';
+    this.waiting = entries.map(() => false);
+    this.artKey = null;
+    if (!this.ctx) return;
+    const { cw, lh, cols, rows } = this.grid();
+    // Crowded wheels set their labels further out, where the sectors are wider.
+    const step = Math.PI * 2 / count, mid = WHEEL.inner + (WHEEL.outer - WHEEL.inner) * (count > 8 ? 0.58 : 0.5);
+    const chord = Math.min(116, Math.max(80, 2 * mid * Math.sin(Math.min(step, Math.PI) / 2) * 0.96));
+    this.spots = entries.map((_, i) => ({
+      col: Math.round((cols - 1) / 2 + mid * Math.sin(i * step) / cw),
+      row: Math.round((rows - 1) / 2 - mid * Math.cos(i * step) / lh),
+      width: Math.floor(chord / cw),
+    }));
     if (menu.stage === 'items') this.tickWheel();
     this.paint();
   }
 
-  // Hover, the bound rune and the hub follow the pointer.
+  // Hover, the bound rune and the hub follow the pointer; the art is redrawn
+  // only when one of them changes.
   paint() {
     const menu = this.menu;
-    if (!menu.isOpen || !this.sectors) return;
+    if (!menu.isOpen || !this.spots) return;
     const bound = this.casting.selected;
-    menu.entries.forEach((entry, i) => {
-      const isBound = menu.stage === 'groups' ? entry.items.some(s => s.id === bound) : entry.id === bound;
-      for (const node of [this.sectors[i], this.cells[i]]) {
-        node.classList.toggle('hover', i === menu.hover);
-        node.classList.toggle('bound', isBound);
-      }
-    });
-    const hovered = menu.hovered;
-    const lines = [];
+    const key = JSON.stringify([menu.stage, menu.group?.id, menu.entries.length, menu.hover, bound, this.waiting, this.scale]);
+    if (this.artKey === key) return;
+    this.artKey = key;
+    this.render(bound);
+  }
+
+  // Label text as lines of [text, colour, bold] runs.
+  hubLines(bound) {
+    const menu = this.menu, hovered = menu.hovered, { ink, muted, quiet } = this.colors;
+    const name = (text, color) => wrap(text, HUB_WIDTH).map(line => [[line, color, true]]);
     if (menu.stage === 'groups') {
       const spell = this.casting.spells.get(bound);
-      if (hovered) lines.push(['spell-wheel-sigil', hovered.sigil], ['strong', hovered.name], ['', `${hovered.kind} runes`]);
-      else lines.push(['strong', 'Runes'], ['', spell ? 'Bound to R' : 'Choose a school'], ['spell-wheel-meta', spell?.name ?? '']);
-    } else if (hovered) {
-      lines.push(['strong', hovered.name], ...this.stats(hovered).map(s => ['spell-wheel-meta', s]));
-    } else {
-      lines.push(['spell-wheel-sigil', menu.group.sigil], ['strong', menu.group.name], ['spell-wheel-meta', '‹ back']);
+      if (hovered) return [[[hovered.sigil, hovered.color, true]], ...name(hovered.name, ink), [[`${hovered.kind} runes`, muted]]];
+      return [...name('Runes', ink), [[spell ? 'Bound to [R]' : 'Choose a school', muted]],
+        ...(spell ? wrap(spell.name, HUB_WIDTH).map(line => [[line, quiet]]) : [])];
     }
-    const key = JSON.stringify(lines);
-    if (this.hubKey === key) return;
-    this.hubKey = key;
-    this.hub.replaceChildren(...lines.map(([kind, text]) => kind === 'strong' ? tag('strong', '', text)
-      : tag('span', kind || 'spell-wheel-line', text)));
+    const color = menu.group.color;
+    if (hovered) return [...name(hovered.name, color), ...this.stats(hovered).map(s => [[s, quiet]])];
+    return [[[menu.group.sigil, color, true]], ...name(menu.group.name, color), [['< back', quiet]]];
+  }
+
+  entryLines(entry, i, bound, width) {
+    const menu = this.menu, { ink, muted, quiet } = this.colors;
+    const hover = i === menu.hover, tint = (menu.group ?? entry).color;
+    if (menu.stage === 'groups') {
+      const isBound = entry.items.some(s => s.id === bound), n = entry.items.length;
+      return [[[entry.sigil, tint, true]], ...wrap(entry.name, width).map(line => [[line, hover || isBound ? tint : muted, true]]),
+        [[`${entry.kind} · ${n} rune${n === 1 ? '' : 's'}`, hover ? muted : quiet]]];
+    }
+    const isBound = entry.id === bound, waiting = this.waiting[i];
+    const color = hover ? tint : waiting ? quiet : isBound ? tint : muted;
+    return [...wrap(entry.name, width).map(line => [[line, color, true]]),
+      [[this.stats(entry)[0], hover ? muted : quiet], ...(isBound ? [[' [', quiet], ['R', ink], [']', quiet]] : [])],
+      ...(waiting ? [[['low mana', quiet]]] : [])];
+  }
+
+  render(bound) {
+    const { ctx, canvas, menu } = this, entries = menu.entries, count = entries.length;
+    const { family, cw, lh, cols, rows } = this.grid(), colors = this.colors;
+    if (!this.cells.has(count)) this.cells.set(count, wheelCells({ count, inner: WHEEL.inner, outer: WHEEL.outer, cw, lh, cols, rows }));
+    const cells = this.cells.get(count);
+    const size = BOX * 2, px = Math.round(size * (globalThis.devicePixelRatio || 1) * this.scale), k = px / size;
+    if (canvas.width !== px) canvas.width = canvas.height = px;
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+    ctx.clearRect(0, 0, size, size);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    // Labels go on the same grid as the rims, centred on a cell each.
+    const text = new Map(), clear = new Set();
+    const write = (lines, row, col, sector) => {
+      const top = Math.round(row - (lines.length - 1) / 2);
+      lines.forEach((runs, n) => {
+        const width = runs.reduce((sum, [t]) => sum + t.length, 0);
+        let c = col - Math.floor(width / 2);
+        for (let i = -1; i <= width; i++) clear.add((top + n) * cols + c + i);
+        for (const [t, color, bold] of runs) for (const ch of t) text.set((top + n) * cols + c++, { ch, color, bold, sector });
+      });
+    };
+    const hub = this.hubLines(bound);
+    write(hub, (rows - 1) / 2, (cols - 1) / 2, -1);
+    entries.forEach((entry, i) => write(this.entryLines(entry, i, bound, this.spots[i].width), this.spots[i].row, this.spots[i].col, i));
+    canvas.setAttribute('aria-label', hub.map(runs => runs.map(([t]) => t).join('')).join(', '));
+
+    const isBound = i => menu.stage === 'groups' ? entries[i].items.some(s => s.id === bound) : entries[i].id === bound;
+    const tint = i => (menu.group ?? entries[i]).color;
+    const snap = v => Math.round(v * k) / k;
+    const x0 = BOX - (cols - 1) / 2 * cw, y0 = BOX - (rows - 1) / 2 * lh;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cell = cells[r][c], label = text.get(r * cols + c);
+        if (cell.zone === 'out' && !label) continue;
+        const x = x0 + c * cw, y = y0 + r * lh, left = snap(x - cw / 2), top = snap(y - lh / 2);
+        ctx.fillStyle = SURFACE;
+        ctx.fillRect(left, top, snap(x + cw / 2) - left, snap(y + lh / 2) - top);
+        let { ch, color, bold } = label ?? cell, alpha = 1;
+        if (!label && cell.zone === 'ring') {
+          // The hovered sector is stippled in its colour.
+          if (cell.sectors[0] !== menu.hover || (r + c) % 2 || clear.has(r * cols + c)) continue;
+          [ch, color, alpha] = ['.', tint(menu.hover), 0.5];
+        } else if (!label) {
+          const near = cell.sectors.includes(menu.hover) ? menu.hover : cell.sectors.find(isBound);
+          color = near === undefined ? colors.quiet : tint(near);
+          alpha = near === undefined ? 0.6 : near === menu.hover ? 1 : 0.7;
+        }
+        if (!ch || ch === ' ') continue;
+        ctx.font = `${bold ? '700 ' : ''}${FONT_SIZE}px ${family}`;
+        ctx.fillStyle = color;
+        ctx.globalAlpha = alpha;
+        ctx.fillText(ch, x, y + 0.5);
+        ctx.globalAlpha = 1;
+      }
+    }
   }
 
   tickWheel() {
     const mana = this.casting.state().mana;
-    this.menu.entries.forEach((spell, i) => {
-      const cell = this.cells[i];
-      const v = this.casting.variant(spell), cost = v ? this.casting.modifiers(v).mana ?? 0 : 0;
-      const text = mana < cost ? 'low mana' : '';
-      const node = cell.lastChild;
-      if (node.textContent !== text) node.textContent = text;
-      this.sectors[i].classList.toggle('waiting', Boolean(text));
+    this.waiting = this.menu.entries.map(spell => {
+      const v = this.casting.variant(spell);
+      return mana < (v ? this.casting.modifiers(v).mana ?? 0 : 0);
     });
+    this.paint();
   }
 
   listen(touchButton) {

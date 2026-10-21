@@ -2,7 +2,7 @@
 // its items. Hold to open, point, and release (or click) to choose. Pointing
 // past the rim of a group also opens it, so a whole choice fits one gesture.
 // The wheel is measured in its own units; the view scales it to the screen.
-export const WHEEL = { inner: 74, outer: 196, reach: 1.7, flick: 22 };
+export const WHEEL = { inner: 84, outer: 224, reach: 1.7, flick: 22 };
 
 // The sector under a point, counted clockwise from the top; -1 in the hub or
 // far beyond the rim.
@@ -89,9 +89,3 @@ export class RadialMenu {
   }
 }
 
-// An annular sector from a to b (radians clockwise from the top).
-export function sectorPath(cx, cy, r0, r1, a, b) {
-  const at = (r, t) => `${(cx + r * Math.sin(t)).toFixed(2)} ${(cy - r * Math.cos(t)).toFixed(2)}`;
-  const large = b - a > Math.PI ? 1 : 0;
-  return `M${at(r1, a)}A${r1} ${r1} 0 ${large} 1 ${at(r1, b)}L${at(r0, b)}A${r0} ${r0} 0 ${large} 0 ${at(r0, a)}Z`;
-}
