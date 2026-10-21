@@ -7,12 +7,13 @@
 // atlas for every pixel, so cost is independent of how many characters are
 // on screen.
 //
-// Ground fog is shaded in the same pass, per pixel rather than per cell, so
-// it fills the dark between characters as well as veiling them.
+// Ground fog is drawn in the same pass as a sheet of grey `o` characters laid
+// over every cell, each as bright as the fog is thick there, so the mist
+// drifts across the grid without touching the cell buffers.
 
 import { mulberry32 } from '../core/rng.js';
 import { ASPECT } from '../world/world.js';
-import { BLANK_GLYPH, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
+import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
 import { FOG, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
 
 // An rgb triple as a GLSL vec3 literal.
@@ -20,6 +21,8 @@ import { FOG, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
 const BG_KEEP = 0.12;
 // Side of the tiling random texture the fog noise is built from.
 const NOISE_SIZE = 256;
+// The character the fog is made of.
+const FOG_GLYPH = glyph('o');
 const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
 
 const VERT = `#version 300 es
@@ -44,7 +47,6 @@ uniform sampler2D uNoise;
 uniform vec2 uWorld;
 uniform vec2 uFogDrift;
 uniform vec3 uFog;
-uniform float uDpr;
 out vec4 outColor;
 
 const float NOISE = ${NOISE_SIZE.toFixed(1)};
@@ -114,23 +116,22 @@ void main() {
   vec3 color = mix(ground, fg.rgb, coverage(g, local));
   if (og > 0.5) color = mix(color, ov.rgb, coverage(og, local));
 
+  if (uFog.x > 0.0) {
+    // How thick the fog is at the middle of this cell, with columns scaled
+    // to rows. Each cell gets its own fixed brightness on top, so the sheet
+    // of characters reads as grainy mist rather than an even pattern.
+    vec2 home = uWorld + cell;
+    float f = fogAt((home + 0.5) * vec2(${ASPECT.toFixed(4)}, 1.0)) * uFog.x;
+    float grain = texelFetch(uNoise, ivec2(mod(home, NOISE)), 0).r;
+    f = clamp(f * (0.55 + 0.8 * grain), 0.0, 1.0);
+    float o = coverage(${FOG_GLYPH.toFixed(1)}, local);
+    color = mix(color, mix(${vec3(FOG_THIN)}, ${vec3(FOG)}, f), o * smoothstep(0.04, 0.7, f) * 0.9);
+  }
+
   // Fade toward a deep navy at the corners so the eye settles on the middle
   // of the scene and the edges stay night rather than plain black.
   vec2 uv = gl_FragCoord.xy / uView - 0.5;
   uv.x *= uView.x / uView.y;
-  if (uFog.x > 0.0) {
-    // The ground under this pixel, with columns scaled to rows.
-    vec2 w = (uWorld + p / uCell) * vec2(${ASPECT.toFixed(4)}, 1.0);
-    float f = fogAt(w) * uFog.x;
-    // Mist is grainy, not smooth: speckles about two pixels across, carried
-    // along with the drifting fog so they do not crawl over the scene.
-    vec2 speck = floor((w + uFogDrift) * uCell.y / (2.0 * uDpr));
-    float grain = texelFetch(uNoise, ivec2(mod(speck, NOISE)), 0).r;
-    f *= 0.6 + 0.75 * grain;
-    f = clamp(f, 0.0, 1.0);
-    color = mix(color, mix(${vec3(FOG_THIN)}, ${vec3(FOG)}, f), f * 0.58);
-  }
-
   float vignette = 1.0 - smoothstep(0.35, 1.05, length(uv)) * 0.7;
   outColor = vec4(mix(${vec3(VIGNETTE)}, color, vignette), 1.0);
 }
@@ -181,7 +182,7 @@ export class AsciiRenderer {
     this.prog = prog;
     this.u = {};
     for (const name of ['uFg', 'uBg', 'uOv', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
-      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uDpr']) {
+      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
 
@@ -381,7 +382,6 @@ export class AsciiRenderer {
     gl.uniform3f(this.u.uFog, fog?.density ?? 0, fog?.coverage ?? 0, fog?.time ?? 0);
     gl.uniform2f(this.u.uWorld, fog?.x0 ?? 0, fog?.y0 ?? 0);
     gl.uniform2f(this.u.uFogDrift, fog?.driftX ?? 0, fog?.driftY ?? 0);
-    gl.uniform1f(this.u.uDpr, this.dpr ?? 1);
 
     gl.uniform2f(this.u.uView, this.canvas.width, this.canvas.height);
     gl.uniform2f(this.u.uCell, this.cellW, this.cellH);

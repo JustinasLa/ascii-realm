@@ -1,7 +1,8 @@
-// Low ground fog: pale, grainy banks of mist that drift across the land.
+// Low ground fog: banks of mist, drawn as grey `o` characters, that drift
+// across the land.
 //
-// The fog itself is shaded per pixel by the renderer (see renderer.js), so it
-// can fill the dark gaps between characters as well as veil them. This class
+// The renderer lays the characters over the finished scene (see
+// renderer.js), so fog never displaces what is under it. This class
 // only decides how thick it is and how far it has drifted, easing both so a
 // change of weather rolls the fog in or out instead of popping.
 
