@@ -668,6 +668,11 @@ function groundSpeed(rig, key) {
   return speeds[Math.floor(speeds.length / 2)] || 1;
 }
 
+// How big a kind of monster stands next to the player, who is 1.
+export function figureScale(kind) {
+  return LOOKS[kind]?.scale ?? 1;
+}
+
 export class MonsterFigures {
   // `gltf` is the loaded animation library; its scene is copied, not used.
   constructor(gltf, { renderer = null } = {}) {

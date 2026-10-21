@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fbm, fogAt, noise, NOISE, NOISE_SIZE } from '../src/world/fog-banks.js';
-import { CELL, FogWake, REFILL } from '../src/world/fog-wake.js';
+import { CELL, FogWake, MAX_WALKERS, REFILL } from '../src/world/fog-wake.js';
 import { AMBIENT_FOG, Fog } from '../src/world/fog.js';
 import { ASPECT } from '../src/world/world.js';
 
@@ -96,7 +96,7 @@ test('the field follows the player in whole cells and ignores bad input', () => 
   wake.update(NaN, [{ id: 'self', x: NaN, y: 0 }, null], still);
   wake.update(1 / 60, [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 1, y: 1 }, { id: 'c', x: 2, y: 2 },
     { id: 'd', x: 3, y: 3 }, { id: 'e', x: 4, y: 4 }], still);
-  assert.ok(wake.tracks.size <= 4);
+  assert.ok(wake.tracks.size <= MAX_WALKERS);
   assert.ok(wake.texels.every((v) => Number.isFinite(v) && v >= 0));
   assert.equal(even().fogAt(0, 0), null);
 });
@@ -113,4 +113,27 @@ test('the banks the game reads match the shader noise and stay in range', () => 
     assert.ok(f >= 0 && f <= 1.45);
   }
   assert.equal(fogAt(0, 0, { ...still, coverage: 0 }) <= fogAt(0, 0, still), true);
+});
+
+test('monsters push the fog too, bigger ones over a wider patch', () => {
+  const pushed = (size) => {
+    const wake = even();
+    // The player stands still well off to one side, inside the field.
+    let x = 100;
+    for (let i = 0; i < 90; i++) {
+      x += 0.25;
+      wake.update(1 / 60, [{ id: 'self', x: 100, y: 20 }, { id: 'troll', x, y: 60, size }], still);
+    }
+    // Only count the monster's half of the field.
+    wake.fog.fill(0.6, 0, wake.cells * Math.floor(wake.cells / 2));
+    let thinned = 0;
+    for (const v of wake.fog) if (v < 0.3) thinned++;
+    return thinned;
+  };
+  assert.ok(pushed(1) > 0, 'a monster walking through the fog parts it');
+  assert.ok(pushed(1.45) > pushed(0.62) * 1.5);
+  const crowd = even();
+  const many = Array.from({ length: MAX_WALKERS + 5 }, (_, i) => ({ id: i, x: i * 4, y: 50 }));
+  crowd.update(1 / 60, many, still);
+  assert.equal(crowd.tracks.size, MAX_WALKERS);
 });

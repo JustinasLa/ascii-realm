@@ -164,9 +164,10 @@ short version see the [README](../README.md).
   land in any weather and creep along with the wind, thinning to clear
   ground between them. The characters float free of the grid in several
   drifting layers that overlap and pulse, so thick fog piles up dense. Fog is
-  never lost: anyone walking through it shoves the mist ahead of them aside
-  into the fog around their path, where it piles up thicker and paler, and
-  drags it along into the gap behind them in eddies. Standing still only
+  never lost: anyone walking through it, player or monster, shoves the mist
+  ahead of them aside into the fog around their path, where it piles up
+  thicker and paler, and drags it along into the gap behind them in eddies;
+  a troll parts a wider patch than a goblin. Standing still only
   nudges it, and over a few seconds the piles spread back out. The Fog
   preset rolls in thick, wide banks over a few seconds, and drizzle thickens
   them a little.

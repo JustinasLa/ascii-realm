@@ -40,7 +40,8 @@ export const REFILL = 5;
 // The field blends back into the undisturbed banks over this many cells at
 // its edge, so its border never shows.
 const BORDER = 5;
-const MAX_WALKERS = 4;
+// The player, friends and the nearest monsters all stir the fog.
+export const MAX_WALKERS = 12;
 
 export class FogWake {
   // `banks` gives the undisturbed fog at a point (see fog-banks.js).
@@ -69,18 +70,19 @@ export class FogWake {
   }
 
   // `walkers` lists who is moving through the fog, each as { id, x, y } in
-  // world cells with their feet at y; the first is the player, whom the field
-  // follows. `state` places the banks: driftX, driftY, time and coverage.
+  // world cells with their feet at y, and optionally `size` (1 for the
+  // player); the first is the player, whom the field follows. `state` places the banks: driftX, driftY, time and coverage.
   update(dt, walkers, state) {
     this.time += dt;
     const live = (walkers ?? []).filter((w) => Number.isFinite(w?.x) && Number.isFinite(w?.y)).slice(0, MAX_WALKERS);
-    if (live.length) this.follow(live[0].x * ASPECT, live[0].y - BODY_LIFT);
+    if (live.length) this.follow(live[0].x * ASPECT, live[0].y - BODY_LIFT * sizeOf(live[0]));
     if (Number.isNaN(this.ox)) return;
     this.measure(state);
     const seen = new Set();
     for (const w of live) {
       seen.add(w.id);
-      this.stir(dt, w.id, w.x * ASPECT, w.y - BODY_LIFT);
+      const size = sizeOf(w);
+      this.stir(dt, w.id, w.x * ASPECT, w.y - BODY_LIFT * size, size);
     }
     for (const id of [...this.tracks.keys()]) if (!seen.has(id)) this.tracks.delete(id);
     if (dt > 0) {
@@ -134,7 +136,7 @@ export class FogWake {
 
   // A walker blows the air in a ragged patch around them outward and drags
   // it along their way.
-  stir(dt, id, gx, gy) {
+  stir(dt, id, gx, gy, size = 1) {
     let track = this.tracks.get(id);
     // A teleport or respawn starts afresh rather than dragging the air.
     if (!track || Math.hypot(gx - track.x, gy - track.y) > SWEEP * 4) {
@@ -153,7 +155,7 @@ export class FogWake {
     const moving = Math.min(1, speed / 6);
     const fx = speed > 1e-3 ? track.vx / speed : 0;
     const fy = speed > 1e-3 ? track.vy / speed : 0;
-    const reach = SWEEP * (1 + Math.min(speed, 25) / 50);
+    const reach = SWEEP * size * (1 + Math.min(speed, 25) / 50);
     const t = this.time * 0.6;
     const lx = (gx - this.ox) / CELL;
     const ly = (gy - this.oy) / CELL;
@@ -313,6 +315,8 @@ export class FogWake {
     return sum;
   }
 }
+
+const sizeOf = (w) => (Number.isFinite(w.size) && w.size > 0 ? Math.min(w.size, 3) : 1);
 
 function smooth(a, b, x) {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
