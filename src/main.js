@@ -190,10 +190,7 @@ const debug = { player, camera, world, grass, splashes, weather, fires, torches,
   audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
 if (params.has('debug')) window.game = debug;
 
-// Fade the controls hint once the player has started walking about.
-const hint = document.getElementById('hint');
 const fireStatus = document.getElementById('fire-status');
-const carriedItem = document.getElementById('carried-item');
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
@@ -201,7 +198,6 @@ const hud = new Hud({
   onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
   onInventory: () => inventoryScreen.toggle(),
 });
-hud.attachNote(carriedItem);
 const inventoryScreen = new InventoryScreen({
   inventory, player, name,
   onToggle: (open) => {
@@ -366,7 +362,6 @@ const torchMessages = {
   hands: 'Both hands are on your weapon. Unequip it to carry a torch.',
 };
 let fireNoticeUntil = 0;
-let walked = 0;
 
 function fireNotice(message) {
   fireStatus.textContent = message;
@@ -449,12 +444,12 @@ const syncSpellPeers = () => {
 const casting = new Spellcasting({ player, world, monsters, peers: () => [...spellPeers.values()],
   notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e) });
 debug.casting = casting;
+hud.attachMana(casting);
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
 window.addEventListener('pagehide', () => casting.clearPresentation());
 // Holding the middle mouse button opens the rune wheel; the chosen rune is
 // bound to R. ?spell=ID binds one up front instead of the last one chosen.
-const spellControls = new SpellControls(casting, { root: document.getElementById('spell-controls'),
-  surface: canvas, touchButton: document.getElementById('touch-runes'),
+const spellControls = new SpellControls(casting, { surface: canvas, touchButton: document.getElementById('touch-runes'),
   canOpen: () => !builder.enabled && !debug.freeze && !isGameplayBlocked(),
   onBind: spell => hud.notify(`${spell.name} bound to R`, 'spell'),
   onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell') });
@@ -697,9 +692,6 @@ function frame(now) {
       else if (cursorCell()) player.face(heading, 0.35);
     }
   }
-  const itemHint = player.handsFull ? 'Two-handed · torch tucked away'
-    : player.torch ? 'Fire torch · G throw · T stow' : 'Empty hand · T draw a fire torch';
-  if (carriedItem.textContent !== itemHint) carriedItem.textContent = itemHint;
   if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
   clicked = false;
   const stoppedDt = Math.min(dt, hitStop);
@@ -803,8 +795,6 @@ function frame(now) {
       }
     }
   }
-  if (move.x || move.y) walked += dt;
-  if (walked > 2 || time > 15) hint.classList.add('hidden');
   // Aim at the wanderer's middle rather than their feet.
   if (builder.enabled) builder.updateCamera(dt, move, isDown('ShiftLeft', 'ShiftRight'));
   else camera.follow(player.x, player.y - 11, dt);

@@ -85,8 +85,12 @@ export class Hud {
     this.nameNode = element('div', 'hud-name', String(name || 'Wanderer').slice(0, 24));
     status.append(this.nameNode);
     this.health = makeVital('Health', 'health', 'HP');
+    // Mana appears once a spell caster is attached.
+    this.mana = makeVital('Mana', 'mana', 'MP');
+    this.mana.node.hidden = true;
+    this.manaSource = null;
     this.load = element('div', 'hud-frame-note');
-    status.append(this.health.node, this.load);
+    status.append(this.health.node, this.mana.node, this.load);
     this.party = element('div', 'hud-party');
     this.partyTab = element('div', 'hud-party-tab', 'party');
     this.partyTab.hidden = true;
@@ -192,6 +196,7 @@ export class Hud {
     const elapsed = Number.isFinite(dt) ? Math.max(0, dt) : 0;
     const vitals = this.player.vitals || {};
     this.updateVital(this.health, vitals.health, vitals.maxHealth);
+    if (this.manaSource) this.updateVital(this.mana, this.manaSource.mana, this.manaSource.maxMana);
     const weight = Number.isFinite(this.inventory.weight) ? this.inventory.weight : 0;
     text(this.load, `Bag ${number(weight)}/${number(this.inventory.capacity ?? 0)} kg`);
     this.updateHotbar();
@@ -303,6 +308,13 @@ export class Hud {
     if (!node) return;
     node.classList.add('hud-frame-note');
     this.status.append(node);
+  }
+
+  // Any object with mana and maxMana, such as the spellcasting system.
+  attachMana(source) {
+    this.manaSource = source || null;
+    hidden(this.mana.node, !this.manaSource);
+    if (this.manaSource) this.updateVital(this.mana, source.mana, source.maxMana);
   }
 
   setName(name) {

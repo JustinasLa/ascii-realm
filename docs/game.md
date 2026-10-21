@@ -10,7 +10,8 @@ short version see the [README](../README.md).
   one of its runes, and let go: that rune stays bound to `R` until another is
   chosen, even across reloads. Aim with the cursor and press `R` or right
   click. The wheel shows each rune's mana cost, cooldown and damage or
-  healing, and the bound rune, its cooldown and the mana bar stay on screen.
+  healing, and binding a rune names it in a notice. Mana shows as the MP bar
+  in the status frame.
   On touch screens, hold RUNES to open the wheel and tap CAST. Mana
   refills slowly a second after the last cast. Projectiles, waves, zones, shields, heals,
   status effects, summons and channels share one simulation that strikes the
@@ -94,9 +95,8 @@ short version see the [README](../README.md).
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 - **Status frames and quick slots.** A party-style frame in the top-left
-  corner shows the outlaw's name, segmented HP bar and the satchel's weight.
-  Nine quick slots sit along the bottom, and a carried-item hint shows whether
-  the torch is in hand. Running and sword strikes have no stamina cost.
+  corner shows the outlaw's name, segmented HP and MP bars and the satchel's weight.
+  Nine quick slots sit along the bottom. Running and sword strikes have no stamina cost.
 - **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
   equipment view drawn with the outlaw's own glyphs, item details, 24 bag slots
   and a 60 kg carrying limit. The bag starts empty, with a short sword equipped
@@ -130,8 +130,7 @@ short version see the [README](../README.md).
   jumping, and reflects in water. Press `T` to stow it or draw a fresh torch;
   `G` throws it in the direction you face. It tumbles through the air and
   starts a ground fire when it lands on dry, open terrain. Water puts it out
-  with a splash. The carried-item hint stays visible after the movement hint
-  fades.
+  with a splash.
 - **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
   surfaces and movement effects,
   slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,

@@ -13,6 +13,7 @@
   --accent: #eef2ee;
   --health: var(--ink);
   --stamina: var(--ink);
+  --mana: #8fb4e3;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; }
@@ -46,7 +47,8 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-vital-value { text-align: right; }
 .hud-vital-bar { display: block; height: 8px; background: repeating-linear-gradient(90deg, #343b38 0 3px, transparent 3px 4px); }
 .hud-vital-filled { display: block; height: 100%; background: repeating-linear-gradient(90deg, var(--accent) 0 3px, transparent 3px 4px); }
-.hud-frame-note, #carried-item.hud-frame-note { position: static; max-width: none; margin-top: 3px; padding: 0; color: var(--muted); background: none; border: 0; font: 11px/1.4 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hud-mana .hud-vital-filled { background: repeating-linear-gradient(90deg, var(--mana) 0 3px, transparent 3px 4px); }
+.hud-frame-note { position: static; max-width: none; margin-top: 3px; padding: 0; color: var(--muted); background: none; border: 0; font: 11px/1.4 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud-frame-note:empty { display: none; }
 .hud-party { display: flex; flex-direction: column; gap: 6px; }
 .hud-party:empty { display: none; }
@@ -79,11 +81,8 @@ kbd::after { content: "]"; color: var(--quiet); }
 /* A wounded enemy's health: the status frame's segmented bar on its own. */
 .hud-foe { position: absolute; left: 0; top: 0; width: 64px; height: 6px; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
 .hud-prompt { position: absolute; left: 50%; bottom: max(144px, calc(env(safe-area-inset-bottom) + 144px)); transform: translateX(-50%); max-width: calc(100% - 24px); padding: 4px 8px; background: var(--surface); border: 1px solid var(--frame); text-align: center; }
-#hint { position: fixed; z-index: 5; left: 50%; bottom: max(112px, calc(env(safe-area-inset-bottom) + 112px)); transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); padding: 4px 8px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); font-size: 11px; text-align: center; pointer-events: none; transition: opacity 1.5s; }
-#hint.hidden { opacity: 0; }
 #fire-status { position: fixed; z-index: 11; left: 50%; bottom: max(180px, calc(env(safe-area-inset-bottom) + 180px)); transform: translateX(-50%); max-width: calc(100% - 24px); padding: 5px 8px; background: var(--surface); border: 1px solid var(--frame); text-align: center; pointer-events: none; opacity: 0; transition: opacity 150ms; }
 #fire-status.visible { opacity: 1; }
-#carried-item { color: var(--muted); }
 #status { position: fixed; z-index: 40; inset: 35% 20px auto; max-width: 440px; margin: auto; padding: 12px; background: var(--solid); border: 1px solid var(--frame); text-align: center; }
 
 /* Utility panels share the player card's surface, type and hairline. */
@@ -165,7 +164,7 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .inventory-open .hud { opacity: 0.2; }
 .inventory-open .hud button { pointer-events: none; }
 .inventory-open :is(#panel-dock, #touch-controls) { visibility: hidden; }
-.inventory-open :is(#hint, #fire-status) { opacity: 0; }
+.inventory-open #fire-status { opacity: 0; }
 .inventory-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(740px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 10px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); color: var(--ink); background: rgba(6, 9, 10, 0.97); border: 1px solid var(--frame); font-size: 11px; pointer-events: auto; }
 .inventory-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding-bottom: 8px; background: var(--solid); border-bottom: 1px solid var(--line); }
 .inventory-identity { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
@@ -234,7 +233,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
    windows keep the mouse and keyboard layout. */
 #touch-controls { display: none; }
 @media (pointer: coarse) {
-  #hint { display: none; }
   #touch-controls { display: block; position: fixed; z-index: 12; inset: 0; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #touch-controls button, #move-pad { pointer-events: auto; touch-action: none; color: var(--ink); background: var(--surface); border: 1px solid var(--frame); }
   #touch-controls button { min-width: 44px; min-height: 44px; padding: 6px; border-radius: 0; font-size: 10px; }
@@ -348,29 +346,13 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   #fire-status { bottom: 198px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hud, #hint, #fire-status, #inventory-root::before { transition: none; }
+  .hud, #fire-status, #inventory-root::before { transition: none; }
 }
 /* The bound rune sits above the hotbar; the rune wheel picks it. */
-#spell-controls { position: fixed; left: 50%; bottom: 104px; transform: translateX(-50%); display: flex;
-  align-items: center; gap: 12px; padding: 5px 10px; background: var(--surface); border: 1px solid var(--frame);
-  color: var(--ink); font: 11px var(--font); z-index: 15; max-width: calc(100vw - 24px); pointer-events: none; white-space: nowrap; }
-.spell-bound { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
-#spell-name { overflow: hidden; text-overflow: ellipsis; max-width: 180px; font-weight: 600; }
-#spell-ready { min-width: 34px; color: var(--quiet); font-size: 10px; font-variant-numeric: tabular-nums; }
-.spell-waiting #spell-ready { color: var(--muted); }
-.spell-mana { display: grid; grid-template-columns: auto 80px; gap: 1px 7px; align-items: center; }
-.spell-mana output { grid-column: 1 / 3; font-size: 10px; color: var(--quiet); }
-#spell-mana { width: 80px; height: 8px; accent-color: var(--ink); }
-.spell-change { color: var(--quiet); font-size: 10px; }
-.inventory-open #spell-controls { visibility: hidden; }
-@media (max-width: 600px) { #spell-controls { bottom: 88px; gap: 7px; } .spell-mana { grid-template-columns: auto 50px; }
-  #spell-mana { width: 50px; } #spell-name { max-width: 110px; } }
-@media (pointer: coarse) { .spell-change { display: none; } }
 
 #spell-wheel { position: fixed; inset: 0; z-index: 35; pointer-events: none; background: radial-gradient(circle, transparent 30%, #05060a66 80%); }
 .spell-wheel-open #screen { cursor: default; }
-.spell-wheel-open #hint { opacity: 0; }
-.spell-wheel-open :is(.hud-hotbar-wrap, .hud-prompt, #spell-controls, #touch-controls, #panel-dock) { opacity: 0.3; transition: opacity 120ms; }
+.spell-wheel-open :is(.hud-hotbar-wrap, .hud-prompt, #touch-controls, #panel-dock) { opacity: 0.3; transition: opacity 120ms; }
 .spell-wheel-ring { position: absolute; width: 432px; height: 432px; transform-origin: 50% 50%; animation: spell-wheel-in 110ms ease-out; }
 @keyframes spell-wheel-in { from { opacity: 0; scale: 0.92; } }
 .spell-wheel-ring svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
