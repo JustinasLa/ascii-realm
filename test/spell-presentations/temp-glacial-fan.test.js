@@ -118,6 +118,34 @@ test('all Glacial Fan stages stay deterministic, bounded, atlas compatible, and 
   }
 });
 
+test('every stage stays inside the 48 m coordinate contract at the largest radius', () => {
+  for (const stage of ['cast', 'projectile', 'impact', 'pulse', 'aura']) {
+    for (const radius of [0.1, 1, 3, 10, 22, 30, 40]) {
+      for (const life of [0.3, 0.6, profile.duration, 3]) {
+        for (let i = 0; i <= 100; i++) {
+          const frame = points(stage, i / 100, 0.7, { life, radius });
+          assert.ok(frame.every(p => Math.abs(p[0]) <= 48 && Math.abs(p[1]) <= 48 && Math.hypot(p[0], p[1]) <= 48),
+            `${stage} at radius ${radius}, progress ${i / 100} stays within 48 m`);
+        }
+      }
+    }
+  }
+  assert.ok(reach(points('impact', 0.5, 0, { life: 0.6, radius: 40 })) > 20, 'large impacts still read as large');
+});
+
+test('draw is reentrant: a nested draw at another heading does not disturb the outer frame', () => {
+  for (const stage of ['cast', 'projectile', 'impact', 'pulse', 'aura']) {
+    const effect = { stage, progress: 0.3, age: 0.3 * profile.duration, life: profile.duration, radius: 1, heading: 0 };
+    const expected = [], actual = [];
+    profile.draw(effect, (...p) => expected.push(p));
+    profile.draw(effect, (...p) => {
+      if (actual.length === 0) profile.draw({ ...effect, stage: 'projectile', heading: Math.PI / 2 }, () => {});
+      actual.push(p);
+    });
+    assert.deepEqual(actual, expected, `${stage} is unaffected by a nested draw`);
+  }
+});
+
 test('slashes follow the on-screen slope of a blade whatever the heading', () => {
   const edges = heading => points('projectile', 0.5, heading, { life: 0.32, radius: 0.65 })
     .filter(p => p[1] > -0.3 && SLASHES.has(p[2])).map(p => p[2]);

@@ -16,8 +16,9 @@ const easeBack = t => { t = clamp01(t) - 1; return 1 + 2.4 * t * t * t + 1.4 * t
 const hash = n => { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
 
 // Heading only selects which slash reads best on screen; geometry stays local.
-let hc = 1, hs = 0;
-function slope(dx, dz) {
+// hc/hs (cos/sin of the heading) are passed down explicitly so draw stays pure
+// and reentrant.
+function slope(dx, dz, hc, hs) {
   const x = dx * hc + dz * hs, y = (dz * hc - dx * hs) * 0.5; // a metre down-screen is half as many pixels
   const ax = Math.abs(x), ay = Math.abs(y);
   if (ay < ax * 0.42) return '-';
@@ -28,10 +29,10 @@ function slope(dx, dz) {
 // A faceted shard from (ox, oz) along `ang`: widest a third of the way out,
 // pointed tip, bright spine, slope-aware edges and a sparse frosted fill.
 // `from` hides the part nearest the base so a released blade thins away.
-function shard(plot, ox, oz, ang, len, wid, b, heat, k, from = 0, fill = true) {
+function shard(plot, hc, hs, ox, oz, ang, len, wid, b, heat, k, from = 0, fill = true) {
   if (b <= 0 || len <= 0.02) return;
   const ux = Math.sin(ang), uz = Math.cos(ang), nx = uz, nz = -ux;
-  const spine = slope(ux, uz);
+  const spine = slope(ux, uz, hc, hs);
   for (let j = Math.ceil(from * k); j <= k; j++) {
     const t = j / k, cx = ox + ux * len * t, cz = oz + uz * len * t, v = b * (0.62 + 0.38 * t);
     if (j === k) { plot(cx, cz, '*', tone(heat + 0.5), b); break; }
@@ -39,7 +40,7 @@ function shard(plot, ox, oz, ang, len, wid, b, heat, k, from = 0, fill = true) {
     plot(cx, cz, spine, tone(heat + 0.28), v);
     for (let side = -1; side <= 1; side += 2) {
       plot(cx + nx * w * side, cz + nz * w * side,
-        slope(ux * len + nx * dw * side, uz * len + nz * dw * side), tone(heat), v * 0.82);
+        slope(ux * len + nx * dw * side, uz * len + nz * dw * side, hc, hs), tone(heat), v * 0.82);
       if (fill && j % 2 === 0 && t > 0.15 && t < 0.75) {
         plot(cx + nx * w * 0.5 * side, cz + nz * w * 0.5 * side, ':', tone(heat - 0.2), v * 0.42);
       }
@@ -47,7 +48,7 @@ function shard(plot, ox, oz, ang, len, wid, b, heat, k, from = 0, fill = true) {
   }
 }
 
-function cast(plot, p) {
+function cast(plot, p, hc, hs) {
   const t = p * DURATION, master = 1 - smooth((p - 0.8) / 0.2), fx = 0, fz = 0.3;
   // Five blades, matching the -45..45 degree volley that leaves left to right.
   for (let i = 0; i < 5; i++) {
@@ -59,13 +60,13 @@ function cast(plot, p) {
     if (tau < 0) {
       // Freshly grown ice glows white, then cools; a glint runs up the spine.
       const heat = 0.32 + 0.6 * (1 - smooth((t - g0 - 0.08) / 0.16));
-      shard(plot, ux * r0, uz * r0, ang, len, 0.2, master, heat, 10);
+      shard(plot, hc, hs, ux * r0, uz * r0, ang, len, 0.2, master, heat, 10);
       const g = clamp01((t - g0 - 0.1) / Math.max(0.05, release - g0 - 0.1));
       if (g > 0 && g < 1) plot(ux * (r0 + len * g), uz * (r0 + len * g), '*', RAMP[6], master * Math.sin(g * Math.PI));
     } else if (tau < 0.24) {
       // Released: the blade accelerates outward, flashes and thins from its base.
       const d = 9 * tau * tau + 3 * tau, fade = 1 - smooth(tau / 0.24);
-      shard(plot, ux * (r0 + d), uz * (r0 + d), ang, len, 0.2 * (1 - tau * 1.5), master * fade,
+      shard(plot, hc, hs, ux * (r0 + d), uz * (r0 + d), ang, len, 0.2 * (1 - tau * 1.5), master * fade,
         0.85 - tau * 2, 10, smooth(tau / 0.2), false);
       if (tau < 0.12) plot(ux * r0, uz * r0, tau < 0.05 ? '@' : '*', RAMP[6], master * (1 - tau / 0.12));
     }
@@ -101,13 +102,13 @@ function cast(plot, p) {
   for (let j = 0; j < 13; j++) {
     const a = -0.95 + j * 0.158, on = smooth((t - 0.06 - j * 0.008) / 0.06);
     const b = master * on * 0.55 * (1 - smooth((t - 0.55) / 0.3));
-    if (b > 0) plot(Math.sin(a) * 0.3, Math.cos(a) * 0.3, slope(Math.cos(a), -Math.sin(a)), tone(0.3), b);
+    if (b > 0) plot(Math.sin(a) * 0.3, Math.cos(a) * 0.3, slope(Math.cos(a), -Math.sin(a), hc, hs), tone(0.3), b);
   }
 }
 
-function projectile(plot, p, age) {
+function projectile(plot, p, age, hc, hs) {
   const fade = 1 - smooth((p - 0.78) / 0.22), grow = 0.6 + 0.4 * easeOut(age / 0.06);
-  shard(plot, 0, -0.32 * grow, 0, 0.9 * grow, 0.12, fade, 0.45, 7, 0, false);
+  shard(plot, hc, hs, 0, -0.32 * grow, 0, 0.9 * grow, 0.12, fade, 0.45, 7, 0, false);
   // Frost wake: motes stream backwards, widening, each fading in and out of its cycle.
   for (let j = 0; j < 16; j++) {
     const h = hash(j + 3), c = (age * 3.2 + h) % 1, z = -0.38 - c * 1.1;
@@ -116,8 +117,11 @@ function projectile(plot, p, age) {
   }
 }
 
-function impact(plot, p, radius) {
-  const R = radius, master = 1 - smooth((p - 0.75) / 0.25);
+// Chips fly out to just under 2R, so cap R to keep every glyph inside the
+// 48 m coordinate contract however large the requested radius.
+const MAX_IMPACT_RADIUS = 22;
+function impact(plot, p, radius, hc, hs) {
+  const R = Math.min(radius, MAX_IMPACT_RADIUS), master = 1 - smooth((p - 0.75) / 0.25);
   // White flash: dense core with a cooling halo.
   const flash = 1 - smooth(p / 0.3);
   if (flash > 0) {
@@ -135,7 +139,7 @@ function impact(plot, p, radius) {
     // The spikes crack from the root outward while their chips take over.
     const crack = smooth((p - 0.24) / 0.12);
     if (crack < 1) {
-      shard(plot, ux * 0.12 * R, uz * 0.12 * R, a, len * easeBack(p / 0.12), 0.07 * R, master * (0.7 + 0.3 * flash) * (1 - crack),
+      shard(plot, hc, hs, ux * 0.12 * R, uz * 0.12 * R, a, len * easeBack(p / 0.12), 0.07 * R, master * (0.7 + 0.3 * flash) * (1 - crack),
         0.4 + flash * 0.6, 5, crack, false);
     }
     if (p < 0.24) continue;
@@ -157,12 +161,12 @@ function impact(plot, p, radius) {
 }
 
 // Glacial Spikes: short crystals erupt in the gaps between the fan's blades.
-function pulse(plot, p, radius) {
+function pulse(plot, p, radius, hc, hs) {
   const R = Math.max(0.4, radius), master = 1 - smooth((p - 0.55) / 0.45);
   for (let k = 0; k < 8; k++) {
     const a = (k - 3.5) * Math.PI / 8, h = hash(k + 71), rise = easeBack((p - k * 0.02) / 0.25);
     const base = R * 0.25, len = R * (0.22 + 0.13 * h) * rise;
-    shard(plot, Math.sin(a) * base, Math.cos(a) * base, a, len, 0.06 * R, master,
+    shard(plot, hc, hs, Math.sin(a) * base, Math.cos(a) * base, a, len, 0.06 * R, master,
       0.35 + 0.5 * (1 - smooth(p / 0.4)), 3, smooth((p - 0.6) / 0.4), false);
   }
   for (let k = 0; k < 10; k++) {
@@ -172,11 +176,11 @@ function pulse(plot, p, radius) {
 }
 
 // Lingering frost (unused by the rune today): a slowly turning crown of shards.
-function crown(plot, p, age, radius) {
+function crown(plot, p, age, radius, hc, hs) {
   const R = Math.min(3, Math.max(0.6, radius)), b = smooth(p / 0.15) * (1 - smooth((p - 0.8) / 0.2));
   for (let k = 0; k < 8; k++) {
     const a = k * Math.PI / 4 + age * 0.6;
-    shard(plot, Math.sin(a) * R * 0.55, Math.cos(a) * R * 0.55, a, R * 0.35, 0.08 * R, b, 0.35, 3, 0, false);
+    shard(plot, hc, hs, Math.sin(a) * R * 0.55, Math.cos(a) * R * 0.55, a, R * 0.35, 0.08 * R, b, 0.35, 3, 0, false);
   }
   for (let k = 0; k < 16; k++) {
     const a = k / 16 * Math.PI * 2 - age * 0.4, r = R * (0.4 + 0.08 * Math.sin(age * 2 + k));
@@ -188,13 +192,13 @@ export default {
   id: 'temp-glacial-fan',
   duration: DURATION,
   draw(effect, plot) {
-    hc = Math.cos(effect.heading || 0); hs = Math.sin(effect.heading || 0);
+    const hc = Math.cos(effect.heading || 0), hs = Math.sin(effect.heading || 0);
     const p = effect.progress;
-    if (effect.stage === 'cast') return cast(plot, p);
-    if (effect.stage === 'projectile') return projectile(plot, p, effect.age);
-    if (effect.stage === 'impact') return impact(plot, p, effect.radius);
-    if (effect.stage === 'pulse') return pulse(plot, p, effect.radius);
-    return crown(plot, p, effect.age, effect.radius);
+    if (effect.stage === 'cast') return cast(plot, p, hc, hs);
+    if (effect.stage === 'projectile') return projectile(plot, p, effect.age, hc, hs);
+    if (effect.stage === 'impact') return impact(plot, p, effect.radius, hc, hs);
+    if (effect.stage === 'pulse') return pulse(plot, p, effect.radius, hc, hs);
+    return crown(plot, p, effect.age, effect.radius, hc, hs);
   },
   sounds: {
     cast: [
