@@ -803,7 +803,8 @@ function frame(now) {
 
   const view = camera.view(renderer);
   weather.update(dt, time, world, view, sound.weather);
-  fog.update(dt, weather);
+  fog.update(dt, weather, [{ id: 'self', x: player.x, y: player.y },
+    ...remotePlayers.visible(view).map((peer) => ({ id: peer, x: peer.player.x, y: peer.player.y }))]);
   if (wasTapped('KeyL') || summonLightning) {
     const bolt = weather.summon(world, view, player);
     if (bolt) sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
