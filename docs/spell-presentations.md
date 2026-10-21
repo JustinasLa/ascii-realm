@@ -36,4 +36,4 @@ unlocks audio from its Cast/R gesture.
 
 Reset, death, hiding, and pause discard presentation effects and stop scheduled
 spell voices. Presentation changes never alter TF damage, targeting, cost,
-cooldown, status duration, or projectile collision.
+status duration, or projectile collision.

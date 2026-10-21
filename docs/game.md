@@ -9,7 +9,8 @@ short version see the [README](../README.md).
   middle mouse button to open the rune wheel, point at a school and then at
   one of its runes, and let go: that rune stays bound to `R` until another is
   chosen, even across reloads. Aim with the cursor and press `R` or right
-  click. The wheel shows each rune's mana cost, cooldown and damage or
+  click. Runes have no cooldown: any rune can be cast again at once while
+  there is mana for it. The wheel shows each rune's mana cost and damage or
   healing, and binding a rune names it in a notice. Mana shows as the MP bar
   in the status frame.
   On touch screens, hold RUNES to open the wheel and tap CAST. Mana

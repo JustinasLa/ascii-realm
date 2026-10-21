@@ -134,8 +134,8 @@ test('real rune cast renders the authored projectile and ally ward with typed sp
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
   const acceptedEvents = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, acceptedEvents, 'cooldown rejection emits no cue');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, acceptedEvents, 'mana rejection emits no cue');
   assert.equal(scene.casting.projectiles.length, 1);
   const castPoints = [];
   scene.casting.effects.paint((...p) => castPoints.push(p));

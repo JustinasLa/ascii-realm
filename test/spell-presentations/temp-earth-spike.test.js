@@ -160,7 +160,7 @@ test('real Earth Spike cast renders its profile, emits typed cues and preserves 
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejects a second cast');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a second cast');
   assert.equal(events.filter(e => e.type === 'spell' && e.stage === 'cast').length, 1);
   const points = [];
   scene.casting.effects.paint((...p) => points.push(p), scene.casting.projectiles);

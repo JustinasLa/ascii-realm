@@ -28,8 +28,8 @@ test('a real Fire Rain cast paints its cloud, rain and ground strikes and emits 
   assert.ok(scene.casting.effects.list.some(effect => effect.stage === 'zone' && effect.presentation === presentation),
     'the return anchor is presented as a zone');
   const acceptedCueCount = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, acceptedCueCount, 'cooldown rejection adds no sound');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, acceptedCueCount, 'mana rejection adds no sound');
   scene.advance(0.6);
   const storm = [];
   scene.casting.effects.paint((...point) => storm.push(point), scene.casting.projectiles);

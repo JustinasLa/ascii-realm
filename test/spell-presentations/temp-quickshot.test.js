@@ -171,7 +171,7 @@ test('real Leaf Arrow casts render the authored profile, emit typed spell cues a
   const mana = scene.casting.state(scene.player).mana;
   assert.equal(scene.cast().ok, true);
   assert.equal(scene.casting.state(scene.player).mana, mana - 4);
-  assert.equal(scene.cast().ok, false, 'cooldown rejects a second shot');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a second shot');
   assert.equal(sounds.length, 1, 'a rejected cast is silent');
   assert.equal(sounds[0].type, 'spell');
   assert.equal(sounds[0].stage, 'cast');

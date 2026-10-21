@@ -152,7 +152,7 @@ test('real Tidal Shield cast renders the profile and emits typed cues while pres
   const scene = runeScene(spell, { range: 2 }), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'a rejected repeat stays silent');
+  assert.equal(scene.castWithoutMana().ok, false, 'a rejected repeat stays silent');
   const drawn = [];
   scene.casting.effects.paint((...point) => drawn.push(point), scene.casting.projectiles);
   assert.ok(drawn.some(p => p[2] === '(') && drawn.some(p => p[2] === '~'), 'runtime renders the swell of the shell');

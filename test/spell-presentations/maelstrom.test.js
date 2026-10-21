@@ -187,8 +187,8 @@ test('Maelstrom uses authored projectile/zone geometry and typed cast/impact cue
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
   const eventCount = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, eventCount, 'cooldown rejection stays silent');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, eventCount, 'mana rejection stays silent');
   const launch = [];
   scene.casting.effects.paint((...p) => launch.push(p), scene.casting.projectiles);
   assert.ok(launch.some(p => p[2] === '@') && launch.some(p => p[2] === '~'), 'real projectile paints its whirlpool');

@@ -52,14 +52,8 @@ export class SpellControls {
 
   stats(spell) {
     const v = this.casting.variant(spell), p = v ? this.casting.modifiers(v) : {};
-    return [`${p.mana ?? 0} mana`, `${p.cooldown ?? 0}s`, p.damage && `${p.damage} dmg`, p.heal && `${p.heal} heal`,
+    return [`${p.mana ?? 0} mana`, p.damage && `${p.damage} dmg`, p.heal && `${p.heal} heal`,
       p.shield_power && `${p.shield_power} shield`, p.duration && `${p.duration}s long`].filter(Boolean);
-  }
-
-  remaining(spell) {
-    const v = this.casting.variant(spell);
-    if (!v) return 0;
-    return Math.max(0, (this.casting.state().cooldowns.get(`${spell.id}:${v.id}`) ?? 0) - this.casting.time);
   }
 
   bind(spell) {
@@ -159,7 +153,7 @@ export class SpellControls {
           tag('span', 'spell-wheel-meta', `${entry.kind} · ${entry.items.length} rune${entry.items.length === 1 ? '' : 's'}`));
       } else {
         cell.append(tag('strong', '', entry.name), tag('span', 'spell-wheel-meta', this.stats(entry)[0]),
-          tag('span', 'spell-wheel-cooldown'));
+          tag('span', 'spell-wheel-status'));
       }
       return cell;
     });
@@ -206,9 +200,9 @@ export class SpellControls {
   tickWheel() {
     const mana = this.casting.state().mana;
     this.menu.entries.forEach((spell, i) => {
-      const left = this.remaining(spell), cell = this.cells[i];
+      const cell = this.cells[i];
       const v = this.casting.variant(spell), cost = v ? this.casting.modifiers(v).mana ?? 0 : 0;
-      const text = left ? `${left.toFixed(1)}s` : mana < cost ? 'low mana' : '';
+      const text = mana < cost ? 'low mana' : '';
       const node = cell.lastChild;
       if (node.textContent !== text) node.textContent = text;
       this.sectors[i].classList.toggle('waiting', Boolean(text));

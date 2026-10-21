@@ -37,7 +37,7 @@ test('a real Cold Embrace cast renders its crescent arms and emits typed profile
   const events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejection does not replay the cast cue');
+  assert.equal(scene.castWithoutMana().ok, false, 'mana rejection does not replay the cast cue');
   assert.equal(events.filter(event => event.type === 'spell' && event.stage === 'cast').length, 1);
   assert.ok(scene.casting.effects.list.some(effect => effect.stage === 'cast' && effect.presentation === presentation));
   scene.advance(0.4);

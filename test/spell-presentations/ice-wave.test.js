@@ -59,7 +59,7 @@ test('a real rune cast renders the authored effects and emits typed spatial cast
     && event.spellId === spell.id && event.presentation === presentation));
   assert.ok(events.every(event => !['draw', 'slam'].includes(event.type)));
   const count = events.length;
-  assert.equal(scene.cast().ok, false, 'cooldown still rejects a second cast');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a second cast');
   assert.equal(events.length, count, 'rejected casts remain silent');
   const audio = fakeRecordedAudio();
   const handles = playSpellSound(audio.engine, castCue);

@@ -38,8 +38,8 @@ test('a real Ice Shield cast paints its honeycomb shield and routes its chord as
   assert.ok(events.every(event => event.type === 'spell' && event.presentation === presentation));
   assert.ok(events.every(event => !['draw', 'slam'].includes(event.type)));
   const count = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, count, 'a rejected cooldown cast stays silent');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, count, 'a cast without mana stays silent');
   const launch = scene.casting.effects.list.find(effect => effect.stage === 'cast');
   assert.equal(launch.presentation, presentation);
   scene.advance(0.6);

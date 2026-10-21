@@ -41,7 +41,7 @@ test('real Ice Shard casts paint the crystal, its frost trail and the shatter wi
   const events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejection emits no extra cast cue');
+  assert.equal(scene.castWithoutMana().ok, false, 'mana rejection emits no extra cast cue');
   assert.equal(events.filter(event => event.stage === 'cast').length, 1);
   assert.equal(scene.casting.effects.list[0].presentation, presentation);
   assert.equal(scene.casting.projectiles[0].ctx.spell.presentation, presentation);

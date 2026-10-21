@@ -192,8 +192,8 @@ test('real Bubble Shard cast renders the profile, emits typed cues, and preserve
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
   assert.equal(scene.casting.mana, 96);
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.filter(e => e.stage === 'cast').length, 1, 'cooldown rejection is silent');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.filter(e => e.stage === 'cast').length, 1, 'mana rejection is silent');
   const dots = [];
   scene.casting.effects.paint((...p) => dots.push(p), scene.casting.projectiles);
   assert.ok(dots.some(p => p[2] === '(') && dots.some(p => p[2] === 'o'), 'runtime paints authored film and bubbles');

@@ -17,8 +17,8 @@ test('Icicle Blitz real casts render authored needles and emit spell cues while 
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
   const cuesBeforeRejectedCast = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, cuesBeforeRejectedCast, 'cooldown rejection stays silent');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, cuesBeforeRejectedCast, 'mana rejection stays silent');
   assert.ok(events.some(event => event.type === 'spell' && event.stage === 'cast' && event.presentation === presentation));
   assert.ok(scene.casting.effects.list.some(effect => effect.stage === 'cast' && effect.presentation === presentation));
 

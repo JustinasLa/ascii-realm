@@ -145,7 +145,7 @@ test('real Scalding Wave cast uses authored profile and typed cues while retaini
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejects a duplicate cast');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a duplicate cast');
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
   assert.ok(events.some(e => e.stage === 'impact'), 'burn aura emits impact steam release');
   assert.ok(events.every(e => e.type === 'spell' && e.presentation === presentation && e.spellId === spell.id));

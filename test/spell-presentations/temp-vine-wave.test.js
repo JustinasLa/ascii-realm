@@ -169,7 +169,7 @@ test('real Vine Wave casts render the braid and emit typed cues while preserving
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejects repeated cast');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects repeated cast');
   assert.equal(events.filter(e => e.type === 'spell' && e.stage === 'cast').length, 1);
   assert.ok(scene.casting.effects.list.some(e => e.presentation === presentation && e.stage === 'cast'));
   assert.equal(scene.casting.projectiles[0].ctx.spell.presentation, presentation);

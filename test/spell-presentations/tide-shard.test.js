@@ -201,7 +201,7 @@ test('real rune casts render the shard, wake and crown and emit typed liquid cue
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'cooldown rejection stays silent');
+  assert.equal(scene.castWithoutMana().ok, false, 'mana rejection stays silent');
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
   assert.ok(scene.casting.projectiles.length > 0);
   scene.advance(0.05);

@@ -148,8 +148,8 @@ test('real Restoration cast renders its profile, emits typed cues, and preserves
   scene.casting.clearPresentation(); events.length = 0;
   assert.equal(scene.cast().ok, true);
   const count = events.length;
-  assert.equal(scene.cast().ok, false);
-  assert.equal(events.length, count, 'cooldown rejection emits no extra cue');
+  assert.equal(scene.castWithoutMana().ok, false);
+  assert.equal(events.length, count, 'mana rejection emits no extra cue');
   assert.equal(scene.casting.mana, 92, 'original 8 mana cost');
   scene.advance(0.075); // The TF totem begins after its authored one-tick delay.
   assert.equal(scene.casting.zones.length, 1);

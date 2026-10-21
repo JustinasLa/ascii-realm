@@ -14,7 +14,12 @@ export function runeScene(spell, { range = 4, allyRange = 4, allyInPath = false,
   casting.state(ally).mana = 20;
   const advance = seconds => { for (let left = seconds; left > 1e-8;) { const step = Math.min(left, 0.05); casting.update(step); left -= step; } };
   const cast = (options = {}) => casting.cast(spell.id, { target: spell.supportive ? ally : foe, heading: 0, ...options });
+  const castWithoutMana = (options = {}) => {
+    const state = casting.state(player), mana = state.mana;
+    state.mana = 0;
+    try { return cast(options); } finally { state.mana = mana; }
+  };
   const aura = (entity, name) => casting.hasAura(entity, name);
   const potion = (entity, name) => casting.state(entity).potions.get(name);
-  return { casting, player, ally, monsters, foe, world, advance, cast, aura, potion };
+  return { casting, player, ally, monsters, foe, world, advance, cast, castWithoutMana, aura, potion };
 }

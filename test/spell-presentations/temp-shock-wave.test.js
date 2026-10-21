@@ -174,7 +174,7 @@ test('real rune cast renders authored cues and travelling anvil without sword so
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.cast().ok, false, 'original cooldown still rejects repeated casts');
+  assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects repeated casts');
   assert.equal(events.filter(event => event.stage === 'cast').length, 1);
   const castDots = [], authored = [];
   scene.casting.effects.paint((...point) => castDots.push(point), scene.casting.projectiles);

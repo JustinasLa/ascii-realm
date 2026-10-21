@@ -265,7 +265,7 @@ test('real Fire Breath casts paint the authored profile and emit typed breath cu
   scene.casting.onSound = cue => cues.push(cue);
   assert.equal(scene.cast().ok, true);
   const count = cues.length;
-  assert.equal(scene.cast().ok, false, 'cooldown rejection stays silent');
+  assert.equal(scene.castWithoutMana().ok, false, 'mana rejection stays silent');
   assert.equal(cues.length, count);
   const castEffect = scene.casting.effects.list.find(effect => effect.stage === 'cast');
   assert.equal(castEffect.presentation, presentation);
