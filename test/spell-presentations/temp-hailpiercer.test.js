@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import presentation from '../../src/spells/presentations/temp-hailpiercer.js';
+import presentation, { LAUNCHES } from '../../src/spells/presentations/temp-hailpiercer.js';
 import spell from '../../src/spells/definitions/temp-hailpiercer.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
@@ -32,20 +32,59 @@ test('Hailpiercer flies as a barbed ice harpoon pointing down its heading, with 
   assert.ok(draw('projectile', 0.3, 0).length < shaft.length, 'harpoon extends out of the muzzle');
 });
 
-test('Hailpiercer cast draws a frost sigil, fires five muzzle bursts on the volley cadence, then shatters', () => {
+// Progress points where at least `jump` plotted glyphs appear at once: a fresh
+// muzzle burst is the only part of the cast that pops in that many together.
+function burstOnsets(jump = 12, step = 0.0005) {
+  const onsets = [];
+  let prev = draw('cast', 0).length;
+  if (prev >= jump) onsets.push(0);
+  for (let p = step; p < 1; p += step) {
+    const now = draw('cast', p).length;
+    if (now - prev >= jump) onsets.push(p);
+    prev = now;
+  }
+  return onsets;
+}
+
+test('Hailpiercer cast draws a frost sigil, fires one muzzle burst per launch, then recharges and shatters', () => {
   const ring = p => draw('cast', p).filter(q => '-/\\|'.includes(q[2])
     && Math.hypot(q[0], q[1]) > 0.85 && Math.hypot(q[0], q[1]) < 1.05).length;
   assert.ok(ring(0.02) < ring(0.25) / 2, 'sigil is drawn around the caster rather than popping in');
-  const volley = 0.25 / presentation.duration;
-  for (let k = 0; k < 5; k++) {
-    const shot = draw('cast', k * volley + 0.01), before = draw('cast', Math.max(0, k * volley - 0.03));
-    assert.ok(shot.some(p => isWhite(p[3])), `shot ${k + 1} recoils the crystal white`);
-    assert.ok(shot.length > before.length, `shot ${k + 1} throws a muzzle burst`);
+  const shots = LAUNCHES.map(t => t / presentation.duration), step = 0.0005;
+  const onsets = burstOnsets(12, step);
+  assert.equal(onsets.length, LAUNCHES.length, `one muzzle burst per harpoon (${onsets.map(p => (p * presentation.duration).toFixed(3))})`);
+  onsets.forEach((p, i) => assert.ok(Math.abs(p - shots[i]) <= step + 1e-9, `burst ${i + 1} at launch ${LAUNCHES[i]}s`));
+  for (const s of shots.slice(1)) {
+    assert.ok(draw('cast', s + 0.002).some(p => isWhite(p[3]) && '#*+'.includes(p[2])), 'each launch recoils the crystal white');
   }
+  const after = shots.at(-1) + 0.07;
+  assert.ok(!draw('cast', after).some(p => isWhite(p[3]) && '#*+'.includes(p[2])), 'no recoil once the last harpoon has left');
   assert.ok(draw('cast', 0.6).some(p => '#*+'.includes(p[2])), 'crystal holds above the sigil');
-  assert.ok(!draw('cast', 0.95).some(p => p[2] === '#'), 'crystal is spent after the fifth harpoon');
+  assert.ok(draw('cast', 0.6).filter(p => p[2] === '#').length > draw('cast', after).filter(p => p[2] === '#').length,
+    'emptied crystal refills from the inhaled hail');
+  assert.ok(!draw('cast', 0.95).some(p => p[2] === '#'), 'crystal is spent after it shatters');
   assert.ok(draw('cast', 0.97).length < draw('cast', 0.5).length / 2, 'everything thins out at the end');
   assert.notDeepEqual(draw('cast', 0.1), draw('cast', 0.6));
+});
+
+test('Hailpiercer muzzle bursts follow the definition and the runtime launch schedule', () => {
+  // Derive the schedule from the definition the way the runtime reads it:
+  // one run plus `repeat` repeats, `repeatinterval` ticks apart (default 1).
+  const step = spell.nodes.temp_hailpiercer_cast.steps.find(s => s.op === 'skill' && s.args.s === 'TEMP_Hailpiercer_PRO');
+  const repeat = Number(step.args.repeat), ticks = Number(step.args.repeatinterval ?? 1);
+  const expected = Array.from({ length: repeat + 1 }, (_, i) => i * ticks / 20);
+  assert.equal(LAUNCHES.length, expected.length);
+  LAUNCHES.forEach((t, i) => assert.ok(Math.abs(t - expected[i]) < 1e-9, `launch ${i + 1}: ${t} vs ${expected[i]}`));
+
+  // Record when a real cast actually launches harpoons, with a fine time step.
+  const scene = runeScene(spell), launched = [], t0 = scene.casting.time;
+  const launch = scene.casting.launch.bind(scene.casting);
+  scene.casting.launch = (...args) => { launched.push(scene.casting.time - t0); return launch(...args); };
+  assert.equal(scene.cast().ok, true);
+  for (let i = 0; i < 1000; i++) scene.casting.update(0.001);
+  assert.equal(launched.length, LAUNCHES.length, `runtime launches ${launched.map(t => t.toFixed(3))}`);
+  launched.forEach((t, i) => assert.ok(Math.abs(t - LAUNCHES[i]) <= 0.0011, `harpoon ${i + 1} at ${t.toFixed(4)}s, burst at ${LAUNCHES[i]}s`));
+  assert.ok(LAUNCHES.at(-1) < presentation.duration, 'every launch happens while the cast effect is up');
 });
 
 test('Hailpiercer impact punches through with a white flash, exit spray and a spreading ring', () => {

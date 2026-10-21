@@ -1,5 +1,5 @@
-// Hailpiercer: a five-shot volley of ice harpoons. The caster draws a frost
-// sigil and inhales hail into a crystal that fires on the gameplay cadence,
+// Hailpiercer: a rapid volley of ice harpoons. A frost sigil snaps open and its
+// crystal fires on the gameplay cadence, then draws hail back in and bursts;
 // harpoons punch through foes in a white streak and exit spray, and the
 // ground along the line splits into erupting spears of ice.
 
@@ -17,9 +17,24 @@ const ICE = [126, 215, 251];
 const DEEP = [74, 141, 205];
 const DUSK = [44, 88, 158];
 
-// Gameplay fires a harpoon every five ticks, five times, during the cast.
+// Volley cadence, mirroring the definition as the runtime runs it:
+// TEMP_Hailpiercer_CAST runs TEMP_Hailpiercer_PRO with `repeat: 5`, i.e. once
+// plus five repeats. The runtime spaces repeats by `repeatinterval` (default one
+// tick); it doesn't read the authored `repeati` alias, so the harpoons leave one
+// tick apart. (The definition imports this module, so it can't be imported here.)
+const TICK = 1 / 20;
+const REPEAT = 5;
+const REPEAT_TICKS = 1;
+// Seconds after the cast at which each harpoon launches.
+export const LAUNCHES = Object.freeze(Array.from({ length: REPEAT + 1 }, (_, i) => i * REPEAT_TICKS * TICK));
+
 const DURATION = 1.45;
-const VOLLEY = 0.25 / DURATION;
+const SHOTS = LAUNCHES.map(t => t / DURATION); // launches in cast progress
+const LAST = SHOTS[SHOTS.length - 1];
+const KICK = 0.6 * REPEAT_TICKS * TICK / DURATION; // crystal recoil, shorter than the gap between shots
+const BURST = 0.06; // muzzle burst length in progress (~0.09 s)
+const REFILL = 0.62; // the emptied crystal has drawn its hail back in
+const SHATTER = 0.7; // ...and bursts into falling hail as the sigil evaporates
 
 const clamp01 = v => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = v => { v = clamp01(v); return v * v * (3 - 2 * v); };
@@ -94,18 +109,19 @@ function spear(v, x, z, height, width, b, heat, lean = 0, glint = -1) {
   v.dot(x, z, height, lean, '^', frost(heat), b);
 }
 
-// Five harpoons leave on the gameplay cadence: frost sigil, inhaled hail,
-// a crystal that recoils at every shot, then shatters as the sigil evaporates.
+// Harpoons leave on the gameplay cadence (LAUNCHES): a frost sigil snaps open,
+// its crystal recoils and drains with every shot, draws hail back in from the
+// ground, then shatters as the sigil evaporates.
 function cast(v, p) {
   const end = clamp01((1 - p) / 0.08);
   let kick = 0;
-  for (let k = 0; k < 5; k++) {
-    const d = p - k * VOLLEY;
-    if (d >= 0 && d < 0.1) kick = Math.max(kick, 1 - d / 0.1);
+  for (const s of SHOTS) {
+    const d = p - s;
+    if (d >= 0 && d < KICK) kick = Math.max(kick, 1 - d / KICK);
   }
 
   // Sigil ring drawn from the front around to the back, then evaporating upward.
-  const R = 0.95, sweep = easeOut(p / 0.2), N = 56;
+  const R = 0.95, sweep = easeOut(p / 0.14), N = 56;
   const base = 0.4 + 0.3 * smooth(p / 0.25) + 0.3 * kick;
   for (let k = 0; k < N; k++) {
     const phi = (k / N) * Math.PI * 2 - Math.PI;
@@ -127,14 +143,16 @@ function cast(v, p) {
     v.dot(Math.sin(phi) * 0.7, Math.cos(phi) * 0.7, 0.4 * w, 0, k % 2 ? '+' : '*', frost(base),
       (0.3 + 0.5 * base) * (1 - w) * end);
   }
-  const chevron = smooth((p - 0.08) / 0.12) * (1 - smooth((p - 0.72) / 0.12)) * end;
+  const chevron = smooth(p / 0.06) * (1 - smooth((p - 0.72) / 0.12)) * end;
   v.dot(0, R + 0.16, 0, 0, v.arrow(0, 1), frost(0.7 + 0.3 * kick), chevron);
   for (const side of [-1, 1]) v.dot(side * 0.12, R + 0.05, 0, 0, v.line(side * -0.12, 0.11), frost(0.6 + 0.3 * kick), chevron * 0.8);
 
-  // Hail is inhaled from the ground and spirals up into the crystal.
-  const lift0 = 1.25, z0 = 0.3;
+  // After the volley, hail is inhaled from the ground and spirals up into the
+  // emptied crystal, every mote arriving before it refills.
+  const lift0 = 1.25, z0 = 0.3, open = LAST + 0.03;
   for (let m = 0; m < 24; m++) {
-    const u = (p - hash(m + 3) * 0.34) / (0.16 + hash(m + 5) * 0.12);
+    const span = 0.12 + hash(m + 5) * 0.1;
+    const u = (p - open - hash(m + 3) * (REFILL - open - span)) / span;
     if (u <= 0 || u >= 1) continue;
     const spin = (m % 2 ? 1 : -1) * 1.4, phi = hash(m) * Math.PI * 2, r0 = 1.4 + hash(m + 9);
     const at = t => {
@@ -146,10 +164,13 @@ function cast(v, p) {
     v.dot(x, z, lift, 0, char, frost(0.3 + 0.65 * u), Math.sin(Math.PI * u) ** 0.6 * 0.9 * end);
   }
 
-  // The crystal refills between shots, recoils white at each launch and
-  // collapses after the fifth.
-  const k = Math.min(4, Math.floor(p / VOLLEY)), d = p - k * VOLLEY;
-  const fill = k < 4 ? 0.3 + 0.7 * smooth(d / VOLLEY) : 0.8 * (1 - smooth(d / 0.05));
+  // The crystal recoils white at each launch and drains over the volley,
+  // refills with the inhaled hail, then collapses into the shatter.
+  let fired = 0;
+  for (const s of SHOTS) if (p >= s) fired += 1 / SHOTS.length;
+  const drain = Math.min(fired, smooth(p / (LAST + KICK)));
+  const fill = p < SHATTER ? 1 - 0.7 * drain + 0.7 * smooth((p - open) / (REFILL - open))
+    : (1 - smooth((p - SHATTER) / 0.05));
   if (fill > 0.02) {
     const color = mix(frost(0.6 + 0.4 * fill), WHITE, kick), b = (0.55 + 0.45 * Math.max(fill, kick)) * end;
     v.dot(0, z0, lift0, 0, fill > 0.65 ? '#' : fill > 0.35 ? '*' : '+', color, b);
@@ -168,13 +189,14 @@ function cast(v, p) {
     }
   }
 
-  // Muzzle burst for each harpoon: an opening chevron of spray and thrown sparks.
-  for (let s = 0; s < 5; s++) {
-    const u = (p - s * VOLLEY) / 0.11;
+  // Muzzle burst for each harpoon launch: an opening chevron of spray and
+  // thrown sparks, splayed a little differently every shot.
+  for (let s = 0; s < SHOTS.length; s++) {
+    const u = (p - SHOTS[s]) / BURST;
     if (u < 0 || u >= 1) continue;
-    const len = 0.15 + 0.6 * easeOut(u), fade = (1 - u) ** 1.5 * end;
+    const len = 0.15 + 0.6 * easeOut(u), fade = (1 - u) ** 1.5 * end, splay = 0.38 + 0.16 * hash(s + 90);
     for (const side of [-1, 1]) {
-      const dx = side * Math.sin(0.45), dz = Math.cos(0.45);
+      const dx = side * Math.sin(splay), dz = Math.cos(splay);
       for (let i = 1; i <= 5; i++) {
         const t = i / 5;
         v.dot(dx * len * t, z0 + dz * len * t, lift0, 0, v.line(dx, dz), frost(1 - 0.5 * u - 0.2 * t), fade * (1 - 0.45 * t));
@@ -188,10 +210,11 @@ function cast(v, p) {
     }
   }
 
-  // Follow-through: the spent crystal shatters into falling hail.
-  const u = (p - (4 * VOLLEY + 0.04)) / (1 - 4 * VOLLEY - 0.04);
-  if (u > 0) {
-    for (let j = 0; j < 14; j++) {
+  // Follow-through: the recharged crystal shatters into falling hail, the
+  // pieces breaking away a few frames apart.
+  for (let j = 0; j < 14; j++) {
+    const at = SHATTER + 0.02 + 0.05 * hash(j + 43), u = (p - at) / (1 - at);
+    if (u > 0) {
       const a = (j / 14) * Math.PI * 2 + hash(j + 31), out = (0.5 + 0.8 * hash(j + 37)) * easeOut(u);
       const up = 0.35 + 0.5 * hash(j + 41), height = (t, o) => Math.max(0, lift0 + up * t - 2.4 * t * t + o);
       const lift = height(u, 0), x = Math.sin(a) * out, z = z0 + Math.cos(a) * out * 0.8;
