@@ -90,7 +90,7 @@ test('Leaf Arrow impact flashes white, quivers in the target and bursts into spl
   const spread = q => Math.max(...lit(points('impact', q)).map(p => Math.hypot(p[0], p[1])));
   assert.ok(spread(0.05) < spread(0.3), 'splinters, leaves and the ring travel outward');
   const forward = near(points('impact', 0.25), 0, 0.7, 0.6).length, backward = near(points('impact', 0.25), 0, -0.7, 0.6).length;
-  assert.ok(forward > 0 && backward >= 0);
+  assert.ok(forward > 0 && backward > 0, 'the burst sprays splinters and leaves both ahead of and behind the hit');
   assert.ok(!points('impact', 0.5).some(p => p[2] === '@'), 'the flash is gone by follow-through');
 });
 
