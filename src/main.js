@@ -208,6 +208,7 @@ const inventoryScreen = new InventoryScreen({
     setGameplayBlocked(open);
     clearInput();
     clicked = false;
+    rightClicked = false;
     mouseHeld = false;
     if (!open) canvas.focus({ preventScroll: true });
   },
@@ -270,11 +271,25 @@ canvas.addEventListener('pointerleave', () => { pointer = null; });
 const carriedCount = (id) => inventory.slots.reduce((n, s) => n + (s?.id === id ? s.count : 0), 0)
   + (inventory.equipment.mainHand?.id === id ? 1 : 0);
 
+// The ground cell under the cursor, or null when it is off the scene.
+const cursorCell = () => pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
+
+// The way the cursor points from the player, or null without one. Close
+// swings are aimed from the hips on screen rather than the feet, so a click
+// beside the body cuts that way rather than off up the screen.
+function cursorHeading(fromHips = false) {
+  const cursor = cursorCell();
+  if (!cursor) return null;
+  const mx = (cursor.x - player.x) * ASPECT / SCALE;
+  const mz = (cursor.y - player.y + (fromHips ? 0.9 * SCALE : 0)) / (SCALE * TILT);
+  return Math.hypot(mx, mz) > 0.05 ? Math.atan2(mx, mz) : null;
+}
+
 // Where a shot or throw would land: the cursor, or a point straight ahead
 // within the weapon's range when aiming from the keyboard.
 function aimPoint(weapon, draw) {
   const range = (weapon.projectileRange ?? 8) * (0.4 + 0.6 * draw);
-  const cursor = pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
+  const cursor = cursorCell();
   let mx = cursor ? (cursor.x - player.x) * ASPECT / SCALE : Math.sin(player.heading) * range;
   let mz = cursor ? (cursor.y - player.y) / (SCALE * TILT) : Math.cos(player.heading) * range;
   const distance = Math.hypot(mx, mz);
@@ -359,15 +374,23 @@ function fireNotice(message) {
   fireNoticeUntil = time + 3;
 }
 
-// A click on the scene swings the sword.
-// Holding it down charges a spin.
+// A click on the scene swings the sword towards the cursor.
+// Holding it down charges a spin. A right click casts the chosen spell
+// at the cursor.
 let clicked = false;
 let mouseHeld = false;
+let rightClicked = false;
 // Touches use the on-screen buttons instead.
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || e.pointerType === 'touch' || builder.enabled || isGameplayBlocked()) return;
+  if (e.pointerType === 'touch' || builder.enabled || isGameplayBlocked()) return;
+  if (e.pointerType === 'mouse' || e.pointerType === 'pen') pointer = { x: e.clientX, y: e.clientY };
+  if (e.button === 2) rightClicked = true;
+  if (e.button !== 0) return;
   clicked = true;
   mouseHeld = true;
+});
+canvas.addEventListener('contextmenu', (e) => {
+  if (!builder.enabled) e.preventDefault();
 });
 window.addEventListener('pointerup', (e) => {
   if (e.button === 0) mouseHeld = false;
@@ -381,6 +404,7 @@ let hitStop = 0;
 const builder = new SceneryBuilder({ world, player, camera, renderer,
   onModeChange: () => {
     clicked = false;
+    rightClicked = false;
     mouseHeld = false;
     hitStop = 0;
     player.combat.charge = 0;
@@ -562,6 +586,7 @@ function fallInBattle() {
   model?.resetPose(player);
   clearInput();
   clicked = false;
+  rightClicked = false;
   mouseHeld = false;
   hitStop = 0;
   camera.x = player.x;
@@ -591,6 +616,7 @@ function suspend() {
   animation = null;
   clock.reset();
   clicked = false;
+  rightClicked = false;
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -636,22 +662,25 @@ function frame(now) {
   }
   const armed = Boolean(weapon);
   const ranged = isBow(weapon) || isThrown(weapon);
-  canvas.classList.toggle('projectile-aiming', ranged);
+  canvas.classList.toggle('projectile-aiming', !builder.enabled);
   const ammo = isBow(weapon) ? `Arrows ${carriedCount('arrow')}` : isThrown(weapon) ? `${ITEMS[hand.id].name} ×${carriedCount(hand.id)}` : '';
   if (ammoNote.textContent !== ammo) ammoNote.textContent = ammo;
   ammoNote.hidden = !ammo;
   const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
   const jump = wasTapped('Space');
-  const attack = wasTapped('KeyJ') || clicked;
+  const keyAttack = wasTapped('KeyJ');
+  const attack = keyAttack || clicked;
   const sword = wasTapped('KeyF');
   const torchKey = wasTapped('KeyT');
   const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
-  const cast = wasTapped('KeyR') || castRequested;
+  const cast = wasTapped('KeyR') || castRequested || rightClicked;
   castRequested = false;
+  rightClicked = false;
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
-    if (attack && armed && !ranged) player.attack();
+    // A click swings at the cursor; J swings the way the body faces.
+    if (attack && armed && !ranged) player.attack(clicked && !keyAttack ? cursorHeading(true) : null);
     if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
@@ -662,6 +691,8 @@ function frame(now) {
       const heading = Math.atan2((aim.x - player.x) * ASPECT / SCALE, (aim.y - player.y) / (SCALE * TILT));
       const result = casting.cast(casting.selected, { aim, heading });
       if (!result.ok) hud.notify(result.reason);
+      // The caster turns to send the spell the way it was aimed.
+      else if (cursorCell()) player.face(heading, 0.35);
     }
   }
   const itemHint = player.handsFull ? 'Two-handed · torch tucked away'
@@ -680,7 +711,7 @@ function frame(now) {
   // javelin jabs on a tap and is thrown after a longer hold.
   const release = player.ranged.update(dt, ranged && held && !builder.enabled && !debug.freeze, weapon);
   player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw) : null;
-  if (release?.action === 'jab') player.attack();
+  if (release?.action === 'jab') player.attack(cursorHeading(true));
   else if (release) fireRanged(release, weapon);
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {

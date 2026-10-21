@@ -15,6 +15,9 @@ const RUN_SPEED = 5.3;
 const toCols = SCALE / ASPECT;
 const toRows = SCALE * TILT;
 const TURN_RATE = 12; // how quickly the heading swings round, per second
+// How quickly the body whips round to face a swing or spell aimed with the
+// cursor; fast enough that the blade lands where it was aimed.
+const FACE_RATE = 40;
 // How quickly the warrior gets up to speed or changes direction (per
 // second). Lower at a sprint, so they carve round in arcs.
 const GRIP = 11;
@@ -85,6 +88,10 @@ export class Player {
     // Drawing a bow or readying a throw, and the ground point aimed at.
     this.ranged = new Ranged();
     this.aimTarget = null;
+    // A heading held for an aimed swing or spell, and the seconds it is held
+    // beyond the end of any swing.
+    this.facing = null;
+    this.faceTime = 0;
     // A lit torch occupies the free hand; T stows it or draws a fresh one.
     this.torchOut = true;
     // Recent blade positions in world cells, for the swing trail.
@@ -221,10 +228,22 @@ export class Player {
     return weaponFeel(this.weapon);
   }
 
-  attack() {
+  // `heading`, when given, is where the swing is aimed: the body turns to
+  // face it and holds there until the swing is over.
+  attack(heading = null) {
     this.cancelPickup();
     if (!this.combat.canAcceptAttack) return false;
-    return this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
+    const accepted = this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
+    if (accepted && heading !== null) this.face(heading);
+    return accepted;
+  }
+
+  // Turns to face `heading` and holds it for `hold` seconds, or for as long
+  // as the sword is moving, whichever is longer.
+  face(heading, hold = 0) {
+    if (!Number.isFinite(heading)) return;
+    this.facing = heading;
+    this.faceTime = hold;
   }
 
   takeDamage(amount, attacker = null) {
@@ -437,7 +456,11 @@ export class Player {
       this.vz = 0;
     }
 
-    if (moving) {
+    if (this.facing !== null) {
+      this.faceTime -= dt;
+      if (this.faceTime <= 0 && !this.combat.busy) this.facing = null;
+    }
+    if (moving && this.facing === null) {
       // Turn smoothly through the in-between headings rather than snapping,
       // following the way the body is actually travelling.
       const target = Math.hypot(this.vx, this.vz) > 0.3 ? Math.atan2(this.vx, this.vz) : Math.atan2(move.x, move.y);
@@ -495,7 +518,10 @@ export class Player {
       }
     }
 
-    if (!moving) this.bank += -this.bank * ease(8);
+    if (!moving || this.facing !== null) this.bank += -this.bank * ease(8);
+    // An aimed swing or spell turns the body to face it, whatever the keys
+    // say, so the blade or spell goes where the cursor points.
+    if (this.facing !== null) this.heading += angleTo(this.heading, this.facing) * ease(FACE_RATE);
     // Taking aim, the outlaw turns to face the point aimed at.
     if (this.ranged.aiming && this.aimTarget) {
       const ax = (this.aimTarget.x - this.x) / toCols;
