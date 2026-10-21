@@ -94,6 +94,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     Fires: inert(),
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
+    Fog: inert(), MAX_WALKERS: 12, figureScale: () => 1,
     fireWeatherWind: () => 0,
     Splashes: class {
       react() {} update() {} precipitate() {}
@@ -108,7 +109,7 @@ async function loadGame(move = { x: 0, y: 0 }) {
     drawShadow: noop, drawProp: noop, reflector: noop, dressFigure: noop,
     drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop,
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
-    Monsters: class extends inert() { constructor() { super(); this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
+    Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
     SceneryBuilder: class {
       constructor() { this.enabled = false; }

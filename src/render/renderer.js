@@ -6,13 +6,24 @@
 // uploaded as textures and the fragment shader looks up the glyphs in the
 // atlas for every pixel, so cost is independent of how many characters are
 // on screen.
+//
+// Ground fog is drawn in the same pass from grey `o` characters that are not
+// held to the grid: several drifting layers of them, scattered and freely
+// overlapping, so thick fog piles up into a dense, smoky mass. They are laid
+// over the finished scene without touching the cell buffers.
 
-import { BLANK_GLYPH, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
-import { NIGHT, VIGNETTE } from './palette.js';
+import { NOISE, NOISE_SIZE } from '../world/fog-banks.js';
+import { ASPECT } from '../world/world.js';
+import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
+import { FOG, FOG_PILED, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
 
 // An rgb triple as a GLSL vec3 literal.
 // How much of a cell's ground colour shows behind its glyph.
 const BG_KEEP = 0.12;
+// The character the fog is made of, and how many drifting layers of it can
+// pile up over one spot.
+const FOG_GLYPH = glyph('o');
+const FOG_LAYERS = 5;
 const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
 
 const VERT = `#version 300 es
@@ -33,7 +44,54 @@ uniform vec2 uAtlasCols;
 uniform vec2 uAtlasCell;
 uniform float uAtlasPad;
 uniform vec2 uAtlasSize;
+uniform sampler2D uNoise;
+uniform vec2 uWorld;
+uniform vec2 uFogDrift;
+uniform vec3 uFog;
+// The fog around the player as walkers have pushed it about, beside the fog
+// the banks alone would put there (see world/fog-wake.js), and where that
+// field lies: its corner and side, in rows with columns scaled to rows.
+uniform sampler2D uPushed;
+uniform vec3 uPushedArea;
 out vec4 outColor;
+
+const float NOISE = ${NOISE_SIZE.toFixed(1)};
+
+// Smooth value noise from one filtered lookup of the random texture: easing
+// the fraction before the hardware interpolates hides the lattice.
+float noise(vec2 x) {
+  vec2 i = floor(x);
+  vec2 f = fract(x);
+  f = f * f * (3.0 - 2.0 * f);
+  return texture(uNoise, (i + f + 0.5) / NOISE).r;
+}
+
+const mat2 TURN = mat2(1.6, 1.2, -1.2, 1.6);
+
+float fbm(vec2 x) {
+  float sum = 0.5 * noise(x);
+  x = TURN * x + 17.3;
+  sum += 0.25 * noise(x);
+  x = TURN * x + 31.7;
+  sum += 0.125 * noise(x);
+  x = TURN * x + 5.9;
+  sum += 0.0625 * noise(x);
+  return sum / 0.9375;
+}
+
+// How thick the fog is at a point on the ground, in rows. Broad banks are
+// warped by a second noise so their edges curl into wisps, and fine streaks
+// inside them keep any bank from reading as a flat smear.
+float fogAt(vec2 w) {
+  float t = uFog.z;
+  vec2 q = (w + uFogDrift) / 28.0;
+  vec2 warp = vec2(fbm(q * 1.7 + vec2(0.0, t * 0.021)), fbm(q * 1.7 + vec2(5.2, 1.3) - t * 0.017));
+  float bank = fbm(q + 1.4 * warp + vec2(t * 0.006, 0.0));
+  float edge = 0.52 - 0.22 * uFog.y;
+  float thick = smoothstep(edge, edge + 0.34, bank);
+  float streak = fbm(vec2((w.x + uFogDrift.x * 1.35) / 5.5, (w.y + uFogDrift.y) / 2.4) + 2.5 * warp);
+  return thick * (0.35 + 1.1 * streak);
+}
 
 float coverage(float g, vec2 local) {
   vec2 gcell = vec2(mod(g, uAtlasCols.x), floor(g / uAtlasCols.x));
@@ -41,6 +99,52 @@ float coverage(float g, vec2 local) {
   vec2 apx = gcell * uAtlasCell + uAtlasPad + local * inner;
   float lod = clamp(log2(inner.y / uCell.y), 0.0, 2.5);
   return textureLod(uAtlas, apx / uAtlasSize, lod).r;
+}
+
+float random(vec2 slot, float salt) {
+  return texelFetch(uNoise, ivec2(mod(slot + vec2(salt * 61.0, salt * 23.0), NOISE)), 0).r;
+}
+
+// The fog at a point of the ground once walkers have pushed it about, given
+// the undisturbed banks there. Where fog was pushed away the banks thin in
+// proportion, keeping their fine streaks; fog pushed in on top piles up.
+float pushedFog(vec2 ground, float banks) {
+  vec2 uv = (ground - uPushedArea.xy) / uPushedArea.z;
+  if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return banks;
+  vec2 field = texture(uPushed, uv).rg;
+  return banks * min(1.0, field.r / max(field.g, 0.02)) + max(0.0, field.r - field.g);
+}
+
+// One layer of fog characters around a point, in world cells. Each slot of
+// the layer's grid holds one 'o', nudged off the grid, sized a little up or
+// down and swaying on its own; only the four slots nearest the point can
+// reach it. Every character fades with the fog's thickness and with its own
+// slow pulse, so banks churn rather than slide. Returns the colour after
+// laying the layer's characters over it.
+vec3 fogLayer(vec3 color, vec2 at, float layer, float thick, vec3 tint) {
+  float t = uFog.z;
+  vec2 shift = vec2(uFogDrift.x / ${ASPECT.toFixed(4)}, uFogDrift.y) * (0.75 + 0.18 * layer)
+    - vec2(layer * 0.37, layer * 0.61);
+  vec2 q = at - shift;
+  vec2 base = floor(q - 0.5);
+  for (int k = 0; k < 4; k++) {
+    vec2 slot = base + vec2(float(k & 1), float(k >> 1));
+    float r1 = random(slot, layer);
+    float r2 = random(slot, layer + 4.0);
+    float r3 = random(slot, layer + 8.0);
+    float phase = r1 * 6.2832;
+    vec2 centre = slot + 0.5 + (vec2(r1, r2) - 0.5) * 0.6
+      + 0.12 * vec2(sin(t * 0.5 + phase), cos(t * 0.4 + phase * 1.7));
+    float size = 0.8 + 0.5 * r3;
+    vec2 local = (q - centre) / size + 0.5;
+    if (any(lessThan(local, vec2(0.0))) || any(greaterThan(local, vec2(1.0)))) continue;
+    float pulse = 0.55 + 0.45 * sin(t * (0.25 + 0.3 * r2) + phase * 3.0);
+    // Fog piled up past its usual thickness keeps getting denser.
+    float a = smoothstep(r3 * 0.35, r3 * 0.35 + 0.45, thick) * pulse * (0.38 + 0.35 * r2)
+      * (1.0 + 0.45 * max(0.0, thick - 0.9));
+    color = mix(color, tint, coverage(${FOG_GLYPH.toFixed(1)}, local) * a);
+  }
+  return color;
 }
 
 void main() {
@@ -63,6 +167,20 @@ void main() {
   vec3 ground = mix(${vec3(NIGHT)}, bg.rgb, ${BG_KEEP.toFixed(3)});
   vec3 color = mix(ground, fg.rgb, coverage(g, local));
   if (og > 0.5) color = mix(color, ov.rgb, coverage(og, local));
+
+  if (uFog.x > 0.0) {
+    // The fog's thickness hardly changes across a character, so it is found
+    // once for the pixel and shared by every character over it.
+    vec2 at = uWorld + p / uCell;
+    vec2 ground = at * vec2(${ASPECT.toFixed(4)}, 1.0);
+    // Walkers push the fog aside into the fog around them.
+    float thick = clamp(pushedFog(ground, fogAt(ground)) * uFog.x, 0.0, 2.2);
+    if (thick > 0.01) {
+      vec3 tint = mix(${vec3(FOG_THIN)}, ${vec3(FOG)}, clamp(thick, 0.0, 1.0));
+      tint = mix(tint, ${vec3(FOG_PILED)}, clamp(thick - 1.0, 0.0, 1.0) * 0.6);
+      for (int layer = 0; layer < ${FOG_LAYERS}; layer++) color = fogLayer(color, at, float(layer), thick, tint);
+    }
+  }
 
   // Fade toward a deep navy at the corners so the eye settles on the middle
   // of the scene and the edges stay night rather than plain black.
@@ -118,7 +236,7 @@ export class AsciiRenderer {
     this.prog = prog;
     this.u = {};
     for (const name of ['uFg', 'uBg', 'uOv', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
-      'uAtlasCell', 'uAtlasPad', 'uAtlasSize']) {
+      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uPushed', 'uPushedArea']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
 
@@ -145,6 +263,24 @@ export class AsciiRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 
+    // A fixed field of random values that tiles, so the fog's noise costs
+    // one texture read per octave instead of hashing every corner. The game
+    // reads the same values to know where the banks lie (fog-banks.js).
+    this.noiseTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, NOISE_SIZE, NOISE_SIZE, 0, gl.RED, gl.UNSIGNED_BYTE, NOISE);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+
+    // The pushed-fog field is smooth, so it is read with filtering.
+    this.pushedTex = dataTexture(gl);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
     this.fgTex = dataTexture(gl);
     this.bgTex = dataTexture(gl);
     this.ovTex = dataTexture(gl);
@@ -153,6 +289,8 @@ export class AsciiRenderer {
     gl.uniform1i(this.u.uBg, 1);
     gl.uniform1i(this.u.uAtlas, 2);
     gl.uniform1i(this.u.uOv, 3);
+    gl.uniform1i(this.u.uNoise, 4);
+    gl.uniform1i(this.u.uPushed, 5);
     gl.uniform2f(this.u.uAtlasCols, atlas.cols, atlas.rows);
     gl.uniform2f(this.u.uAtlasCell, atlas.cellW, atlas.cellH);
     gl.uniform1f(this.u.uAtlasPad, atlas.pad);
@@ -276,8 +414,11 @@ export class AsciiRenderer {
   }
 
   // offsetX/offsetY: how far (in device px) the grid is scrolled into its
-  // first cell, so the camera can move smoothly between cells.
-  draw(offsetX = 0, offsetY = 0) {
+  // first cell, so the camera can move smoothly between cells. `fog` places
+  // the ground fog: the world cell in the grid's corner (x0, y0), its
+  // density, coverage, drift and age (see world/fog.js). Without it the
+  // scene is drawn clear.
+  draw(offsetX = 0, offsetY = 0, fog = null) {
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.fgTex);
@@ -291,8 +432,24 @@ export class AsciiRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.ovTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE,
       this.ov);
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, this.atlasTex);
+
+    gl.uniform3f(this.u.uFog, fog?.density ?? 0, fog?.coverage ?? 0, fog?.time ?? 0);
+    gl.uniform2f(this.u.uWorld, fog?.x0 ?? 0, fog?.y0 ?? 0);
+    gl.uniform2f(this.u.uFogDrift, fog?.driftX ?? 0, fog?.driftY ?? 0);
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, this.pushedTex);
+    const wake = fog?.wake;
+    if (wake && !Number.isNaN(wake.ox)) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, wake.cells, wake.cells, 0, gl.RG, gl.FLOAT, wake.texels);
+      gl.uniform3f(this.u.uPushedArea, wake.ox, wake.oy, wake.size);
+    } else {
+      // Nothing pushed: an area too small to reach any pixel.
+      gl.uniform3f(this.u.uPushedArea, -1e6, -1e6, 1);
+    }
 
     gl.uniform2f(this.u.uView, this.canvas.width, this.canvas.height);
     gl.uniform2f(this.u.uCell, this.cellW, this.cellH);

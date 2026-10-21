@@ -160,6 +160,17 @@ short version see the [README](../README.md).
   Gusts bend grass and roughen the water. Clear is the default; selection and
   intensity are saved. Effects also work with sound muted or before audio is
   enabled.
+- **Ground fog.** Banks of mist made of pale `o` characters lie over the
+  land in any weather and creep along with the wind, thinning to clear
+  ground between them. The characters float free of the grid in several
+  drifting layers that overlap and pulse, so thick fog piles up dense. Fog is
+  never lost: anyone walking through it, player or monster, shoves the mist
+  ahead of them aside into the fog around their path, where it piles up
+  thicker and paler, and drags it along into the gap behind them in eddies;
+  a troll parts a wider patch than a goblin. Standing still only
+  nudges it, and over a few seconds the piles spread back out. The Fog
+  preset rolls in thick, wide banks over a few seconds, and drizzle thickens
+  them a little.
 - **Skeletons.** The dead climb out of the ground a short way off, run at the
   player and hack at them with rusted swords; step back out of reach and the
   blow misses. Like the player they wade into lakes up to the knee, slowed and

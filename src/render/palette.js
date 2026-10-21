@@ -7,6 +7,12 @@
 export const NIGHT = [10, 9, 20];
 export const VIGNETTE = [5, 4, 12];
 
+// Ground fog: a cold grey where it is thin, a pale moonlit white in the
+// thick of a bank, and near white where walkers have piled it up.
+export const FOG = [184, 204, 226];
+export const FOG_THIN = [104, 122, 148];
+export const FOG_PILED = [214, 228, 242];
+
 // The moon lights the tops of things with a pale, slightly minty white; the
 // undersides fall into a cool shade rather than toward black.
 export const MOONLIGHT = [200, 222, 236];
