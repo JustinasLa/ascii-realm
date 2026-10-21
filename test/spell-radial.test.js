@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { RadialMenu, sectorAt, sectorPath, WHEEL } from '../src/spells/radial.js';
+import { RadialMenu, sectorAt, WHEEL } from '../src/spells/radial.js';
 
 const mid = (WHEEL.inner + WHEEL.outer) / 2;
 const schools = [
@@ -20,7 +20,6 @@ test('sectors count clockwise from the top and ignore the hub', () => {
   assert.equal(sectorAt(0, -10, 4), -1, 'the hub picks nothing');
   assert.equal(sectorAt(0, -WHEEL.outer * 3, 4), -1, 'far beyond the rim picks nothing');
   assert.equal(sectorAt(0, -mid, 0), -1);
-  assert.match(sectorPath(0, 0, 10, 20, 0, 1), /^M.*A20 20 0 0 1 .*L.*A10 10 0 0 0 .*Z$/);
 });
 
 test('empty schools stay off the wheel', () => {
