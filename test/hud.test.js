@@ -61,6 +61,19 @@ test('HUD segmented bars and accessible values follow rounded, bounded player vi
   meter(document.body, 'hud-health');
 });
 
+test('the status frame shows the attached caster mana under health', (t) => {
+  const { document, hud } = mount(t);
+  assert.equal(byClass(document.body, 'hud-mana')[0].hidden, true, 'no mana row before a caster is attached');
+  const caster = { mana: 37.6, maxMana: 100 };
+  hud.attachMana(caster);
+  const mana = meter(document.body, 'hud-mana');
+  assert.equal(mana.element.hidden, false);
+  assert.match(mana.element.textContent, /MP38\/100/);
+  caster.mana = 100;
+  hud.update(0, view);
+  assert.equal(meter(document.body, 'hud-mana').current, 100);
+});
+
 test('HUD hotbar reflects equipment, selection, and consumed quick-item counts', (t) => {
   const selections = [];
   let inventoryOpened = 0;

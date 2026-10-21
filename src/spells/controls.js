@@ -18,22 +18,12 @@ const tag = (name, className, text) => {
   return node;
 };
 
-// The bound rune, mana and cooldown sit above the hotbar. Holding the middle
-// mouse button (or RUNES on touch) opens the rune wheel: a school first, then
+// Holding the middle mouse button (or RUNES on touch) opens the rune wheel: a school first, then
 // one of its runes, which stays bound to R until another is chosen.
 export class SpellControls {
-  constructor(casting, { root, surface, touchButton, canOpen = () => true, onBind = () => {}, onFocus = () => {},
+  constructor(casting, { surface, touchButton, canOpen = () => true, onBind = () => {}, onFocus = () => {},
     restore = true, storage = globalThis.localStorage }) {
-    Object.assign(this, { casting, root, surface, canOpen, onBind, onFocus, restore, storage });
-    this.root.innerHTML = '<div class="spell-bound"><kbd>R</kbd><span id="spell-name">No rune</span>'
-      + '<span id="spell-ready" role="status"></span></div>'
-      + '<div class="spell-mana"><label for="spell-mana">Mana</label><meter id="spell-mana" min="0" max="100" value="100"></meter>'
-      + '<output id="spell-mana-value">100 / 100</output></div>'
-      + '<span class="spell-change"><kbd>Hold MMB</kbd> runes</span>';
-    this.name = root.querySelector('#spell-name');
-    this.ready = root.querySelector('#spell-ready');
-    this.meter = root.querySelector('meter');
-    this.manaText = root.querySelector('output');
+    Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage });
     this.menu = new RadialMenu();
     this.buildWheel();
     this.listen(touchButton);
@@ -54,7 +44,6 @@ export class SpellControls {
     }
     if (!available.some(s => s.id === this.casting.selected)) this.casting.selected = available[0]?.id ?? '';
     this.menu.setGroups(this.schools());
-    this.describe();
     if (this.menu.isOpen) this.drawWheel();
   }
 
@@ -73,30 +62,13 @@ export class SpellControls {
     return Math.max(0, (this.casting.state().cooldowns.get(`${spell.id}:${v.id}`) ?? 0) - this.casting.time);
   }
 
-  describe() {
-    const spell = this.casting.spells.get(this.casting.selected);
-    const school = SCHOOLS.find(s => s.id === spell?.element);
-    this.name.textContent = spell ? spell.name : 'No rune';
-    this.name.style.color = school?.color ?? '';
-    this.root.title = spell ? `${spell.name} · ${school?.name ?? spell.element} · ${this.stats(spell).join(' · ')}` : '';
-  }
-
   bind(spell) {
     this.casting.selected = spell.id;
     this.remember(spell.id);
-    this.describe();
     this.onBind(spell);
   }
 
   update() {
-    const casting = this.casting, spell = casting.spells.get(casting.selected), v = casting.variant(spell);
-    const state = casting.state(), p = v ? casting.modifiers(v) : {};
-    const remaining = spell ? this.remaining(spell) : 0;
-    this.meter.value = state.mana; this.meter.max = state.maxMana;
-    this.manaText.textContent = `${Math.floor(state.mana)} / ${state.maxMana}`;
-    const text = !spell ? '' : remaining ? `${remaining.toFixed(1)}s` : state.mana < (p.mana ?? 0) ? 'Low mana' : 'Ready';
-    if (this.ready.textContent !== text) this.ready.textContent = text;
-    this.root.classList.toggle('spell-waiting', Boolean(text && text !== 'Ready'));
     if (this.menu.isOpen && !this.canOpen()) this.close();
     if (this.menu.isOpen && this.menu.stage === 'items') this.tickWheel();
   }

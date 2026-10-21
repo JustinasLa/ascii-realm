@@ -159,7 +159,6 @@ export class SceneryBuilder {
     this.banner.hidden = !enabled;
     this.cursor.hidden = true;
     this.canvas.style.touchAction = enabled ? 'none' : '';
-    document.getElementById('hint').hidden = enabled;
     if (enabled) {
       this.panel.open = true;
       this.camera.quake = 0;
