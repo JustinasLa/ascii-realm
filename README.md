@@ -14,11 +14,23 @@ shared online lobby.
 
 ## Features
 
-- **Rune casting.** Open Rune spells, choose a rune, aim and press `R` or Cast.
-  Mana, cooldowns, projectiles, shields, status effects and channels share one
-  simulation. The [casting arena](docs/casting-simulation.html) has stationary
-  enemy and ally targets, a wall toggle and manual time stepping. Rune spells
-  are added individually; class abilities are outside this batch.
+- **Rune casting.** 40 rune spells across four elements: 8 Oseni (fire), 12
+  Seithr (ice), 12 Cerrith (life) and 8 Mitlan (water), from Fire Shard and
+  Meteor to Frozen Tomb, Vine Wave, Maelstrom and Drowning Prison. Open the
+  Rune spells panel, filter by element, choose a rune, aim with the pointer
+  and press `R` or Cast. The panel shows each rune's mana cost, cooldown and
+  damage or healing, and the mana bar and cooldown stay on screen. Mana
+  refills slowly a second after the last cast. Projectiles, waves, zones, shields, heals,
+  status effects, summons and channels share one simulation that strikes the
+  monsters in the world. Every rune has its own ASCII animation for casting,
+  travel and impact, and its own layered synthesized sound. Support spells
+  such as Healing Orb or Mana Transfer need another player in range.
+  Add `?spell=fire-shard` (or another rune's id) to start with that rune
+  chosen. The [casting arena](docs/casting-simulation.html) has stationary
+  enemy and ally targets, a wall toggle, practice spells and manual time
+  stepping. Class abilities are outside this batch. See
+  [rune casting](docs/spellcasting.md) and
+  [spell presentations](docs/spell-presentations.md).
 
 - **One-pass WebGL2 renderer.** The CPU fills a cell buffer (glyph + colours);
   a fragment shader draws every glyph from a font atlas, so the screen can hold
@@ -86,7 +98,7 @@ shared online lobby.
   impact), a lunging thrust from a sprint, a plunging strike from the air and
   a charged spinning slash, all with glowing swing trails. Footsteps kick up
   dust and grass and leave prints in dirt and sand.
-- **Nameplate.** The warrior's name floats above the helm; add `?name=...` to
+- **Nameplate.** The outlaw's name floats above the hood; add `?name=...` to
   the URL to choose it.
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 - **Status frames and quick slots.** A party-style frame in the top-left
@@ -189,7 +201,9 @@ shared online lobby.
   many.
   Wounded monsters show a segmented health bar over their heads.
 - **Phone controls and performance.** A touch stick for walking/running, separate
-  jump and sword buttons, and zoom controls in portrait or landscape. Rendering
+  jump, sword and cast buttons, and zoom controls in portrait or landscape. They
+  appear only when touch is the primary input, so touchscreen laptops and narrow
+  desktop windows keep the keyboard and mouse layout. Rendering
   targets 60 fps, caps backing resolution, and lowers that resolution under
   sustained load without changing your zoom. Zoom stops at the furthest scale
   that still draws grass blades, swaying trees and reflections; a very wide
@@ -197,7 +211,7 @@ shared online lobby.
   and distant chunks are evicted.
 - **Multiplayer lobbies.** Create a lobby and share its six-character code;
   friends enter the code to join the same seeded world. Movement, jumps, swings,
-  gear, weapons, nameplates and reflections are visible to everyone, and each
+  rune casts, gear, weapons, nameplates and reflections are visible to everyone, and each
   friend's health appears in the party frames under your own. Players
   have distinct nameplate colours, and brief connection drops reconnect
   automatically. The lobby keeps working when its creator leaves.
@@ -248,10 +262,12 @@ waits for you to press **Join lobby**. You can also use the `?room=ABC234` and
 To play this checkout on a phone on the same Wi-Fi, open
 `http://<computer-LAN-IP>:8000` on the phone after starting the server.
 
-Gameplay, input, rendering equivalence, memory bounds and frame budgets have
-tests (Node 18+, no dependencies):
+Gameplay, input, rendering equivalence, memory bounds, frame budgets and every
+rune's behaviour and presentation have tests (Node 22+; `npm ci` first, since
+the lobby server tests use `ws`):
 
 ```sh
+npm ci
 npm test
 ```
 
@@ -271,6 +287,8 @@ checks and reproduction instructions are in [docs/performance.md](docs/performan
 | `T` | Stow the torch or draw a fresh lit torch |
 | `G` | Throw the carried torch in the direction faced; dry ground ignites on landing |
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
+| `R` / Cast button | Cast the selected rune spell towards the pointer |
+| Rune spells panel | Filter runes by element and choose the one to cast |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
 | Weather & seasons panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
@@ -315,8 +333,8 @@ Add `?builder` to the URL to open the panel automatically. With `?debug`, the
 current scene is available as `window.game.builder.scene` for inspection.
 
 On a phone, drag the left pad to walk and push it to the outer edge to run.
-Use **JUMP**, **STRIKE**, and **DRAW** with your other thumb; repeated strikes
-chain a combo. The upper **− / +** buttons zoom. Controls support multiple
+Use **JUMP**, **STRIKE**, **DRAW** and **CAST** with your other thumb; repeated
+strikes chain a combo, and spells cast on touch follow your facing. The upper **− / +** buttons zoom. Controls support multiple
 fingers and reset when a touch is cancelled or the page is backgrounded.
 
 ## Layout
@@ -324,12 +342,13 @@ fingers and reset when a touch is cancelled or the page is backgrounded.
 ```
 src/
   main.js            game loop and wiring
-  core/              input, hashing, noise
+  core/              input, touch controls, pointer aiming, ballistics, hashing, noise
   multiplayer/       lobby client, controls, snapshot validation and interpolation
   editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   inventory/         items, satchel, equipment, quick slots and carry weight
   render/            glyph atlas, WebGL renderer, cell writers
+  spells/            rune casting simulation, rune definitions by element, animations and sounds
   ui/                status frames, inventory panel, item art and notifications
   world/             terrain, grass and water shading, props, sky, reflections, fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
@@ -339,7 +358,8 @@ src/
 The server owns lobby membership, IDs, colours and world seeds; each player
 simulates their own movement and sends bounded pose snapshots at 20 Hz.
 Other players interpolate snapshots 100 ms behind and are drawn as the
-shape-built outlaw in their own gear. Monsters and combat are simulated locally;
+shape-built outlaw in their own gear. Rune casts are relayed as allowlisted cast
+intent and simulated by each client. Monsters and combat are simulated locally;
 lobbies do not synchronize enemies or add PvP damage, shared loot or competitive
 movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
 the browser uses its native WebSocket API.
