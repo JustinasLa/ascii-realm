@@ -40,8 +40,19 @@ export const REFILL = 5;
 // The field blends back into the undisturbed banks over this many cells at
 // its edge, so its border never shows.
 const BORDER = 5;
-// The player, friends and the nearest monsters all stir the fog.
-export const MAX_WALKERS = 12;
+// The player, friends, spells in flight and the nearest monsters all stir
+// the fog.
+export const MAX_WALKERS = 20;
+// Spells burst the fog outward and whirl it about. A burst's shove starts at
+// this many times its radius per second; any air is held under MAX_WIND rows
+// per second so a pile of spells cannot fling fog out of the field at once.
+const BURST = 4;
+const MAX_WIND = 60;
+// A fast walker drags the air at no more than this, in rows per second.
+const MAX_DRAG = 30;
+// How hard something flying fast flings the fog out from its path, in rows
+// per second for each stamp of its patch.
+const FLING = 26;
 
 export class FogWake {
   // `banks` gives the undisturbed fog at a point (see fog-banks.js).
@@ -70,9 +81,14 @@ export class FogWake {
   }
 
   // `walkers` lists who is moving through the fog, each as { id, x, y } in
-  // world cells with their feet at y, and optionally `size` (1 for the
-  // player); the first is the player, whom the field follows. `state` places the banks: driftX, driftY, time and coverage.
-  update(dt, walkers, state) {
+  // world cells with their feet at y, optionally `size` (1 for the player)
+  // and `lift`, how far above y the fog is pushed from (the body's middle
+  // unless given); the first is the player, whom the field follows. `state`
+  // places the banks: driftX, driftY, time and coverage. `spells` lists what
+  // spells do to the fog this frame: `bursts` and `whirls`, each { x, y }
+  // in world cells with a `radius` in rows and a `strength` (1 is full);
+  // whirls also have a `spin`, positive clockwise on screen.
+  update(dt, walkers, state, spells = {}) {
     this.time += dt;
     const live = (walkers ?? []).filter((w) => Number.isFinite(w?.x) && Number.isFinite(w?.y)).slice(0, MAX_WALKERS);
     if (live.length) this.follow(live[0].x * ASPECT, live[0].y - BODY_LIFT * sizeOf(live[0]));
@@ -82,7 +98,16 @@ export class FogWake {
     for (const w of live) {
       seen.add(w.id);
       const size = sizeOf(w);
-      this.stir(dt, w.id, w.x * ASPECT, w.y - BODY_LIFT * size, size);
+      const lift = Number.isFinite(w.lift) ? w.lift : BODY_LIFT * size;
+      this.stir(dt, w.id, w.x * ASPECT, w.y - lift, size);
+    }
+    for (const b of (spells.bursts ?? []).slice(0, 32)) {
+      if (Number.isFinite(b?.x) && Number.isFinite(b?.y)) this.burst(b.x * ASPECT, b.y, b.radius, b.strength);
+    }
+    if (dt > 0) {
+      for (const w of (spells.whirls ?? []).slice(0, 32)) {
+        if (Number.isFinite(w?.x) && Number.isFinite(w?.y)) this.whirl(dt, w.x * ASPECT, w.y, w.radius, w.spin, w.strength);
+      }
     }
     for (const id of [...this.tracks.keys()]) if (!seen.has(id)) this.tracks.delete(id);
     if (dt > 0) {
@@ -139,28 +164,48 @@ export class FogWake {
   stir(dt, id, gx, gy, size = 1) {
     let track = this.tracks.get(id);
     // A teleport or respawn starts afresh rather than dragging the air.
-    if (!track || Math.hypot(gx - track.x, gy - track.y) > SWEEP * 4) {
+    if (!track || Math.hypot(gx - track.x, gy - track.y) > SWEEP * 9) {
       track = { x: gx, y: gy, vx: 0, vy: 0, seed: (this.tracks.size + 1) * 17.3 };
       this.tracks.set(id, track);
     }
-    const k = 1 - Math.exp(-8 * dt);
     if (dt > 0) {
-      track.vx += ((gx - track.x) / dt - track.vx) * k;
-      track.vy += ((gy - track.y) / dt - track.vy) * k;
+      // Footsteps are smoothed; something flying fast is read at once.
+      const vx = (gx - track.x) / dt;
+      const vy = (gy - track.y) / dt;
+      const k = Math.hypot(vx, vy) > 40 ? 1 : 1 - Math.exp(-8 * dt);
+      track.vx += (vx - track.vx) * k;
+      track.vy += (vy - track.vy) * k;
     }
+    const fromX = track.x;
+    const fromY = track.y;
     track.x = gx;
     track.y = gy;
-    const n = this.cells;
     const speed = Math.hypot(track.vx, track.vy);
+    const held = Math.min(1, MAX_DRAG / Math.max(speed, 1e-6));
     const moving = Math.min(1, speed / 6);
     const fx = speed > 1e-3 ? track.vx / speed : 0;
     const fy = speed > 1e-3 ? track.vy / speed : 0;
     const reach = SWEEP * size * (1 + Math.min(speed, 25) / 50);
+    // Something fast, like a spell in flight, kicks the air harder.
+    const pull = Math.min(1, dt * 8 * (1 + speed / 30));
+    // A fast walker, like a spell in flight, covers more than its own patch
+    // in a frame, so the patch is laid all along the way it came.
+    const steps = Math.min(12, Math.max(1, Math.ceil(Math.hypot(gx - fromX, gy - fromY) / (reach * 0.5))));
+    // Past a run, the fog beside the path is flung out sideways too, so a
+    // spell in flight leaves a channel rather than a smear.
+    const fast = Math.max(0, Math.min(1, (speed - 30) / 60));
+    const shape = { track, reach, held, moving, fast, fx, fy, pull };
+    for (let s = 1; s <= steps; s++) {
+      this.stamp(fromX + (gx - fromX) * s / steps, fromY + (gy - fromY) * s / steps, shape);
+    }
+  }
+
+  stamp(gx, gy, { track, reach, held, moving, fast, fx, fy, pull }) {
+    const n = this.cells;
     const t = this.time * 0.6;
     const lx = (gx - this.ox) / CELL;
     const ly = (gy - this.oy) / CELL;
     const span = (reach * 1.4) / CELL;
-    const pull = Math.min(1, dt * 8);
     for (let j = Math.max(0, Math.floor(ly - span)); j <= Math.min(n - 1, Math.ceil(ly + span)); j++) {
       for (let i = Math.max(0, Math.floor(lx - span)); i <= Math.min(n - 1, Math.ceil(lx + span)); i++) {
         const ax = (i + 0.5 - lx) * CELL;
@@ -184,8 +229,75 @@ export class FogWake {
         const px = ux + fx * 0.6 * moving;
         const py = uy + fy * 0.6 * moving;
         const c = j * n + i;
-        this.vx[c] += (px * blow + track.vx * drag - this.vx[c]) * within * pull;
-        this.vy[c] += (py * blow + track.vy * drag - this.vy[c]) * within * pull;
+        this.vx[c] += (px * blow + track.vx * held * drag - this.vx[c]) * within * pull;
+        this.vy[c] += (py * blow + track.vy * held * drag - this.vy[c]) * within * pull;
+        if (fast > 0) {
+          // Flung straight out from the path, added to whatever the air is
+          // already doing so later stamps cannot undo it.
+          const sx = ux - ahead * fx;
+          const sy = uy - ahead * fy;
+          const side = Math.hypot(sx, sy);
+          if (side > 1e-3) {
+            const fling = FLING * fast * within * (1 - smooth(r * 0.5, r * 1.2, d)) / side;
+            this.vx[c] += sx * fling;
+            this.vy[c] += sy * fling;
+            limit(this.vx, this.vy, c);
+          }
+        }
+      }
+    }
+  }
+
+  // A spell going off throws the fog outward from a point, hardest a little
+  // way out from the middle, in a ragged ring that the air then carries.
+  burst(gx, gy, radius, strength = 1) {
+    radius = clampRadius(radius);
+    strength = Math.max(0, Math.min(1.5, Number.isFinite(strength) ? strength : 1));
+    if (!radius || !strength) return;
+    const seed = gx * 0.37 + gy * 0.71;
+    this.around(gx, gy, radius * 1.4, (c, ux, uy, d) => {
+      const r = radius * (0.55 + 0.6 * valueNoise(ux * 1.8 + seed, uy * 1.8, 541)
+        + 0.25 * valueNoise(ux * 5 - seed, uy * 5, 542));
+      const k = smooth(0, r * 0.3, d) * (1 - smooth(r * 0.7, r * 1.4, d));
+      this.vx[c] += ux * BURST * radius * strength * k;
+      this.vy[c] += uy * BURST * radius * strength * k;
+      limit(this.vx, this.vy, c);
+    });
+  }
+
+  // A lasting spell turns the fog around it, easing the air toward a ring of
+  // wind that dies away at its middle and past its edge.
+  whirl(dt, gx, gy, radius, spin = 1, strength = 1) {
+    radius = clampRadius(radius);
+    strength = Math.max(0, Math.min(1.5, Number.isFinite(strength) ? strength : 1));
+    spin = Number.isFinite(spin) ? Math.max(-3, Math.min(3, spin)) : 1;
+    if (!radius || !strength) return;
+    const pull = Math.min(1, dt * 4) * strength;
+    this.around(gx, gy, radius * 1.3, (c, ux, uy, d) => {
+      const k = smooth(0, radius * 0.35, d) * (1 - smooth(radius * 0.7, radius * 1.3, d));
+      const speed = radius * 2.5 * spin;
+      const tx = -uy * speed + ux * radius * 0.3;
+      const ty = ux * speed + uy * radius * 0.3;
+      this.vx[c] += (tx - this.vx[c]) * k * pull;
+      this.vy[c] += (ty - this.vy[c]) * k * pull;
+      limit(this.vx, this.vy, c);
+    });
+  }
+
+  // Calls `each(cell, ux, uy, distance)` for every cell within `reach` rows
+  // of a point of the ground, with the unit direction out from it.
+  around(gx, gy, reach, each) {
+    const n = this.cells;
+    const lx = (gx - this.ox) / CELL;
+    const ly = (gy - this.oy) / CELL;
+    const span = reach / CELL;
+    for (let j = Math.max(0, Math.floor(ly - span)); j <= Math.min(n - 1, Math.ceil(ly + span)); j++) {
+      for (let i = Math.max(0, Math.floor(lx - span)); i <= Math.min(n - 1, Math.ceil(lx + span)); i++) {
+        const ax = (i + 0.5 - lx) * CELL;
+        const ay = (j + 0.5 - ly) * CELL;
+        const d = Math.hypot(ax, ay);
+        if (d > reach) continue;
+        each(j * n + i, d > 1e-6 ? ax / d : 1, d > 1e-6 ? ay / d : 0, d);
       }
     }
   }
@@ -314,6 +426,16 @@ export class FogWake {
     for (const v of this.fog) sum += v;
     return sum;
   }
+}
+
+// Spell radii are held to what the field can show.
+const clampRadius = (r) => (Number.isFinite(r) && r > 0 ? Math.min(r, 30) : 0);
+
+function limit(vx, vy, c) {
+  const speed = Math.hypot(vx[c], vy[c]);
+  if (speed <= MAX_WIND) return;
+  vx[c] *= MAX_WIND / speed;
+  vy[c] *= MAX_WIND / speed;
 }
 
 const sizeOf = (w) => (Number.isFinite(w.size) && w.size > 0 ? Math.min(w.size, 3) : 1);
