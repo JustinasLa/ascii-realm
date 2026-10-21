@@ -48,11 +48,11 @@ uniform sampler2D uNoise;
 uniform vec2 uWorld;
 uniform vec2 uFogDrift;
 uniform vec3 uFog;
-// The fog around the player as walkers have pushed it about, beside the fog
-// the banks alone would put there (see world/fog-wake.js), and where that
-// field lies: its corner and side, in rows with columns scaled to rows.
+// The fog in view as walkers have pushed it about, beside the fog the banks
+// alone would put there (see world/fog-wake.js), and where that field lies:
+// its corner, width and height, in rows with columns scaled to rows.
 uniform sampler2D uPushed;
-uniform vec3 uPushedArea;
+uniform vec4 uPushedArea;
 out vec4 outColor;
 
 const float NOISE = ${NOISE_SIZE.toFixed(1)};
@@ -109,7 +109,7 @@ float random(vec2 slot, float salt) {
 // the undisturbed banks there. Where fog was pushed away the banks thin in
 // proportion, keeping their fine streaks; fog pushed in on top piles up.
 float pushedFog(vec2 ground, float banks) {
-  vec2 uv = (ground - uPushedArea.xy) / uPushedArea.z;
+  vec2 uv = (ground - uPushedArea.xy) / uPushedArea.zw;
   if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) return banks;
   vec2 field = texture(uPushed, uv).rg;
   return banks * min(1.0, field.r / max(field.g, 0.02)) + max(0.0, field.r - field.g);
@@ -444,11 +444,11 @@ export class AsciiRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.pushedTex);
     const wake = fog?.wake;
     if (wake && !Number.isNaN(wake.ox)) {
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, wake.cells, wake.cells, 0, gl.RG, gl.FLOAT, wake.texels);
-      gl.uniform3f(this.u.uPushedArea, wake.ox, wake.oy, wake.size);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG16F, wake.w, wake.h, 0, gl.RG, gl.FLOAT, wake.texels);
+      gl.uniform4f(this.u.uPushedArea, wake.ox, wake.oy, wake.width, wake.height);
     } else {
       // Nothing pushed: an area too small to reach any pixel.
-      gl.uniform3f(this.u.uPushedArea, -1e6, -1e6, 1);
+      gl.uniform4f(this.u.uPushedArea, -1e6, -1e6, 1, 1);
     }
 
     gl.uniform2f(this.u.uView, this.canvas.width, this.canvas.height);

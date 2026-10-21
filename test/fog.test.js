@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { fbm, fogAt, noise, NOISE, NOISE_SIZE } from '../src/world/fog-banks.js';
-import { CELL, FogWake, MAX_WALKERS, REFILL } from '../src/world/fog-wake.js';
+import { CELL_SIZES, FogWake, MAX_CELLS, MAX_WALKERS, REFILL } from '../src/world/fog-wake.js';
 import { AMBIENT_FOG, Fog } from '../src/world/fog.js';
 import { ASPECT } from '../src/world/world.js';
 
@@ -84,15 +84,70 @@ test('standing still only nudges the fog, and pushed fog settles back', () => {
   assert.ok(walking.fog.every((v) => Math.abs(v - 0.6) < 0.02));
 });
 
-test('the field follows the player in whole cells and ignores bad input', () => {
+test('the field covers the whole view and its margin, coarser when zoomed out', () => {
+  for (const [w, h] of [[161, 91], [286, 161], [430, 242], [2000, 1000]]) {
+    const wake = even();
+    const area = { x: 1000.3, y: -500.7, w, h };
+    wake.update(1 / 60, [], still, {}, area);
+    assert.ok(wake.w * wake.h <= MAX_CELLS || wake.cell === CELL_SIZES.at(-1));
+    assert.equal(wake.ox % wake.cell, 0);
+    if (wake.cell === CELL_SIZES.at(-1) && wake.w * wake.h > MAX_CELLS) continue;
+    // Several cells of margin beyond every edge, where the fade lies.
+    assert.ok(wake.ox <= area.x - 5 * wake.cell && wake.oy <= area.y - 5 * wake.cell, `${w}x${h}`);
+    assert.ok(wake.ox + wake.width >= area.x + area.w + 5 * wake.cell);
+    assert.ok(wake.oy + wake.height >= area.y + area.h + 5 * wake.cell);
+  }
+  const close = even();
+  close.update(1 / 60, [], still, {}, { x: 0, y: 0, w: 161, h: 91 });
+  assert.equal(close.cell, CELL_SIZES[0], 'the usual view keeps the finest cells');
+});
+
+test('a monster far from the player but on screen still pushes the fog', () => {
+  const wake = even();
+  const area = { x: 0, y: 0, w: 161, h: 91 };
+  // The player stands at the left of the view; a troll strides at the right.
+  let x = 230;
+  for (let i = 0; i < 60; i++) {
+    x += 0.4;
+    wake.update(1 / 60, [{ id: 'self', x: 20, y: 45 }, { id: 'troll', x, y: 50, size: 1.45 }], still, {}, area);
+  }
+  assert.ok(wake.fogAt(x * ASPECT, 46) < 0.3, `fog at the troll: ${wake.fogAt(x * ASPECT, 46)}`);
+});
+
+test('panning with a sprinting player shifts the field a cell at a time without jumps', () => {
+  const wake = even();
+  // What the renderer is given at a point of the ground.
+  const shown = (gx, gy) => {
+    const i = Math.floor((gx - wake.ox) / wake.cell);
+    const j = Math.floor((gy - wake.oy) / wake.cell);
+    return wake.texels[(j * wake.w + i) * 2];
+  };
+  let x = 0;
+  let last = null;
+  let biggest = 0;
+  for (let i = 0; i < 240; i++) {
+    x += 0.9;
+    const area = { x: x * ASPECT - 80, y: 0, w: 161, h: 91 };
+    const ox = wake.ox;
+    wake.update(1 / 60, [{ id: 'self', x, y: 48 }], still, {}, area);
+    if (!Number.isNaN(ox)) assert.ok(Math.abs(wake.ox - ox) <= wake.cell, 'never more than a cell a frame');
+    // A point on the trail the player passed before i = 107, which stays
+    // inside the view to the end.
+    if (i >= 120) {
+      const now = shown(58, 45);
+      if (last !== null) biggest = Math.max(biggest, Math.abs(now - last));
+      last = now;
+    }
+  }
+  assert.ok(biggest < 0.06, `largest jump between frames: ${biggest}`);
+  assert.ok(wake.fogAt(58, 45) < 0.55, 'the trail behind the sprinter is still there');
+});
+
+test('the field ignores bad input', () => {
   const wake = even();
   wake.update(1 / 60, [{ id: 'self', x: 0, y: 0 }], still);
-  const ox = wake.ox;
-  wake.update(1 / 60, [{ id: 'self', x: 3, y: 0 }], still);
-  assert.equal(wake.ox, ox, 'small steps do not move the field');
-  wake.update(1 / 60, [{ id: 'self', x: 200, y: 400 }], still);
-  assert.equal(wake.ox % CELL, 0);
-  assert.ok(Math.abs(wake.ox + wake.size / 2 - 200 * ASPECT) <= CELL);
+  wake.update(1 / 60, [{ id: 'self', x: 0, y: 0 }], still, {}, { x: NaN, y: 0, w: -4, h: 9 });
+  assert.ok(wake.w > 0 && Number.isFinite(wake.ox));
   wake.update(NaN, [{ id: 'self', x: NaN, y: 0 }, null], still);
   wake.update(1 / 60, [{ id: 'a', x: 0, y: 0 }, { id: 'b', x: 1, y: 1 }, { id: 'c', x: 2, y: 2 },
     { id: 'd', x: 3, y: 3 }, { id: 'e', x: 4, y: 4 }], still);
@@ -125,7 +180,7 @@ test('monsters push the fog too, bigger ones over a wider patch', () => {
       wake.update(1 / 60, [{ id: 'self', x: 100, y: 20 }, { id: 'troll', x, y: 60, size }], still);
     }
     // Only count the monster's half of the field.
-    wake.fog.fill(0.6, 0, wake.cells * Math.floor(wake.cells / 2));
+    wake.fog.fill(0.6, 0, wake.w * Math.floor(wake.h / 2));
     let thinned = 0;
     for (const v of wake.fog) if (v < 0.3) thinned++;
     return thinned;
