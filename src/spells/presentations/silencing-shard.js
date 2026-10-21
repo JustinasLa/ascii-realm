@@ -86,9 +86,9 @@ function pen(plot, heading) {
 
 // An elongated hexagonal crystal pointing along +z, cracked across its waist;
 // the lower half is offset along the fracture by `split`.
-function shard(ink, size, split, b, warm, age = 0) {
+function shard(ink, size, split, b, warm, age = 0, cap = 9) {
   const P = (x, z, lower) => [x * size + (lower ? split : 0), z * size - (lower ? split * 0.6 : 0)];
-  const edge = (a, bb, ta, tb, ba, bb2) => ink.line(...a, ...bb, 9, ta - warm, tb - warm, ba * b, bb2 * b);
+  const edge = (a, bb, ta, tb, ba, bb2) => ink.line(...a, ...bb, cap, ta - warm, tb - warm, ba * b, bb2 * b);
   const tip = P(0, 1.15), sl = P(-0.19, 0.3), sr = P(0.19, 0.3);
   const fl = P(-0.18, 0.04), fr = P(0.18, -0.1);
   const fl2 = P(-0.18, 0.04, true), fr2 = P(0.18, -0.1, true);
@@ -104,7 +104,7 @@ function shard(ink, size, split, b, warm, age = 0) {
   edge(ll, base, 0.46, 0.58, 0.7, 0.55);
   edge(lr, base, 0.46, 0.58, 0.7, 0.55);
   // Bright core along the axis, dimmer below the crack.
-  ink.line(...P(0, 0.9), ...P(0, 0.14), 7, 0.0 - warm, 0.18 - warm, b, b * 0.75);
+  ink.line(...P(0, 0.9), ...P(0, 0.14), Math.min(7, cap), 0.0 - warm, 0.18 - warm, b, b * 0.75);
   ink.line(...P(0, -0.2, true), ...P(0, -0.62, true), 4, 0.35 - warm, 0.5 - warm, b * 0.6, b * 0.45);
   // Slow inner glints keep the crystal alive without flicker.
   for (let i = 0; i < 4; i++) {
@@ -123,14 +123,16 @@ function drawProjectile(ink, p, age) {
     ink.waves(0.8 - 0.55 * easeIn(q), 0.75, 6, 0.75 - q * 0.45, env * 0.7 * Math.sin(Math.PI * q));
   }
   // A frost wake streams behind, slowed by drag and stirred by turbulence.
-  for (let i = 0; i < 22; i++) {
+  for (let i = 0; i < 18; i++) {
     const q = frac(hash(i) + age * 1.6);
     const z = -0.5 - (1 - (1 - q) ** 2) * 1.8;
     const x = (hash(i, 2) - 0.5) * 0.34 * (0.25 + q) + Math.sin(age * 5 + i * 1.7) * 0.08 * q;
     const b = env * 0.72 * (1 - q) ** 1.5 * Math.min(1, q * 12);
     ink.dot(x, z, mote(1 - q * 1.1), 0.15 + q * 0.8, b);
   }
-  const tip = shard(ink, 0.62, 0.04, env, 0, age);
+  // Edges are capped at five dots: side-on headings stretch the shard across
+  // four times as many columns, and the flight must stay within ~110 glyphs.
+  const tip = shard(ink, 0.62, 0.04, env, 0, age, 5);
   const twinkle = 0.5 + 0.5 * Math.sin(age * 23);
   ink.dot(tip[0], tip[1] + 0.2, '*', 0, env * (0.45 + 0.55 * twinkle));
 }
@@ -143,9 +145,9 @@ function drawCast(ink, p, radius) {
   // Wind-up: three nested sound waves are pulled in, accelerating into the forming crystal.
   for (let k = 0; k < 3; k++) {
     const q = span(p, k * 0.07, 0.46);
-    if (q >= 1) { ink.n += 20; continue; }
+    if (q >= 1) { ink.n += 18; continue; }
     const r = (1.75 - 1.35 * easeIn(q)) * u * (1 - k * 0.17);
-    ink.waves(r, 0.8 - 0.25 * q, 10, 0.78 - q * 0.6,
+    ink.waves(r, 0.8 - 0.25 * q, 9, 0.78 - q * 0.6,
       env * (0.35 + 0.65 * q) * (1 - span(q, 0.86, 1)) * Math.min(1, 0.4 + p * 12));
   }
   // Frost motes spiral inward with the dying sound.
@@ -173,7 +175,7 @@ function drawCast(ink, p, radius) {
     for (let i = 0; i < 6; i++) {
       const a = i / 6 * TAU, L = reach * (i % 3 ? 0.7 : 1.15);
       const x = Math.cos(a), z = Math.sin(a);
-      ink.line(x * L * 0.45, z * L * 0.45, x * L, z * L, 5, 0, 0.35, env * flash, env * flash * 0.35);
+      ink.line(x * L * 0.45, z * L * 0.45, x * L, z * L, 4, 0, 0.35, env * flash, env * flash * 0.35);
     }
   }
   // The muting slash cuts across the shard with a bright leading head.

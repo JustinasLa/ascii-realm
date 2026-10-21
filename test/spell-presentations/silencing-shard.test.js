@@ -3,6 +3,7 @@ import test from 'node:test';
 import presentation from '../../src/spells/presentations/silencing-shard.js';
 import spell from '../../src/spells/definitions/silencing-shard.js';
 import { runeScene } from '../../test-support/spells.js';
+import { paintPresentation } from '../../src/spells/presentation.js';
 
 function points(stage, progress, extra = {}) {
   const output = [];
@@ -142,6 +143,40 @@ test('every stage is bounded, deterministic and fades completely without invalid
     assert.ok(points(stage, 0.5).length > 0, `${stage} draws mid-life`);
     assert.ok(energy(points(stage, 0.99)) < energy(points(stage, 0.5)) * 0.2, `${stage} fades at the tail`);
     assert.equal(points(stage, 1).length, 0, `${stage} leaves no persistent pixels`);
+  }
+});
+
+test('every stage stays within budget whichever way the runtime turns it', () => {
+  // Heading changes how many cells a line spans on screen, so sweep it densely.
+  const budget = { cast: 230, impact: 170, projectile: 110, pulse: 140, aura: 100, zone: 120 };
+  for (const stage of Object.keys(budget)) {
+    let most = 0;
+    for (let h = 0; h < 48; h++) {
+      const heading = h / 48 * Math.PI * 2;
+      for (const radius of stage === 'projectile' ? [1] : [0.8, 1.5, 3]) {
+        for (let i = 0; i <= 40; i++) {
+          // Only the projectile and zone animate on age, so only they need an independent age.
+          const ages = stage === 'projectile' || stage === 'zone' ? [i / 40, 0.07 + i * 0.137] : [i / 40];
+          for (const age of ages) {
+            most = Math.max(most, points(stage, i / 40, { radius, heading, age }).length);
+          }
+        }
+      }
+    }
+    assert.ok(most <= budget[stage], `${stage} peaks at ${most} glyphs, above ${budget[stage]}`);
+  }
+});
+
+test('a side-on projectile keeps every glyph, including the tip glint, under the runtime cap', () => {
+  for (let h = 0; h < 48; h++) {
+    const heading = h / 48 * Math.PI * 2, drawn = [];
+    const count = paintPresentation(presentation, { x: 0, y: 0, stage: 'projectile', age: 0.07, life: 1, heading },
+      (...point) => drawn.push(point), 128);
+    let raw = 0;
+    presentation.draw({ stage: 'projectile', progress: 0.07, age: 0.07, life: 1, radius: 1, heading }, () => raw++);
+    assert.ok(raw <= 110, `heading ${heading.toFixed(2)} emits ${raw} glyphs`);
+    assert.equal(count, raw, 'nothing is dropped by the 128-glyph projectile cap');
+    assert.equal(drawn.at(-1)[2], '*', 'the bright tip marker, drawn last, survives');
   }
 });
 
