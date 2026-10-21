@@ -121,7 +121,7 @@ test('burn ticks, burning ground and the guardian aura stay lean flame shapes', 
   const ground = lit(points('zone', 0.3));
   assert.equal(ground.filter(p => p.char === '^').length, 3, 'three flame tongues on each burning patch');
   assert.ok(Math.max(...ground.map(p => Math.hypot(p.x, p.z))) < 1.2, 'patches stay compact along the flight path');
-  assert.notDeepEqual(points('zone', 0.3), (() => {
+  assert.notDeepEqual(points('zone', 0.3).map(({ x, z, char }) => ({ x, z, char })), (() => {
     const other = [];
     profile.draw({ stage: 'zone', progress: 0.3, age: 0.9, life: 3, radius: 2, heading: 0, x: 40, y: 7 },
       (x, z, char) => other.push({ x, z, char }));
