@@ -57,10 +57,15 @@ function view(heading) {
     flankLeft: line(1 / across, 1 / along), flankRight: line(-1 / across, 1 / along) };
 }
 
+// Longest quill (projectile at its widest scale, seen side-on) is ~30 cells;
+// the cap only guards the loop and never thins a shaft into dashes.
+const SHAFT_CAP = 32;
+
 // A forward-pointing quill: white tip, barbed head, shaft cooling to deep blue.
-function quill(plot, v, x, tipZ, length, light, cap) {
+// The shaft is sampled one screen cell apart so it stays solid at any heading.
+function quill(plot, v, x, tipZ, length, light) {
   if (light <= 0.002 || length <= 0.02) return;
-  const n = Math.max(2, Math.min(cap, Math.ceil(length * v.along)));
+  const n = Math.max(2, Math.min(SHAFT_CAP, Math.ceil(length * v.along)));
   for (let k = n; k >= 1; k--) {
     const u = k / n;
     plot(x, tipZ - length * u, k === n ? ':' : v.shaft, tone(0.95 - u * 0.7), Math.min(1, light * (1 - 0.62 * u)));
@@ -95,7 +100,7 @@ function cast(plot, v, p, s) {
     const grow = easeOut((p - (launch - NOCK)) / NOCK);
     if (p < launch) {
       // Anticipation: the quill crystallises tip-first and draws back.
-      if (grow > 0) quill(plot, v, x, (nock - 0.1 * grow) * s, 0.55 * grow * s, (0.35 + 0.5 * grow) * env, 14);
+      if (grow > 0) quill(plot, v, x, (nock - 0.1 * grow) * s, 0.55 * grow * s, (0.35 + 0.5 * grow) * env);
       continue;
     }
     const f = (p - launch) / FLIGHT;
@@ -140,7 +145,7 @@ function cast(plot, v, p, s) {
       plot(x + drift, z, mote(fadeK * 0.7), tone(0.6 - behind), 0.65 * fadeK);
     }
 
-    quill(plot, v, x, tipZ, length, light, 16);
+    quill(plot, v, x, tipZ, length, light);
   }
 }
 
@@ -168,7 +173,7 @@ function projectile(plot, v, p, age, s) {
     }
   }
 
-  quill(plot, v, 0, tipZ, length, light, 24);
+  quill(plot, v, 0, tipZ, length, light);
 
   // Intentional glint racing over the tip.
   const glint = Math.sin(age * 23) * 0.5 + 0.5;
@@ -328,7 +333,7 @@ function zone(plot, v, p, age, radius) {
     const rise = Math.sin(Math.PI * cycle);
     const a = hash(i, 33) * Math.PI * 2, r = (0.25 + hash(i, 34) * 0.6) * R;
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
-    quill(plot, v, x, z + 0.3 * rise, 0.35 * rise, env * rise, 5);
+    quill(plot, v, x, z + 0.3 * rise, 0.35 * rise, env * rise);
   }
 }
 

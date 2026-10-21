@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import presentation from '../../src/spells/presentations/temp-icicle-blitz.js';
 import spell from '../../src/spells/definitions/temp-icicle-blitz.js';
+import { paintPresentation } from '../../src/spells/presentation.js';
 import { runeScene } from '../../test-support/spells.js';
 
 function sample(stage, progress, radius = 1, heading = 0) {
@@ -61,6 +62,43 @@ test('Icicle Blitz nocks five quills that snap forward one at a time', () => {
   assert.ok(sideways.some(point => point.char === '>'));
   assert.ok(sideways.some(point => point.char === '-'));
   assert.ok(!sideways.some(point => point.char === 'v'));
+});
+
+test('Icicle Blitz quills stay solid unbroken shafts on screen at side-on headings', () => {
+  // Paint through the real adapter and walk each needle tip back along its
+  // shaft cells (8-connected): a sampling gap would cut the walk short.
+  const reach = (progress, radius, heading) => {
+    const cells = new Map();
+    paintPresentation(presentation, { x: 0, y: 0, stage: 'cast', age: progress, life: 1, radius, heading }, (x, y, char, color, brightness) => {
+      const key = `${Math.floor(x)},${Math.floor(y)}`;
+      if (brightness > 0.05 && (cells.get(key)?.brightness ?? -1) <= brightness) cells.set(key, { char, brightness });
+    });
+    return [...cells].filter(([, cell]) => /[<>v^]/.test(cell.char)).map(([key]) => {
+      const tip = key.split(',').map(Number), seen = new Set([key]), queue = [tip];
+      let extent = 0;
+      while (queue.length) {
+        const [cx, cy] = queue.pop();
+        extent = Math.max(extent, Math.abs(cx - tip[0]), Math.abs(cy - tip[1]));
+        for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+          const next = `${cx + dx},${cy + dy}`;
+          if (!seen.has(next) && /^[-|/\\:]$/.test(cells.get(next)?.char ?? '')) { seen.add(next); queue.push([cx + dx, cy + dy]); }
+        }
+      }
+      return extent;
+    }).sort((a, b) => b - a);
+  };
+  for (let step = 0; step < 48; step++) {
+    const heading = step / 48 * Math.PI * 2;
+    // Screen cells per metre along the flight line (26 across, 6.5 down).
+    const along = Math.max(Math.abs(Math.sin(heading)) * 26, Math.abs(Math.cos(heading)) * 6.5);
+    // The leading quill is ~0.77 m long here: ~20 cells side-on, ~5 head-on.
+    const flying = reach(0.2, 0.8, heading);
+    assert.ok(flying.length >= 2 && flying[0] >= 0.75 * 0.77 * along,
+      `the leading quill keeps a solid shaft (${flying.slice(0, 3)}) at heading ${step}/48`);
+    if (Math.abs(Math.sin(heading)) >= 0.9) {
+      assert.ok(flying[0] >= 22 && flying[1] >= 15, `side-on quills stay unbroken (${flying.slice(0, 3)}) at heading ${step}/48`);
+    }
+  }
 });
 
 test('Icicle Blitz flies as a single long quill with a frost wake', () => {
