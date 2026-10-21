@@ -1,5 +1,5 @@
-// Low ground fog: banks of mist, drawn as grey `o` characters, that drift
-// across the land.
+// Low ground fog: banks of mist, drawn as overlapping pale `o` characters,
+// that drift across the land.
 //
 // The renderer lays the characters over the finished scene (see
 // renderer.js), so fog never displaces what is under it. This class

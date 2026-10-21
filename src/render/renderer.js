@@ -7,9 +7,10 @@
 // atlas for every pixel, so cost is independent of how many characters are
 // on screen.
 //
-// Ground fog is drawn in the same pass as a sheet of grey `o` characters laid
-// over every cell, each as bright as the fog is thick there, so the mist
-// drifts across the grid without touching the cell buffers.
+// Ground fog is drawn in the same pass from grey `o` characters that are not
+// held to the grid: several drifting layers of them, scattered and freely
+// overlapping, so thick fog piles up into a dense, smoky mass. They are laid
+// over the finished scene without touching the cell buffers.
 
 import { mulberry32 } from '../core/rng.js';
 import { ASPECT } from '../world/world.js';
@@ -21,8 +22,10 @@ import { FOG, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
 const BG_KEEP = 0.12;
 // Side of the tiling random texture the fog noise is built from.
 const NOISE_SIZE = 256;
-// The character the fog is made of.
+// The character the fog is made of, and how many drifting layers of it can
+// pile up over one spot.
 const FOG_GLYPH = glyph('o');
+const FOG_LAYERS = 5;
 const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
 
 const VERT = `#version 300 es
@@ -95,6 +98,39 @@ float coverage(float g, vec2 local) {
   return textureLod(uAtlas, apx / uAtlasSize, lod).r;
 }
 
+float random(vec2 slot, float salt) {
+  return texelFetch(uNoise, ivec2(mod(slot + vec2(salt * 61.0, salt * 23.0), NOISE)), 0).r;
+}
+
+// One layer of fog characters around a point, in world cells. Each slot of
+// the layer's grid holds one \`o\`, nudged off the grid, sized a little up or
+// down and swaying on its own; only the four slots nearest the point can
+// reach it. Every character fades with the fog's thickness and with its own
+// slow pulse, so banks churn rather than slide. Returns the colour after
+// laying the layer's characters over it.
+vec3 fogLayer(vec3 color, vec2 at, float layer, float thick, vec3 tint) {
+  float t = uFog.z;
+  vec2 drift = vec2(uFogDrift.x / ${ASPECT.toFixed(4)}, uFogDrift.y) * (0.75 + 0.18 * layer);
+  vec2 q = at - drift + vec2(layer * 0.37, layer * 0.61);
+  vec2 base = floor(q - 0.5);
+  for (int k = 0; k < 4; k++) {
+    vec2 slot = base + vec2(float(k & 1), float(k >> 1));
+    float r1 = random(slot, layer);
+    float r2 = random(slot, layer + 4.0);
+    float r3 = random(slot, layer + 8.0);
+    float phase = r1 * 6.2832;
+    vec2 centre = slot + 0.5 + (vec2(r1, r2) - 0.5) * 0.6
+      + 0.12 * vec2(sin(t * 0.5 + phase), cos(t * 0.4 + phase * 1.7));
+    float size = 0.8 + 0.5 * r3;
+    vec2 local = (q - centre) / size + 0.5;
+    if (any(lessThan(local, vec2(0.0))) || any(greaterThan(local, vec2(1.0)))) continue;
+    float pulse = 0.55 + 0.45 * sin(t * (0.25 + 0.3 * r2) + phase * 3.0);
+    float a = smoothstep(r3 * 0.35, r3 * 0.35 + 0.45, thick) * pulse * (0.38 + 0.35 * r2);
+    color = mix(color, tint, coverage(${FOG_GLYPH.toFixed(1)}, local) * a);
+  }
+  return color;
+}
+
 void main() {
   vec2 p = vec2(gl_FragCoord.x, uView.y - gl_FragCoord.y) + uOffset;
   vec2 cell = floor(p / uCell);
@@ -117,15 +153,14 @@ void main() {
   if (og > 0.5) color = mix(color, ov.rgb, coverage(og, local));
 
   if (uFog.x > 0.0) {
-    // How thick the fog is at the middle of this cell, with columns scaled
-    // to rows. Each cell gets its own fixed brightness on top, so the sheet
-    // of characters reads as grainy mist rather than an even pattern.
-    vec2 home = uWorld + cell;
-    float f = fogAt((home + 0.5) * vec2(${ASPECT.toFixed(4)}, 1.0)) * uFog.x;
-    float grain = texelFetch(uNoise, ivec2(mod(home, NOISE)), 0).r;
-    f = clamp(f * (0.55 + 0.8 * grain), 0.0, 1.0);
-    float o = coverage(${FOG_GLYPH.toFixed(1)}, local);
-    color = mix(color, mix(${vec3(FOG_THIN)}, ${vec3(FOG)}, f), o * smoothstep(0.04, 0.7, f) * 0.9);
+    // The fog's thickness hardly changes across a character, so it is found
+    // once for the pixel and shared by every character over it.
+    vec2 at = uWorld + p / uCell;
+    float thick = clamp(fogAt(at * vec2(${ASPECT.toFixed(4)}, 1.0)) * uFog.x, 0.0, 1.5);
+    if (thick > 0.01) {
+      vec3 tint = mix(${vec3(FOG_THIN)}, ${vec3(FOG)}, clamp(thick, 0.0, 1.0));
+      for (int layer = 0; layer < ${FOG_LAYERS}; layer++) color = fogLayer(color, at, float(layer), thick, tint);
+    }
   }
 
   // Fade toward a deep navy at the corners so the eye settles on the middle

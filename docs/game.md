@@ -160,9 +160,10 @@ short version see the [README](../README.md).
   Gusts bend grass and roughen the water. Clear is the default; selection and
   intensity are saved. Effects also work with sound muted or before audio is
   enabled.
-- **Ground fog.** Banks of mist made of grey `o` characters lie over the
+- **Ground fog.** Banks of mist made of pale `o` characters lie over the
   land in any weather and creep along with the wind, thinning to clear
-  ground between them; each `o` is as bright as the fog is thick. The Fog
+  ground between them. The characters float free of the grid in several
+  drifting layers that overlap and pulse, so thick fog piles up dense. The Fog
   preset rolls in thick, wide banks over a few seconds, and drizzle thickens
   them a little.
 - **Skeletons.** The dead climb out of the ground a short way off, run at the
