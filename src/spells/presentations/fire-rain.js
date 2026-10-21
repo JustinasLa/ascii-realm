@@ -105,11 +105,12 @@ function drawCast(put, p, age, radius) {
         const dome = Math.sqrt(Math.max(0, 1 - u * u));
         const churn = Math.sin(j * 1.9 + k * 2.3 + age * 2.2) * 0.5 + Math.sin(j * 0.7 - age * 1.4 + k) * 0.5;
         const v = (dome * 1.2 - k * 0.24 + churn * 0.13) * form - thin * 1.25;
-        if (v < 0.12) continue;
-        const t = clamp(v, 0, 1);
+        if (v <= 0.12) continue;
+        // Glyphs crossing the visibility threshold fade in (and out as the cloud thins) instead of popping.
+        const t = clamp(v, 0, 1), emerge = smooth(0.12, 0.4, v);
         put(u * width + Math.sin(age * 1.6 + k * 1.3 + j) * 0.03,
           cloudY - k * 0.17 * s + (1 - dome) * 0.18 * s - thin * 0.25,
-          ramp(t * 0.9), heat(0.3 + 0.55 * t - k * 0.07 + 0.08 * Math.sin(age * 9 + j)), 0.35 + 0.65 * t);
+          ramp(t * 0.9), heat(0.3 + 0.55 * t - k * 0.07 + 0.08 * Math.sin(age * 9 + j)), (0.35 + 0.65 * t) * emerge);
       }
     }
   }
@@ -278,12 +279,27 @@ function drawAura(put, p, age, radius) {
 // The return anchor: a burning boundary with heat waves running around it, a
 // brazier flame at its heart, and drops still falling inside it.
 // The totem's 4 m hit radius never deals damage, so the visible boundary is drawn
-// tighter where its outline can stay continuous instead of a scatter of dots.
+// tighter, where the zone budget can keep its outline continuous on screen.
+const COLS = 13 / 0.6, ROWS = 6.5; // cells per metre across and down the screen
+const BOUNDARY_GAP = 1.6; // cells between boundary marks, so at most one empty cell between neighbours
+const BOUNDARY_MARKS = 96;
+const BOUNDARY_STEPS = 480;
+
 function drawZone(put, p, age, radius) {
-  const R = clamp(radius * 0.55, 1, 2.4);
-  for (let i = 0; i < 56; i++) {
-    const a = i / 56 * TAU, c = Math.cos(a), s = Math.sin(a);
-    const w = 0.5 + 0.5 * Math.sin(a * 3 - age * 2.4) * Math.sin(a * 2 + age * 1.1);
+  const R = clamp(radius * 0.4, 0.8, 1.6);
+  // Space the marks evenly along the projected outline: the ellipse is about 3.3 times
+  // wider than tall in cells, so equal angles would leave wide gaps along its top and bottom.
+  const a = R * COLS, b = R * ROWS;
+  const perimeter = Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b)));
+  const marks = Math.min(BOUNDARY_MARKS, Math.ceil(perimeter / BOUNDARY_GAP)), gap = perimeter / marks;
+  let travelled = 0, placed = 0, px = a, py = 0;
+  for (let step = 0; step <= BOUNDARY_STEPS && placed < marks; step++) {
+    const ang = step / BOUNDARY_STEPS * TAU, c = Math.cos(ang), s = Math.sin(ang);
+    travelled += Math.hypot(c * a - px, s * b - py);
+    px = c * a; py = s * b;
+    if (travelled + 1e-9 < placed * gap) continue;
+    placed++;
+    const w = 0.5 + 0.5 * Math.sin(ang * 3 - age * 2.4) * Math.sin(ang * 2 + age * 1.1);
     put(c * R, s * R, w > 0.72 ? '#' : streak(-s, c), heat(0.3 + 0.55 * w), 0.25 + 0.6 * w);
   }
   for (let k = -2; k <= 2; k++) {
@@ -294,7 +310,7 @@ function drawZone(put, p, age, radius) {
         m === Math.round(h) - 1 ? '^' : ramp(t * 0.82), heat(0.35 + 0.65 * t - Math.abs(k) * 0.08), 0.5 + 0.5 * t);
     }
   }
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 6; i++) {
     const cycle = age / 0.7 + hash(i + 140), n = Math.floor(cycle), tau = cycle - n;
     const gx = (hash(i * 7 + n * 13) * 2 - 1) * 0.75 * R, gy = (hash(i * 7 + n * 13 + 1) * 2 - 1) * 0.5 * R;
     if (tau < 0.55) drop(put, gx - 0.4, gy - 2.2 * H_TO_Y, gx, gy, tau / 0.55);

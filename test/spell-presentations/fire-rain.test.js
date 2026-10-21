@@ -59,6 +59,18 @@ test('Fire Rain casts a sigil, gathers a burning cloud overhead and rains slante
   assert.ok(cloud.length >= 60, 'cloud is a dense band rather than scattered dots');
   assert.ok(cloud.some(point => point.x < -1.4) && cloud.some(point => point.x > 1.4), 'cloud spans the field');
   assert.ok(cloud.some(point => /[%#]/.test(point.char)), 'cloud core uses dense glyphs');
+  // The cloud fades in and thins out glyph by glyph instead of popping into view.
+  // Above z = -2.41 only the cloud is drawn (sparks and drops stay below its underside).
+  const cloudLight = progress => draw('cast', progress, { radius }).filter(point => point.z < -2.41);
+  let previous = 0, firstSeen = null, steepest = 0;
+  for (let progress = 0.05; progress < 1; progress += 0.0025) {
+    const points = cloudLight(progress), total = points.reduce((sum, point) => sum + point.brightness, 0);
+    if (!firstSeen && points.length) firstSeen = points;
+    steepest = Math.max(steepest, Math.abs(total - previous));
+    previous = total;
+  }
+  assert.ok(firstSeen && Math.max(...firstSeen.map(point => point.brightness)) < 0.1, 'first cloud glyphs appear dim');
+  assert.ok(steepest < 2, `cloud brightness changes smoothly between frames (${steepest.toFixed(2)})`);
   // Drops fall continuously and accelerate.
   const heads = progress => draw('cast', progress, { radius }).filter(point => point.char === '@' && point.z > -2);
   assert.ok(heads(0.45).length >= 2, 'several drops are in flight at once');
@@ -116,8 +128,17 @@ test('Fire Rain bonfire impact, updraft aura, anchor zone and fireball projectil
   const zone = draw('zone', 0.5, { radius: 4, life: 6.5, age: 3.25 });
   const brazier = zone.filter(point => Math.abs(point.x) < 0.2 && point.z < 0 && point.z > -0.8);
   assert.ok(brazier.length >= 8 && brazier.some(point => point.char === '^'), 'a brazier flame burns at the anchor');
-  const boundary = zone.filter(point => Math.abs(Math.hypot(point.x, point.z) - 2.2) < 0.05);
-  assert.ok(boundary.length >= 50, 'the anchor boundary is a continuous ring');
+  const boundary = zone.filter(point => Math.abs(Math.hypot(point.x, point.z) - 1.6) < 0.05);
+  assert.ok(boundary.length >= 80, 'the anchor boundary is a dense ring');
+  // On screen the marks follow each other with at most one empty cell between neighbours,
+  // including along the wide top and bottom edges of the projected ellipse.
+  const cells = boundary.map(point => [Math.floor(point.x * 13 / 0.6), Math.floor(point.z * 6.5)])
+    .sort((a, b) => Math.atan2(a[1] / 6.5, a[0] * 0.6 / 13) - Math.atan2(b[1] / 6.5, b[0] * 0.6 / 13));
+  const widest = Math.max(...cells.map((cell, i) => {
+    const next = cells[(i + 1) % cells.length];
+    return Math.max(Math.abs(next[0] - cell[0]), Math.abs(next[1] - cell[1])) - 1;
+  }));
+  assert.ok(widest <= 1, `the anchor boundary outline is continuous on screen (gap ${widest})`);
   const levels = boundary.map(point => point.brightness);
   assert.ok(Math.max(...levels) - Math.min(...levels) > 0.3, 'heat waves run around the boundary');
 
