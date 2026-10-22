@@ -17,6 +17,42 @@ import { ASPECT } from './world.js';
 // mass. Partly covered cells become outline glyphs pointing at the solid
 // side, so silhouettes stay crisp instead of ending in loose letters.
 
+// Trees and rocks can also be baked in small letters for the renderer's
+// fine grid (see fine-bakes.js). The recipe is kept beside the prop rather
+// than on it, so props stay plain data that can be compared, cloned and
+// saved. A recipe is a generator function: it may pause (yield) between
+// steps of a long bake, and returns the finished cells. The source is plain
+// data a worker can rebuild the same prop from (see rebuildProp).
+const fineRecipes = new WeakMap();
+const fineSources = new WeakMap();
+
+// Gives a prop a recipe for its fine bake and the source it was made from.
+export function withFine(prop, bake, source = null) {
+  fineRecipes.set(prop, bake);
+  if (source) fineSources.set(prop, source);
+  else fineSources.delete(prop);
+  return prop;
+}
+
+export const fineRecipe = (prop) => fineRecipes.get(prop);
+export const fineSource = (prop) => fineSources.get(prop) ?? null;
+
+// A random stream that remembers what it drew, so the same draws can be
+// replayed to make the same prop again.
+export function recording(rand) {
+  const draws = [];
+  return { draws, random: () => {
+    const v = rand();
+    draws.push(v);
+    return v;
+  } };
+}
+
+export function replaying(draws) {
+  let i = 0;
+  return () => draws[i++];
+}
+
 const SUB_X = [0.25, 0.75];
 const SUB_Y = [1 / 6, 3 / 6, 5 / 6];
 const FINE_X = [0.125, 0.375, 0.625, 0.875];

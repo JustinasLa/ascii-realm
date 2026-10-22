@@ -3,7 +3,7 @@
 export async function createScene(root = new URL('../', import.meta.url), options = {}) {
   const load = (path) => import(new URL(`src/${path}.js`, root));
   const [worldModule, { Player }, figure, { Grass }, { drawGround }, { drawSkyReflection },
-    { reflector }, { drawProp }, { Camera }, { AsciiRenderer }] = await Promise.all([
+    { reflector }, propsModule, { Camera }, { AsciiRenderer }] = await Promise.all([
     load('world/world'), load('entities/player'), load('entities/figure'), load('world/grass'),
     load('world/ground'), load('world/sky'), load('world/reflection'), load('world/props'),
     load('world/camera'), load('render/renderer'),
@@ -16,12 +16,19 @@ export async function createScene(root = new URL('../', import.meta.url), option
   const grass = new Grass();
   const cols = Math.ceil(width / (cell * worldModule.ASPECT)) + 1;
   const rows = Math.ceil(height / cell) + 1;
+  const { drawProp } = propsModule;
+  // Older checkouts have no fine bakes.
+  const { bakeFine } = await import(new URL('src/world/fine-bakes.js', root)).catch(() => ({}));
   const r = Object.assign(Object.create(AsciiRenderer.prototype), {
-    cols, rows, cellW: cell * worldModule.ASPECT, cellH: cell, dpr: 1,
-    canvas: { width, height }, fg: new Uint8ClampedArray(cols * rows * 4),
-    bg: new Uint8ClampedArray(cols * rows * 4), ov: new Uint8ClampedArray(cols * rows * 4),
-    mask: new Uint8Array(cols * rows),
+    cellW: cell * worldModule.ASPECT, cellH: cell, dpr: 1, canvas: { width, height },
   });
+  // Older checkouts have no allocate(); build the buffers they read.
+  if (r.allocate) r.allocate(cols, rows);
+  else {
+    Object.assign(r, { cols, rows, fg: new Uint8ClampedArray(cols * rows * 4),
+      bg: new Uint8ClampedArray(cols * rows * 4), ov: new Uint8ClampedArray(cols * rows * 4),
+      mask: new Uint8Array(cols * rows) });
+  }
   let time = 0;
   const move = { x: 0, y: 0 };
   function frame(dt = 1 / 60) {
@@ -56,6 +63,12 @@ export async function createScene(root = new URL('../', import.meta.url), option
     figure.drawTrail(r, view, player.trail, player.time);
     figure.drawNameTag(r, view, player, parts, 'Kael');
     mark('grassAndSprites');
+    // Fine bakes queued by this frame finish before the next one, so every
+    // run draws the same frames. Older checkouts have none.
+    if (bakeFine) {
+      bakeFine();
+      mark('fineBakes');
+    }
     return timings;
   }
   return { frame, world, player, grass, camera, renderer: r, move };

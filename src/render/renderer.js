@@ -11,9 +11,18 @@
 // held to the grid: several drifting layers of them, scattered and freely
 // overlapping, so thick fog piles up into a dense, smoky mass. They are laid
 // over the finished scene without touching the cell buffers.
+//
+// Trees and rocks are drawn finer than everything else: a second grid with
+// FINE x FINE small cells in every cell, in `fine` (rgb + low byte of the
+// glyph) and `fineBg` (the dark backdrop that blots out the ground behind a
+// solid part, plus the glyph's high bits and flags). A sprite drawn there
+// stands apart from the grass as a dense mass of smaller letters with a hard
+// edge. Painter's order still holds: whatever is drawn into a cell after a
+// fine sprite is laid over the sprite's small cells there.
 
 import { NOISE, NOISE_SIZE } from '../world/fog-banks.js';
 import { ASPECT } from '../world/world.js';
+import { FINE } from './cells.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
 import { FOG, FOG_PILED, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
 
@@ -24,6 +33,32 @@ const BG_KEEP = 0.12;
 // pile up over one spot.
 const FOG_GLYPH = glyph('o');
 const FOG_LAYERS = 5;
+// Flags in the fine backdrop's alpha, above the glyph's high four bits:
+// the small cell holds a sprite; it blots out the ground behind it;
+// something was drawn into its cell after it and stands in front of it;
+// and that was a glyph layered over the cell (a firefly, a raindrop), which
+// is drawn over the sprite's small letters instead of in their place.
+const FINE_SET = 16;
+const FINE_SOLID = 32;
+const FINE_UNDER = 64;
+const FINE_OVER = 128;
+// A small cell next to a solid part of a sprite, with nothing of the sprite
+// in it, is part of the sprite's outline of nothing: a thin band of night
+// that parts the sprite from the grass behind it. Its strength, 1 to
+// FINE_HALO, is kept in the backdrop's alpha, below FINE_SET, while nothing
+// has been drawn into its cell since. Where a sprite stands on the ground
+// the outline fades out, so the sprite stays planted in the grass.
+const FINE_HALO = 15;
+// How wide the band is, in small-cell heights, and how many small cells
+// around a solid one it can reach.
+const HALO_WIDTH = 1.25;
+const HALO_REACH = 2;
+// How much of a sprite's backdrop colour shows: it is near black, so the
+// silhouette reads as one dark mass against the grass.
+const FINE_BG_KEEP = 0.12;
+// Small letters carry less ink than full-size ones, so they are drawn
+// brighter to keep a sprite as bright as before.
+const FINE_INK = 1.55;
 const vec3 = (c) => `vec3(${c.map((v) => (v / 255).toFixed(4)).join(', ')})`;
 
 const VERT = `#version 300 es
@@ -53,6 +88,8 @@ uniform vec3 uFog;
 // its corner, width and height, in rows with columns scaled to rows.
 uniform sampler2D uPushed;
 uniform vec4 uPushedArea;
+uniform sampler2D uFine;
+uniform sampler2D uFineBg;
 out vec4 outColor;
 
 const float NOISE = ${NOISE_SIZE.toFixed(1)};
@@ -93,12 +130,18 @@ float fogAt(vec2 w) {
   return thick * (0.35 + 1.1 * streak);
 }
 
-float coverage(float g, vec2 local) {
+// How much of a glyph covers a point of its cell, for cells of the given
+// height in device pixels.
+float coverageAt(float g, vec2 local, float height) {
   vec2 gcell = vec2(mod(g, uAtlasCols.x), floor(g / uAtlasCols.x));
   vec2 inner = uAtlasCell - 2.0 * uAtlasPad;
   vec2 apx = gcell * uAtlasCell + uAtlasPad + local * inner;
-  float lod = clamp(log2(inner.y / uCell.y), 0.0, 2.5);
+  float lod = clamp(log2(inner.y / height), 0.0, 3.5);
   return textureLod(uAtlas, apx / uAtlasSize, lod).r;
+}
+
+float coverage(float g, vec2 local) {
+  return coverageAt(g, local, uCell.y);
 }
 
 float random(vec2 slot, float salt) {
@@ -168,6 +211,49 @@ void main() {
   vec3 color = mix(ground, fg.rgb, coverage(g, local));
   if (og > 0.5) color = mix(color, ov.rgb, coverage(og, local));
 
+  // A tree or rock drawn in small cells over this spot.
+  vec2 finePos = p / uCell * ${FINE.toFixed(1)};
+  vec2 fineCell = floor(finePos);
+  vec4 fineBg = texelFetch(uFineBg, ivec2(fineCell), 0);
+  float flags = floor(fineBg.a * 255.0 + 0.5);
+  if (flags >= ${FINE_SET.toFixed(1)}) {
+    // A solid small cell is darker than the night, faintly tinted by the
+    // sprite's backdrop, so the sprite's outline is crisp.
+    bool solid = mod(floor(flags / ${FINE_SOLID.toFixed(1)}), 2.0) > 0.5;
+    vec3 backdrop = mix(${vec3(NIGHT)} * 0.5, fineBg.rgb, ${FINE_BG_KEEP.toFixed(3)});
+    bool under = mod(floor(flags / ${FINE_UNDER.toFixed(1)}), 2.0) > 0.5;
+    if (under && flags < ${FINE_OVER.toFixed(1)}) {
+      // Whatever was drawn into the cell afterwards stands in front, over
+      // the sprite's backdrop and in place of its small letters.
+      if (solid) color = mix(backdrop, fg.rgb, coverage(g, local));
+    } else {
+      vec4 fine = texelFetch(uFine, ivec2(fineCell), 0);
+      float fineGlyph = mod(flags, 16.0) * 256.0 + floor(fine.a * 255.0 + 0.5);
+      // Lifted without clipping, so lit wood keeps its highlights.
+      vec3 ink = fine.rgb * ${FINE_INK.toFixed(2)} / (1.0 + fine.rgb * ${(FINE_INK - 1).toFixed(2)});
+      vec3 sprite = mix(solid ? backdrop : color, ink,
+        coverageAt(fineGlyph, finePos - fineCell, uCell.y / ${FINE.toFixed(1)}));
+      color = under ? mix(sprite, fg.rgb, coverage(g, local)) : sprite;
+    }
+  } else if (flags > 0.5) {
+    // Beside a solid part of a sprite: how far this pixel is from it, in
+    // device pixels, decides how much of what lies behind is blotted out.
+    vec2 small = uCell / ${FINE.toFixed(1)};
+    float near = 1e9;
+    for (int j = -${HALO_REACH}; j <= ${HALO_REACH}; j++) {
+      for (int i = -${HALO_REACH}; i <= ${HALO_REACH}; i++) {
+        ivec2 at = ivec2(fineCell) + ivec2(i, j);
+        float f = floor(texelFetch(uFineBg, at, 0).a * 255.0 + 0.5);
+        if (f < ${FINE_SET.toFixed(1)} || mod(floor(f / ${FINE_SOLID.toFixed(1)}), 2.0) < 0.5) continue;
+        vec2 off = max(abs(finePos - vec2(at) - 0.5) - 0.5, 0.0) * small;
+        near = min(near, length(off));
+      }
+    }
+    float width = small.y * ${HALO_WIDTH.toFixed(2)};
+    float strength = flags / ${FINE_HALO.toFixed(1)};
+    color = mix(color, ${vec3(NIGHT)} * 0.5, (1.0 - smoothstep(width * 0.6, width, near)) * strength);
+  }
+
   if (uFog.x > 0.0) {
     // The fog's thickness hardly changes across a character, so it is found
     // once for the pixel and shared by every character over it.
@@ -236,7 +322,8 @@ export class AsciiRenderer {
     this.prog = prog;
     this.u = {};
     for (const name of ['uFg', 'uBg', 'uOv', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
-      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uPushed', 'uPushedArea']) {
+      'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uPushed', 'uPushedArea',
+      'uFine', 'uFineBg']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
 
@@ -284,6 +371,8 @@ export class AsciiRenderer {
     this.fgTex = dataTexture(gl);
     this.bgTex = dataTexture(gl);
     this.ovTex = dataTexture(gl);
+    this.fineTex = dataTexture(gl);
+    this.fineBgTex = dataTexture(gl);
 
     gl.uniform1i(this.u.uFg, 0);
     gl.uniform1i(this.u.uBg, 1);
@@ -291,6 +380,8 @@ export class AsciiRenderer {
     gl.uniform1i(this.u.uOv, 3);
     gl.uniform1i(this.u.uNoise, 4);
     gl.uniform1i(this.u.uPushed, 5);
+    gl.uniform1i(this.u.uFine, 6);
+    gl.uniform1i(this.u.uFineBg, 7);
     gl.uniform2f(this.u.uAtlasCols, atlas.cols, atlas.rows);
     gl.uniform2f(this.u.uAtlasCell, atlas.cellW, atlas.cellH);
     gl.uniform1f(this.u.uAtlasPad, atlas.pad);
@@ -326,6 +417,23 @@ export class AsciiRenderer {
     const cols = Math.ceil(w / this.cellW) + 1;
     const rows = Math.ceil(h / this.cellH) + 1;
     if (cols === this.cols && rows === this.rows) return;
+    this.allocate(cols, rows);
+
+    for (const tex of [this.fgTex, this.bgTex, this.ovTex]) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    }
+    for (const tex of [this.fineTex, this.fineBgTex]) {
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, this.fineCols, this.fineRows, 0, gl.RGBA,
+        gl.UNSIGNED_BYTE, null);
+    }
+  }
+
+  // The cell buffers for a grid of the given size.
+  allocate(cols, rows) {
     this.cols = cols;
     this.rows = rows;
     this.fg = new Uint8ClampedArray(cols * rows * 4);
@@ -333,18 +441,20 @@ export class AsciiRenderer {
     this.ov = new Uint8ClampedArray(cols * rows * 4);
     // Terrain type under each cell, so later passes know where water is.
     this.mask = new Uint8Array(cols * rows);
-
-    for (const tex of [this.fgTex, this.bgTex, this.ovTex]) {
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, tex);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    }
+    this.fineCols = cols * FINE;
+    this.fineRows = rows * FINE;
+    this.fine = new Uint8ClampedArray(this.fineCols * this.fineRows * 4);
+    this.fineBg = new Uint8ClampedArray(this.fineCols * this.fineRows * 4);
+    // Cells holding any small cell of a sprite, so plain cells skip them.
+    this.fineMark = new Uint8Array(cols * rows);
+    this.fineUsed = false;
   }
 
   clear(r = NIGHT[0], g = NIGHT[1], b = NIGHT[2]) {
     const { fg, bg, ov } = this;
     fg.fill(0);
     ov.fill(0);
+    this.clearFine();
     for (let i = 0; i < bg.length; i += 4) {
       bg[i] = r;
       bg[i + 1] = g;
@@ -372,6 +482,100 @@ export class AsciiRenderer {
     this.fg[i + 3] = glyphIndex & 255;
     this.bg[i + 3] = glyphIndex >> 8;
     this.ov[i + 3] = 0;
+    if (this.fineMark?.[cell]) this.overFine(cell, FINE_UNDER);
+  }
+
+  // Empties the fine grid. The ground is drawn over every cell each frame,
+  // but nothing redraws the small cells, so they are emptied with it.
+  clearFine() {
+    if (!this.fineUsed) return;
+    this.fineBg.fill(0);
+    this.fineMark.fill(0);
+    this.fineUsed = false;
+  }
+
+  // Something drawn into a cell holding part of a sprite: it stands in
+  // front of the sprite's small cells there (FINE_UNDER), is layered over
+  // them (FINE_UNDER | FINE_OVER), or, being solid, hides them (0).
+  overFine(cell, flag) {
+    const cx = cell % this.cols;
+    const cy = (cell - cx) / this.cols;
+    for (let j = 0; j < FINE; j++) {
+      let at = ((cy * FINE + j) * this.fineCols + cx * FINE) * 4 + 3;
+      for (let i = 0; i < FINE; i++, at += 4) {
+        const flags = this.fineBg[at];
+        if (flags >= FINE_SET) this.fineBg[at] = flag ? (flags & ~FINE_OVER) | flag : 0;
+        // Whatever is drawn afterwards stands in front of the outline too.
+        else if (flags) this.fineBg[at] = 0;
+      }
+    }
+    if (!flag) this.fineMark[cell] = 0;
+  }
+
+  // Lighting passes reach a sprite's small cells too. Adds a colour to the
+  // small cells of a cell, and a share of it to their backdrop.
+  lightFine(cell, cr, cg, cb, ground = 0.2) {
+    this.blendFine(cell, 1, 0, 0, 0, 0, cr, cg, cb, ground);
+  }
+
+  // Blends the small cells of a cell as v * m * (1 - k) + c * k + add; the
+  // backdrop takes `ground` of the colour and of the light added.
+  blendFine(cell, m, k, cr, cg, cb, ar, ag, ab, ground) {
+    const cx = cell % this.cols;
+    const cy = (cell - cx) / this.cols;
+    const keep = m * (1 - k);
+    for (let j = 0; j < FINE; j++) {
+      let at = ((cy * FINE + j) * this.fineCols + cx * FINE) * 4;
+      for (let i = 0; i < FINE; i++, at += 4) {
+        if (this.fineBg[at + 3] < FINE_SET) continue;
+        const { fine, fineBg } = this;
+        fine[at] = fine[at] * keep + cr * k + ar;
+        fine[at + 1] = fine[at + 1] * keep + cg * k + ag;
+        fine[at + 2] = fine[at + 2] * keep + cb * k + ab;
+        fineBg[at] = fineBg[at] * keep + (cr * k + ar) * ground;
+        fineBg[at + 1] = fineBg[at + 1] * keep + (cg * k + ag) * ground;
+        fineBg[at + 2] = fineBg[at + 2] * keep + (cb * k + ab) * ground;
+      }
+    }
+  }
+
+  // Draws a glyph into one small cell of the fine grid, given in small
+  // cells (FINE to a cell). With a backdrop colour the small cell is solid
+  // and blots out the ground behind it; without one, a glyph laid over a
+  // solid small cell keeps that backdrop. A solid small cell rings itself
+  // with an outline of nothing of the given strength (see FINE_HALO).
+  fineAt(fx, fy, glyphIndex, r, g, b, br, bgG, bb, halo = FINE_HALO) {
+    if (fx < 0 || fy < 0 || fx >= this.fineCols || fy >= this.fineRows) return;
+    const i = (fy * this.fineCols + fx) * 4;
+    const glyphOnly = glyphIndex & GLYPH_MASK;
+    const old = this.fineBg[i + 3];
+    let flags = FINE_SET | (glyphOnly >> 8);
+    if (br !== undefined) {
+      this.fineBg[i] = br;
+      this.fineBg[i + 1] = bgG;
+      this.fineBg[i + 2] = bb;
+      flags |= FINE_SOLID;
+      if (halo > 0) this.haloAround(fx, fy, halo);
+    } else if ((old & FINE_SOLID) && !(old & FINE_UNDER)) flags |= FINE_SOLID;
+    this.fine[i] = r;
+    this.fine[i + 1] = g;
+    this.fine[i + 2] = b;
+    this.fine[i + 3] = glyphOnly & 255;
+    this.fineBg[i + 3] = flags;
+    this.fineMark[((fy / FINE) | 0) * this.cols + ((fx / FINE) | 0)] = 1;
+    this.fineUsed = true;
+  }
+
+  // Marks the empty small cells around a solid one as its outline.
+  haloAround(fx, fy, halo) {
+    for (let y = Math.max(0, fy - HALO_REACH); y <= Math.min(this.fineRows - 1, fy + HALO_REACH); y++) {
+      for (let x = Math.max(0, fx - HALO_REACH); x <= Math.min(this.fineCols - 1, fx + HALO_REACH); x++) {
+        const at = (y * this.fineCols + x) * 4 + 3;
+        if (this.fineBg[at] >= halo) continue;
+        this.fineBg[at] = halo;
+        this.fineMark[((y / FINE) | 0) * this.cols + ((x / FINE) | 0)] = 1;
+      }
+    }
   }
 
   // The topmost character takes the cell, including overlapping blades.
@@ -385,6 +589,7 @@ export class AsciiRenderer {
     const glyphIndexOnly = glyphIndex & GLYPH_MASK;
     if (GLYPH_KIND[glyphIndexOnly] === BLANK_GLYPH) return;
     this.putAt(cell, glyphIndexOnly, r, g, b);
+    if (this.fineMark?.[cell]) this.overFine(cell, FINE_UNDER | FINE_OVER);
   }
 
   // The base glyph of a cell, without anything layered over it.
@@ -407,6 +612,8 @@ export class AsciiRenderer {
 
   putBg(x, y, r, g, b) {
     if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) return;
+    // A solid cell drawn over part of a sprite hides it there.
+    if (this.fineMark?.[y * this.cols + x]) this.overFine(y * this.cols + x, 0);
     const i = (y * this.cols + x) * 4;
     this.bg[i] = r;
     this.bg[i + 1] = g;
@@ -432,6 +639,14 @@ export class AsciiRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.ovTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE,
       this.ov);
+    gl.activeTexture(gl.TEXTURE6);
+    gl.bindTexture(gl.TEXTURE_2D, this.fineTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.fineCols, this.fineRows, gl.RGBA, gl.UNSIGNED_BYTE,
+      this.fine);
+    gl.activeTexture(gl.TEXTURE7);
+    gl.bindTexture(gl.TEXTURE_2D, this.fineBgTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.fineCols, this.fineRows, gl.RGBA, gl.UNSIGNED_BYTE,
+      this.fineBg);
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
     gl.activeTexture(gl.TEXTURE2);

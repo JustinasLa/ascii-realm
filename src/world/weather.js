@@ -239,6 +239,9 @@ export class WeatherEffects {
           r.ov[o + c] = r.ov[o + c] * light * (1 - k) + tint[c] * k + flashFg;
           r.bg[o + c] = r.bg[o + c] * light * (1 - k) + tint[c] * k * 0.35 + flashBg;
         }
+        if (r.fineMark?.[o >> 2]) {
+          r.blendFine(o >> 2, light, k, tint[0], tint[1], tint[2], flashFg, flashFg, flashFg, 0.35);
+        }
       }
     }
     this.lightning.light(r, view);

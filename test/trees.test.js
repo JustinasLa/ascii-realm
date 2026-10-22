@@ -6,7 +6,8 @@ import { dg, GLYPH_COUNT, GLYPH_MASK, GLYPHS, LAYER } from '../src/render/glyphs
 import { drawLeaves, MAX_LEAF_DRIFT } from '../src/world/leaves.js';
 import { blocks, drawProp, generateProps, nearWater, propInView, treeSpeciesAt } from '../src/world/props.js';
 import { reflector } from '../src/world/reflection.js';
-import { makeBush, makeTree, MAX_LITTER_DEPTH, MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT, TREE_SPECIES } from '../src/world/trees.js';
+import { makeBush, makeTree, MAX_LITTER_DEPTH, MAX_ROOT_DEPTH, MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT,
+  TREE_SPECIES } from '../src/world/trees.js';
 import { treeWind, windGust } from '../src/world/wind.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from '../src/world/world.js';
 import { withLayers } from './helpers/renderer.js';
@@ -77,14 +78,17 @@ test('each tree species has a deterministic, distinct, bounded sprite', () => {
     assert.ok(prop.cells.length > 500 && prop.cells.length < 14000, species);
     assert.ok(prop.cells.some((cell) => cell.foliage), `${species} foliage`);
     assert.ok(prop.cells.some((cell) => !cell.foliage && !cell.litter && cell.dy >= -2), `${species} roots`);
+    // Roots run out over the ground in front of the base, wider than the trunk.
+    const roots = prop.cells.filter((cell) => !cell.foliage && !cell.litter && cell.dy > 0);
+    assert.ok(roots.length > 0, `${species} roots reach over the ground`);
     assert.ok(prop.footW > 0 && prop.footH > 0);
     assert.ok(prop.height >= 75 && prop.height <= MAX_TREE_HEIGHT, `${species} must tower over the 27-row player`);
     const occupied = new Set();
     let previous = null;
     for (const cell of prop.cells) {
       assert.ok(Number.isInteger(cell.dx) && Number.isInteger(cell.dy));
-      // Only litter lies on the ground in front of the base.
-      const lowest = cell.litter ? MAX_LITTER_DEPTH : 0;
+      // Only litter and roots lie on the ground in front of the base.
+      const lowest = cell.litter ? MAX_LITTER_DEPTH : MAX_ROOT_DEPTH;
       assert.ok(Math.abs(cell.dx) <= MAX_TREE_HALF_WIDTH && cell.dy >= 1 - MAX_TREE_HEIGHT && cell.dy <= lowest, species);
       const location = `${cell.dx},${cell.dy}`;
       if (isLayer(cell)) {
@@ -131,13 +135,13 @@ test('row culling preserves complete seeded sprites across seasons and growth st
   // both caller-supplied and fallback random streams.
   const fixtures = [
     { seed: 1, x: -100.5, y: 300.5, randomSeed: 123456,
-      expected: '743b2db2226bbe8f56b7349ec7443dc2728169b9f991f8736dbc8b72e39b9f3b' },
+      expected: 'a9f33d7cb9b4b50eb0068441443461513854972a73adbf48304291918bd35ed8' },
     { seed: 42, x: 100.5, y: -300.5, girth: 0.6, randomSeed: 42,
-      expected: '4b780db9f61bf5ed0820dc3320e8e99c78f70ed40e82ba4f6faabdb6a477382a' },
+      expected: '259143f80176cf4c18db90182e626e5b0f03c2f31518a971b6c43851e2439204' },
     { seed: 9281, x: 63.5, y: 24.5, girth: 2, randomSeed: 9281,
-      expected: 'ed872e6064ddb925959a8fa86b45d14107f7d023fc7c10b0f144022d842d0bc3' },
+      expected: 'dbe65e206a1e174359a95f65415d09953588de43d984f52b9094921a11071ee4' },
     { seed: 4294967295, x: -63.5, y: -24.5,
-      expected: '2a04de0d50e61c2bf43846cc1df486a662fe251be212aecd68f4a314729917fe' },
+      expected: 'a2e0cad668fc5f06fd2a2d2bcdfb3f93f01cbb5303e5be033a4c5ac91bdc73da' },
   ];
   for (const { expected, randomSeed, ...options } of fixtures) {
     const digest = createHash('sha256');
@@ -381,7 +385,7 @@ test('saplings and walkable bushes form a varied layer below mature trees', () =
   assert.ok(heights.size >= 4, 'sapling species have different proportions');
 });
 
-test('moonlit crowns are paler on top and trunks are pale grey in every growth stage', () => {
+test('moonlit crowns are paler on top and round trunks are lit toward the moon in every growth stage', () => {
   const brightness = (c) => c.r + c.gg + c.b;
   const mean = (cells) => cells.reduce((sum, c) => sum + brightness(c), 0) / cells.length;
   for (const species of TREE_SPECIES) {
@@ -392,10 +396,17 @@ test('moonlit crowns are paler on top and trunks are pale grey in every growth s
     const third = (bottom - top) / 3;
     assert.ok(mean(leaves.filter((c) => c.dy < top + third)) > mean(leaves.filter((c) => c.dy > bottom - third)) * 1.2,
       `${species} crown top is lit`);
-    const trunk = baseCells(prop).filter((c) => !c.foliage && !c.litter && c.dy > -6);
-    // Moonlit bark is a pale cool grey, its letters heaviest toward the moon.
-    const sum = (k) => trunk.reduce((total, c) => total + c[k], 0);
-    if (species !== 'birch') assert.ok(sum('b') >= sum('r'), `${species} cool moonlit bark`);
+    // A trunk is round: the side facing the moon, up and to the left, is
+    // brighter than the side turned away from it.
+    let lit = 0;
+    let unlit = 0;
+    for (let dy = -14; dy <= -4; dy++) {
+      const row = baseCells(prop).filter((c) => !c.foliage && !c.litter && c.dy === dy).sort((a, b) => a.dx - b.dx);
+      const half = Math.floor(row.length / 2);
+      lit += mean(row.slice(0, half)) || 0;
+      unlit += mean(row.slice(row.length - half)) || 0;
+    }
+    assert.ok(lit > unlit * 1.15, `${species} trunk is lit from the left`);
     // Deeply shaded bark under a leafy cell must still choose a real glyph.
     for (let i = 0; i < 24; i++) {
       for (const growth of ['sapling', 'bush']) {

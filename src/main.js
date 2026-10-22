@@ -43,6 +43,7 @@ import { drawResource } from './world/item-draw.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
 import { Projectiles } from './world/projectiles.js';
 import { drawProp, propInView } from './world/props.js';
+import { bakeFine, fineBakesPending, fineOf, startFineWorkers } from './world/fine-bakes.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { Splashes } from './world/splashes.js';
@@ -630,6 +631,22 @@ function schedule() {
   if (animation === null && !document.hidden && !contextLost) animation = requestAnimationFrame(frame);
 }
 
+// Trees and rocks are baked in small letters for the fine grid by workers,
+// or, where they cannot run, here while the browser is idle, a few rows at
+// a time, so one coming near the view never stalls a frame. Until then it
+// is drawn in ordinary cells.
+startFineWorkers();
+let baking = false;
+function bakeWhenIdle() {
+  if (baking || !fineBakesPending()) return;
+  baking = true;
+  const idle = window.requestIdleCallback ?? ((run) => setTimeout(() => run({ timeRemaining: () => 4 }), 0));
+  idle((deadline) => {
+    baking = false;
+    bakeFine(Math.max(2, deadline.timeRemaining() - 1));
+  }, { timeout: 120 });
+}
+
 function suspend() {
   if (animation !== null) cancelAnimationFrame(animation);
   animation = null;
@@ -977,6 +994,9 @@ function frame(now) {
   ambience.draw(renderer, view, time);
   weather.draw(renderer, view);
   builder.drawPreview(view);
+  // Props near the view queue their fine bakes after those in view.
+  for (const p of props) fineOf(p);
+  bakeWhenIdle();
   if (debug.freeze) sound.pause();
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
