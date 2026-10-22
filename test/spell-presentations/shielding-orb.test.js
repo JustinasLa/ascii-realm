@@ -6,6 +6,7 @@ import { SpellEffects } from '../../src/spells/effects.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function draw(stage, progress = 0.2, age = progress * profile.duration, radius = 1, life = profile.duration, heading = 0) {
   const points = [];
@@ -107,29 +108,46 @@ test('the ward lands as a sealing pearl bubble with a closing seal and corner-br
   assert.ok(draw('impact', 0.3, 0.27, 1).some(p => p[2] === '`' || p[2] === ','), 'a direct impact flings petals');
 });
 
-test('paired beating bells lead a low rim hum and resilient falling impact thrum', () => {
-  const [bellA, bellB, hum] = profile.sounds.cast;
-  assert.ok([bellA, bellB].every(v => v.kind === 'tone' && v.type === 'sine' && v.release > v.duration * 0.7));
-  assert.ok(Math.abs(bellA.frequency - bellB.frequency) > 0);
-  assert.ok(Math.abs(bellA.frequency - bellB.frequency) / bellA.frequency < 0.03, 'near unison bells create a slow beat');
-  assert.ok((bellB.delay ?? 0) < 0.04 && hum.delay > bellB.delay);
-  assert.ok(hum.frequency < bellA.frequency / 3 && hum.attack > bellA.attack);
-  const [thrum, overtone, ...rim] = profile.sounds.impact;
-  assert.ok(thrum.endFrequency < thrum.frequency && thrum.frequency < hum.frequency);
-  assert.ok(overtone.endFrequency < overtone.frequency);
-  assert.ok(rim.every(v => v.delay > overtone.delay && v.type === 'sine'));
-  assert.ok(profile.sounds.pulse.every(v => v.gain < 0.02 && v.duration <= 0.1));
-  for (const recipe of Object.values(profile.sounds)) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
+test('heartwood ward plays real foley with bounded timing and subdued repeating leaves', async () => {
+  const totalGain = recipe => recipe.reduce((sum, voice) => sum + voice.gain, 0);
+  assert.ok(totalGain(profile.sounds.pulse) <= 0.3);
+  assert.ok(totalGain(profile.sounds.pulse) < totalGain(profile.sounds.cast) * 0.25);
+  assert.ok(totalGain(profile.sounds.pulse) < totalGain(profile.sounds.impact) * 0.25);
+  assert.ok(profile.sounds.cast.some(v => v.url.endsWith('/root-creak.wav')));
+  assert.ok(profile.sounds.impact.some(v => v.url.endsWith('/wood-knock.wav')));
+  for (const stage of ['cast', 'impact', 'pulse']) {
+    const recipe = profile.sounds[stage];
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(totalGain(recipe) <= 1.2, `${stage} leaves headroom for concurrent world audio`);
     for (const voice of recipe) {
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
     }
+    const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, profile), true, 'all actual WAV files load');
+    const handles = playSpellSound(fake.engine, { presentation: profile, stage, x: 2, y: 3 });
+    assert.equal(handles.length, recipe.length, `${stage} schedules every authored layer`);
+    const sources = fake.nodes.filter(node => node.kind === 'source');
+    assert.equal(sources.length, recipe.length);
+    assert.equal(fake.nodes.some(node => node.kind === 'oscillator'), false, 'no synthesized voices');
+    sources.forEach((source, index) => {
+      const voice = recipe[index];
+      assert.equal(source.buffer.id, voice.url.split('/').at(-1));
+      assert.equal(source.starts[0], fake.context.currentTime + (voice.delay ?? 0));
+      assert.equal(source.playbackRate.calls[0].args[0], voice.rate);
+      assert.ok(Math.abs(source.stops[0] - source.starts[0] - source.buffer.duration / voice.rate - 0.01) < 1e-9);
+      if (stage === 'pulse') assert.ok(source.buffer.duration / voice.rate < 0.56, 'at most two leaf tails overlap at the 0.28 s cue interval');
+    });
+    assert.deepEqual(fake.invalid, []);
+    for (const handle of handles) handle.stop();
+    assert.ok(fake.routes.every(route => route.disposals === 1));
   }
 });
 
-test('real rune cast renders the authored projectile and ally ward with typed spatial sound cues', () => {
+test('real rune cast renders the authored projectile and ally ward with typed spatial sound cues', async () => {
   const scene = runeScene(spell, { range: 12, allyInPath: true }), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
@@ -160,11 +178,12 @@ test('real rune cast renders the authored projectile and ally ward with typed sp
   assert.equal(impact.x, scene.ally.x);
   assert.equal(impact.y, scene.ally.y);
   const fake = fakeRecordedAudio();
+  assert.equal(await prepareRecordedSpellTest(fake, profile), true);
   const handles = [cast, impact].flatMap(event => playSpellSound(fake.engine, event));
   assert.equal(handles.length, profile.sounds.cast.length + profile.sounds.impact.length);
   assert.ok(fake.routes.every(r => r.bus === 'sfx'));
   assert.ok(fake.routes.some(r => r.x === scene.ally.x && r.y === scene.ally.y));
-  assert.ok(fake.nodes.some(n => n.starts.some(at => at > fake.context.currentTime)), 'bell and rim layers are scheduled');
+  assert.ok(fake.nodes.some(n => n.starts.some(at => at > fake.context.currentTime)), 'wood and leaf layers are scheduled');
   assert.deepEqual(fake.invalid, []);
   for (const handle of handles) handle.stop();
   assert.ok(fake.routes.every(r => r.disposals === 1));

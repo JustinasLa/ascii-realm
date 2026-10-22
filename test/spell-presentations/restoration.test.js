@@ -4,6 +4,9 @@ import presentation from '../../src/spells/presentations/restoration.js';
 import spell from '../../src/spells/definitions/restoration.js';
 import fireShard from '../../src/spells/presentations/fire-shard.js';
 import { runeScene } from '../../test-support/spells.js';
+import { playSpellSound } from '../../src/audio/spells.js';
+import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 // The stages Restoration actually uses in play: the 1.45 s cast at radius 0.8,
 // the 1.85 s radius-4 totem zone, 0.25 s radius-5 tick pulses and the 0.3 s
@@ -112,30 +115,48 @@ test('aura leaflets swoop in, and the impact stitches close into knots', () => {
   assert.ok(shoot.some(p => p.z < -1), 'twin vine wake trails behind');
 });
 
-test('Restoration has a slow rising warm chime with held breath and restrained repeating notes', () => {
+test('Restoration grows a sanctuary from recorded roots, slow water and restrained leaf ripples', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const notes = cast.filter(v => v.kind === 'tone');
-  assert.ok(notes.length >= 4);
-  for (let i = 1; i < notes.length; i++) {
-    assert.ok(notes[i].frequency > notes[i - 1].frequency);
-    assert.ok(notes[i].delay - notes[i - 1].delay >= 0.25, 'a slow rising phrase');
-  }
-  const breath = cast.find(v => v.kind === 'noise');
-  assert.ok(breath.duration > 1 && breath.attack > 0.1 && breath.filterType === 'lowpass');
-  assert.ok(impact.some(v => v.kind === 'tone'));
-  assert.ok(pulse.every(v => v.gain <= 0.02 && v.duration < 0.2), 'repeated totem ticks stay quiet and brief');
+  const file = layer => layer.url.split('/').at(-1);
+  const gain = recipe => recipe.reduce((sum, layer) => sum + layer.gain, 0);
+  assert.deepEqual(cast.map(file), ['root-creak.wav', 'water-flow.wav', 'leaf-drift.wav']);
+  assert.ok(cast.every(v => v.rate < 1), 'slow organic growth anchors the sanctuary');
+  assert.ok(cast[1].delay > cast[0].delay && cast[2].delay > cast[1].delay, 'water and leaves open after the roots');
+  assert.ok(impact.some(v => file(v) === 'branch-strain.wav') && impact.some(v => file(v) === 'water-touch.wav'), 'wood settles as cleansing water arrives');
+  assert.equal(pulse.length, 1);
+  assert.ok(gain(pulse) <= 0.3 && gain(pulse) < gain(impact) * 0.2, 'frequent pulses stay beneath the arrival');
+  assert.ok(pulse.every(v => file(v) === 'leaf-turn.wav' && v.rate >= 1 && v.delay === 0));
   assert.notDeepEqual(cast, impact);
-  assert.notDeepEqual(cast, fireShard.sounds.cast, 'Restoration has its own phrase and texture');
-  for (const voices of [cast, impact, pulse]) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
-    for (const voice of voices) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
+  assert.notDeepEqual(cast, fireShard.sounds.cast, 'Restoration has its own physical textures');
+  const fake = fakeRecordedAudio();
+  assert.equal(await prepareRecordedSpellTest(fake, presentation), true, 'actual authored WAV files load');
+  for (const stage of ['cast', 'impact', 'pulse']) {
+    const recipe = presentation.sounds[stage];
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(gain(recipe) <= 1.2);
+    for (const layer of recipe) {
+      assert.equal(layer.kind, 'recording');
+      assert.match(layer.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2);
+      assert.ok(layer.delay >= 0 && layer.delay <= 2);
     }
+    const handles = playSpellSound(fake.engine, { stage, presentation, x: 3, y: 7 });
+    assert.equal(handles.length, recipe.length);
+    const sources = fake.nodes.filter(v => v.kind === 'source').slice(-handles.length);
+    sources.forEach((source, i) => {
+      assert.equal(source.buffer.id, file(recipe[i]));
+      assert.equal(source.starts[0], fake.context.currentTime + recipe[i].delay);
+      assert.equal(source.playbackRate.calls[0].args[0], recipe[i].rate);
+      assert.ok(source.buffer.duration > 0 && source.buffer.duration < 2);
+      if (stage === 'pulse') assert.ok(source.buffer.duration / recipe[i].rate < 0.5, 'repeat is a short brush');
+    });
+    handles.forEach(handle => handle.stop());
   }
+  assert.ok(!fake.nodes.some(v => v.kind === 'oscillator'));
+  assert.deepEqual(fake.allocations, [], 'no generated noise buffers');
+  assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 3 && r.y === 7 && r.disposals === 1));
+  assert.deepEqual(fake.invalid, []);
 });
 
 test('real Restoration cast renders its profile, emits typed cues, and preserves the TF cleanse', () => {
@@ -164,7 +185,7 @@ test('real Restoration cast renders its profile, emits typed cues, and preserves
   assert.equal(scene.foe.health, 100);
   assert.ok(events.some(e => e.stage === 'cast'));
   assert.ok(events.some(e => e.stage === 'impact'), 'aura cue uses the restorative arrival sound');
-  assert.ok(events.some(e => e.stage === 'pulse'), 'totem uses the quiet repeating notes');
+  assert.ok(events.some(e => e.stage === 'pulse'), 'totem uses the quiet leaf ripples');
   assert.ok(events.every(e => e.type === 'spell' && e.spellId === 'restoration' && e.presentation === presentation));
   assert.ok(events.every(e => !['draw', 'slam'].includes(e.type)));
 });

@@ -1,0 +1,51 @@
+Cerrith recorded spell foley
+
+All seven source recordings: Creative Commons CC0 1.0 Universal.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+Downloaded public high-quality previews; original source files may require a Freesound account.
+The previews are lossy source encodings; exported WAV files are 48 kHz mono 16-bit PCM.
+
+Freesound - Wood Creak Single V7 by Rudmer_Rotteveel
+https://freesound.org/people/Rudmer_Rotteveel/sounds/506662/
+Public preview: https://cdn.freesound.org/previews/506/506662_4921277-hq.mp3
+Source SHA-256: ca0d99357dec4aee3cbb1a32e0b4ed3d15558fb68c63e8203e52240bf7e5c301
+
+Freesound - Dried branches by Vrymaa
+https://freesound.org/people/Vrymaa/sounds/734627/
+Public preview: https://cdn.freesound.org/previews/734/734627_13973196-hq.mp3
+Source SHA-256: 04535ca2634f877dc74252e541ce86f4b8a8d0bdf88c5e831527612780d9b95c
+
+Freesound - Wood logs - woodshed by Vrymaa
+https://freesound.org/people/Vrymaa/sounds/734628/
+Public preview: https://cdn.freesound.org/previews/734/734628_13973196-hq.mp3
+Source SHA-256: 1def96c0fd6d27e142e34d9b9930e4b3380ac577156d8d46856db400c9be0cc9
+
+Freesound - Autumn leaves falling on forest floor (close, loopable) by Mjeno
+https://freesound.org/people/Mjeno/sounds/405136/
+Public preview: https://cdn.freesound.org/previews/405/405136_3958938-hq.mp3
+Source SHA-256: 49fa3f09a4a323f45ca1fc1b286602973e6da03828282563d34ed67f1694dddc
+
+Freesound - Foley_Whoosh_Clothes.wav by Nox_Sound
+https://freesound.org/people/Nox_Sound/sounds/495390/
+Public preview: https://cdn.freesound.org/previews/495/495390_9250976-hq.mp3
+Source SHA-256: 2b00c696b8028a79084cf54a120d12840241d05963d89fa21cc8b83b5c6a9230
+
+Freesound - pouring water 2015.wav by bart1234567
+https://freesound.org/people/bart1234567/sounds/319963/
+Public preview: https://cdn.freesound.org/previews/319/319963_4898539-hq.mp3
+Source SHA-256: 4b7253e9d49362e2625c047108956238c3073df3c590aff5334bb7f952a3a4dc
+
+Freesound - BODY FALL - V HVY - DIRT by leonelmail
+https://freesound.org/people/leonelmail/sounds/504626/
+Public preview: https://cdn.freesound.org/previews/504/504626_4437257-hq.mp3
+Source SHA-256: 336a44d95279173764073a9b2d4d7e12f4167cfb0c1ad5c58e316895e129c6bb
+
+Adaptations: exact crops in sources.json; mono resampling at 48 kHz;
+28 Hz high-pass, DC removal, 4 ms entry and 55 ms exit fades, linear peak balancing.
+No synthetic tones/noise, bit crushing, compression, reverse playback or artificial reverb.
+Wood creak is recorded floor timber; branches are twisted twigs/herbs; leaves are a forest
+field recording; logs are heavy timber impacts; cloth is a recorded jacket whoosh;
+water is poured into a glass; earth impact is a heavy body landing on dirt.
+Names describe their role in the spell mix; no claim of recording magical objects.
+Rebuild: python tools/render-spell-audio-cerrith.py (numpy, scipy, ffmpeg required).

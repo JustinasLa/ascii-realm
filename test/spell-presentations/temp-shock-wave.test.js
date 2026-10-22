@@ -6,6 +6,7 @@ import { runeScene } from '../../test-support/spells.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function draw(stage, progress, { heading = 0, radius = 1, life = presentation.duration } = {}) {
   const points = [];
@@ -145,25 +146,37 @@ test('motion is smooth between neighbouring frames', () => {
   }
 });
 
-test('sound has a delayed wooden strike, resonant anvil body, and separate low aftershock', () => {
+test('recorded timber strike follows the mallet, with dirt aftershock and settling branches', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.kind === 'noise' && v.delay >= 0.5 && v.filterType === 'bandpass'), 'mallet strike waits for the hammer descent');
-  assert.ok(cast.filter(v => v.kind === 'tone' && v.delay >= 0.6).length >= 2, 'inharmonic body tones follow the mallet');
-  assert.ok(impact.some(v => v.kind === 'noise' && v.delay >= 0.2 && v.cutoff <= 200), 'soil aftershock follows the contact');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.delay >= 0.2 && v.endFrequency < 40), 'aftershock has a descending sub-bass body');
+  const hammer = cast.find(v => v.url.endsWith('/wood-knock.wav'));
+  assert.ok(Math.abs(hammer.delay - AT * presentation.duration) < 0.01, 'physical mallet contact matches the animation');
+  assert.ok(cast.some(v => v.url.endsWith('/branch-strain.wav') && v.delay < hammer.delay), 'timber strains before contact');
+  assert.ok(impact.some(v => v.url.endsWith('/wood-crash.wav') && v.delay === 0), 'the travelling wave lands with a wooden blow');
+  assert.ok(impact.some(v => v.url.endsWith('/earth-impact.wav') && v.delay >= 0.2), 'soil aftershock follows the contact');
+  assert.ok(impact.some(v => v.url.endsWith('/branch-snap.wav') && v.delay > 0.4), 'branches settle after the ground shock');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain <= 0.03 && v.duration <= 0.15), 'repeated ground ticks remain quiet and brief');
+  assert.equal(pulse.length, 1, 'repeated ticks use one quiet physical knock');
+  assert.ok(pulse.reduce((sum, voice) => sum + voice.gain, 0) <= 0.3);
   for (const recipe of Object.values(presentation.sounds)) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(recipe.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2, 'recorded layers leave mixing headroom');
     for (const voice of recipe) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
+      assert.equal(voice.kind, 'recording', 'all layers use real foley');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
     }
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
     const stage = Object.entries(presentation.sounds).find(([, value]) => value === recipe)[0];
     const handles = playSpellSound(fake.engine, { presentation, stage, x: 4, y: 7 });
-    assert.equal(handles.length, recipe.length, 'every authored layer reaches the existing voice instruments');
+    assert.equal(handles.length, recipe.length, 'every authored file reaches the recording player');
+    assert.ok(!fake.nodes.some(node => node.kind === 'oscillator'), 'no synthesized notes are allocated');
+    const sources = fake.nodes.filter(node => node.kind === 'source');
+    assert.deepEqual(sources.map(node => node.buffer.id), recipe.map(voice => voice.url.split('/').at(-1)));
+    assert.deepEqual(sources.map(node => node.starts[0]), recipe.map(voice => fake.context.currentTime + voice.delay));
+    assert.ok(sources.every(node => Number.isFinite(node.buffer.duration) && node.buffer.duration > 0), 'real WAV metadata was loaded');
     assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 4 && route.y === 7));
     assert.deepEqual(fake.invalid, []);
     for (const handle of handles) handle.stop();

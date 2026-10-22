@@ -6,6 +6,7 @@ import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 const STAGES = ['cast', 'projectile', 'impact', 'pulse', 'aura', 'zone'];
 const BUDGET = { cast: 200, impact: 200, projectile: 110, pulse: 90, aura: 160, zone: 160 };
@@ -131,29 +132,31 @@ test('Leaf Arrow moves smoothly between 60 fps frames', () => {
   }
 });
 
-test('Leaf Arrow schedules a woody two-part twang, delayed dart and uneven dry leaf flicks on SFX', () => {
+test('Leaf Arrow plays immediate recorded branch and air release, then wood and earth contact on SFX', async () => {
   const { cast, impact } = presentation.sounds;
-  const twang = cast.filter(v => v.kind === 'tone');
-  assert.equal(twang.length, 2);
-  assert.ok(twang.every(v => v.endFrequency < v.frequency && v.attack <= 0.002));
-  assert.ok(twang.some(v => v.type === 'triangle') && twang.some(v => v.type === 'sine'));
-  const dart = cast.find(v => v.kind === 'noise');
-  assert.ok(dart.delay > Math.max(...twang.map(v => v.delay ?? 0)));
-  assert.equal(dart.filterType, 'bandpass');
-  const flicks = impact.filter(v => v.kind === 'noise');
-  assert.equal(flicks.length, 3);
-  const intervals = flicks.slice(1).map((v, i) => v.delay - (flicks[i].delay ?? 0));
-  assert.notEqual(intervals[0], intervals[1], 'the dry flicks have an uneven rhythm');
-  assert.ok(flicks.every(v => v.duration <= 0.05));
+  assert.deepEqual(Object.keys(presentation.sounds).sort(), ['cast', 'impact']);
+  const snap = cast.find(v => v.url.endsWith('/branch-snap.wav'));
+  const air = cast.find(v => v.url.endsWith('/cloth-sweep.wav'));
+  assert.ok(snap && air, 'release combines physical wood and moving air');
+  assert.equal(snap.delay, 0, 'quick shot has no startup wait');
+  assert.ok(air.delay <= 0.02 && air.rate >= 1, 'air dart responds promptly');
+  const wood = impact.find(v => v.url.endsWith('/wood-knock.wav'));
+  const earth = impact.find(v => v.url.endsWith('/earth-impact.wav'));
+  assert.ok(wood && earth && wood.gain > earth.gain, 'shaft contact leads the earth body');
+  assert.equal(wood.delay, 0);
   assert.notDeepEqual(cast, impact);
   for (const [stage, recipe] of Object.entries(presentation.sounds)) {
-    assert.ok(recipe.length <= 8);
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const v of recipe) {
-      assert.ok(v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5);
+      assert.equal(v.kind, 'recording', 'all sound layers use real foley');
+      assert.match(v.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8 && v.rate >= 0.75 && v.rate <= 1.2);
       assert.ok((v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2);
       assert.ok(Object.values(v).filter(v => typeof v === 'number').every(Number.isFinite));
     }
     const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, presentation), true, 'actual recording metadata loads');
     const handles = playSpellSound(fake.engine, { presentation, stage, x: 7, y: 11 });
     assert.equal(handles.length, recipe.length);
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 7 && r.y === 11));

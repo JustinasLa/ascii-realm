@@ -264,20 +264,21 @@ export default {
     return halo(effect, plot);
   },
   sounds: {
+    // Foliage parts around the seed; cloth gives the release a physical breath.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 330, endFrequency: 392, duration: 0.38, gain: 0.065, attack: 0.015, release: 0.28 },
-      { kind: 'tone', type: 'sine', frequency: 523.25, delay: 0.12, duration: 0.25, gain: 0.055, attack: 0.008, release: 0.2 },
-      { kind: 'tone', type: 'sine', frequency: 659.25, delay: 0.25, duration: 0.28, gain: 0.05, attack: 0.008, release: 0.23 },
-      { kind: 'tone', type: 'sine', frequency: 783.99, delay: 0.38, duration: 0.35, gain: 0.045, attack: 0.01, release: 0.29 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-drift.wav', gain: 0.38, rate: 0.86, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.32, rate: 0.9, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.2, rate: 0.88, delay: 0.22 },
     ],
+    // The healing seed lands softly, releasing water through unfurling leaves.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 523.25, duration: 0.65, gain: 0.06, attack: 0.025, release: 0.5 },
-      { kind: 'tone', type: 'sine', frequency: 659.25, delay: 0.035, duration: 0.6, gain: 0.04, attack: 0.04, release: 0.46 },
-      { kind: 'noise', delay: 0.04, duration: 0.5, gain: 0.035, cutoff: 1800, filterType: 'bandpass', attack: 0.1, release: 0.35 },
-      { kind: 'tone', type: 'sine', frequency: 1046.5, delay: 0.12, duration: 0.48, gain: 0.025, attack: 0.02, release: 0.4 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.43, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.3, rate: 0.82, delay: 0.035 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.2, rate: 0.85, delay: 0.12 },
     ],
+    // Repeating sprouts retain only a restrained, short brush of real leaves.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 783.99, duration: 0.11, gain: 0.012, attack: 0.012, release: 0.085 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.11, rate: 1.15, delay: 0 },
     ],
   },
 };

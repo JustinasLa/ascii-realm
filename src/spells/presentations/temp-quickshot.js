@@ -264,16 +264,17 @@ export default {
     else whirl(plot, v, effect.stage, p, age, radius);
   },
   sounds: {
+    // A dry branch release cuts through a short cloth-air dart and leaf wake.
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 294, endFrequency: 132, duration: 0.12, gain: 0.085, attack: 0.001, release: 0.1 },
-      { kind: 'tone', type: 'sine', frequency: 672, endFrequency: 336, delay: 0.008, duration: 0.055, gain: 0.025, attack: 0.001, release: 0.05 },
-      { kind: 'noise', delay: 0.045, duration: 0.09, gain: 0.047, cutoff: 3200, filterType: 'bandpass', attack: 0.005, release: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.48, rate: 1.16, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-sweep.wav', gain: 0.34, rate: 1.2, delay: 0.012 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.16, rate: 1.1, delay: 0.045 },
     ],
+    // Solid shaft contact, soft earth weight, then a little falling foliage.
     impact: [
-      { kind: 'noise', duration: 0.035, gain: 0.055, cutoff: 3900, filterType: 'highpass', attack: 0.001, release: 0.03 },
-      { kind: 'noise', delay: 0.026, duration: 0.04, gain: 0.037, cutoff: 5200, filterType: 'bandpass', attack: 0.001, release: 0.035 },
-      { kind: 'noise', delay: 0.068, duration: 0.03, gain: 0.022, cutoff: 2700, filterType: 'highpass', attack: 0.001, release: 0.026 },
-      { kind: 'tone', type: 'sine', frequency: 840, endFrequency: 280, duration: 0.035, gain: 0.018, attack: 0.001, release: 0.03 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-knock.wav', gain: 0.53, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/earth-impact.wav', gain: 0.27, rate: 1.12, delay: 0.008 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.14, rate: 0.94, delay: 0.07 },
     ],
   },
 };

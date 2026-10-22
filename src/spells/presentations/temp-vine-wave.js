@@ -401,25 +401,21 @@ export default {
     else drawCast(view, p, age, age * 8);
   },
   sounds: {
+    // Twisted branches strain, then swinging air carries a drag of living leaves.
     cast: [
-      { kind: 'noise', duration: 0.32, gain: 0.06, cutoff: 920, filterType: 'bandpass', attack: 0.025, release: 0.12 },
-      { kind: 'tone', type: 'triangle', frequency: 310, endFrequency: 180, delay: 0.06, duration: 0.075, gain: 0.06, attack: 0.002, release: 0.06 },
-      { kind: 'tone', type: 'triangle', frequency: 235, endFrequency: 145, delay: 0.18, duration: 0.08, gain: 0.055, attack: 0.002, release: 0.065 },
-      { kind: 'tone', type: 'triangle', frequency: 310, endFrequency: 180, delay: 0.31, duration: 0.07, gain: 0.05, attack: 0.002, release: 0.06 },
-      { kind: 'noise', delay: 0.22, duration: 0.23, gain: 0.035, cutoff: 1200, filterType: 'bandpass', attack: 0.035, release: 0.15 },
-      { kind: 'tone', type: 'triangle', frequency: 180, endFrequency: 76, delay: 0.38, duration: 0.26, gain: 0.075, attack: 0.008, release: 0.2 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-strain.wav', gain: 0.48, rate: 0.84, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-sweep.wav', gain: 0.25, rate: 0.92, delay: 0.23 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-drift.wav', gain: 0.27, rate: 0.9, delay: 0.34 },
     ],
+    // A physical snap catches the victim; buried roots creak as the binding holds.
     impact: [
-      { kind: 'noise', duration: 0.13, gain: 0.075, cutoff: 690, filterType: 'bandpass', attack: 0.003, release: 0.1 },
-      { kind: 'tone', type: 'sawtooth', frequency: 185, endFrequency: 58, duration: 0.23, gain: 0.07, cutoff: 800, attack: 0.003, release: 0.19 },
-      { kind: 'tone', type: 'sine', frequency: 350, endFrequency: 200, delay: 0.035, duration: 0.055, gain: 0.045, attack: 0.002, release: 0.045 },
-      { kind: 'tone', type: 'triangle', frequency: 240, endFrequency: 135, delay: 0.11, duration: 0.07, gain: 0.04, attack: 0.002, release: 0.06 },
-      { kind: 'noise', delay: 0.08, duration: 0.26, gain: 0.055, cutoff: 1300, filterType: 'bandpass', attack: 0.025, release: 0.18 },
-      { kind: 'noise', delay: 0.23, duration: 0.13, gain: 0.02, cutoff: 2500, filterType: 'highpass', attack: 0.01, release: 0.1 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.52, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/earth-impact.wav', gain: 0.22, rate: 0.86, delay: 0.025 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/root-creak.wav', gain: 0.29, rate: 0.8, delay: 0.12 },
     ],
+    // One restrained leaf movement marks each travelling tendril.
     pulse: [
-      { kind: 'tone', type: 'triangle', frequency: 205, endFrequency: 145, duration: 0.07, gain: 0.025, attack: 0.002, release: 0.06 },
-      { kind: 'noise', delay: 0.025, duration: 0.065, gain: 0.015, cutoff: 1050, filterType: 'bandpass', attack: 0.005, release: 0.05 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.16, rate: 1.12, delay: 0 },
     ],
   },
 };

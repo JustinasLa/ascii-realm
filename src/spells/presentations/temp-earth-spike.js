@@ -323,19 +323,20 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'noise', duration: 0.46, gain: 0.055, cutoff: 290, filterType: 'lowpass', attack: 0.08, release: 0.18 },
-      { kind: 'tone', type: 'triangle', frequency: 55, endFrequency: 98, duration: 0.42, gain: 0.05, attack: 0.07, release: 0.16 },
-      { kind: 'noise', delay: 0.16, duration: 0.045, gain: 0.09, cutoff: 1500, filterType: 'bandpass', attack: 0.001, release: 0.035 },
-      { kind: 'noise', delay: 0.31, duration: 0.035, gain: 0.07, cutoff: 2400, filterType: 'bandpass', attack: 0.001, release: 0.028 },
+      // Ancient roots strain before the stomp splits the ground open.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/root-creak.wav', gain: 0.32, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.25, rate: 0.87, delay: 0.24 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/earth-impact.wav', gain: 0.36, rate: 0.9, delay: 0.27 },
     ],
     impact: [
-      { kind: 'noise', duration: 0.17, gain: 0.1, cutoff: 650, filterType: 'lowpass', attack: 0.002, release: 0.14 },
-      { kind: 'tone', type: 'triangle', frequency: 108, endFrequency: 39, duration: 0.18, gain: 0.085, attack: 0.002, release: 0.15 },
-      { kind: 'noise', delay: 0.06, duration: 0.1, gain: 0.03, cutoff: 1900, filterType: 'bandpass', attack: 0.001, release: 0.09 },
+      // Physical earth weight arrives first; heavy timber and splinters follow.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/earth-impact.wav', gain: 0.5, rate: 0.8, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-crash.wav', gain: 0.32, rate: 0.86, delay: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.16, rate: 1.12, delay: 0.22 },
     ],
     pulse: [
-      { kind: 'noise', duration: 0.05, gain: 0.018, cutoff: 500, filterType: 'lowpass', release: 0.04 },
-      { kind: 'tone', type: 'sine', frequency: 64, endFrequency: 45, duration: 0.08, gain: 0.016, release: 0.065 },
+      // One small fracture per travelling eruption keeps the ridge unobtrusive.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.1, rate: 1.18, delay: 0 },
     ],
   },
 };

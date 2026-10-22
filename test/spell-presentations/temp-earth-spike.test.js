@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/temp-earth-spike.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function draw(stage, progress, heading = 0, life = presentation.duration) {
   const points = [];
@@ -136,20 +137,35 @@ test('Earth Spike projectile burrows as a heaving soil mound with a stone tip an
   assert.notDeepEqual(a, b, 'the mound heaves and sprays soil as it travels');
 });
 
-test('Earth Spike has a soil rise, separated rock cracks, compact descending strike and quiet tick recipe', () => {
+test('Earth Spike uses root strain, earth weight and falling timber recordings with quiet travelling cracks', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'lowpass' && v.attack >= 0.05));
-  const cracks = cast.filter(v => v.kind === 'noise' && v.filterType === 'bandpass');
-  assert.equal(cracks.length, 2);
-  assert.ok(cracks[1].delay - cracks[0].delay >= 0.1, 'two distinct cracks follow the rumble');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.frequency > v.endFrequency && v.endFrequency < 50));
-  assert.ok(pulse.every(v => v.gain < 0.025 && v.duration <= 0.1), 'travelling pulses remain quiet');
+  const root = cast.find(v => v.url.endsWith('/root-creak.wav'));
+  const snap = cast.find(v => v.url.endsWith('/branch-snap.wav'));
+  const stomp = cast.find(v => v.url.endsWith('/earth-impact.wav'));
+  assert.ok(root && snap && stomp, 'root strain precedes a physical ground-breaking stomp');
+  assert.ok(root.delay < snap.delay && snap.delay <= stomp.delay);
+  const earth = impact.find(v => v.url.endsWith('/earth-impact.wav'));
+  const timber = impact.find(v => v.url.endsWith('/wood-crash.wav'));
+  const splinters = impact.find(v => v.url.endsWith('/branch-snap.wav'));
+  assert.ok(earth && timber && splinters);
+  assert.ok(earth.delay < timber.delay && timber.delay < splinters.delay, 'heavy earth leads the falling debris');
+  assert.ok(earth.gain > timber.gain && timber.gain > splinters.gain, 'debris recedes behind the earth strike');
+  assert.equal(pulse.length, 1, 'travelling eruptions use one small fracture');
+  assert.ok(pulse[0].url.endsWith('/branch-snap.wav') && pulse[0].gain <= 0.3);
   for (const [stage, recipe] of Object.entries(presentation.sounds)) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
-    assert.ok(recipe.every(v => v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5 && (v.delay ?? 0) <= 2));
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 1.2, `${stage} keeps layered peaks bounded`);
+    for (const voice of recipe) {
+      assert.equal(voice.kind, 'recording', 'every layer uses physical foley');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
+    }
     const audio = fakeRecordedAudio();
+    await prepareRecordedSpellTest(audio, presentation);
     const handles = playSpellSound(audio.engine, { stage, presentation, x: 2, y: 3 });
-    assert.equal(handles.length, recipe.length, `${stage} schedules every authored layer`);
+    assert.equal(handles.length, recipe.length, `${stage} schedules every authored recording`);
     assert.ok(audio.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 3));
     assert.deepEqual(audio.invalid, []);
     for (const handle of handles) handle.stop();

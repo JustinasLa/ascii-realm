@@ -254,22 +254,20 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 261.63, endFrequency: 254, delay: 0, duration: 0.27, gain: 0.055, attack: 0.002, release: 0.25, cutoff: 1500 },
-      { kind: 'tone', type: 'triangle', frequency: 329.63, endFrequency: 320, delay: 0.09, duration: 0.3, gain: 0.045, attack: 0.002, release: 0.28, cutoff: 1600 },
-      { kind: 'tone', type: 'triangle', frequency: 392, endFrequency: 384, delay: 0.23, duration: 0.35, gain: 0.04, attack: 0.003, release: 0.33, cutoff: 1800 },
-      { kind: 'tone', type: 'sine', frequency: 196, delay: 0.03, duration: 0.52, gain: 0.035, attack: 0.035, release: 0.43 },
-      { kind: 'tone', type: 'sine', frequency: 784, delay: 0.36, duration: 0.38, gain: 0.022, attack: 0.004, release: 0.36 },
+      // A sleeve brushes past the palm; close cloth breath and a little water
+      // gather into the hand without the airborne leaves of Healing Orb.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-sweep.wav', gain: 0.38, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.24, rate: 0.84, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.22, rate: 1, delay: 0.17 },
     ],
     impact: [
-      { kind: 'tone', type: 'triangle', frequency: 554.37, endFrequency: 548, delay: 0, duration: 0.28, gain: 0.05, attack: 0.002, release: 0.26, cutoff: 2000 },
-      { kind: 'tone', type: 'triangle', frequency: 440, endFrequency: 432, delay: 0.06, duration: 0.32, gain: 0.04, attack: 0.002, release: 0.3, cutoff: 1800 },
-      { kind: 'tone', type: 'triangle', frequency: 349.23, endFrequency: 344, delay: 0.18, duration: 0.38, gain: 0.035, attack: 0.003, release: 0.36, cutoff: 1600 },
-      { kind: 'tone', type: 'sine', frequency: 220, delay: 0.02, duration: 0.55, gain: 0.032, attack: 0.03, release: 0.46 },
-      { kind: 'tone', type: 'sine', frequency: 1046.5, delay: 0.26, duration: 0.42, gain: 0.019, attack: 0.003, release: 0.4 },
+      // A soft palm contact gives way to one intimate liquid movement.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.28, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.46, rate: 0.88, delay: 0.035 },
     ],
     pulse: [
-      { kind: 'tone', type: 'triangle', frequency: 329.63, delay: 0, duration: 0.15, gain: 0.016, attack: 0.002, release: 0.14, cutoff: 1200 },
-      { kind: 'tone', type: 'sine', frequency: 659.26, delay: 0.055, duration: 0.18, gain: 0.01, attack: 0.003, release: 0.17 },
+      // The restorative ring carries only a faint cloth brush.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.14, rate: 1.2, delay: 0 },
     ],
   },
 };

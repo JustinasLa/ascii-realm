@@ -6,6 +6,7 @@ import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 const LIFE = { cast: presentation.duration, impact: 0.6, pulse: 0.25, aura: 1.5, zone: 4, projectile: 1 };
 
@@ -166,29 +167,40 @@ test('Hand Cure motion is smooth between neighbouring frames', () => {
   }
 });
 
-test('Hand Cure uses asymmetric plucked phrases, warm body harmonics, and quiet restorative chimes', () => {
+test('Hand Cure layers close cloth and liquid recordings with a subdued contact pulse', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const phrase = voices => voices.filter(v => v.type === 'triangle');
-  for (const voices of [cast, impact]) {
-    assert.ok(voices.length <= 8 && voices.every(v => v.kind === 'tone'));
-    const plucks = phrase(voices);
-    assert.ok(plucks.length >= 3 && plucks.every(v => v.attack < 0.01 && v.release > v.duration * 0.8));
-    assert.ok(plucks.every(v => v.endFrequency < v.frequency && v.endFrequency > v.frequency * 0.9));
-    const [a, b, c] = plucks.map(v => v.delay);
-    assert.notEqual(b - a, c - b, 'the plucks use an intimate, uneven rhythm');
-    assert.ok(voices.some(v => v.type === 'sine' && v.frequency < 250 && v.attack > 0.02), 'warm middle harmonic under the plucks');
-    assert.ok(voices.some(v => v.type === 'sine' && v.frequency > 700 && v.gain < 0.025), 'small restorative finishing chime');
+  assert.ok(cast.some(v => v.url.endsWith('/cloth-sweep.wav') && v.delay === 0), 'the sleeve begins the hand gesture');
+  assert.ok(cast.some(v => v.url.endsWith('/water-touch.wav') && v.delay > 0), 'liquid follows the palm gesture');
+  assert.ok(impact.some(v => v.url.endsWith('/water-touch.wav') && v.delay < 0.05), 'liquid contact lands promptly');
+  assert.ok(impact.some(v => v.url.endsWith('/cloth-breath.wav')), 'soft cloth keeps contact intimate');
+  assert.equal(pulse.length, 1, 'repeated rings carry only one soft detail');
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.3);
+  for (const voices of [cast, impact, pulse]) {
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    for (const voice of voices) {
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/(cloth|water)-[a-z]+\.wav$/);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+    }
   }
-  assert.ok(phrase(cast).every((v, i, notes) => i === 0 || v.frequency > notes[i - 1].frequency));
-  assert.ok(phrase(impact).every((v, i, notes) => i === 0 || v.frequency < notes[i - 1].frequency));
-  assert.ok(pulse.every(v => v.gain <= 0.02 && v.duration < 0.2));
-  for (const voices of [cast, impact, pulse]) for (const voice of voices) {
-    assert.ok(voice.duration > 0 && voice.duration <= 2.5 && voice.delay >= 0 && voice.delay <= 2);
-    assert.ok(voice.gain > 0 && voice.gain <= 0.25);
+  const fake = fakeRecordedAudio();
+  assert.equal(await prepareRecordedSpellTest(fake, presentation), true, 'all authored WAV files load');
+  for (const stage of ['cast', 'impact', 'pulse']) {
+    const before = fake.nodes.length;
+    const handles = playSpellSound(fake.engine, { presentation, stage, x: 0, y: 0 });
+    const sources = fake.nodes.slice(before).filter(n => n.kind === 'source');
+    assert.equal(sources.length, presentation.sounds[stage].length);
+    assert.ok(sources.every(n => n.buffer.duration > 0 && n.buffer.duration < 0.8), 'short close recordings keep this distinct from a flying orb');
+    for (const source of sources) assert.equal(source.loop, false);
+    for (const handle of handles) handle.stop();
   }
+  assert.ok(!fake.nodes.some(n => n.kind === 'oscillator'));
 });
 
-test('real Hand Cure cast heals unchanged and routes authored profiles and typed spatial sound cues', () => {
+test('real Hand Cure cast heals unchanged and routes authored profiles and typed spatial sound cues', async () => {
   const scene = runeScene(spell, { range: 12, allyInPath: true, allyRange: 1 }), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
@@ -215,11 +227,12 @@ test('real Hand Cure cast heals unchanged and routes authored profiles and typed
   assert.ok(rendered.some(p => p[2] === "'") && rendered.some(p => p[2] === '@'), 'gathering motes and the cross flash are on screen');
   assert.deepEqual(rendered, expected, 'runtime effect stream actually calls the Hand Cure profile');
   const fake = fakeRecordedAudio(), handles = [];
+  assert.equal(await prepareRecordedSpellTest(fake, presentation), true);
   for (const event of events) handles.push(...playSpellSound(fake.engine, event));
   assert.equal(handles.length, events.reduce((sum, e) => sum + presentation.sounds[e.stage].length, 0));
   assert.ok(fake.routes.every(r => r.bus === 'sfx'));
   assert.ok(fake.routes.some(r => r.x === scene.ally.x && r.y === scene.ally.y));
-  assert.ok(fake.nodes.some(n => n.kind === 'oscillator' && n.starts[0] > fake.context.currentTime));
+  assert.ok(fake.nodes.some(n => n.kind === 'source' && n.starts[0] > fake.context.currentTime));
   assert.deepEqual(fake.invalid, []);
   for (const handle of handles) handle.stop();
   assert.ok(fake.routes.every(r => r.disposals === 1));

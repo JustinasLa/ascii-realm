@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/blessing-of-swiftness.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 // Lives and radii match how gameplay presents each stage.
 const LIVES = { cast: presentation.duration, impact: presentation.duration, aura: 0.3, pulse: 0.25, zone: 4, projectile: 1 };
@@ -132,28 +133,42 @@ test('all Swiftness stages animate deterministically, stay bounded and fade clea
   }
 });
 
-test('Swiftness plays a quick woody arpeggio with a brush and a high finishing ping', () => {
+test('Swiftness accelerates recorded cloth and leaf rushes into natural swift motion', async () => {
   const cast = presentation.sounds.cast, impact = presentation.sounds.impact;
-  const wood = cast.filter(s => s.kind === 'tone' && s.type === 'triangle');
-  assert.equal(wood.length, 3);
-  assert.ok(wood.every((s, i) => !i || s.frequency > wood[i - 1].frequency));
-  assert.ok(wood.every((s, i) => !i || s.delay > (wood[i - 1].delay ?? 0)));
-  assert.ok(wood.every(s => s.attack <= 0.003 && s.duration < 0.1 && s.cutoff <= 2000), 'short filtered plucks make the woody attack');
-  assert.ok(cast.some(s => s.kind === 'noise' && s.attack > 0.04), 'wind brushes in beneath the plucks');
-  const ping = cast.find(s => s.type === 'sine');
-  assert.ok(ping.frequency > wood.at(-1).frequency && ping.delay > wood.at(-1).delay);
+  assert.ok(cast[0].url.endsWith('/cloth-breath.wav'));
+  assert.ok(cast.some(s => s.url.endsWith('/cloth-sweep.wav')));
+  assert.ok(cast.some(s => s.url.endsWith('/leaf-drift.wav')));
+  for (let i = 1; i < cast.length; i++) {
+    assert.ok(cast[i].rate > cast[i - 1].rate, 'successive rushes become faster');
+    assert.ok(cast[i].delay > cast[i - 1].delay);
+    if (i > 1) assert.ok(cast[i].delay - cast[i - 1].delay < cast[i - 1].delay - cast[i - 2].delay, 'the rhythm accelerates');
+  }
   assert.notDeepEqual(cast, impact);
-  assert.ok(presentation.sounds.pulse.every(s => s.duration <= 0.1 && s.gain < 0.02));
+  assert.ok(impact.some(s => s.url.endsWith('/wood-knock.wav') && s.gain < 0.2), 'a quiet heel strike grounds the gust');
+  assert.ok(presentation.sounds.pulse.reduce((sum, s) => sum + s.gain, 0) <= 0.3);
+  assert.ok(presentation.sounds.pulse.every(s => s.url.endsWith('/leaf-turn.wav') || s.url.endsWith('/cloth-sweep.wav')));
   for (const [stage, recipe] of Object.entries(presentation.sounds)) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(recipe.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
     for (const voice of recipe) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
     const handles = playSpellSound(fake.engine, { presentation, stage, x: 2, y: 4 });
     assert.equal(handles.length, recipe.length);
+    const sources = fake.nodes.filter(n => n.kind === 'source');
+    assert.equal(sources.length, recipe.length);
+    sources.forEach((source, i) => {
+      assert.equal(source.buffer.id, recipe[i].url.split('/').at(-1));
+      assert.ok(source.buffer.duration > 0);
+      assert.equal(source.starts[0], fake.context.currentTime + recipe[i].delay);
+    });
+    assert.ok(fake.nodes.every(n => n.kind !== 'oscillator'));
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 4));
     assert.deepEqual(fake.invalid, []);
     handles.forEach(h => h.stop());
