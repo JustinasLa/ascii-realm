@@ -1,0 +1,163 @@
+{
+  "format": "mono PCM16 WAV at 48000 Hz",
+  "sources": [
+    {
+      "id": "fire",
+      "title": "Fire crackling in fireplace",
+      "author": "Davor",
+      "source": "https://freesound.org/people/Davor/sounds/382616/",
+      "download": "https://cdn.freesound.org/previews/382/382616_7094269-hq.mp3",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "recording": "Real fireplace, Zoom H1; no EQ or effects.",
+      "originalPreviewSha256": "1e470bafa4a1a44d143beb0ae65664e574fe01243d82901a8428b4e41251320e"
+    },
+    {
+      "id": "torch",
+      "title": "Chalumeau.wav",
+      "author": "rombart",
+      "source": "https://freesound.org/people/rombart/sounds/197800/",
+      "download": "https://cdn.freesound.org/previews/197/197800_2591786-hq.mp3",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "recording": "Real blowtorch, Zoom H4n, 48 kHz / 24 bit.",
+      "originalPreviewSha256": "22cafa059020e51f04308e604b36e165f55a7dfd82a60f80159991af2709467d"
+    },
+    {
+      "id": "swish",
+      "title": "Swosh / Whoosh / Air Cut",
+      "author": "qubodup",
+      "source": "https://freesound.org/people/qubodup/sounds/60030/",
+      "download": "https://cdn.freesound.org/previews/60/60030_71257-hq.mp3",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "recording": "Bamboo stick swung through air; Zoom H2.",
+      "originalPreviewSha256": "0301adf448c60b80c09b89df57510fd09949d6b15bb457ef7c9e70999b8a2ad0"
+    },
+    {
+      "id": "crack",
+      "title": "Wood Crack 5",
+      "author": "utsuru",
+      "source": "https://freesound.org/people/utsuru/sounds/183450/",
+      "download": "https://cdn.freesound.org/previews/183/183450_418644-hq.mp3",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "recording": "Real cracking wood recorded with Zoom H4N.",
+      "originalPreviewSha256": "8c4efb7f2cb950ea23c3cbb363594b8e813f2fb5de229363adaef435b9378a17"
+    },
+    {
+      "id": "cloth",
+      "title": "Cloth Flapping On A Clothesline Thickly",
+      "author": "leonelmail",
+      "source": "https://freesound.org/people/leonelmail/sounds/330638/",
+      "download": "https://cdn.freesound.org/previews/330/330638_4437257-hq.mp3",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "recording": "Real cloth movement; source itself is a 128 kbps MP3.",
+      "originalPreviewSha256": "b3895a097ebbb88c7ee06a21b21c3457838ce09aab1457fd253d28cecee4fabc"
+    },
+    {
+      "id": "thunder",
+      "title": "Thunder Clap And Rumble #1",
+      "author": "Kinoton",
+      "source": "https://freesound.org/people/Kinoton/sounds/397952/",
+      "download": "https://cdn.freesound.org/previews/397/397952_2247456-hq.mp3",
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "recording": "Real medium-distance lightning strike, DR-60D MkII and Mk 012 microphones; source denoised/compressed.",
+      "originalPreviewSha256": "a977e35d3d7911ffa0900e7e5508c70123994cbc6b072fac7a9c8c2a1339eba8"
+    }
+  ],
+  "clips": [
+    {
+      "file": "ignition.wav",
+      "source": "torch",
+      "startSeconds": 34.32,
+      "durationSeconds": 0.8,
+      "fadeInSeconds": 0.012,
+      "fadeOutSeconds": 0.16,
+      "peak": 0.8,
+      "sampleRate": 48000,
+      "sha256": "fe47747516b80207b3f10acb6b88bfc3d029e4fc66096408f9b9a5d9fdc03d5a"
+    },
+    {
+      "file": "fire-roar.wav",
+      "source": "torch",
+      "startSeconds": 25.1,
+      "durationSeconds": 1.75,
+      "fadeInSeconds": 0.07,
+      "fadeOutSeconds": 0.3,
+      "peak": 0.75,
+      "sampleRate": 48000,
+      "sha256": "041199e5e8370cd93407700aeb735413c6e44137437248c511c09f134c418ec7"
+    },
+    {
+      "file": "coal-crack.wav",
+      "source": "fire",
+      "startSeconds": 49.58,
+      "durationSeconds": 0.55,
+      "fadeInSeconds": 0.008,
+      "fadeOutSeconds": 0.12,
+      "peak": 0.74,
+      "sampleRate": 48000,
+      "sha256": "d7d9a0deb7ea35a61b6ceb6167a214cad9c779cb6e13c23645de4121b1d31360"
+    },
+    {
+      "file": "ember-bed.wav",
+      "source": "fire",
+      "startSeconds": 15.2,
+      "durationSeconds": 1.15,
+      "fadeInSeconds": 0.04,
+      "fadeOutSeconds": 0.23,
+      "peak": 0.68,
+      "sampleRate": 48000,
+      "sha256": "9fbb1f13060332f0695b57b626af8cea8b5db956e527762df5e549c528688c23"
+    },
+    {
+      "file": "air-swish.wav",
+      "source": "swish",
+      "startSeconds": 0.0,
+      "durationSeconds": 0.436,
+      "fadeInSeconds": 0.005,
+      "fadeOutSeconds": 0.07,
+      "peak": 0.78,
+      "sampleRate": 48000,
+      "sha256": "933f39fdc4ae52f3dad0ae85cdd7db695b353849b2fc81f8393015b7886c1e70"
+    },
+    {
+      "file": "wing-flap.wav",
+      "source": "cloth",
+      "startSeconds": 12.57,
+      "durationSeconds": 0.72,
+      "fadeInSeconds": 0.008,
+      "fadeOutSeconds": 0.13,
+      "peak": 0.78,
+      "sampleRate": 48000,
+      "sha256": "065fc4d34695d1609116dbd18922b24f07bd28093291f0cd2e02136966772f29"
+    },
+    {
+      "file": "wood-break.wav",
+      "source": "crack",
+      "startSeconds": 0.04,
+      "durationSeconds": 0.66,
+      "fadeInSeconds": 0.004,
+      "fadeOutSeconds": 0.14,
+      "peak": 0.8,
+      "sampleRate": 48000,
+      "sha256": "ae44437f53d51464b5eb2926e4e9e8f7df2d311dcdc355633eac849bb81f0cc3"
+    },
+    {
+      "file": "thunder-impact.wav",
+      "source": "thunder",
+      "startSeconds": 0.47,
+      "durationSeconds": 2.55,
+      "fadeInSeconds": 0.012,
+      "fadeOutSeconds": 0.65,
+      "peak": 0.8,
+      "sampleRate": 48000,
+      "sha256": "1ad117e73626282d5a0263dfd605a00c64d34e90b54d6ba13c6562820805c920"
+    }
+  ],
+  "processing": "HQ MP3 previews decoded at 48 kHz, mono downmix, DC removed, cropped, cosine fades, peak normalized. No generated waveform or added noise.",
+  "previewNote": "The public high-quality MP3 previews are used; these are compressed source files, not claimed to be original lossless masters."
+}

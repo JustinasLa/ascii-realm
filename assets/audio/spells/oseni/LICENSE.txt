@@ -1,0 +1,35 @@
+Oseni recorded foley bank
+
+All source recordings are CC0 1.0 Universal.
+https://creativecommons.org/publicdomain/zero/1.0/
+Source licenses verified on the linked Freesound pages on 2026-10-22.
+Credits are supplied for provenance even though CC0 does not require attribution.
+
+"Fire crackling in fireplace" by Davor
+https://freesound.org/people/Davor/sounds/382616/
+Real fireplace, Zoom H1; no EQ or effects.
+
+"Chalumeau.wav" by rombart
+https://freesound.org/people/rombart/sounds/197800/
+Real blowtorch, Zoom H4n, 48 kHz / 24 bit.
+
+"Swosh / Whoosh / Air Cut" by qubodup
+https://freesound.org/people/qubodup/sounds/60030/
+Bamboo stick swung through air; Zoom H2.
+
+"Wood Crack 5" by utsuru
+https://freesound.org/people/utsuru/sounds/183450/
+Real cracking wood recorded with Zoom H4N.
+
+"Cloth Flapping On A Clothesline Thickly" by leonelmail
+https://freesound.org/people/leonelmail/sounds/330638/
+Real cloth movement; source itself is a 128 kbps MP3.
+
+"Thunder Clap And Rumble #1" by Kinoton
+https://freesound.org/people/Kinoton/sounds/397952/
+Real medium-distance lightning strike, DR-60D MkII and Mk 012 microphones; source denoised/compressed.
+
+HQ MP3 previews decoded at 48 kHz, mono downmix, DC removed, cropped, cosine fades, peak normalized. No generated waveform or added noise.
+The public high-quality MP3 previews are used; these are compressed source files, not claimed to be original lossless masters.
+See sources.json for exact download URLs, SHA-256 values and per-file crop/fade details.
+Rebuild: python tools/render-spell-audio-oseni.py

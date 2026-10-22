@@ -1,40 +1,57 @@
-# Mitlan spell sound design
+# Mitlan recorded spell sound design
 
-Mitlan uses the weight of deep water: pressure changes, submerged resonance,
-churning surf and muffled ruptures. Lightning carries the same weight into a
-storm. Each spell was authored by its own spell agent and has separate cast,
-impact and pulse recipes in its existing presentation module.
+Mitlan spells now use real water and storm recordings exclusively. Weight comes
+from physical water displacement, splashing, close bubbling and recorded thunder.
+There are no oscillator notes, pitch sweeps or synthesized noise layers. Subtle
+playback-rate changes preserve the identity of the recorded material.
 
-| Spell | Character and timing |
+| Spell | Recorded material and phrasing |
 | --- | --- |
-| Tide Shard | A compact rising pressure draw releases a descending spear through narrow surf; a wet crack becomes a hollow implosion and drowned wake. |
-| Bubble Shard | Detuned hollow pressure drops buckle at uneven intervals; a second smaller collapse and wet grit follow the first rupture. |
-| Scalding Wave | A cauldron-deep swell and irregular boiling beads lead into muffled steam; burn ticks land as wet bass slaps. |
-| Tidal Shield | Dragging surf gathers into a heavy liquid bulwark, then seals with a submerged knock; impacts shove outward as low pressure waves. |
-| Mitlan Glyph | Staggered ritual strokes carve a drowned seal through silt; activation erupts as a heavy geyser over collapsing bass and undertow. |
-| Crashing Wave | A broad, looming pressure swell breaks into a bass-water slam; delayed foam and the retreating wake distinguish it from boiling water. |
-| Maelstrom | Staggered suction and hollow currents spiral into an abyssal whirlpool; its inward collapse contrasts with the outward breakers. |
-| Drowning Prison | A submerged gong and oxygen bubbles become a constricting enclosure; rounded pressure closes and subdued hold ticks sustain the confinement. |
-| Lightning | Oppressive electrical tension precedes a ragged thunderclap and delayed rolling bass thunder. |
+| Tide Shard | Quick creek-water lift, compact wet strike and falling droplets. |
+| Bubble Shard | Irregular close bubbles, droplets and displaced water; a wet strike ruptures the bubble. |
+| Scalding Wave | Close-miked boiling leads into a rush, with bubbling after the impact. |
+| Tidal Shield | Lifted water spreads into broad wash, then shoves as a physical splash. |
+| Mitlan Glyph | Measured displacement and bubbling inscription give way to a geyser-like splash. |
+| Crashing Wave | A full recorded splash breaks and retreats into returning wash. |
+| Maelstrom | Staggered wash and bubbles emphasize repeated movement and churning water. |
+| Drowning Prison | Water encloses the target with close bubbling and quiet trapped-air ticks. |
+| Lightning | Rain precedes a real thunderclap and its naturally rolling tail. |
 
-The recipes use only the existing Web Audio tone and filtered-noise voices.
-Every layer has explicit attack, decay, sustain and release settings; envelope
-segments fit their durations without relying on renderer clamping. Whole-stage
-gain totals stay below 0.45, individual layers stay below 0.25, and no stage
-exceeds the renderer's eight-layer budget. Repeating pulse cues are restrained
-so ongoing visual effects do not compete with casts and hits.
+All three emitted audio stages (cast, impact, pulse) are authored for each spell.
+Aura application uses impact; zones and visual ticks use pulse. Ongoing ticks
+are quieter than casts and hits. The spatial SFX bus, preloaded recording cache
+and owner cancellation handle sound lifecycle. Visual geometry, rune definitions,
+damage and control effects are unchanged.
 
-The casting runtime emits three sound stages: `cast`, `impact` (including aura
-application), and `pulse` (including zone and visual effects). All nine spells
-cover all three. No visual geometry, gameplay definitions, timing, damage,
-control effects, routing or audio-engine code changes are required.
+## Sources and processing
 
-`test/audio-spells-mitlan.test.js` renders every authored stage with the recorded
-audio harness, checks voice/envelope budgets and supported fields, exercises all
-three stages through actual rune casts, verifies rejected casts stay silent,
-and checks spatial SFX routing and cancellation of delayed layers. Existing
-spell tests retain their visual and gameplay assertions; audio assertions now
-describe these darker sounds.
+Nine mono 44,100 Hz PCM16 clips retain broadband detail: seven water textures,
+rain and thunder. All five source recordings are CC0:
 
-Listen to each stage in [the Mitlan sound archive](audio-mitlan.html), or cast
-the spells in [the casting simulator](casting-simulation.html).
+- [Walking through water](https://freesound.org/people/rosenberg3/sounds/627004/) by rosenberg3.
+- [Water splash, emptying a bucket 2](https://freesound.org/people/wormer2/sounds/415670/) and [take 3](https://freesound.org/people/wormer2/sounds/415669/) by wormer2.
+- [Boiling water.wav](https://freesound.org/people/xenognosis/sounds/137229/) by xenognosis, recorded close to a pot with an H4 Zoom.
+- [Rain + Long Thunder](https://opengameart.org/content/rain-long-thunder) by WuxiaScrub.
+
+Freesound inputs are public HQ MP3 previews; thunder uses the original OGG.
+Processing only crops, converts to mono, removes DC, fades edit boundaries and
+balances peaks below 0.85. It adds no generated sound, filtering, reversal,
+compression or looping. Water clips last 0.56-2.68 seconds; thunder lasts 4.8
+seconds. Playback rates stay between 0.75 and 1.2; combined stage gain is at
+most 1.2.
+
+Exact source licenses, hashes, crop timings and fades are recorded in
+assets/audio/spells/mitlan/sources.json and LICENSE.txt. Reproduce with
+Python/numpy and ffmpeg:
+
+```sh
+python tools/render-spell-audio-mitlan.py --sources PATH_TO_SOURCE_CACHE
+```
+
+Missing sources download from their documented URLs. Tests check PCM sample
+rate, DC, unclipped peaks, audible signal and click-free endpoints. Family tests
+also exercise every stage through real rune casts, recording-only recipes,
+provenance, spatial routing, silent rejected casts and delayed-tail cancellation.
+
+Listen in [the Mitlan sound archive](audio-mitlan.html), or cast spells in
+[the casting simulator](casting-simulation.html).

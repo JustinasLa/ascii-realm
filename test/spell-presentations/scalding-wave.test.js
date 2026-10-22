@@ -3,8 +3,10 @@ import test from 'node:test';
 import presentation from '../../src/spells/presentations/scalding-wave.js';
 import spell from '../../src/spells/definitions/scalding-wave.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
+import { readFileSync } from 'node:fs';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import { runeScene } from '../../test-support/spells.js';
 
 const LIFE = { cast: presentation.duration, impact: 0.6, pulse: 0.4, aura: 1.5, zone: 3, projectile: 1 };
@@ -113,30 +115,32 @@ test('all Scalding Wave stages are deterministic, bounded, evolving, and fade ou
   }
 });
 
-test('Scalding Wave layers dark boiling pressure and bubbles under softened steam', () => {
+test('Scalding Wave uses natural boiling and water recordings for every sound stage', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'bandpass' && v.cutoff < 2000 && v.attack >= 0.05), 'soft steam swell');
-  assert.ok(cast.some(v => v.kind === 'noise' && v.cutoff < 500), 'low bubbling texture');
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 100 && v.frequency < v.endFrequency), 'abyssal pressure rises');
-  const bubbles = cast.filter(v => v.kind === 'tone' && v.type === 'sine');
-  assert.ok(bubbles.length >= 2 && bubbles[0].delay !== bubbles[1].delay);
-  assert.ok(bubbles.every(v => v.type === 'sine' && v.frequency > v.endFrequency));
-  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < 60 && v.attack < 0.015), 'wet low pressure impact');
-  assert.ok([...cast, ...impact, ...pulse].filter(v => v.kind === 'noise').every(v => v.cutoff < 2000 && v.filterType !== 'highpass'), 'steam stays dark rather than shrill');
-  assert.ok(impact.some(v => v.release > 0.2), 'steam tail');
+  assert.ok(cast.some(v => v.url.endsWith('/boil.wav')), 'real boiling leads the cast');
+  assert.ok(cast.some(v => v.url.endsWith('/water-lift.wav')), 'displaced water follows the boiling pool');
+  assert.ok(impact.some(v => v.url.endsWith('/water-strike.wav')), 'real water impact');
+  assert.ok(impact.some(v => v.url.endsWith('/bubbles.wav')), 'close bubbling follows the scald');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain <= 0.03 && v.duration < 0.4), 'repeated simmer stays quiet and brief');
+  assert.ok(pulse.every(v => v.gain <= 0.15 && v.url.endsWith('/boil.wav')), 'repeated simmer stays quiet');
+  assert.deepEqual(Object.keys(presentation.sounds).sort(), ['cast', 'impact', 'pulse']);
   for (const [stage, recipe] of Object.entries(presentation.sounds)) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
-    assert.ok(recipe.reduce((total, voice) => total + voice.gain, 0) <= 0.45);
+    assert.ok(recipe.length > 0 && recipe.length <= 3);
+    assert.ok(recipe.reduce((total, voice) => total + voice.gain, 0) <= 1.2);
     for (const voice of recipe) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
-      assert.ok([voice.attack, voice.decay, voice.sustain, voice.release].every(Number.isFinite));
-      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration, 'authored envelope fits the voice');
+      assert.equal(voice.kind, 'recording');
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
+      const wav = readFileSync(new URL(`../../${voice.url.slice(1)}`, import.meta.url));
+      assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
+      assert.equal(wav.toString('ascii', 8, 12), 'WAVE');
+      assert.ok(wav.length > 10000, 'a recorded waveform is present');
     }
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
     const handles = playSpellSound(fake.engine, { stage, presentation, x: 2, y: 4 });
     assert.equal(handles.length, recipe.length);
     assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 2 && route.y === 4));

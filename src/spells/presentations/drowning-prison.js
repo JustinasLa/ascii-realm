@@ -355,30 +355,20 @@ export default {
     }
   },
   sounds: {
-    // A drowned, inharmonic gong draws the bars together; trapped air escapes
-    // in an accelerating phrase beneath the muffled weight of the water.
+    // Displaced water folds around the target, trapping a pocket of real air.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 108, endFrequency: 86, duration: 1.08, gain: 0.1, attack: 0.028, decay: 0.17, sustain: 0.55, release: 0.82, cutoff: 380 },
-      { kind: 'tone', type: 'triangle', frequency: 251, endFrequency: 219, duration: 0.92, gain: 0.038, attack: 0.018, decay: 0.16, sustain: 0.3, release: 0.71, cutoff: 440 },
-      { kind: 'tone', type: 'sine', delay: 0.21, frequency: 190, endFrequency: 285, duration: 0.14, gain: 0.032, attack: 0.012, decay: 0.025, sustain: 0.42, release: 0.095, cutoff: 520 },
-      { kind: 'tone', type: 'sine', delay: 0.44, frequency: 250, endFrequency: 365, duration: 0.12, gain: 0.027, attack: 0.01, decay: 0.025, sustain: 0.34, release: 0.08, cutoff: 570 },
-      { kind: 'tone', type: 'sine', delay: 0.61, frequency: 315, endFrequency: 465, duration: 0.1, gain: 0.022, attack: 0.008, decay: 0.02, sustain: 0.28, release: 0.065, cutoff: 620 },
-      { kind: 'noise', delay: 0.09, duration: 0.73, gain: 0.044, attack: 0.15, decay: 0.13, sustain: 0.5, release: 0.43, cutoff: 330, filterType: 'lowpass', Q: 1.1 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.48, rate: 0.84, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.32, rate: 0.88, delay: 0.22 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.22, rate: 0.9, delay: 0.5 },
     ],
-    // The cage crushes inward with a low pressure fall and a damped bar clang;
-    // a single breath bubbles out after the constriction.
+    // A compact water blow closes the prison; trapped breath escapes after it.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 91, endFrequency: 42, duration: 0.53, gain: 0.097, attack: 0.055, decay: 0.075, sustain: 0.43, release: 0.39, cutoff: 250 },
-      { kind: 'noise', duration: 0.34, gain: 0.062, attack: 0.025, decay: 0.065, sustain: 0.3, release: 0.24, cutoff: 300, filterType: 'lowpass', Q: 1.3 },
-      { kind: 'tone', type: 'triangle', delay: 0.08, frequency: 193, endFrequency: 113, duration: 0.28, gain: 0.035, attack: 0.018, decay: 0.05, sustain: 0.29, release: 0.2, cutoff: 390 },
-      { kind: 'tone', type: 'sine', delay: 0.23, frequency: 310, endFrequency: 460, duration: 0.11, gain: 0.021, attack: 0.009, decay: 0.025, sustain: 0.3, release: 0.07, cutoff: 600 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.43, rate: 0.8, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.28, rate: 0.82, delay: 0.18 },
     ],
-    // Small oxygen pops and a very short pressure creak keep repeated ticks
-    // intimate, leaving room for other spells during the four-second hold.
+    // A single restrained pocket of air marks the repeated drowning ticks.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 196, endFrequency: 294, duration: 0.12, gain: 0.018, attack: 0.014, decay: 0.024, sustain: 0.34, release: 0.075, cutoff: 440 },
-      { kind: 'tone', type: 'triangle', delay: 0.025, frequency: 104, endFrequency: 78, duration: 0.15, gain: 0.013, attack: 0.022, decay: 0.026, sustain: 0.3, release: 0.095, cutoff: 220 },
-      { kind: 'noise', delay: 0.045, duration: 0.1, gain: 0.012, attack: 0.012, decay: 0.02, sustain: 0.22, release: 0.06, cutoff: 390, filterType: 'bandpass', Q: 1.4 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.14, rate: 1.08, delay: 0 },
     ],
   },
 };

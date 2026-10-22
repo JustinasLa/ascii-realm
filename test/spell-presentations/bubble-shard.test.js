@@ -3,10 +3,8 @@ import test from 'node:test';
 import presentation from '../../src/spells/presentations/bubble-shard.js';
 import spell from '../../src/spells/definitions/bubble-shard.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
-import { playSpellSound } from '../../src/audio/spells.js';
 import { toCells } from '../../src/entities/monsters.js';
 import { runeScene } from '../../test-support/spells.js';
-import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 
 const LIFE = { cast: presentation.duration, projectile: 10, impact: 0.6, pulse: 0.25, aura: 1.5, zone: 3 };
 const BUDGET = { cast: 200, projectile: 110, impact: 200, pulse: 70, aura: 90, zone: 160 };
@@ -167,30 +165,27 @@ test('all Bubble Shard stages use finite ASCII geometry, bounded light, budgets,
   assert.equal(new Set(signatures).size, 6, 'every stage has its own form');
 });
 
-test('Bubble Shard sounds use detuned pressure drops, irregular ruptures, and quiet wet flight ticks', () => {
+test('Bubble Shard uses natural water recordings with irregular bubbles and a physical hit', () => {
+  const allowed = ['delay', 'gain', 'kind', 'rate', 'url'];
   for (const stage of ['cast', 'impact', 'pulse']) {
-    const voices = presentation.sounds[stage], tones = voices.filter(v => v.kind === 'tone');
-    assert.ok(tones.length >= 2);
-    assert.ok(tones.every(v => v.frequency < 350 && v.endFrequency < v.frequency && v.release > v.attack && v.detune !== 0));
-    if (stage !== 'pulse') {
-      assert.notEqual(tones[1].delay - tones[0].delay, tones[2].delay - tones[1].delay, 'irregular rupture rhythm');
+    const voices = presentation.sounds[stage];
+    assert.ok(voices.length >= 1 && voices.length <= 3);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    for (const voice of voices) {
+      assert.deepEqual(Object.keys(voice).sort(), allowed, 'recordings preserve their natural detail');
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }
-    assert.equal(new Set(tones.map(v => v.frequency)).size, tones.length, 'each bubble has a different pitch');
-    assert.ok(voices.some(v => v.kind === 'noise' && v.cutoff < 1000 && v.playbackRate < 1), 'dark filtered wet texture');
-    assert.ok(voices.length >= 3 && voices.length <= 8 && voices.every(v => v.gain <= 0.1 && v.duration <= 2.5 && (v.delay ?? 0) <= 2));
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45);
-    assert.ok(voices.every(v => v.attack > 0 && v.decay > 0 && v.sustain > 0 && v.sustain < 1
-      && v.release > 0 && v.attack + v.decay + v.release <= v.duration), 'authored envelopes fit their durations');
-    const fake = fakeRecordedAudio();
-    assert.equal(playSpellSound(fake.engine, { stage, presentation, x: 3, y: 7 }).length, voices.length);
-    assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === 7));
-    const oscillators = fake.nodes.filter(node => node.kind === 'oscillator');
-    assert.deepEqual(oscillators.map(node => node.starts[0] - fake.context.currentTime), tones.map(v => v.delay).map(delay => fake.context.currentTime + delay - fake.context.currentTime));
-    assert.deepEqual(fake.invalid, []);
   }
-  assert.notDeepEqual(presentation.sounds.cast, presentation.sounds.impact);
-  assert.ok(presentation.sounds.pulse.reduce((sum, v) => sum + v.gain, 0) < 0.03
-    && presentation.sounds.pulse.every(v => v.delay + v.duration < 0.28), 'flight ticks remain quiet and finish before the next cue');
+  const cast = presentation.sounds.cast;
+  assert.ok(cast.some(v => v.url.endsWith('/bubbles.wav')));
+  assert.ok(cast.some(v => v.url.endsWith('/droplets.wav')));
+  assert.notEqual(cast[1].delay - cast[0].delay, cast[2].delay - cast[1].delay, 'irregular wet rupture rhythm');
+  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/water-strike.wav') && v.delay === 0));
+  assert.ok(presentation.sounds.pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.15, 'frequent flight cues stay restrained');
 });
 
 test('real Bubble Shard cast renders the profile, emits typed cues, and preserves damage and slowing', () => {

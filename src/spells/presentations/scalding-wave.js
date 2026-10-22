@@ -278,26 +278,19 @@ export default {
     (stages[effect.stage] ?? cast)(state, lifted(effect, plot));
   },
   sounds: {
-    // A cauldron-deep pressure swell, uneven boiling beads, then muffled steam.
+    // Real boiling leads the gathering pool; a close water rush rolls out behind it.
     cast: [
-      { kind: 'tone', type: 'triangle', duration: 0.95, gain: 0.105, frequency: 58, endFrequency: 103, cutoff: 320, attack: 0.19, decay: 0.19, sustain: 0.6, release: 0.38 },
-      { kind: 'noise', delay: 0.055, duration: 0.92, gain: 0.095, cutoff: 410, filterType: 'lowpass', Q: 0.8, playbackRate: 0.65, attack: 0.17, decay: 0.21, sustain: 0.66, release: 0.36 },
-      { kind: 'tone', type: 'sine', delay: 0.12, duration: 0.19, gain: 0.04, frequency: 242, endFrequency: 87, attack: 0.012, decay: 0.05, sustain: 0.3, release: 0.11 },
-      { kind: 'tone', type: 'sine', delay: 0.32, duration: 0.24, gain: 0.035, frequency: 185, endFrequency: 61, attack: 0.015, decay: 0.065, sustain: 0.26, release: 0.14 },
-      { kind: 'noise', delay: 0.48, duration: 0.65, gain: 0.055, cutoff: 1380, filterType: 'bandpass', Q: 0.65, playbackRate: 0.75, attack: 0.12, decay: 0.14, sustain: 0.42, release: 0.32 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/boil.wav', gain: 0.6, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.36, rate: 0.9, delay: 0.16 },
     ],
-    // Burn ticks land as a wet low slap; steam falls away without a sharp hiss.
+    // A wet slap and close bubbling preserve the irregular texture of scalding water.
     impact: [
-      { kind: 'tone', type: 'sine', duration: 0.27, gain: 0.07, frequency: 136, endFrequency: 46, attack: 0.009, decay: 0.055, sustain: 0.28, release: 0.17 },
-      { kind: 'noise', duration: 0.22, gain: 0.065, cutoff: 570, filterType: 'lowpass', Q: 0.9, attack: 0.008, decay: 0.045, sustain: 0.34, release: 0.14 },
-      { kind: 'noise', delay: 0.045, duration: 0.44, gain: 0.045, cutoff: 1620, filterType: 'bandpass', Q: 0.7, playbackRate: 0.8, attack: 0.055, decay: 0.085, sustain: 0.32, release: 0.26 },
-      { kind: 'tone', type: 'sine', delay: 0.105, duration: 0.15, gain: 0.027, frequency: 273, endFrequency: 92, attack: 0.009, decay: 0.031, sustain: 0.22, release: 0.095 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.38, rate: 0.93, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.34, rate: 1.04, delay: 0.08 },
     ],
-    // Restrained rolling backwash under the repeated cone visuals.
+    // Quiet natural simmer under the repeated cone visuals.
     pulse: [
-      { kind: 'noise', duration: 0.32, gain: 0.026, cutoff: 440, filterType: 'lowpass', playbackRate: 0.7, attack: 0.045, decay: 0.065, sustain: 0.38, release: 0.17 },
-      { kind: 'tone', type: 'sine', delay: 0.025, duration: 0.19, gain: 0.023, frequency: 166, endFrequency: 62, attack: 0.012, decay: 0.045, sustain: 0.3, release: 0.11 },
-      { kind: 'noise', delay: 0.08, duration: 0.28, gain: 0.018, cutoff: 1190, filterType: 'bandpass', Q: 0.65, attack: 0.045, decay: 0.055, sustain: 0.3, release: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/boil.wav', gain: 0.1, rate: 1.1, delay: 0 },
     ],
   },
 };

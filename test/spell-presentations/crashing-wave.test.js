@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/crashing-wave.js';
 import { runeScene } from '../../test-support/spells.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 // Lifetimes the game actually uses: the cast flash, a 10 s projectile clock
 // (the wave spends itself at its 16 m range), the default impact, tick pulses.
@@ -123,34 +124,38 @@ test('every stage stays finite, bounded, deterministic, moving and fully faded',
   }
 });
 
-test('abyssal surf gathers in staggered layers, then a bass slam leads a softened foam wash', () => {
+test('recorded water lifts into a full breaker and returning wash with quiet droplet wakes', async () => {
   const { cast, impact, pulse } = profile.sounds;
-  const rush = cast.filter(v => v.kind === 'noise');
-  assert.ok(rush.length >= 3 && new Set(rush.map(v => v.delay ?? 0)).size === rush.length);
-  assert.ok(rush[0].attack > 0.2, 'the surf swells instead of clicking');
-  const thump = impact.find(v => v.kind === 'tone');
-  const foam = impact.find(v => v.kind === 'noise' && v.duration > 1);
-  assert.ok(thump.frequency < 120 && thump.endFrequency < thump.frequency);
-  assert.ok(foam.delay > 0 && foam.release > 1 && foam.filterType === 'bandpass', 'softened foam outlasts the breaker hit');
-  assert.ok(pulse.every(v => v.gain <= 0.02 && v.duration <= 0.1), 'repeating tick foam stays quiet');
+  assert.ok(cast.some(v => v.url.endsWith('/water-lift.wav')));
+  const breaker = impact.find(v => v.url.endsWith('/breaker.wav'));
+  const wash = impact.find(v => v.url.endsWith('/wash.wav'));
+  assert.ok(breaker && wash && wash.delay > breaker.delay, 'returning water follows the physical impact');
+  assert.ok(pulse.every(v => v.gain <= 0.12), 'repeating wake stays quiet');
+  const allowed = new Set(['kind', 'url', 'gain', 'rate', 'delay']);
   for (const voices of Object.values(profile.sounds)) {
-    assert.ok(voices.length >= 3 && voices.length <= 8);
-    assert.ok(voices.some(v => v.kind === 'tone') && voices.some(v => v.kind === 'noise'));
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45, 'layer peaks leave mixing headroom');
+    assert.ok(voices.length >= 1 && voices.length <= 3);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const v of voices) {
-      assert.ok(v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5);
-      assert.ok((v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2);
-      assert.ok(v.attack > 0 && v.decay > 0 && v.release > 0 && v.sustain > 0 && v.sustain <= 1);
-      assert.ok(v.attack + v.decay + v.release <= v.duration, 'authored envelope fits without runtime clamping');
+      assert.equal(v.kind, 'recording');
+      assert.match(v.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(Object.keys(v).every(key => allowed.has(key)), 'no synthetic oscillators, filters, or cropped envelopes');
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8 && v.rate >= 0.75 && v.rate <= 1.2);
+      assert.ok(v.delay >= 0 && v.delay <= 2);
     }
   }
   const fake = fakeRecordedAudio();
+  assert.equal(await prepareRecordedSpellTest(fake, profile), true);
   for (const stage of ['cast', 'impact', 'pulse']) {
     const handles = playSpellSound(fake.engine, { type: 'spell', stage, presentation: profile, x: 2, y: 7 });
     assert.equal(handles.length, profile.sounds[stage].length);
     handles.forEach(h => h.stop());
+    assert.ok(handles.every(h => h.ended));
   }
-  assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 7));
+  assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 7 && r.disposals === 1));
+  assert.ok(fake.nodes.every(n => n.kind !== 'oscillator' && n.kind !== 'filter'));
+  const splash = fake.nodes.find(n => n.buffer?.id === 'breaker.wav');
+  assert.ok(splash.buffer.duration > 2.5, 'full recorded splash retains its natural tail');
+  assert.ok(splash.stops[0] - splash.starts[0] >= splash.buffer.duration / breaker.rate);
   assert.deepEqual(fake.invalid, []);
 });
 

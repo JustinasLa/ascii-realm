@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/maelstrom.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function draw(stage, age = 0.2, progress = 0.2, radius = 3, heading = 1.1, life = 1) {
   const points = [];
@@ -153,43 +154,32 @@ test('Maelstrom stays within budget, prints ASCII and fades every stage', () => 
   assert.deepEqual(once, again, 'draw is a pure function of the effect state');
 });
 
-test('Maelstrom layers a low rumble and overlapping descending water tones with a sucking release', () => {
+test('Maelstrom layers real returning water and staggered bubbles into a restrained whirlpool', async () => {
   assert.equal(spell.presentation, presentation);
-  const cast = presentation.sounds.cast;
-  const descents = cast.filter(voice => voice.kind === 'tone' && voice.type === 'sine');
-  assert.ok(cast.some(voice => voice.kind === 'tone' && voice.frequency < 100 && voice.duration >= 1), 'low rumble');
-  assert.ok(descents.length >= 3);
-  for (let i = 0; i < descents.length; i++) {
-    assert.ok(descents[i].endFrequency < descents[i].frequency / 2, 'audible downward glide');
-    assert.ok(Math.abs(descents[i].detune) >= 10, 'hollow currents are detuned');
-    if (i > 0) {
-      assert.ok(descents[i].delay > descents[i - 1].delay, 'currents enter in successive turns');
-      assert.ok(descents[i].delay < descents[i - 1].delay + descents[i - 1].duration, 'water tones overlap');
-    }
-  }
-  assert.ok(presentation.sounds.impact.some(voice => voice.kind === 'noise' && voice.filterType === 'bandpass'
-    && voice.attack > 0.15 && voice.release > 0.15), 'rounded sucking release');
-  assert.notDeepEqual(presentation.sounds.cast, presentation.sounds.impact);
-  for (const [stage, voices] of Object.entries(presentation.sounds)) {
-    assert.ok(voices.length >= 3 && voices.length <= 6);
-    assert.ok(voices.some(voice => voice.kind === 'tone') && voices.some(voice => voice.kind === 'noise'));
-    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= (stage === 'pulse' ? 0.05 : 0.45));
+  for (const stage of ['cast', 'impact', 'pulse']) {
+    const voices = presentation.sounds[stage];
+    assert.ok(voices.length >= 1 && voices.length <= 3);
+    assert.ok(voices.some(voice => voice.url.endsWith('/wash.wav')));
+    assert.ok(voices.some(voice => voice.url.endsWith('/bubbles.wav')));
+    assert.ok(new Set(voices.map(voice => voice.delay)).size > 1, 'water and trapped air enter in staggered turns');
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= (stage === 'pulse' ? 0.3 : 1.2));
     for (const voice of voices) {
-      assert.ok(voice.gain > 0 && voice.gain <= (stage === 'pulse' ? 0.025 : 0.25));
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
-      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
-      assert.ok(voice.sustain > 0 && voice.sustain < 1);
-      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration + 1e-9, 'authored envelope fits its voice');
-      if (stage === 'pulse') assert.ok((voice.delay ?? 0) + voice.duration <= 0.25, 'recurring churn stays short');
+      assert.equal(voice.kind, 'recording', 'every layer uses recorded water foley');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
     const handles = playSpellSound(fake.engine, { stage, presentation, x: 4, y: 8 });
-    assert.equal(handles.length, voices.length, 'every authored layer reaches the instruments');
+    assert.equal(handles.length, voices.length, 'every authored recording reaches playback');
     assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 4 && route.y === 8));
     assert.deepEqual(fake.invalid, []);
     for (const handle of handles) handle.stop();
   }
+  assert.notDeepEqual(presentation.sounds.cast, presentation.sounds.impact);
 });
 
 test('Maelstrom uses authored projectile/zone geometry and typed cast/impact cues in a real rune scene', () => {

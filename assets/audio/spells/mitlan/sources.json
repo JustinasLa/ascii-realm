@@ -1,0 +1,153 @@
+{
+  "license": "CC0-1.0",
+  "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "processing": "44.1 kHz mono PCM16; DC removal, sine/cosine fades, peak balance only; no generated sound.",
+  "sources": [
+    {
+      "file": "wading.mp3",
+      "title": "Walking through water",
+      "author": "rosenberg3",
+      "page": "https://freesound.org/people/rosenberg3/sounds/627004/",
+      "download": "https://cdn.freesound.org/previews/627/627004_13855267-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "e39537f30cc1c777ed43784bc9d89380a6cf721ca64fe70a4616d0d1c4ee57d5"
+    },
+    {
+      "file": "splash-small.mp3",
+      "title": "Water splash, emptying a bucket 2",
+      "author": "wormer2",
+      "page": "https://freesound.org/people/wormer2/sounds/415670/",
+      "download": "https://cdn.freesound.org/previews/415/415670_2383863-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "01a93f6e8b30fa77c16cc1a781c60dc35619e7b2d64cbf1335bae80131957e1e"
+    },
+    {
+      "file": "splash-medium.mp3",
+      "title": "Water splash, emptying a bucket 3",
+      "author": "wormer2",
+      "page": "https://freesound.org/people/wormer2/sounds/415669/",
+      "download": "https://cdn.freesound.org/previews/415/415669_2383863-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "0a91018cb1b63a44b20cd552ab9fec9a1bfcee9f3c954739187fa9429c754e95"
+    },
+    {
+      "file": "boiling.mp3",
+      "title": "Boiling water.wav",
+      "author": "xenognosis",
+      "page": "https://freesound.org/people/xenognosis/sounds/137229/",
+      "download": "https://cdn.freesound.org/previews/137/137229_2515465-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "94c79b62cd48d4aa769f623826fe2ab5afae3e1d8cd3905075c0f8c50aee8fbe"
+    },
+    {
+      "file": "thunder.ogg",
+      "title": "Rain + Long Thunder",
+      "author": "WuxiaScrub",
+      "page": "https://opengameart.org/content/rain-long-thunder",
+      "download": "https://opengameart.org/sites/default/files/rain-thunder.ogg",
+      "license": "CC0-1.0",
+      "sha256": "9499fd1aefa3b5d8ba3764ea46d15c00ab449be7e19c029290a1f52228f1434c"
+    }
+  ],
+  "clips": [
+    {
+      "file": "water-strike.wav",
+      "source": "splash-small.mp3",
+      "start": 0.31,
+      "duration": 0.85,
+      "fadeIn": 0.004,
+      "fadeOut": 0.16,
+      "peak": 0.8,
+      "sampleRate": 44100,
+      "sha256": "702d8b1b4dd419f11817ccafa90a221b70e6da8bb43aa7d23864fb535635aaa5"
+    },
+    {
+      "file": "breaker.wav",
+      "source": "splash-medium.mp3",
+      "start": 0.1,
+      "duration": 2.68,
+      "fadeIn": 0.004,
+      "fadeOut": 0.3,
+      "peak": 0.84,
+      "sampleRate": 44100,
+      "sha256": "6d314f14a8f1b47de76d08ab4ae4ce27e029b433c3b6b47e685ea0afd2b7780a"
+    },
+    {
+      "file": "wash.wav",
+      "source": "splash-small.mp3",
+      "start": 1.18,
+      "duration": 1.05,
+      "fadeIn": 0.025,
+      "fadeOut": 0.18,
+      "peak": 0.68,
+      "sampleRate": 44100,
+      "sha256": "11a550076c069461b91cab6fb245d712b032d95dd1255f3c2b554eb88d8b9966"
+    },
+    {
+      "file": "water-lift.wav",
+      "source": "wading.mp3",
+      "start": 0.52,
+      "duration": 0.62,
+      "fadeIn": 0.012,
+      "fadeOut": 0.1,
+      "peak": 0.72,
+      "sampleRate": 44100,
+      "sha256": "a3dbc30ae543d235d20fc01cc552bc813f5fdd8c314966b9e3083936be208650"
+    },
+    {
+      "file": "droplets.wav",
+      "source": "wading.mp3",
+      "start": 2.315,
+      "duration": 0.56,
+      "fadeIn": 0.008,
+      "fadeOut": 0.1,
+      "peak": 0.62,
+      "sampleRate": 44100,
+      "sha256": "76057ad604ea95be7bffe25652cacd5bbf07aa872c92c6f400b114ec37c15f55"
+    },
+    {
+      "file": "boil.wav",
+      "source": "boiling.mp3",
+      "start": 3.0,
+      "duration": 1.5,
+      "fadeIn": 0.035,
+      "fadeOut": 0.22,
+      "peak": 0.72,
+      "sampleRate": 44100,
+      "sha256": "2eadc0b387f07197cb6b944d2d787815e9ab6554ada9f9b0483e8ad0d44aee0e"
+    },
+    {
+      "file": "bubbles.wav",
+      "source": "boiling.mp3",
+      "start": 7.1,
+      "duration": 0.68,
+      "fadeIn": 0.02,
+      "fadeOut": 0.14,
+      "peak": 0.68,
+      "sampleRate": 44100,
+      "sha256": "cfedea16152e3548fd52ba50f3470ac17405345834a2b06b5bf2b46f3ca411a2"
+    },
+    {
+      "file": "thunder-clap.wav",
+      "source": "thunder.ogg",
+      "start": 21.38,
+      "duration": 4.8,
+      "fadeIn": 0.004,
+      "fadeOut": 0.8,
+      "peak": 0.84,
+      "sampleRate": 44100,
+      "sha256": "076b6ad628c056c88723fb8c106de2c353005b91546057f98ced7f0653973fee"
+    },
+    {
+      "file": "storm-rain.wav",
+      "source": "thunder.ogg",
+      "start": 5.0,
+      "duration": 0.9,
+      "fadeIn": 0.04,
+      "fadeOut": 0.18,
+      "peak": 0.62,
+      "sampleRate": 44100,
+      "sha256": "7dd72c09ae1316909f13ca8f88edd27ed15e075f870df257c3ae12a14de7f085"
+    }
+  ]
+}

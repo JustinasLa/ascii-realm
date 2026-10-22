@@ -5,7 +5,8 @@ import spell from '../../src/spells/definitions/lightning.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
-import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { fakeRecordedAudio, sources } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import { Monster, toCells } from '../../src/entities/monsters.js';
 
 function draw(stage, progress = 0.35, overrides = {}) {
@@ -142,32 +143,39 @@ test('all stages remain deterministic, finite, ASCII and within budget, then fad
   }
 });
 
-test('the strike cracks through a dark filter over staggered thunder and plays through the effects bus', () => {
+test('recorded thunder retains its rolling tail with quiet rain and positional effects routing', async () => {
   const { impact, cast, pulse } = presentation.sounds;
-  assert.ok(impact.some(v => v.kind === 'noise' && v.filterType === 'lowpass' && v.attack <= 0.002 && v.gain >= 0.1), 'a sharp crack with its high hiss filtered');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.frequency < 100 && v.duration > 1), 'a low rumble');
-  const rolls = impact.filter(v => v.kind === 'noise' && v.cutoff < 300 && v.duration > 1);
-  assert.ok(rolls.length >= 2 && rolls[1].delay > rolls[0].delay + 0.2, 'thunder rolls arrive in staggered swells');
-  assert.ok(cast.some(v => v.kind === 'tone' && v.endFrequency > v.frequency), 'the charge hum rises');
-  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < 0.08, 'chain discharges stay quiet');
+  assert.ok(impact.some(v => v.url.endsWith('/thunder-clap.wav')), 'a real thunderclap anchors the strike');
+  assert.ok(cast.every(v => v.url.endsWith('/storm-rain.wav')), 'physical rain precedes the strike');
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.2, 'repeated rain ticks stay quiet');
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length >= 3 && voices.length <= 6);
-    assert.ok(voices.some(v => v.kind === 'tone') && voices.some(v => v.kind === 'noise'));
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45);
+    assert.ok(voices.length >= 1 && voices.length <= 3);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5 && voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
-      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
-      assert.ok(voice.sustain >= 0 && voice.sustain <= 1);
-      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration);
-      assert.notEqual(voice.filterType, 'highpass', 'no exposed high hiss');
+      assert.equal(voice.kind, 'recording', 'no synthesized oscillator or noise layer');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.equal(voice.rate, 1, 'recordings preserve natural pitch');
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
+      assert.ok(Object.keys(voice).every(key => ['kind', 'url', 'gain', 'rate', 'delay'].includes(key)));
     }
   }
   for (const stage of ['cast', 'impact', 'pulse']) {
     const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, presentation), true);
     const handles = playSpellSound(fake.engine, { type: 'spell', stage, presentation, x: 3, y: 9 });
     assert.equal(handles.length, presentation.sounds[stage].length);
+    assert.equal(sources(fake).length, handles.length);
+    assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === 9));
+    if (stage === 'impact') {
+      const thunder = sources(fake).find(source => source.buffer.id === 'thunder-clap.wav');
+      assert.ok(thunder.buffer.duration > 4, 'the real rolling tail is longer than a short synthetic burst');
+      assert.ok(thunder.stops[0] - thunder.starts[0] >= thunder.buffer.duration, 'the full tail plays');
+    }
     handles.forEach(handle => handle.stop());
+    assert.ok(handles.every(handle => handle.ended));
+    assert.ok(fake.routes.every(route => route.disposals === 1));
+    assert.ok(fake.nodes.every(node => node.disconnects === 1));
     assert.deepEqual(fake.invalid, []);
   }
 });

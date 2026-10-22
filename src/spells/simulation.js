@@ -4,6 +4,7 @@ import { practiceSpells } from './practice.js';
 import { Player } from '../entities/player.js';
 import { Monster, Monsters, toCells, toMetres } from '../entities/monsters.js';
 import { GameAudio } from '../audio/audio.js';
+import { prepareSpellSounds } from '../audio/spells.js';
 const $ = id => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const library = [...practiceSpells, ...await loadSpells()];
@@ -42,6 +43,7 @@ async function cast() {
   const generation = castGeneration;
   // Resume synchronously from this click/key gesture before the cue is emitted.
   await sound.engine.unlock();
+  await prepareSpellSounds(sound.engine, casting.spells.get(casting.selected));
   if (paused || generation !== castGeneration) return;
   const spell = casting.spells.get(casting.selected);
   const target = $('ally-target').checked || spell.supportive ? ally : monsters.list[0];

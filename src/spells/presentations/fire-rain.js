@@ -347,26 +347,22 @@ export default {
     else drawCast(put, progress, age, radius);
   },
   sounds: {
+    // Recorded blowtorch pressure gathers overhead before an uneven shower of
+    // real fireplace pops; the gaps widen as the last coals fall from the cloud.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.34, gain: 0.035, attack: 0.13, release: 0.17, cutoff: 1500, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0, duration: 0.34, gain: 0.026, attack: 0.12, release: 0.16, frequency: 310, endFrequency: 1480, type: 'triangle', cutoff: 2400 },
-      { kind: 'tone', delay: 0.24, duration: 0.23, gain: 0.034, attack: 0.025, release: 0.12, frequency: 1800, endFrequency: 530, type: 'sine' },
-      { kind: 'noise', delay: 0.42, duration: 0.13, gain: 0.043, attack: 0.006, release: 0.11, cutoff: 2300, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.55, duration: 0.25, gain: 0.032, attack: 0.025, release: 0.14, frequency: 1540, endFrequency: 420, type: 'sine' },
-      { kind: 'noise', delay: 0.75, duration: 0.14, gain: 0.04, attack: 0.006, release: 0.12, cutoff: 1800, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.89, duration: 0.23, gain: 0.031, attack: 0.025, release: 0.12, frequency: 2080, endFrequency: 640, type: 'sine' },
-      { kind: 'noise', delay: 1.07, duration: 0.17, gain: 0.04, attack: 0.006, release: 0.14, cutoff: 2600, filterType: 'highpass' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.5, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.21, rate: 1.08, delay: 0.38 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.17, rate: 0.93, delay: 0.71 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.13, rate: 1.16, delay: 1.19 },
     ],
+    // A coal breaks on contact, leaving the soft sound of burning embers.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.16, gain: 0.044, attack: 0.006, release: 0.12, frequency: 1050, endFrequency: 180, type: 'triangle' },
-      { kind: 'noise', delay: 0.07, duration: 0.24, gain: 0.072, attack: 0.008, release: 0.2, cutoff: 2100, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.18, duration: 0.15, gain: 0.033, attack: 0.006, release: 0.11, frequency: 1340, endFrequency: 240, type: 'sine' },
-      { kind: 'noise', delay: 0.25, duration: 0.22, gain: 0.054, attack: 0.008, release: 0.18, cutoff: 2800, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.39, duration: 0.16, gain: 0.028, attack: 0.006, release: 0.12, frequency: 890, endFrequency: 150, type: 'sine' },
-      { kind: 'noise', delay: 0.46, duration: 0.28, gain: 0.044, attack: 0.008, release: 0.23, cutoff: 1600, filterType: 'highpass' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.3, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.16, rate: 1.1, delay: 0.075 },
     ],
+    // Frequent ward and projectile cues use only a subdued, short coal contact.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.075, gain: 0.022, attack: 0.004, release: 0.065, cutoff: 2400, filterType: 'highpass' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.1, rate: 1.2, delay: 0 },
     ],
   },
 };

@@ -127,18 +127,23 @@ export default {
     }
   },
   sounds: {
+    // A real rush of air feeds a modest flame; the coal catches a moment
+    // later and settles into the soft, irregular texture of a fireplace.
     cast: [
-      { kind: 'noise', duration: 0.7, gain: 0.06, cutoff: 700, filterType: 'lowpass', attack: 0.3, release: 0.35 },
-      { kind: 'tone', type: 'sine', frequency: 196, endFrequency: 392, duration: 0.7, gain: 0.03, attack: 0.3, release: 0.3 },
-      { kind: 'noise', delay: 0.12, duration: 0.04, gain: 0.05, cutoff: 2600, filterType: 'bandpass', attack: 0.002, release: 0.03 },
-      { kind: 'noise', delay: 0.27, duration: 0.03, gain: 0.04, cutoff: 3200, filterType: 'bandpass', attack: 0.002, release: 0.025 },
-      { kind: 'tone', type: 'triangle', delay: 0.38, frequency: 523, endFrequency: 659, duration: 0.5, gain: 0.025, attack: 0.02, release: 0.45 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.16, rate: 0.83, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.25, rate: 0.88, delay: 0.13 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.13, rate: 0.9, delay: 0.37 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.19, rate: 0.92, delay: 0.47 },
     ],
+    // Healing stays intimate: one small coal opens under a quiet breath
+    // of ignition, both finished before the next one-second heal.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 440, endFrequency: 554, duration: 0.45, gain: 0.025, attack: 0.01, release: 0.4 },
-      { kind: 'noise', duration: 0.35, gain: 0.04, cutoff: 900, filterType: 'lowpass', attack: 0.04, release: 0.3 },
-      { kind: 'noise', delay: 0.05, duration: 0.03, gain: 0.035, cutoff: 3000, filterType: 'bandpass', attack: 0.002, release: 0.025 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.11, rate: 0.96, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.12, rate: 1.05, delay: 0.07 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.2, gain: 0.02, cutoff: 800, filterType: 'lowpass', attack: 0.03, release: 0.15 }],
+    // Residual fire uses the recording's own soft crackle and natural decay.
+    pulse: [
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.15, delay: 0 },
+    ],
   },
 };

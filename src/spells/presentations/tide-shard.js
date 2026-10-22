@@ -278,25 +278,19 @@ export default {
     else eddy(o, effect);
   },
   sounds: {
-    // A compact pressure draw releases a spear through dark, narrow surf.
+    // Real creek displacement gathers into a quick, close water strike.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 92, endFrequency: 138, duration: 0.14, gain: 0.065, attack: 0.028, decay: 0.025, sustain: 0.65, release: 0.07 },
-      { kind: 'noise', delay: 0.035, duration: 0.2, gain: 0.075, cutoff: 940, filterType: 'bandpass', Q: 1.4, playbackRate: 0.78, attack: 0.018, decay: 0.045, sustain: 0.3, release: 0.12 },
-      { kind: 'tone', type: 'triangle', frequency: 328, endFrequency: 94, delay: 0.05, duration: 0.23, gain: 0.048, cutoff: 620, Q: 0.65, attack: 0.005, decay: 0.045, sustain: 0.24, release: 0.16 },
-      { kind: 'noise', delay: 0.09, duration: 0.29, gain: 0.044, cutoff: 320, filterType: 'lowpass', Q: 0.8, playbackRate: 0.6, attack: 0.015, decay: 0.065, sustain: 0.22, release: 0.19 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.48, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.32, rate: 1.15, delay: 0.08 },
     ],
-    // The tip cracks wetly, followed by a hollow implosion and a drowned wake.
+    // A physical splash breaks the spear; loose droplets fall after contact.
     impact: [
-      { kind: 'noise', duration: 0.09, gain: 0.075, cutoff: 1650, filterType: 'bandpass', Q: 0.8, attack: 0.002, decay: 0.018, sustain: 0.2, release: 0.06 },
-      { kind: 'tone', type: 'sine', frequency: 158, endFrequency: 49, duration: 0.33, gain: 0.09, attack: 0.003, decay: 0.055, sustain: 0.28, release: 0.24 },
-      { kind: 'noise', delay: 0.028, duration: 0.43, gain: 0.07, cutoff: 460, filterType: 'lowpass', Q: 1.2, playbackRate: 0.64, attack: 0.016, decay: 0.08, sustain: 0.28, release: 0.31 },
-      { kind: 'tone', type: 'triangle', frequency: 263, endFrequency: 117, delay: 0.055, duration: 0.34, gain: 0.035, cutoff: 420, Q: 0.7, attack: 0.01, decay: 0.06, sustain: 0.19, release: 0.25 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.7, rate: 0.95, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.2, rate: 1.02, delay: 0.12 },
     ],
-    // Restrained water drag for repeated flight ticks and the radial hit spray.
+    // Flight wakes keep the creek's small splashes quiet and natural.
     pulse: [
-      { kind: 'noise', duration: 0.12, gain: 0.018, cutoff: 650, filterType: 'bandpass', Q: 1.1, playbackRate: 0.7, attack: 0.012, decay: 0.025, sustain: 0.25, release: 0.07 },
-      { kind: 'tone', type: 'sine', frequency: 126, endFrequency: 81, duration: 0.14, gain: 0.014, attack: 0.007, decay: 0.028, sustain: 0.2, release: 0.095 },
-      { kind: 'noise', delay: 0.025, duration: 0.14, gain: 0.01, cutoff: 240, filterType: 'lowpass', Q: 0.7, attack: 0.015, decay: 0.025, sustain: 0.2, release: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.1, rate: 1.12, delay: 0 },
     ],
   },
 };

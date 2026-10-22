@@ -3,9 +3,7 @@ import test from 'node:test';
 import presentation from '../../src/spells/presentations/tide-shard.js';
 import spell from '../../src/spells/definitions/tide-shard.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
-import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
-import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 
 // Radii and lives follow what the rune really spawns: the cast flash, the flying
 // shard, in-flight wake ticks, the wide hit splash and the damage impact.
@@ -167,36 +165,25 @@ test('the paint adapter keeps every stage under its glyph cap', () => {
   }
 });
 
-test('the sound recipe draws pressure, strikes with a wet implosion and keeps flight wakes quiet', () => {
+test('the sound recipe uses natural water foley with a quiet repeated wake', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const tones = cast.filter(v => v.kind === 'tone');
-  assert.ok(tones.every(v => ['sine', 'triangle'].includes(v.type) && v.frequency < 400), 'dark rounded tones carry the pressure');
-  assert.ok(tones.some(v => v.frequency < 150 && v.endFrequency > v.frequency), 'pressure rises into release');
-  assert.ok(tones.some(v => v.endFrequency < v.frequency && v.delay > 0), 'a short descending spear follows');
-  const sharp = impact.find(v => v.kind === 'noise' && v.filterType === 'bandpass');
-  const body = impact.find(v => v.kind === 'noise' && v.filterType === 'lowpass');
-  assert.ok(sharp.attack <= 0.002 && sharp.duration < body.duration && body.delay > 0, 'splash opens crisply before a liquid wash');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < 60), 'impact falls into an abyssal pressure thud');
-  assert.ok(pulse.every(v => v.gain < 0.025 && v.duration <= 0.16), 'repeating ticks remain quiet and short');
+  assert.match(cast[0].url, /water-lift\.wav$/, 'creek displacement leads the release');
+  assert.ok(cast.some(v => v.url.endsWith('/water-strike.wav') && v.delay > cast[0].delay));
+  assert.match(impact[0].url, /water-strike\.wav$/, 'contact begins with a physical splash');
+  assert.ok(impact.some(v => v.url.endsWith('/droplets.wav') && v.delay > 0));
+  assert.ok(pulse.every(v => v.url.endsWith('/droplets.wav') && v.gain <= 0.12), 'repeated wakes stay restrained');
   for (const recipe of [cast, impact, pulse]) {
-    assert.ok(recipe.length >= 3 && recipe.length <= 6);
-    assert.ok(recipe.some(v => v.kind === 'tone') && recipe.some(v => v.kind === 'noise'));
-    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 0.45);
+    assert.ok(recipe.length >= 1 && recipe.length <= 3);
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const v of recipe) {
-      assert.ok(v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5);
-      assert.ok((v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2);
-      assert.ok(v.attack > 0 && v.decay > 0 && v.release > 0 && v.sustain > 0 && v.sustain < 1);
-      assert.ok(v.attack + v.decay + v.release <= v.duration, 'authored envelope fits without clamping');
+      assert.equal(v.kind, 'recording');
+      assert.match(v.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8);
+      assert.ok(v.rate >= 0.75 && v.rate <= 1.2, 'gentle playback rates retain natural water detail');
+      assert.ok(v.delay >= 0 && v.delay <= 2);
+      assert.deepEqual(Object.keys(v).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
     }
   }
-  const fake = fakeRecordedAudio();
-  for (const stage of ['cast', 'impact', 'pulse']) {
-    const handles = playSpellSound(fake.engine, { stage, presentation, x: 4, y: 7 });
-    assert.equal(handles.length, presentation.sounds[stage].length);
-    for (const handle of handles) handle.stop();
-  }
-  assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 4 && r.y === 7 && r.disposals === 1));
-  assert.deepEqual(fake.invalid, []);
 });
 
 test('real rune casts render the shard, wake and crown and emit typed liquid cues without sword sounds', () => {

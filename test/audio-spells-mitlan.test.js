@@ -1,49 +1,47 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { mitlan } from '../src/spells/elements/mitlan.js';
 import { GameAudio } from '../src/audio/audio.js';
 import { playSpellSound } from '../src/audio/spells.js';
 import { fakeRecordedAudio } from '../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../test-support/spell-audio.js';
 import { runeScene } from '../test-support/spells.js';
 
 const spells = await Promise.all(mitlan.map(async id =>
   (await import(`../src/spells/definitions/${id}.js`)).default));
-const supported = new Set(['kind', 'type', 'frequency', 'endFrequency', 'detune',
-  'delay', 'duration', 'gain', 'attack', 'decay', 'sustain', 'release',
-  'cutoff', 'filterType', 'Q', 'playbackRate', 'offset']);
+const supported = new Set(['kind', 'url', 'gain', 'rate', 'delay']);
 
 for (const spell of spells) {
-  test(`${spell.name}: every authored stage renders within the voice and envelope budget`, () => {
+  test(`${spell.name}: every stage uses real recordings within the mix budget`, async () => {
     const { sounds } = spell.presentation;
     for (const stage of ['cast', 'impact', 'pulse']) {
       const recipe = sounds[stage];
-      assert.ok(Array.isArray(recipe) && recipe.length >= 3 && recipe.length <= 8, stage);
-      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 0.45, `${stage} gain headroom`);
-      assert.ok(recipe.some(layer => layer.kind === 'tone'), `${stage} pressure pitch`);
-      assert.ok(recipe.some(layer => layer.kind === 'noise'), `${stage} water texture`);
+      assert.ok(Array.isArray(recipe) && recipe.length >= 1 && recipe.length <= 4, stage);
+      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2, `${stage} gain headroom`);
       for (const layer of recipe) {
         assert.ok(Object.keys(layer).every(key => supported.has(key)), 'no silently ignored options');
-        assert.ok(layer.duration >= 0.01 && layer.duration <= 2.5);
-        assert.ok(layer.gain > 0 && layer.gain <= 0.25);
+        assert.equal(layer.kind, 'recording', 'no oscillator or generated-noise substitute');
+        assert.match(layer.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+        assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+        assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2, 'retain recognizable natural texture');
         assert.ok((layer.delay ?? 0) >= 0 && (layer.delay ?? 0) <= 2);
-        for (const key of ['attack', 'decay', 'sustain', 'release']) assert.ok(Number.isFinite(layer[key]), key);
-        assert.ok(layer.attack >= 0.001 && layer.attack <= layer.duration / 2);
-        assert.ok(layer.decay >= 0 && layer.release >= 0.001);
-        assert.ok(layer.attack + layer.decay + layer.release <= layer.duration + 1e-9, 'envelope fits without clamping');
-        assert.ok(layer.sustain >= 0 && layer.sustain <= 1);
-        if (layer.kind === 'noise') assert.ok(layer.cutoff >= 20, 'authored filtered texture');
       }
       const fake = fakeRecordedAudio();
+      await prepareRecordedSpellTest(fake, spell);
       const handles = playSpellSound(fake.engine, { stage, presentation: spell.presentation, x: 3, y: 7 });
       assert.equal(handles.length, recipe.length, 'no layers truncated or dropped');
       assert.deepEqual(fake.invalid, [], 'finite Web Audio scheduling');
+      assert.equal(fake.nodes.filter(node => node.kind === 'oscillator').length, 0);
+      assert.equal(fake.nodes.filter(node => node.kind === 'source').length, recipe.length);
       assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === 7));
       handles.forEach(handle => handle.stop());
       assert.ok(fake.routes.every(route => route.disposals === 1));
     }
   });
 
-  test(`${spell.name}: real rune events select authored cues and cancel their delayed tails`, () => {
+  test(`${spell.name}: real rune events select authored cues and cancel their delayed tails`, async () => {
     const scene = runeScene(spell, { range: spell.id === 'drowning-prison' ? 20 : 2 }), events = [];
     scene.casting.onSound = event => events.push(event);
     assert.equal(scene.cast().ok, true);
@@ -55,6 +53,7 @@ for (const spell of spells) {
     assert.deepEqual([...new Set(cues.map(event => event.stage))].sort(), ['cast', 'impact', 'pulse'],
       'exercise every emitted stage in a real cast');
     const fake = fakeRecordedAudio(), audio = new GameAudio({}, fake.engine);
+    await prepareRecordedSpellTest(fake, spell);
     const handles = [];
     for (const stage of new Set(cues.map(event => event.stage))) {
       const event = cues.find(cue => cue.stage === stage);
@@ -70,7 +69,46 @@ for (const spell of spells) {
   });
 }
 
-test('Mitlan spells and their three sound stages have individual authored identities', () => {
-  const signatures = spells.flatMap(spell => Object.values(spell.presentation.sounds).map(recipe => JSON.stringify(recipe)));
-  assert.equal(new Set(signatures).size, signatures.length, 'no copied complete cues');
+test('Mitlan spells have individual recorded arrangements', () => {
+  const signatures = spells.map(spell => JSON.stringify(spell.presentation.sounds));
+  assert.equal(new Set(signatures).size, signatures.length, 'no copied complete spell arrangements');
+});
+
+test('Mitlan CC0 recordings retain source detail with clean bounded PCM and documented provenance', async () => {
+  const directory = new URL('../assets/audio/spells/mitlan/', import.meta.url);
+  const manifest = JSON.parse(await readFile(new URL('sources.json', directory), 'utf8'));
+  assert.equal(manifest.license, 'CC0-1.0');
+  assert.equal(manifest.clips.length, 9);
+  const sourceNames = new Set(manifest.sources.map(source => source.file));
+  for (const source of manifest.sources) {
+    assert.equal(source.license, 'CC0-1.0');
+    assert.match(source.page, /^https:\/\/(freesound.org|opengameart.org)\//);
+    assert.match(source.sha256, /^[a-f0-9]{64}$/);
+  }
+  for (const clip of manifest.clips) {
+    assert.ok(sourceNames.has(clip.source));
+    const bytes = await readFile(new URL(clip.file, directory));
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), clip.sha256);
+    assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(bytes.readUInt16LE(20), 1, 'uncompressed PCM');
+    assert.equal(bytes.readUInt16LE(22), 1, 'mono spatial foley');
+    assert.equal(bytes.readUInt32LE(24), 44100, 'retain original preview bandwidth');
+    assert.equal(bytes.readUInt16LE(34), 16);
+    assert.ok(clip.duration >= 0.3 && clip.duration <= (clip.file === 'thunder-clap.wav' ? 5 : 3));
+    const samples = (bytes.length - 44)/2;
+    let sum = 0, sumSquares = 0, peak = 0;
+    for (let index = 0; index < samples; index++) {
+      const value = bytes.readInt16LE(44+index*2)/32768;
+      sum += value; sumSquares += value*value; peak = Math.max(peak, Math.abs(value));
+    }
+    assert.ok(peak > 0.5 && peak <= 0.85, `${clip.file}: balanced unclipped peak`);
+    assert.ok(Math.abs(sum/samples) < 0.0001, `${clip.file}: removed DC`);
+    assert.ok(Math.sqrt(sumSquares/samples) > 0.01, `${clip.file}: audible recorded material`);
+    assert.equal(bytes.readInt16LE(44), 0, 'click-free opening');
+    assert.equal(bytes.readInt16LE(bytes.length-2), 0, 'click-free close');
+  }
+  const files = new Set(manifest.clips.map(clip => '/assets/audio/spells/mitlan/'+clip.file));
+  for (const spell of spells) for (const recipe of Object.values(spell.presentation.sounds)) {
+    for (const layer of recipe) assert.ok(files.has(layer.url), 'every used recording has provenance');
+  }
 });

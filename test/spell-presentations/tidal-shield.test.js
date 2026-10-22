@@ -4,8 +4,10 @@ import profile from '../../src/spells/presentations/tidal-shield.js';
 import spell from '../../src/spells/definitions/tidal-shield.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
 import { runeScene } from '../../test-support/spells.js';
+import { readFileSync } from 'node:fs';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 // The radius and life each stage receives from the real Tidal Shield cast.
 const SETUP = { cast: [0.8, profile.duration], impact: [1, 0.6], pulse: [2, 0.4], aura: [1, 0.6],
@@ -122,30 +124,34 @@ test('all stages are deterministic, bounded, printable, and fade completely', ()
   }
 });
 
-test('water audio raises a heavy liquid bulwark, shoves with pressure, and leaves quiet wavelets', () => {
+test('water audio uses recorded displacement, physical splash, and quiet droplets', async () => {
   const { cast, impact, pulse } = profile.sounds;
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 100 && v.endFrequency > v.frequency && v.attack >= 0.1), 'submerged pressure slowly builds');
-  assert.ok(cast.some(v => v.kind === 'tone' && v.delay >= 0.4 && v.endFrequency < 60), 'a low knock seals the shell');
-  assert.ok(cast.filter(v => v.kind === 'noise').length >= 2, 'layers of filtered surf form the walls');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < 50 && v.attack < 0.02), 'a descending pressure wave drives contact');
-  assert.ok(pulse.every(v => v.gain <= 0.025 && v.duration <= 0.15), 'repeated wavelets remain quiet and short');
+  assert.ok(cast[0].url.endsWith('/water-lift.wav'));
+  assert.ok(cast[1].url.endsWith('/wash.wav') && cast[1].delay > cast[0].delay);
+  assert.ok(impact[0].url.endsWith('/water-strike.wav'));
+  assert.ok(pulse.every(v => v.url.endsWith('/droplets.wav') && v.gain <= 0.15), 'repeated droplets remain quiet');
   for (const [stage, voices] of Object.entries(profile.sounds)) {
-    assert.ok(voices.length >= 3 && voices.length <= 6);
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45, 'combined layers respect the stage headroom');
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, profile);
     const handles = playSpellSound(fake.engine, { stage, x: 2, y: 3, presentation: profile });
-    assert.equal(handles.length, voices.length, 'each authored layer reaches the real voice instruments');
+    assert.equal(handles.length, voices.length, 'each recording reaches the positional audio bus');
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 3));
     assert.deepEqual(fake.invalid, []);
+    handles.forEach(handle => handle.stop());
+    assert.ok(voices.length >= 1 && voices.length <= 3);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
-      assert.ok(voice.sustain >= 0 && voice.sustain <= 1);
-      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration, 'authored envelope fits without runtime truncation');
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.equal(voice.kind, 'recording');
+      assert.ok(Object.keys(voice).every(key => ['kind', 'url', 'gain', 'rate', 'delay'].includes(key)));
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
+      assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      const wav = readFileSync(new URL(`../../${voice.url.slice(1)}`, import.meta.url));
+      assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
+      assert.equal(wav.toString('ascii', 8, 12), 'WAVE');
+      assert.ok(wav.length > 1000, 'recorded material contains audio data');
     }
-    handles.forEach(h => h.stop());
   }
 });
 
