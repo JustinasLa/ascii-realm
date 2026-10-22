@@ -3,8 +3,6 @@
 export const SPRINT_STAMINA_PER_SECOND = 18;
 export const STAMINA_REGEN_PER_SECOND = 20;
 export const STAMINA_REGEN_DELAY = 1.2;
-export const ATTACK_STAMINA_COST = 15;
-export const SPRINT_RECOVERY_STAMINA = 25;
 
 const bounded = (value, max) => Math.max(0, Math.min(max, Number.isFinite(value) ? value : 0));
 

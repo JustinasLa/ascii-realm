@@ -408,6 +408,21 @@ const ELF = KINDS.elf;
 const elf = (mx, mz) => new Monster(...toCells(mx, mz), { kind: ELF });
 const field = { isWalkable: () => true, typeAt: () => GRASS, propsIn: () => [] };
 
+test('elf arrows apply damage modifiers when fired and cannot deal negative damage', () => {
+  for (const [modifier, expected] of [[undefined, 9], [-4, 5], [3, 12], [-20, 0]]) {
+    const monsters = new Monsters({ counts: {} });
+    const e = elf(0, 0);
+    e.magicDamage = modifier;
+    e.setState('aim');
+    e.stateTime = ELF.ranged.draw - dt / 2;
+    monsters.list.push(e);
+    monsters.update(dt, field, player(...toCells(5, 0)));
+    assert.equal(monsters.arrows.list.length, 1);
+    assert.equal(monsters.arrows.list[0].damage, expected, `modifier ${modifier}`);
+    assert.equal(monsters.events.find(event => event.type === 'shoot').damage, expected);
+  }
+});
+
 test('an elf closes to bowshot and keeps there, never coming to blows', () => {
   const e = elf(0, 0);
   const target = player(...toCells(30, 0));

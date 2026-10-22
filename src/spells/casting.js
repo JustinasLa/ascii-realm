@@ -123,7 +123,12 @@ export class Spellcasting {
     const root = spell.nodes[lower(variant.root ?? spell.root)];
     if (!root) return { ok: false, reason: 'Spell definition missing.' };
     if (!ctx.target) ctx.target = this.aimTarget(caster, options.aim, spell.supportive);
+    const relay = () => {
+      if (!options.remote && !options.passive) this.onCast({ id, variant: variant.id, heading: ctx.heading, aim: options.aim,
+        targetId: ctx.target?.spellId ?? null, characterClass: this.characterClass, level: this.level });
+    };
     if (!this.conditions(root.conditions, ctx, caster) || !this.conditions(root.targetConditions, ctx, ctx.target)) {
+      if (ctx.stopped) relay();
       return { ok: Boolean(ctx.stopped), stopped: Boolean(ctx.stopped), reason: 'No valid target in range.' };
     }
     const cost = Math.max(0, ctx.modifiers.mana ?? 0);
@@ -133,8 +138,7 @@ export class Spellcasting {
     this.run(variant.root ?? spell.root, ctx);
     this.present(ctx, caster, 'cast', { shape: 'ward', radius: 0.8, life: hasPresentation(spell) ? spell.presentation.duration : 0.25 });
     if (!hasPresentation(spell)) this.onSound({ type: 'draw', x: caster.x, y: caster.y });
-    if (!options.remote && !options.passive) this.onCast({ id, variant: variant.id, heading: ctx.heading, aim: options.aim,
-      targetId: ctx.target?.spellId ?? null, characterClass: this.characterClass, level: this.level });
+    relay();
     return { ok: true };
   }
 
@@ -395,9 +399,11 @@ export class Spellcasting {
     const s = this.state(target), name = lower(a.type);
     const level = this.number(a.level, ctx, 0), duration = clamp(this.number(a.duration ?? a.d, ctx, 20) / 20, 0.05, 120);
     const previous = s.potions.get(name);
-    if (!previous || previous.level <= level || previous.until < this.time) s.potions.set(name, { until: this.time + duration,
-      level, next: this.time + (name === 'regeneration' ? 2.5 / 2 ** level : 1), ctx });
-    if (name === 'absorption') { s.shield = Math.max(s.shield, 4 * (level + 1)); s.shieldUntil = this.time + duration; }
+    if (!previous || previous.level <= level || previous.until <= this.time) {
+      s.potions.set(name, { until: this.time + duration,
+        level, next: this.time + (name === 'regeneration' ? 2.5 / 2 ** level : 1), ctx });
+      if (name === 'absorption') { s.shield = Math.max(s.shield, 4 * (level + 1)); s.shieldUntil = this.time + duration; }
+    }
     this.present(ctx, target, 'aura', { shape: 'ward', radius: 1, life: 0.3 });
   }
 
@@ -421,11 +427,12 @@ export class Spellcasting {
   damage(target, amount, ctx, options = {}) {
     if (!alive(target) || target === ctx.caster || !Number.isFinite(amount) || amount <= 0) return;
     const targetState = this.state(target);
+    const hitDamage = amount;
     if (!TRUE(options.ii) && (targetState.invulnerableUntil ?? 0) > this.time) {
       if (amount <= targetState.lastHitDamage) return;
       amount -= targetState.lastHitDamage;
     }
-    if (!TRUE(options.pi)) { targetState.invulnerableUntil = this.time + 0.5; targetState.lastHitDamage = amount; }
+    if (!TRUE(options.pi)) { targetState.invulnerableUntil = this.time + 0.5; targetState.lastHitDamage = hitDamage; }
     this.state(ctx.caster).lastCombat = this.time;
     this.state(target).lastCombat = this.time;
     if (target.takeHit) {

@@ -47,6 +47,13 @@ test('lobby codes, names and seeds normalize consistently', () => {
   assert.equal(cleanSeed(1.5), 1);
 });
 
+test('non-string names use the default without coercing untrusted values', () => {
+  for (const name of [null, undefined, 42, true, {}, [], ['Kael'], { toString: null },
+    [{ toString: null }], { toString() { throw new Error('Must not coerce names'); } }]) {
+    assert.equal(cleanName(name), 'Wanderer');
+  }
+});
+
 test('server URLs support same-origin and separately hosted lobbies', () => {
   assert.equal(lobbyServerUrl('', 'http://localhost:8000/?seed=42'), 'ws://localhost:8000/multiplayer');
   assert.equal(lobbyServerUrl('', 'https://example.com/ascii-realm/'), 'wss://example.com/multiplayer');

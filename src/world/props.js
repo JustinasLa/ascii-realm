@@ -10,7 +10,7 @@ import { fineOf } from './fine-bakes.js';
 import { shade } from './glow.js';
 import { bakeSurface, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
-import { makeBush, makeTree } from './trees.js';
+import { makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
 

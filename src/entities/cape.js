@@ -33,6 +33,8 @@ export class Cape {
   update(dt, anchor, back, moved, wind) {
     if (!this.pts) this.settle(anchor, back);
     const { pts, prev } = this;
+    // The attachment follows the shoulders even between fixed physics steps.
+    for (let axis = 0; axis < 3; axis++) pts[0][axis] = anchor[axis];
 
     // The warrior moved; in their frame of reference the cloth moved back.
     for (let i = 1; i < POINTS; i++) {
@@ -69,9 +71,6 @@ export class Cape {
       p[2] = nz;
     }
 
-    pts[0][0] = anchor[0];
-    pts[0][1] = anchor[1];
-    pts[0][2] = anchor[2];
     for (let iter = 0; iter < 4; iter++) {
       for (let i = 1; i < POINTS; i++) {
         const a = pts[i - 1];

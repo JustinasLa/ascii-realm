@@ -31,17 +31,22 @@ function moduleURL(path) {
   return url;
 }
 moduleURL('../vendor/three/utils/BufferGeometryUtils.js');
+moduleURL('../vendor/three/utils/SkeletonUtils.js');
 const { GLTFLoader } = await import(moduleURL('../vendor/three/loaders/GLTFLoader.js'));
 moduleURL('../src/entities/retarget.js');
 moduleURL('../src/entities/gear.js');
 moduleURL('../src/entities/armory.js');
 const { ModelFigure } = await import(moduleURL('../src/entities/model.js'));
 
-async function figure() {
+async function library() {
   const bytes = readFileSync(new URL('../assets/ual1.glb', import.meta.url));
-  const gltf = await new GLTFLoader().parseAsync(
+  return new GLTFLoader().parseAsync(
     bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), '',
   );
+}
+
+async function figure(gltf) {
+  gltf ??= await library();
   const document = globalThis.document;
   globalThis.document = { createElement: () => ({}) };
   try {
@@ -51,6 +56,37 @@ async function figure() {
     else globalThis.document = document;
   }
 }
+
+test('figures sharing a library keep their skeletons, clothes and animation tracks independent', async () => {
+  const gltf = await library();
+  const source = gltf.animations.find((clip) => clip.name === 'Jog_Fwd_Loop');
+  const tracks = source.tracks.map((track) => Array.from(track.values));
+  const sourceMesh = gltf.scene.getObjectByProperty('isSkinnedMesh', true);
+  const sourceColors = sourceMesh.geometry.getAttribute('color');
+  const first = await figure(gltf);
+  const firstJog = first.actions.jog.getClip();
+  const shortened = firstJog.tracks.map((track) => Array.from(track.values));
+  const second = await figure(gltf);
+
+  assert.equal(first.model.parent, first.scene, 'a second figure does not steal the first model');
+  assert.equal(second.model.parent, second.scene);
+  assert.notEqual(first.model, gltf.scene);
+  assert.notEqual(first.feet[0], second.feet[0]);
+  assert.notEqual(firstJog, second.actions.jog.getClip());
+  assert.deepEqual(source.tracks.map((track) => Array.from(track.values)), tracks,
+    'monster clips retain the unmodified library gait');
+  assert.deepEqual(firstJog.tracks.map((track) => Array.from(track.values)), shortened,
+    'creating another figure does not shorten the first stride again');
+  assert.deepEqual(second.actions.jog.getClip().tracks.map((track) => Array.from(track.values)), shortened);
+  assert.equal(sourceMesh.geometry.getAttribute('color'), sourceColors, 'gear does not repaint source geometry');
+  const firstMesh = first.model.getObjectByProperty('isSkinnedMesh', true);
+  const secondMesh = second.model.getObjectByProperty('isSkinnedMesh', true);
+  assert.notEqual(firstMesh.geometry, sourceMesh.geometry);
+  assert.notEqual(firstMesh.geometry, secondMesh.geometry);
+  const before = second.feet[0].quaternion.clone();
+  first.update(1 / 60, new Player(0, 0));
+  assert.ok(second.feet[0].quaternion.equals(before), 'animating one figure leaves the other untouched');
+});
 
 test('standing jump anticipation restarts after idle and on a later jump', async () => {
   const model = await figure();

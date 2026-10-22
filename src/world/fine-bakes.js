@@ -167,6 +167,7 @@ export function startFineWorkers(count = spareCores(), url = new URL('./fine-wor
     };
     workers.push(slot);
   }
+  if (!workers.length) return;
   for (const job of queue.values()) if (job.state === 'here' && job.source && !job.steps) job.state = 'waiting';
   dispatch();
 }

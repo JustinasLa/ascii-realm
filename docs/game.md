@@ -17,7 +17,7 @@ short version see the [README](../README.md).
   refills slowly a second after the last cast. Projectiles, waves, zones, shields, heals,
   status effects, summons and channels share one simulation that strikes the
   monsters in the world. Every rune has its own ASCII animation for casting,
-  travel and impact, and its own layered synthesized sound. Support spells
+  travel and impact, and its own layered recorded foley. Support spells
   such as Healing Orb or Mana Transfer need another player in range.
   Add `?spell=fire-shard` (or another rune's id) to start with that rune
   chosen. The [casting arena](casting-simulation.html) has stationary

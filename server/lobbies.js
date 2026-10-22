@@ -132,6 +132,8 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
   }
 
   wss.on('connection', (socket, request) => {
+    // Rejected sockets can still receive malformed frames during the close handshake.
+    socket.on('error', () => {}); // Close handles cleanup.
     if (connections.size >= 256) return socket.close(1013, 'Server busy');
     const address = request?.socket?.remoteAddress ?? 'unknown';
     const entry = addressOf(address);
@@ -141,7 +143,6 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
     connections.set(socket, session);
     session.timeout = setTimeout(() => socket.close(1008, 'Join a lobby first'), 10000);
     session.timeout.unref();
-    socket.on('error', () => {}); // Close handles cleanup, including malformed WebSocket frames.
     socket.on('pong', () => { session.alive = true; });
     socket.on('message', (data, binary) => {
       const now = Date.now();

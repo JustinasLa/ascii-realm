@@ -86,11 +86,13 @@ export class MultiplayerClient {
         this.token = typeof message.token === 'string' ? message.token.slice(0, 128) : null;
         this.retry = 0;
         this.players = readMembers(message.players);
-        this.clock = { time: Number.isFinite(message.time) ? message.time : null, at: performance.now() };
         const self = this.players.find((p) => p.id === this.id);
         this.onJoin({ code: message.code, seed, id: this.id, self: self?.state ?? null });
+        if (this.socket !== socket) return;
         this.onSnapshot(this.players, this.id);
+        if (this.socket !== socket) return;
         this.setStatus('online', 'Connected. Share the lobby code with your friends.');
+        if (this.socket !== socket) return;
         clearInterval(this.sendTimer);
         this.sendTimer = setInterval(() => this.sendState(), UPDATE_MS);
         this.sendState();
@@ -99,7 +101,6 @@ export class MultiplayerClient {
       } else if (message.type === 'snapshot' && this.room && Array.isArray(message.players)) {
         const before = this.players.map((p) => `${p.id}:${p.name}`).join('|');
         this.players = readMembers(message.players);
-        this.clock = { time: Number.isFinite(message.time) ? message.time : null, at: performance.now() };
         this.onSnapshot(this.players, this.id);
         const after = this.players.map((p) => `${p.id}:${p.name}`).join('|');
         if (before !== after) this.onChange(this);
@@ -129,11 +130,6 @@ export class MultiplayerClient {
     this.setStatus('reconnecting', 'Connection interrupted. Reconnecting to your lobby…');
     const delay = Math.min(8000, this.retryDelay * 2 ** this.retry++);
     this.retryTimer = setTimeout(() => this.open(true), delay);
-  }
-
-  worldTime(fallback) {
-    return this.status === 'online' && Number.isFinite(this.clock?.time)
-      ? this.clock.time + (performance.now() - this.clock.at) / 1000 : fallback;
   }
 
   fail(message) {

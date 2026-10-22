@@ -18,6 +18,13 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
   let previewGeneration = 0;
   let previewDucked = false;
   let bound = true;
+  const duckPreview = () => {
+    if (!previewDucked || !engine.context) return;
+    for (const bus of ['music', 'ambience']) {
+      setParam(engine.buses[bus]?.gain, 0, engine.context.currentTime, 0.03);
+    }
+  };
+  const toggleMute = () => { engine.toggleMute(); duckPreview(); };
   const stopPreview = () => {
     previewGeneration++;
     clearTimeout(previewTimer);
@@ -68,9 +75,8 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
       status.textContent = 'Footstep audio could not load';
       return;
     }
-    const now = engine.context.currentTime;
-    for (const bus of ['music', 'ambience']) setParam(engine.buses[bus]?.gain, 0, now, 0.03);
     previewDucked = true;
+    duckPreview();
     previewButton.disabled = true;
     previewButton.textContent = 'Playing grass footsteps…';
     let remaining = 6;
@@ -127,7 +133,7 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
       || target?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
     const editing = editingTarget(event.target) || event.composedPath?.().some(editingTarget);
     if (!event.defaultPrevented && !event.isComposing && !editing && !event.repeat) {
-      if (event.code === 'KeyM') engine.toggleMute();
+      if (event.code === 'KeyM') toggleMute();
       if (event.code === 'KeyN') skipSong();
     }
     unlock();
@@ -144,10 +150,11 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
       unlock();
     }
   };
-  const muteClick = () => { engine.toggleMute(); refresh(); };
+  const muteClick = () => { toggleMute(); refresh(); };
   const volume = event => {
     const slider = event.currentTarget;
     engine.setVolume(slider.dataset.volume, Number(slider.value) / 100);
+    duckPreview();
     slider.nextElementSibling.value = `${slider.value}%`;
   };
   for (const slider of sliders) {

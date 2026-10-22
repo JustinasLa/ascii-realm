@@ -32,8 +32,11 @@ export class SpellEffects {
   }
 
   // Both the game and the standalone arena consume this world-cell stream.
-  paint(dot, projectiles = []) {
+  paint(output, projectiles = []) {
     if (this.paused) return;
+    const dot = (x, y, char, color, brightness = 1) => {
+      if (brightness > 0) output(x, y, char, color, brightness);
+    };
     let remaining = 4096;
     for (const e of this.list) {
       if (remaining <= 0) break;
@@ -60,7 +63,11 @@ export class SpellEffects {
         continue;
       }
       const color = COLORS[p.ctx.spell.element] ?? COLORS.martial;
-      for (let i = 0; i < p.trail.length && --remaining > 0; i++) dot(p.trail[i].x, p.trail[i].y - p.h * 5, '.', color, (i + 1) / p.trail.length * 0.6);
+      remaining--; // Reserve a glyph for the projectile head, even without a trail.
+      for (let i = 0; i < p.trail.length && remaining > 0; i++) {
+        dot(p.trail[i].x, p.trail[i].y - p.h * 5, '.', color, (i + 1) / p.trail.length * 0.6);
+        remaining--;
+      }
       dot(p.x, p.y - p.h * 5, p.ctx.spell.element === 'seithr' ? '+' : '*', color);
     }
   }

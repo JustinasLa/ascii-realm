@@ -209,10 +209,7 @@ const inventoryScreen = new InventoryScreen({
   inventory, player, name,
   onToggle: (open) => {
     setGameplayBlocked(open);
-    clearInput();
-    clicked = false;
-    rightClicked = false;
-    mouseHeld = false;
+    cancelActions();
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
@@ -230,6 +227,7 @@ const multiplayer = new MultiplayerClient({
       const url = new URL(location.href);
       url.searchParams.set('seed', lobby.seed);
       url.searchParams.set('room', lobby.code);
+      if (multiplayer.options?.server) url.searchParams.set('server', multiplayer.options.server);
       try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
       multiplayer.leave(false);
       location.replace(url);
@@ -382,6 +380,17 @@ function fireNotice(message) {
 let clicked = false;
 let mouseHeld = false;
 let rightClicked = false;
+// Losing control of the scene cancels a charge; it is not a weapon release.
+function cancelActions() {
+  clearInput();
+  clicked = false;
+  rightClicked = false;
+  mouseHeld = false;
+  player.ranged.reset();
+  player.aimTarget = null;
+  player.combat.charge = 0;
+  player.combat.queued = null;
+}
 // Touches use the on-screen buttons instead.
 canvas.addEventListener('pointerdown', (e) => {
   if (e.pointerType === 'touch' || builder.enabled || isGameplayBlocked()) return;
@@ -397,20 +406,18 @@ canvas.addEventListener('contextmenu', (e) => {
 window.addEventListener('pointerup', (e) => {
   if (e.button === 0) mouseHeld = false;
 });
-window.addEventListener('blur', () => {
-  mouseHeld = false;
+window.addEventListener('blur', cancelActions);
+window.addEventListener('pointercancel', cancelActions);
+window.addEventListener('focusin', (event) => {
+  if (isControlTarget(event.target)) cancelActions();
 });
 
 let hitStop = 0;
 
 const builder = new SceneryBuilder({ world, player, camera, renderer,
   onModeChange: () => {
-    clicked = false;
-    rightClicked = false;
-    mouseHeld = false;
+    cancelActions();
     hitStop = 0;
-    player.combat.charge = 0;
-    player.combat.queued = null;
     player.vx = 0;
     player.vz = 0;
     player.surge = 0;
@@ -651,8 +658,7 @@ function suspend() {
   if (animation !== null) cancelAnimationFrame(animation);
   animation = null;
   clock.reset();
-  clicked = false;
-  rightClicked = false;
+  cancelActions();
 }
 
 document.addEventListener('visibilitychange', () => {
@@ -682,6 +688,7 @@ function frame(now) {
   const started = performance.now();
   time += dt;
   updateZoom(dt);
+  if (debug.freeze || isGameplayBlocked() || player.magicStunned) cancelActions();
 
   for (let index = 0; index < 9; index++) {
     if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`)) selectHotbar(index);
@@ -720,7 +727,7 @@ function frame(now) {
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
-    if (cast && !isGameplayBlocked()) {
+    if (cast && !isGameplayBlocked() && !player.magicStunned) {
       syncSpellPeers();
       const aim = aimPoint({ projectileRange: 40 }, 1);
       const heading = Math.atan2((aim.x - player.x) * ASPECT / SCALE, (aim.y - player.y) / (SCALE * TILT));
@@ -741,7 +748,9 @@ function frame(now) {
   casting.setPresentationPaused(paused || document.hidden);
   // A bow draws while the attack is held and shoots on release; a spear or
   // javelin jabs on a tap and is thrown after a longer hold.
-  const release = player.ranged.update(dt, ranged && held && !builder.enabled && !debug.freeze, weapon);
+  const rangedBlocked = paused || isGameplayBlocked() || player.magicStunned;
+  if (rangedBlocked) player.ranged.reset();
+  const release = rangedBlocked ? null : player.ranged.update(dt, ranged && held, weapon);
   player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw) : null;
   if (release?.action === 'jab') player.attack(cursorHeading(true));
   else if (release) fireRanged(release, weapon);
@@ -764,7 +773,10 @@ function frame(now) {
   remotePlayers.update(dt, now);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
-    if (e.type === 'damage') hud.damage(e.amount, e.x, e.y);
+    if (e.type === 'damage') {
+      lastHurt = time;
+      hud.damage(e.amount, e.x, e.y);
+    }
     // Each cut can fell a tree a blow at a time or mow tall grass.
     if (e.type === 'strike' && !paused) {
       for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
@@ -801,14 +813,17 @@ function frame(now) {
   }
   for (const e of monsters.events) monsterEvent(e);
   monsters.events.length = 0;
-  if (!paused && player.vitals.health <= 0) fallInBattle();
+  // Spells and monster updates can hurt the player after the event pass above.
+  if (player.events.some(event => event.type === 'damage')) lastHurt = time;
+  const respawned = !paused && player.vitals.health <= 0;
+  if (respawned) fallInBattle();
   else if (!paused && time - lastHurt > 6) player.heal(5 * playerDt);
   if (!paused) {
     projectiles.update(dt, world);
     for (const impact of projectiles.events) sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
     projectiles.events.length = 0;
     // Walking over a landed arrow or spear picks it up again.
-    if (player.air === 0) {
+    if (player.air === 0 && !respawned) {
       for (const shaft of projectiles.collectNear(player.x, player.y, 0.75, { x: fromX, y: fromY })) {
         const id = shaft.kind === 'arrow' ? 'arrow' : shaft.kind;
         if (!inventory.add(id, 1, { material: shaft.material })) {

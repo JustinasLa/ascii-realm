@@ -1,9 +1,8 @@
 // Draws a grid of coloured glyphs with a single full-screen WebGL2 pass.
 //
-// The CPU fills three cell buffers each frame: `fg` (rgb + low byte of the
-// glyph), `ov` (the same for a second glyph layered over the first, like a
-// flower over grass) and `bg` (rgb + the high bits of both glyphs). They are
-// uploaded as textures and the fragment shader looks up the glyphs in the
+// The CPU fills cell buffers each frame: `fg` (rgb + low byte of the
+// glyph) and `bg` (rgb + the glyph's high bits). They are uploaded as
+// textures and the fragment shader looks up the glyphs in the
 // atlas for every pixel, so cost is independent of how many characters are
 // on screen.
 //
@@ -70,7 +69,6 @@ const FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uFg;
 uniform sampler2D uBg;
-uniform sampler2D uOv;
 uniform sampler2D uAtlas;
 uniform vec2 uView;
 uniform vec2 uCell;
@@ -198,18 +196,15 @@ void main() {
 
   vec4 fg = texelFetch(uFg, ci, 0);
   vec4 bg = texelFetch(uBg, ci, 0);
-  vec4 ov = texelFetch(uOv, ci, 0);
 
-  // The background's alpha holds the high bits of both glyph indices.
+  // The background's alpha holds the high bits of the glyph index.
   float hi = floor(bg.a * 255.0 + 0.5);
   float g = floor(fg.a * 255.0 + 0.5) + mod(hi, 16.0) * 256.0;
-  float og = floor(ov.a * 255.0 + 0.5) + floor(hi / 16.0) * 256.0;
 
   // Cells are not painted in: the ground colour only faintly tints the night
   // between characters, so every shape is drawn by its glyphs alone.
   vec3 ground = mix(${vec3(NIGHT)}, bg.rgb, ${BG_KEEP.toFixed(3)});
   vec3 color = mix(ground, fg.rgb, coverage(g, local));
-  if (og > 0.5) color = mix(color, ov.rgb, coverage(og, local));
 
   // A tree or rock drawn in small cells over this spot.
   vec2 finePos = p / uCell * ${FINE.toFixed(1)};
@@ -321,7 +316,7 @@ export class AsciiRenderer {
     gl.useProgram(prog);
     this.prog = prog;
     this.u = {};
-    for (const name of ['uFg', 'uBg', 'uOv', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
+    for (const name of ['uFg', 'uBg', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
       'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uPushed', 'uPushedArea',
       'uFine', 'uFineBg']) {
       this.u[name] = gl.getUniformLocation(prog, name);
@@ -370,14 +365,12 @@ export class AsciiRenderer {
 
     this.fgTex = dataTexture(gl);
     this.bgTex = dataTexture(gl);
-    this.ovTex = dataTexture(gl);
     this.fineTex = dataTexture(gl);
     this.fineBgTex = dataTexture(gl);
 
     gl.uniform1i(this.u.uFg, 0);
     gl.uniform1i(this.u.uBg, 1);
     gl.uniform1i(this.u.uAtlas, 2);
-    gl.uniform1i(this.u.uOv, 3);
     gl.uniform1i(this.u.uNoise, 4);
     gl.uniform1i(this.u.uPushed, 5);
     gl.uniform1i(this.u.uFine, 6);
@@ -419,7 +412,7 @@ export class AsciiRenderer {
     if (cols === this.cols && rows === this.rows) return;
     this.allocate(cols, rows);
 
-    for (const tex of [this.fgTex, this.bgTex, this.ovTex]) {
+    for (const tex of [this.fgTex, this.bgTex]) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -438,6 +431,8 @@ export class AsciiRenderer {
     this.rows = rows;
     this.fg = new Uint8ClampedArray(cols * rows * 4);
     this.bg = new Uint8ClampedArray(cols * rows * 4);
+    // Legacy CPU shading helpers still write this buffer; layers now
+    // resolve into fg, so it does not need a GPU texture.
     this.ov = new Uint8ClampedArray(cols * rows * 4);
     // Terrain type under each cell, so later passes know where water is.
     this.mask = new Uint8Array(cols * rows);
@@ -548,6 +543,7 @@ export class AsciiRenderer {
     if (fx < 0 || fy < 0 || fx >= this.fineCols || fy >= this.fineRows) return;
     const i = (fy * this.fineCols + fx) * 4;
     const glyphOnly = glyphIndex & GLYPH_MASK;
+    if ((glyphIndex & LAYER) && GLYPH_KIND[glyphOnly] === BLANK_GLYPH) return;
     const old = this.fineBg[i + 3];
     let flags = FINE_SET | (glyphOnly >> 8);
     if (br !== undefined) {
@@ -635,10 +631,6 @@ export class AsciiRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.bgTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE,
       this.bg);
-    gl.activeTexture(gl.TEXTURE3);
-    gl.bindTexture(gl.TEXTURE_2D, this.ovTex);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE,
-      this.ov);
     gl.activeTexture(gl.TEXTURE6);
     gl.bindTexture(gl.TEXTURE_2D, this.fineTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.fineCols, this.fineRows, gl.RGBA, gl.UNSIGNED_BYTE,

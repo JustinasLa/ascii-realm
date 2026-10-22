@@ -58,6 +58,47 @@ test('a partial merge leaves the excess in the source stack', () => {
   assert.deepEqual(inventoryState(inventory), before);
 });
 
+test('moving weapons with different materials swaps stacks without changing their materials', () => {
+  const inventory = emptyInventory();
+  inventory.add('spear', 1, { material: 'steel' });
+  inventory.add('spear', 2, { material: 'stone' });
+  const beforeWeight = inventory.weight;
+
+  assert.equal(inventory.move(0, 1), true);
+  assert.deepEqual(inventory.slots[0], { id: 'spear', count: 2, material: 'stone' });
+  assert.deepEqual(inventory.slots[1], { id: 'spear', count: 1, material: 'steel' });
+  assert.equal(inventory.weight, beforeWeight);
+});
+
+test('moving matching weapon materials merges up to the stack limit', () => {
+  const inventory = emptyInventory();
+  const limit = ITEMS.spear.stackLimit;
+  inventory.add('spear', limit + 1, { material: 'steel' });
+
+  assert.equal(inventory.move(0, 1), true);
+  assert.deepEqual(inventory.slots[0], { id: 'spear', count: 1, material: 'steel' });
+  assert.deepEqual(inventory.slots[1], { id: 'spear', count: limit, material: 'steel' });
+});
+
+test('capacity checks agree with additions for matching, different, and sanitized materials', () => {
+  for (const existing of [{ material: 'steel' }, {}]) {
+    for (const incoming of [{ material: 'steel' }, { material: 'stone' }, {}, { material: 'unknown' }]) {
+      const inventory = emptyInventory();
+      inventory.add('spear', 1, existing);
+      inventory.add('longbow', 23);
+      const before = inventoryState(inventory);
+      const expected = existing.material === 'steel'
+        ? (incoming.material === 'steel' ? 2 : 0)
+        : (!incoming.material || incoming.material === 'unknown' ? 2 : 0);
+
+      assert.equal(inventory.spaceFor('spear', 3, incoming), expected);
+      assert.deepEqual(inventoryState(inventory), before, 'space checks are read-only');
+      assert.equal(inventory.add('spear', 3, incoming), expected);
+      assert.equal(carriedCount(inventory, 'spear'), 1 + expected);
+    }
+  }
+});
+
 test('moving to an empty slot and swapping different items conserves their counts', () => {
   const inventory = emptyInventory();
   inventory.add('healingDraught', 3);

@@ -405,8 +405,16 @@ export class InventoryScreen {
     const width = columns > 1 ? columns : 6;
     const length = this.bagNodes.length;
     const index = this.selection.index;
-    const delta = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -width, ArrowDown: width }[code];
-    const next = (index + delta + length) % length;
+    let next;
+    if (code === 'ArrowUp' || code === 'ArrowDown') {
+      const column = index % width;
+      const rows = Math.floor((length - 1 - column) / width) + 1;
+      const row = Math.floor(index / width);
+      const direction = code === 'ArrowUp' ? -1 : 1;
+      next = ((row + direction + rows) % rows) * width + column;
+    } else {
+      next = (index + (code === 'ArrowLeft' ? -1 : 1) + length) % length;
+    }
     this._select({ source: 'bag', index: next }, true);
   }
 

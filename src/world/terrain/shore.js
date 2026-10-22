@@ -4,7 +4,7 @@
 
 import { fbm } from '../../core/noise.js';
 import { hash2 } from '../../core/rng.js';
-import { dg, over } from '../../render/glyphs.js';
+import { over } from '../../render/glyphs.js';
 import { ASPECT, CHUNK_SIZE as CHUNK, WATER, WATER_LEVEL } from '../world.js';
 import { emit } from './cell.js';
 import { clamp01, fam, headingIndex, pick } from './surface.js';

@@ -146,11 +146,12 @@ test('a real Cerrith cast renders its profile, emits spell cues and retains dela
   assert.equal(cast.length, 1);
   assert.equal(scene.casting.mana, 92);
   assert.ok(scene.casting.effects.list.some(e => e.stage === 'cast' && e.presentation === presentation));
+  scene.advance(0.05); // Let the seed and pollen fade into view.
   const points = [];
   scene.casting.effects.paint((...p) => points.push(p), scene.casting.projectiles);
   assert.ok(points.some(p => p[2] === 'o'), 'runtime paints the spinning seed core');
   assert.ok(points.some(p => ".':*".includes(p[2])), 'runtime paints the gathering pollen');
-  scene.advance(0.8);
+  scene.advance(0.75);
   assert.equal(scene.casting.state(scene.ally).shield, 0, 'arming delay is preserved');
   scene.advance(1.5);
   assert.equal(scene.casting.state(scene.ally).shield, 23);

@@ -2,6 +2,22 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
 import { buildRig, rotY } from '../src/entities/rig.js';
+import { Cape } from '../src/entities/cape.js';
+
+test('the cape attachment follows the shoulders between physics steps', () => {
+  const cape = new Cape();
+  const back = [0, -1];
+  const zero = [0, 0, 0];
+  cape.update(1 / 120, [0, 1.5, 0], back, zero, zero);
+  const free = cape.pts.slice(1).map((point) => point.slice());
+  const anchor = [0.1, 1.6, 0.05];
+  cape.update(1 / 240, anchor, back, zero, zero);
+  assert.deepEqual(cape.pts[0], anchor);
+  assert.deepEqual(cape.pts.slice(1), free, 'substep frames do not advance the cloth simulation');
+  cape.update(1 / 240, anchor, back, zero, zero);
+  assert.deepEqual(cape.pts[0], anchor);
+  assert.notDeepEqual(cape.pts.slice(1), free, 'accumulated time still advances the fixed-step simulation');
+});
 
 test('the cape stays behind the turning body throughout a charged spin', () => {
   const player = new Player(0, 0);

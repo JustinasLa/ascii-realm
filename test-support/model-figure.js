@@ -15,6 +15,7 @@ function moduleURL(path) {
   const url = dataURL(source); modules.set(file.href, url); return url;
 }
 moduleURL('../vendor/three/utils/BufferGeometryUtils.js');
+moduleURL('../vendor/three/utils/SkeletonUtils.js');
 const { GLTFLoader } = await import(moduleURL('../vendor/three/loaders/GLTFLoader.js'));
 moduleURL('../src/entities/retarget.js'); moduleURL('../src/entities/gear.js'); moduleURL('../src/entities/armory.js');
 const { ModelFigure } = await import(moduleURL('../src/entities/model.js'));

@@ -3,7 +3,7 @@ import { Cape } from './cape.js';
 import { Combat } from './combat.js';
 import { buildRig, gaitPlan, project, rotY, SCALE, strideCycle, TILT } from './rig.js';
 import { Vitals } from './vitals.js';
-import { heldWeapon, needsBothHands, weaponFeel } from './loadout.js';
+import { heldWeapon, isBow, isThrown, needsBothHands, weaponFeel } from './loadout.js';
 import { Ranged } from './ranged.js';
 
 // Ground speeds in metres per second. On screen a metre sideways spans
@@ -231,6 +231,7 @@ export class Player {
   // `heading`, when given, is where the swing is aimed: the body turns to
   // face it and holds there until the swing is over.
   attack(heading = null) {
+    if (this.magicStunned) return false;
     this.cancelPickup();
     if (!this.combat.canAcceptAttack) return false;
     const accepted = this.combat.attack({ running: this.run > 0.6 && this.speed > 3, air: this.air > 0 });
@@ -294,7 +295,7 @@ export class Player {
   // of jump depends on the pace: on the spot, walking or running, and on
   // the spot, how many have been made in a row.
   jump() {
-    if (this.magicRooted) return;
+    if (this.magicRooted || this.magicStunned) return;
     this.cancelPickup();
     if (this.windUp >= 0) {
       // Pressed twice in quick succession: the trick follows as soon as the
@@ -406,6 +407,17 @@ export class Player {
   // `held`: whether the attack button is still down, to charge a spin.
   update(dt, world, move, running, held = false) {
     this.time += dt;
+    if (this.magicStunned) {
+      move = { x: 0, y: 0 };
+      running = false;
+      held = false;
+      this.vx = 0;
+      this.vz = 0;
+      this.skid = 0;
+      this.wasMoving = false;
+      // A stun cancels a held charge rather than releasing its spin.
+      this.combat.charge = 0;
+    }
     const fromX = this.x;
     const fromY = this.y;
     const len = Math.hypot(move.x, move.y);
@@ -576,7 +588,8 @@ export class Player {
 
     const feel = this.feel;
     // Heavier weapons swing more slowly, lighter ones faster.
-    cb.update(dt * feel.tempo, { moving, running: moving && this.run > 0.5, air: this.air > 0, held });
+    const meleeHeld = held && !isBow(this.weapon) && !isThrown(this.weapon);
+    cb.update(dt * feel.tempo, { moving, running: moving && this.run > 0.5, air: this.air > 0, held: meleeHeld });
     for (const e of cb.events) {
       if (e.type === 'slam' || e.type === 'strike') {
         // The blade lands a stride ahead, in the direction faced.

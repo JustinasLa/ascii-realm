@@ -175,6 +175,17 @@ test('invalid codes, unknown lobbies, incompatible clients and malformed message
   assert.ok((await create(port)).lobby.code);
 });
 
+test('malformed names cannot crash lobby creation or joining', async (t) => {
+  const { port } = await setup(t);
+  const host = await create(port, 42, { toString: null });
+  assert.equal(host.lobby.self.name, 'Wanderer');
+  const friend = await join(port, host.lobby.code, [{ toString: null }]);
+  assert.equal(friend.lobby.self.name, 'Wanderer');
+  const next = await join(port, host.lobby.code, 'Rowan');
+  assert.equal(next.lobby.self.name, 'Rowan');
+  assert.equal(next.lobby.players.length, 3);
+});
+
 test('invalid state cannot corrupt a room or impersonate another player', async (t) => {
   const { port, game } = await setup(t);
   const host = await create(port);
@@ -207,6 +218,20 @@ test('one address cannot hold unbounded connections or create lobbies without pa
   fourth.on('error', () => {});
   const [code] = await once(fourth, 'close');
   assert.equal(code, 1013);
+});
+
+test('oversized frames from rejected connections cannot crash the server', async (t) => {
+  const { port } = await setup(t, { maxPerAddress: 1 });
+  const host = await create(port);
+  const rejected = new WebSocket(`ws://127.0.0.1:${port}/multiplayer`);
+  rejected.on('error', () => {});
+  const closed = once(rejected, 'close');
+  rejected.on('open', () => rejected.send('a'.repeat(9000)));
+  assert.equal((await closed)[0], 1013);
+  const health = await fetch(`http://127.0.0.1:${port}/health`);
+  assert.deepEqual(await health.json(), { ok: true });
+  await host.client.leave();
+  assert.ok((await create(port)).lobby.code);
 });
 
 test('a friend far from the world is not used to place newcomers', async (t) => {

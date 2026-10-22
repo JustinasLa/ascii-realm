@@ -210,3 +210,28 @@ test('wounded enemies get just the segmented health bar, following them and gone
   hud.update(0, view);
   assert.equal(byClass(document.body, 'hud-foe').length, 0);
 });
+
+test('damage and enemy bars share viewport visibility while damage stays inside its edges', (t) => {
+  const { document, hud } = mount(t);
+  hud.damage(10, 100, 200);
+  hud.setFoes([{ id: 1, health: 10, maxHealth: 20, x: 100, y: 200 }]);
+  hud.update(0, view);
+  const damage = byClass(document.body, 'hud-damage')[0];
+  const foe = byClass(document.body, 'hud-foe')[0];
+  const position = (node) => /translate\(([-\d.]+)px,\s*([-\d.]+)px\)/
+    .exec(node.style.transform).slice(1).map(Number);
+  assert.equal(damage.hidden, false);
+  assert.equal(foe.hidden, false);
+  assert.ok(position(damage)[0] > position(foe)[0], 'damage has a left-edge inset');
+  assert.ok(position(damage)[1] > position(foe)[1], 'damage has a top-edge inset');
+
+  hud.update(0, { ...view, x0: 101 });
+  assert.equal(damage.hidden, true);
+  assert.equal(foe.hidden, true);
+  hud.update(0, view);
+  assert.equal(damage.hidden, false);
+  assert.equal(foe.hidden, false);
+  hud.update(0, { ...view, cellW: 0 });
+  assert.equal(damage.hidden, true);
+  assert.equal(foe.hidden, true);
+});

@@ -2,14 +2,12 @@
 export function arithmetic(source, resolve = () => 0) {
   if (typeof source === 'number') return Number.isFinite(source) ? source : 0;
   const text = String(source ?? 0).replace(/["']/g, '')
-    .replace(/<([^>]+)>|%([^%]+)%/g, (_, a, b) => String(Number(resolve(a ?? b)) || 0));
+    .replace(/<([^>]+)>|%([a-z_][a-z0-9_.]*)%/gi, (_, a, b) => String(Number(resolve(a ?? b)) || 0));
   const tokens = text.match(/\d*\.?\d+(?:e[+-]?\d+)?|[a-z_]+|[()+*/%,^-]/gi) ?? [];
   if (tokens.join('').toLowerCase() !== text.replace(/\s/g, '').toLowerCase()) return 0;
   let pos = 0;
   function atom() {
     const token = tokens[pos++];
-    if (token === '-') return -atom();
-    if (token === '+') return atom();
     if (token === '(') { const value = sum(); if (tokens[pos++] !== ')') throw Error(); return value; }
     if (/^[\d.]/.test(token ?? '')) return Number(token);
     const fn = { min: Math.min, max: Math.max, floor: Math.floor, ceil: Math.ceil, abs: Math.abs, round: Math.round }[token?.toLowerCase()];
@@ -19,11 +17,21 @@ export function arithmetic(source, resolve = () => 0) {
     if (tokens[pos++] !== ')') throw Error();
     return fn(...args);
   }
-  function product() {
+  function power() {
     let value = atom();
-    while (['*', '/', '%', '^'].includes(tokens[pos])) {
-      const op = tokens[pos++], right = atom();
-      value = op === '*' ? value * right : op === '/' ? value / right : op === '%' ? value % right : value ** right;
+    if (tokens[pos] === '^') { pos++; value **= unary(); }
+    return value;
+  }
+  function unary() {
+    if (tokens[pos] === '-') { pos++; return -unary(); }
+    if (tokens[pos] === '+') { pos++; return unary(); }
+    return power();
+  }
+  function product() {
+    let value = unary();
+    while (['*', '/', '%'].includes(tokens[pos])) {
+      const op = tokens[pos++], right = unary();
+      value = op === '*' ? value * right : op === '/' ? value / right : value % right;
     }
     return value;
   }

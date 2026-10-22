@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
 import { FINE } from '../src/render/cells.js';
-import { glyph, LAYER, over } from '../src/render/glyphs.js';
+import { dg, glyph, LAYER, over } from '../src/render/glyphs.js';
 import { AsciiRenderer } from '../src/render/renderer.js';
 import { fineRecipe, fineSource } from '../src/world/prop-art.js';
 import { bakeFine, fineOf, packFine } from '../src/world/fine-bakes.js';
@@ -48,6 +48,24 @@ test('a small cell keeps its glyph and backdrop and marks the cell it lies in', 
   r.fineAt(-1, 0, glyph('@'), 1, 1, 1);
   r.fineAt(r.fineCols, 0, glyph('@'), 1, 1, 1);
   assert.equal(r.fineMark.reduce((a, b) => a + b, 0), marked);
+});
+
+test('blank fine accents preserve the underlying stone and its backdrop', () => {
+  const r = renderer();
+  r.fineAt(5, 3, glyph('#'), 100, 120, 140, 10, 12, 14);
+  const fine = r.fine.slice();
+  const backdrop = r.fineBg.slice();
+  const marks = r.fineMark.slice();
+  for (const accent of [dg('props.ridge.0'), dg('props.shade.0'), glyph(' ')]) {
+    r.fineAt(5, 3, over(accent), 1, 2, 3);
+    assert.deepEqual(r.fine, fine);
+    assert.deepEqual(r.fineBg, backdrop);
+    assert.deepEqual(r.fineMark, marks);
+  }
+  // A plain blank still replaces the letter while retaining a solid cell.
+  r.fineAt(5, 3, glyph(' '), 1, 2, 3, 4, 5, 6);
+  assert.equal(r.fine[(3 * r.fineCols + 5) * 4 + 3], glyph(' '));
+  assert.equal(flagsAt(r, 5, 3), SET | SOLID);
 });
 
 test('later cells stand in front of a sprite, layered effects over it, solid ones hide it', () => {

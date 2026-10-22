@@ -160,11 +160,15 @@ test('real Scalding Wave cast uses authored profile and typed cues while retaini
   assert.ok(events.every(e => e.type === 'spell' && e.presentation === presentation && e.spellId === spell.id));
   assert.ok(events.every(e => !['draw', 'slam'].includes(e.type)));
   assert.ok(scene.casting.effects.list.every(e => e.presentation === presentation));
+  scene.advance(0.05); // Sample the water sheet after its transparent first frame.
   const rendered = [], expected = [];
   scene.casting.effects.paint((...p) => rendered.push(p), scene.casting.projectiles);
-  for (const effect of scene.casting.effects.list) paintPresentation(presentation, effect, (...p) => expected.push(p));
+  for (const effect of scene.casting.effects.list) paintPresentation(presentation, effect, (...p) => {
+    if (p[4] > 0) expected.push(p);
+  });
+  assert.ok(expected.length > 0, 'the authored profiles have visible geometry');
   assert.deepEqual(rendered, expected, 'the real effects renderer consumes the authored geometry');
   assert.ok(rendered.some(p => p[2] === '~') && rendered.some(p => 'oO'.includes(p[2])), 'water sheet and boiling beads');
-  scene.advance(4);
+  scene.advance(3.95);
   assert.equal(scene.foe.health, 85, 'three original five-damage burn pulses');
 });

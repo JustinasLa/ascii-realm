@@ -96,7 +96,7 @@ export class Inventory {
 
   // The world uses this before pulling a loose item toward the player. A
   // capacity check must not collect it, mutate stacks or emit pickup events.
-  spaceFor(id, count = 1) {
+  spaceFor(id, count = 1, extras = {}) {
     const item = itemFor(id);
     if (!item || !validCount(count) || !Number.isFinite(this.capacity) || this.capacity < 0) return 0;
     const availableWeight = Math.max(0, this.capacity - this.weight);
@@ -105,18 +105,19 @@ export class Inventory {
       : count;
     const amount = Math.min(count, allowed);
     if (!amount) return 0;
+    const properties = stackExtras(extras);
     let space = 0;
     for (let index = 0; index < SLOT_COUNT && space < amount; index++) {
       const stack = this.slots[index];
       if (stack === null) space += item.stackLimit;
-      else if (validStack(stack) && stack.id === id) space += item.stackLimit - stack.count;
+      else if (validStack(stack) && stack.id === id && sameExtras(stack, properties)) space += item.stackLimit - stack.count;
     }
     return Math.min(amount, space);
   }
 
   // `extras` are the stack's own properties, e.g. { material: 'steel' }.
   add(id, count = 1, extras = {}) {
-    const amount = this.spaceFor(id, count);
+    const amount = this.spaceFor(id, count, extras);
     if (!amount) return 0;
     const added = putInSlots(this.slots, id, amount, stackExtras(extras));
     if (added) this.events.push({ type: 'pickup', id, count: added });
@@ -146,7 +147,7 @@ export class Inventory {
     const source = this.slots[from];
     const destination = this.slots[to];
     if (!validStack(source) || (destination !== null && !validStack(destination))) return false;
-    if (destination?.id === source.id) {
+    if (destination?.id === source.id && sameExtras(source, destination)) {
       const amount = Math.min(source.count, ITEMS[source.id].stackLimit - destination.count);
       if (!amount) return false;
       destination.count += amount;
