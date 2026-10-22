@@ -192,3 +192,28 @@ test('monsters push the fog too, bigger ones over a wider patch', () => {
   crowd.update(1 / 60, many, still);
   assert.equal(crowd.tracks.size, MAX_WALKERS);
 });
+
+test('fog covers about a quarter of the ground in clear weather and half in full fog', () => {
+  // The banks the game draws, sampled over a wide stretch of ground.
+  const measure = ({ density, coverage }) => {
+    let sum = 0;
+    let covered = 0;
+    let n = 0;
+    for (let gy = 0; gy < 1600; gy += 8) {
+      for (let gx = 0; gx < 1600; gx += 8) {
+        const f = fogAt(gx, gy, { ...still, coverage }) * density;
+        sum += f;
+        if (f > 0.1) covered++;
+        n++;
+      }
+    }
+    return { amount: sum / n, covered: covered / n };
+  };
+  const clear = measure(Fog.target('clear', 0));
+  const full = measure(Fog.target('fog', 1));
+  // Half of what each used to be (0.181 and 0.600 on average).
+  assert.ok(Math.abs(clear.amount - 0.0905) < 0.01, `clear ${clear.amount}`);
+  assert.ok(Math.abs(full.amount - 0.300) < 0.02, `full ${full.amount}`);
+  assert.ok(clear.covered > 0.2 && clear.covered < 0.35, `clear covers ${clear.covered}`);
+  assert.ok(full.covered > 0.45 && full.covered < 0.6, `full covers ${full.covered}`);
+});

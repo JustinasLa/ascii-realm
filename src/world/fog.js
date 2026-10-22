@@ -11,8 +11,11 @@ import { FogWake } from './fog-wake.js';
 import { WEATHER_EFFECTS } from './weather.js';
 import { ASPECT } from './world.js';
 
-// A thin, patchy mist lies over the land in any weather.
-export const AMBIENT_FOG = { density: 0.75, coverage: 0.4 };
+// A thin, patchy mist lies over the land in any weather: banks over about
+// a quarter of the ground.
+export const AMBIENT_FOG = { density: 0.75, coverage: 0.055 };
+// How much wider the banks spread in full fog: about half the ground.
+const FOG_SPREAD = 0.39;
 // How quickly density and coverage settle on a new weather, per second.
 const EASE = 0.6;
 // The banks creep along on their own, faster when the wind picks up. Speeds
@@ -36,7 +39,7 @@ export class Fog {
     const extra = (WEATHER_EFFECTS[preset]?.fog ?? 0) * Math.max(0, Math.min(1, intensity || 0));
     return {
       density: AMBIENT_FOG.density + extra * 0.4,
-      coverage: AMBIENT_FOG.coverage + extra * 0.6,
+      coverage: AMBIENT_FOG.coverage + extra * FOG_SPREAD,
     };
   }
 
