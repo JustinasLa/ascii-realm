@@ -118,12 +118,17 @@ export function makeGateGeometry(rand, seed) {
   const spring = 34.6 + rand() * 0.4, outer = opening + 3.15;
   const height = 68.4 + rand() * 1.1, crown = height - 10.0;
   const s = studio(rand, depth), { mesh, block, profile, solid } = s;
+  const groundFootprints = [];
 
   // Broad, three-step footings. Their inner faces retain a generous clear
   // passage even at the rear projected edge; there is no floor across it.
   for (const side of [-1, 1]) {
     const span = (inside, outside) => side < 0 ? [-outside, -inside] : [inside, outside];
     const [base0, base1] = span(opening - 0.15, radius + 0.65);
+    // Keep the actual model-space floor corners for yaw. Rotating a projected
+    // axis-aligned envelope would turn empty space beside the tunnel solid.
+    groundFootprints.push([[base0 - s.shift, 0.08], [base1 - s.shift, 0.08],
+      [base1 - s.shift, depth], [base0 - s.shift, depth]]);
     const [mid0, mid1] = span(opening - 0.05, radius + 0.35);
     const [a, b] = span(opening, radius);
     block(base0, base1, 0, 0.75, 0.08, depth, { tone: 0.89 }, 0.22);
@@ -223,7 +228,7 @@ export function makeGateGeometry(rand, seed) {
 
   const footW = radius + 0.65 + s.shift, footH = depth * 0.45;
   const inner = opening - 0.15 - s.shift;
-  return { mesh, footW, footH, collisionRects: [
+  return { mesh, footW, footH, groundFootprints, collisionRects: [
     { minX: -footW / ASPECT, maxX: -inner / ASPECT, minY: -footH, maxY: 0.3 },
     { minX: inner / ASPECT, maxX: footW / ASPECT, minY: -footH, maxY: 0.3 },
   ] };

@@ -393,7 +393,8 @@ function scaleCells(cells, scaleX, scaleY = scaleX) {
   for (let dy = Math.ceil((minY - 0.5) * scaleY); dy <= Math.floor((maxY + 0.5) * scaleY); dy++) {
     for (let dx = Math.ceil((minX - 0.5) * scaleX); dx <= Math.floor((maxX + 0.5) * scaleX); dx++) {
       const group = source.get(`${Math.round(dx / scaleX)},${Math.round(dy / scaleY)}`);
-      if (group) for (const c of group) scaled.push(makeCell(dx, dy, c.g, c.r, c.gg, c.b, c.br, c.bgG, c.bb));
+      if (group) for (const c of group) scaled.push(makeCell(dx, dy, c.g, c.r, c.gg, c.b, c.br, c.bgG, c.bb,
+        Number.isFinite(c.depth) ? c.depth * scaleY : undefined));
     }
   }
   return scaled;
@@ -409,7 +410,10 @@ function scaledBaker(sx, sy, used) {
       ry: options.shadow.ry * sy, ox: (options.shadow.ox ?? options.shadow.rx * 0.25) * sx };
     const extras = options.extras?.map((e) => ({ ...e, dx: Math.round(e.dx * sx), dy: Math.round(e.dy * sy) }));
     return bake(Math.ceil(w * sx) + 1, Math.floor(top * sy) - 1, Math.ceil(bottom * sy),
-      (px, py) => sample(px / sx, py / sy), seed, { ...options, shadow, extras });
+      (px, py) => {
+        const surface = sample(px / sx, py / sy);
+        return Number.isFinite(surface?.depth) ? { ...surface, depth: surface.depth * sy } : surface;
+      }, seed, { ...options, shadow, extras });
   };
 }
 
@@ -463,7 +467,7 @@ export function createProp(kind, x, y, options = {}) {
   if (variant === 1) {
     const shade = (value, offset = 0) => Math.max(0, Math.min(255, value * brightness + offset));
     const shadeAll = (list) => list.map((c) => makeCell(c.dx, c.dy, c.g, shade(c.r, warmth), shade(c.gg),
-      shade(c.b, -warmth), c.br, c.bgG, c.bb));
+      shade(c.b, -warmth), c.br, c.bgG, c.bb, c.depth));
     cells = shadeAll(cells);
     const fine = fineRecipe(prop);
     if (fine) withFine(prop, function* shaded() { return shadeAll(yield* fine()); });
@@ -673,6 +677,34 @@ function stumpCells(prop) {
 // reordering their cells: base glyphs and their layers keep painter order.
 // Weak keys let this index disappear with evicted chunks and edited sprites.
 const spriteRows = new WeakMap();
+const depthSlices = new WeakMap();
+
+// Interleave these immutable cell subsets with actors/grass at prop.y + depth.
+// Quarter-row bands bound sorting work while preserving each spot's painter
+// order. Cache by the source cells so replacing a bake invalidates the slices.
+export function propDepthSlices(prop) {
+  const cells = prop.cells;
+  const cached = depthSlices.get(cells);
+  if (cached?.length === cells.length) return cached.slices;
+  let slices = null;
+  if (cells.some((c) => Number.isFinite(c.depth))) {
+    const bands = new Map();
+    let lastDx, lastDy, lastDepth;
+    for (const cell of cells) {
+      const layered = cell.g >= LAYER && cell.dx === lastDx && cell.dy === lastDy;
+      const depth = layered ? lastDepth : Math.round((Number.isFinite(cell.depth) ? cell.depth : 0) * 4) / 4 || 0;
+      if (!bands.has(depth)) bands.set(depth, []);
+      bands.get(depth).push(cell);
+      lastDx = cell.dx;
+      lastDy = cell.dy;
+      lastDepth = depth;
+    }
+    slices = [...bands].sort(([a], [b]) => a - b).map(([depth, cells]) => ({ depth, cells }));
+  }
+  depthSlices.set(cells, { length: cells.length, slices });
+  return slices;
+}
+
 function rowsOf(cells) {
   let cached = spriteRows.get(cells);
   if (cached?.length === cells.length) return cached.rows;
@@ -807,12 +839,12 @@ function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
   }
 }
 
-export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
+export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false, cells = prop.cells) {
   const direct = write === putCell;
   if (direct && !propInView(view, prop)) return;
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
-  const baked = direct && r.fine && !prop.chopped ? fineOf(prop, true) : null;
+  const baked = cells === prop.cells && direct && r.fine && !prop.chopped ? fineOf(prop, true) : null;
   if (baked) {
     drawFine(r, view, prop, baked, t, player, seed, bx, by);
     return;
@@ -845,7 +877,6 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   let lastDy = 0;
   let lastShift = 0;
   let lastHidden = true;
-  const cells = prop.cells;
   for (const row of rowsOf(cells)) {
     const sy = by + row.y;
     if ((direct && (sy < 0 || sy >= view.rows || bx + row.right < 0 || bx + row.left >= view.cols)) ||

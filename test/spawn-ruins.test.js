@@ -1,6 +1,8 @@
 ﻿import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scenery } from '../src/editor/scenery.js';
+import { mulberry32 } from '../src/core/rng.js';
+import { makeGateGeometry } from '../src/world/architecture-buildings.js';
 import { ASPECT, CHUNK_SIZE, WATER, World } from '../src/world/world.js';
 import { blocks, createProp } from '../src/world/props.js';
 import * as architecture from '../src/world/architecture-props.js';
@@ -69,6 +71,30 @@ function corners(rect) {
     [rect.maxX, rect.maxY], [rect.minX, rect.maxY]];
 }
 
+function localFootprints(prop) {
+  if (prop.kind === 'stone-gate') {
+    return makeGateGeometry(mulberry32(prop.seed), prop.seed).groundFootprints.map(polygon =>
+      polygon.map(([x, z]) => [(x + 0.55 * z) / ASPECT * prop.scale, -0.45 * z * prop.scale]));
+  }
+  return unrotated(prop).collisionRects.map(corners);
+}
+
+function polygonBounds(polygon) {
+  return { minX: Math.min(...polygon.map(p => p[0])), maxX: Math.max(...polygon.map(p => p[0])),
+    minY: Math.min(...polygon.map(p => p[1])), maxY: Math.max(...polygon.map(p => p[1])) };
+}
+
+function rowSpan(polygon, y) {
+  const xs = [];
+  for (const [i, a] of polygon.entries()) {
+    const b = polygon[(i + 1) % polygon.length];
+    if (a[1] === b[1] || y < Math.min(a[1], b[1]) || y > Math.max(a[1], b[1])) continue;
+    xs.push(a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]));
+  }
+  assert.ok(xs.length >= 2, 'sampled row crosses the actual footprint');
+  return [Math.min(...xs), Math.max(...xs)];
+}
+
 function polygonCenter(polygon) {
   return [0, 1].map(axis => polygon.reduce((sum, point) => sum + point[axis], 0) / polygon.length);
 }
@@ -119,10 +145,9 @@ for (const seed of seeds) {
         'pillars and rubble keep their spacious original positions');
     }
     assert.equal(gate.rotation, 17);
-    const original = unrotated(gate);
-    const minX = Math.min(...original.collisionRects.map(rect => rect.minX));
-    const maxX = Math.max(...original.collisionRects.map(rect => rect.maxX));
-    const a = at(gate, minX, 0), b = at(gate, maxX, 0);
+    const piers = localFootprints(gate);
+    const [minX, frontY] = piers[0][0], [maxX] = piers[1][1];
+    const a = at(gate, minX, frontY), b = at(gate, maxX, frontY);
     const spanRatio = (b[0] - a[0]) * ASPECT / ((maxX - minX) * ASPECT);
     assert.ok(spanRatio >= 0.76 && spanRatio <= 0.84, `gate retains about 80% of its unturned frontal span: ${spanRatio}`);
     const screenSlope = (b[1] - a[1]) / ((b[0] - a[0]) * ASPECT);
@@ -144,10 +169,10 @@ for (const seed of seeds) {
     const world = new World(seed, { spawnRuins: true });
     dryAndWalkable(world);
     const gate = ruins(world).find(prop => prop.kind === 'stone-gate');
-    const piers = unrotated(gate).collisionRects;
+    const piers = localFootprints(gate);
     const points = world.spawnRuins.route.map(p => rotate(p.x - gate.x, p.y - gate.y, -gate.rotation));
-    const front = Math.max(...piers.map(p => p.maxY));
-    const back = Math.min(...piers.map(p => p.minY));
+    const front = Math.max(...piers.flat().map(p => p[1]));
+    const back = Math.min(...piers.flat().map(p => p[1]));
     let crossed = false;
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1], b = points[i];
@@ -155,7 +180,8 @@ for (const seed of seeds) {
       for (const y of [front, back]) {
         const f = (y - a[1]) / (b[1] - a[1]);
         const x = a[0] + (b[0] - a[0]) * f;
-        assert.ok(x > piers[0].maxX && x < piers[1].minX, 'route enters and exits between the solid piers');
+        assert.ok(x > rowSpan(piers[0], y)[1] && x < rowSpan(piers[1], y)[0],
+          'route enters and exits between the actual solid piers');
       }
       crossed = true;
     }
@@ -167,7 +193,7 @@ for (const seed of seeds) {
     const props = ruins(world);
     const gate = props.find(prop => prop.kind === 'stone-gate');
     assert.equal(gate.collisionPolygons?.length, 2);
-    const piers = unrotated(gate).collisionRects;
+    const piers = localFootprints(gate);
     const walls = props.filter(prop => prop.kind.startsWith('wall-')).sort((a, b) =>
       rotate(a.x - gate.x, a.y - gate.y, -gate.rotation)[0]
       - rotate(b.x - gate.x, b.y - gate.y, -gate.rotation)[0]);
@@ -178,9 +204,10 @@ for (const seed of seeds) {
       assert.equal(prop.variant, 0, 'gate and adjoining walls share coherent, unvaried yaw');
       assert.equal(prop.rotation, gate.rotation, 'all four wall sections use the gate yaw');
       const original = unrotated(prop);
-      assert.equal(prop.collisionPolygons?.length, original.collisionRects.length);
-      for (const [i, rect] of original.collisionRects.entries()) {
-        const expected = corners(rect).map(([x, y]) => rotate(x, y, prop.rotation));
+      const footprints = localFootprints(prop);
+      assert.equal(prop.collisionPolygons?.length, footprints.length);
+      for (const [i, footprint] of footprints.entries()) {
+        const expected = footprint.map(([x, y]) => rotate(x, y, prop.rotation));
         const polygon = prop.collisionPolygons[i];
         assert.equal(polygon.length, 4);
         for (const [x, y] of expected) {
@@ -194,8 +221,9 @@ for (const seed of seeds) {
     }
     for (const pier of piers) {
       for (const fx of [0.01, 0.5, 0.99]) for (const fy of [0.01, 0.5, 0.99]) {
-        const point = at(gate, pier.minX + (pier.maxX - pier.minX) * fx,
-          pier.minY + (pier.maxY - pier.minY) * fy);
+        const point = at(gate,
+          pier[0][0] + (pier[1][0] - pier[0][0]) * fx + (pier[3][0] - pier[0][0]) * fy,
+          pier[0][1] + (pier[1][1] - pier[0][1]) * fx + (pier[3][1] - pier[0][1]) * fy);
         assert.equal(blocks(gate, ...point), true, 'rotated pier corners and centre remain solid');
         assert.equal(world.isWalkable(...point), false, 'world collision finds rotated piers');
       }
@@ -203,28 +231,37 @@ for (const seed of seeds) {
     const sections = walls.map(wall => {
       const [wx, wy] = rotate(wall.x - gate.x, wall.y - gate.y, -gate.rotation);
       near(wy, 0, 'every wall stays on the gate masonry axis');
-      const faces = unrotated(wall).collisionRects;
-      return { prop: wall, minX: wx + Math.min(...faces.map(rect => rect.minX)),
-        maxX: wx + Math.max(...faces.map(rect => rect.maxX)),
-        minY: wy + Math.min(...faces.map(rect => rect.minY)),
-        maxY: wy + Math.max(...faces.map(rect => rect.maxY)) };
+      const polygons = localFootprints(wall).map(polygon => polygon.map(([x, y]) => [wx + x, wy + y]));
+      return { prop: wall, polygons, ...polygonBounds(polygons.flat()) };
     });
     const [outerLeft, innerLeft, innerRight, outerRight] = sections;
     assert.ok(innerLeft.maxX < 0 && innerRight.minX > 0, 'wall runs flank the open tunnel');
     assert.ok(outerLeft.minX < innerLeft.minX && outerRight.maxX > innerRight.maxX,
       'both low wall sections lengthen the original runs');
-    const leftPier = { ...piers[0], prop: gate }, rightPier = { ...piers[1], prop: gate };
+    const leftPier = { ...polygonBounds(piers[0]), polygons: [piers[0]], prop: gate };
+    const rightPier = { ...polygonBounds(piers[1]), polygons: [piers[1]], prop: gate };
     for (const [left, right] of [[outerLeft, innerLeft], [innerLeft, leftPier],
       [rightPier, innerRight], [innerRight, outerRight]]) {
       assert.ok(Math.min(left.maxX, right.maxX) > Math.max(left.minX, right.minX),
         'adjoining masonry physically overlaps');
       const minY = Math.max(left.minY, right.minY), maxY = Math.min(left.maxY, right.maxY);
       assert.ok(maxY > minY, 'adjoining masonry shares collision depth');
-      const x0 = (left.minX + left.maxX) / 2, x1 = (right.minX + right.maxX) / 2;
       // Probe the full span between centres on several rows to catch cracks
       // at both wall/pier joins and both inner/outer wall joins.
       for (const f of [0.2, 0.5, 0.8]) {
         const y = minY + (maxY - minY) * f;
+        const span = section => {
+          const ranges = section.polygons.filter(polygon => {
+            const bounds = polygonBounds(polygon);
+            return y > bounds.minY && y < bounds.maxY;
+          }).map(polygon => rowSpan(polygon, y));
+          assert.ok(ranges.length, 'adjoining masonry occupies the sampled row');
+          return [Math.min(...ranges.map(r => r[0])), Math.max(...ranges.map(r => r[1]))];
+        };
+        const l = span(left), r = span(right);
+        assert.ok(Math.min(l[1], r[1]) > Math.max(l[0], r[0]),
+          `actual masonry footprints overlap on every sampled join row: ${left.prop.id}/${right.prop.id}, y=${y}, spans=${l}/${r}`);
+        const x0 = (l[0] + l[1]) / 2, x1 = (r[0] + r[1]) / 2;
         for (let x = x0; x <= x1; x += 0.1) {
           const point = at(gate, x, y);
           assert.ok(blocks(left.prop, ...point) || blocks(right.prop, ...point), `masonry gap at ${point}`);
