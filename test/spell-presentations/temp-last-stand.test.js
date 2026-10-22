@@ -142,26 +142,27 @@ test('all effect stages remain deterministic, bounded, finite and fade completel
   assert.deepEqual(frame('cast', 0.3, { heading: 2 }), frame('cast', 0.3), 'heading rotation belongs to the runtime');
 });
 
-test('martial horn and paired rising calls launch into a separate low landing stamp', () => {
+test('recorded wing and fire launches follow the flight before a separate heavy landing', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const horn = cast.find(v => v.type === 'sawtooth');
-  const calls = cast.filter(v => v.kind === 'tone' && v.duration < 0.2);
-  assert.ok(horn.frequency < calls[0].frequency && horn.duration > 0.3, 'low held horn underlies the calls');
-  assert.equal(calls.length, 4, 'two short paired calls');
-  for (let i = 1; i < calls.length; i++) assert.ok(calls[i].frequency > calls[i - 1].frequency);
-  assert.ok(calls[2].delay - calls[1].delay > calls[1].delay - calls[0].delay, 'a breath separates the two pairs');
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'bandpass' && v.attack > 0.05), 'launch air swells');
-  assert.ok(impact.some(v => v.type === 'sine' && v.endFrequency < v.frequency && v.endFrequency < 60), 'landing stamps downward into bass');
-  assert.ok(impact.some(v => v.kind === 'noise' && v.delay > 0), 'landing leaves a short grit tail');
-  assert.ok(pulse.every(v => v.gain <= 0.02 && v.duration <= 0.12), 'repeat pulses stay quiet and brief');
+  const clip = (layers, name) => layers.find(v => v.url.endsWith('/' + name + '.wav'));
+  assert.equal(clip(cast, 'ignition').delay, 0, 'fire gathers with the raised blade');
+  assert.equal(clip(cast, 'wing-flap').delay, 0.6, 'cloth wings open at the backward launch');
+  assert.equal(clip(cast, 'fire-roar').delay, 0.6, 'fire thrust follows the wings');
+  assert.equal(clip(cast, 'air-swish').delay, 1.2, 'the physical air sweep marks the forward dive');
+  assert.equal(clip(impact, 'wood-break').delay, 0, 'the landing starts with a solid fracture');
+  assert.ok(clip(impact, 'thunder-impact').rate <= 0.85, 'low thunder supplies landing weight');
+  assert.ok(clip(impact, 'coal-crack').delay > clip(impact, 'wood-break').delay, 'embers fracture after contact');
+  assert.ok(pulse.every(v => v.gain <= 0.15), 'repeated waves stay quiet');
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length > 0 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.attack > 0 && voice.attack + voice.release <= voice.duration);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
     }
   }
   assert.notDeepEqual(cast, impact);

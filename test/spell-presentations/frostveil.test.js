@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import presentation from '../../src/spells/presentations/frostveil.js';
 import spell from '../../src/spells/definitions/frostveil.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function points(stage, progress, radius = 2, heading = 0, life = presentation.duration) {
   const result = [];
@@ -97,24 +100,60 @@ test('Frostveil stays deterministic, finite, ASCII, bounded and fades in every r
   }
 });
 
-test('Frostveil unfurls frozen whispers with very quiet field pulses', () => {
+test('Frostveil unfurls recorded wind and breath with quiet ice field pulses', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.filter(v => v.kind === 'noise' && v.duration > 1).length >= 2, 'overlapping mist curtains');
-  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.015, 'dense field repeats stay subdued');
-  assert.notDeepEqual(cast, impact);
+  const name = voice => voice.url.split('/').at(-1);
+  assert.deepEqual(cast.map(name), ['wind-swell.wav', 'cold-breath.wav', 'ice-grit.wav']);
+  assert.ok(cast[0].delay < cast[1].delay && cast[1].delay < cast[2].delay,
+    'outdoor wind opens before the breath and subtle close creak');
+  assert.ok(cast[0].gain > cast[1].gain && cast[1].gain > cast[2].gain);
+  assert.deepEqual(impact.map(name), ['snow-scuff.wav', 'cold-breath.wav', 'wind-swell.wav']);
+  assert.ok(impact[0].delay < impact[1].delay && impact[1].delay < impact[2].delay,
+    'the soft settling scuff gives way to breath and lingering wind');
+  assert.equal(pulse.length, 1, 'dense field repeats have one recording only');
+  assert.equal(name(pulse[0]), 'ice-tick.wav');
+  assert.equal(pulse[0].gain, 0.1);
+  assert.ok(0.32 / pulse[0].rate + pulse[0].delay < 0.28, 'pulse ends before the next cue gate');
+
+  const manifest = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url)));
   for (const [stage, voices] of Object.entries(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.equal(voice.kind, 'recording');
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
+      assert.match(voice.url, /^\/assets\/audio\/spells\/seithr\/[a-z-]+\.wav$/);
+      const clip = manifest.clips.find(item => item.file === name(voice));
+      assert.ok(clip, `${name(voice)} has source provenance`);
+      const source = manifest.sources.find(item => item.id === clip.sourceId);
+      assert.ok(source?.provenance && source?.artist && source?.licenseUrl);
+      assert.ok(['CC0-1.0', 'CC-BY-4.0'].includes(source.license));
+      const bytes = await readFile(new URL('../..' + voice.url, import.meta.url));
+      assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), clip.sha256);
     }
     const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, presentation), true);
     const handles = playSpellSound(fake.engine, { stage, presentation, x: 4, y: 7 });
     assert.equal(handles.length, voices.length);
+    const sources = fake.nodes.filter(node => node.kind === 'source');
+    assert.equal(sources.length, voices.length);
+    sources.forEach((source, index) => {
+      assert.equal(source.buffer.id, name(voices[index]));
+      assert.deepEqual(source.starts, [fake.context.currentTime + voices[index].delay]);
+      assert.equal(source.playbackRate.calls[0].args[0], voices[index].rate);
+      assert.equal(source.loop, false);
+    });
+    assert.ok(!fake.nodes.some(node => node.kind === 'oscillator' || node.kind === 'filter'));
+    assert.deepEqual(fake.allocations, [], 'no generated noise buffers');
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 4 && r.y === 7));
     assert.deepEqual(fake.invalid, []);
     handles.forEach(h => h.stop());
+    assert.ok(handles.every(handle => handle.ended));
+    assert.ok(fake.routes.every(route => route.disposals === 1));
   }
 });
 

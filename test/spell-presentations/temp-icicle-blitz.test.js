@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
+import { playSpellSound } from '../../src/audio/spells.js';
+import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import presentation from '../../src/spells/presentations/temp-icicle-blitz.js';
 import spell from '../../src/spells/definitions/temp-icicle-blitz.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
@@ -163,22 +167,55 @@ test('Icicle Blitz frames are deterministic, bounded, and fade away for every st
   assert.ok(peak(sample('projectile', 0.99)) < peak(sample('projectile', 0.2)) * 0.1);
 });
 
-test('Icicle Blitz snaps an uneven volley above low glacier strain', () => {
+test('Icicle Blitz uses documented recordings for an uneven ice volley and snowy contact', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const snaps = cast.filter(v => v.kind === 'tone' && v.frequency > 500);
-  assert.ok(snaps.length >= 3);
-  assert.ok(new Set(snaps.slice(1).map((v, i) => Number((v.delay - snaps[i].delay).toFixed(3)))).size >= 2, 'uneven volley rhythm');
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
-  assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
+  const grains = cast.filter(v => v.url.endsWith('/ice-tick.wav'));
+  assert.equal(grains.length, 3);
+  assert.equal(new Set(grains.map(v => v.rate)).size, 3, 'each grain has a different physical pitch');
+  assert.ok(new Set(grains.slice(1).map((v, i) => Number((v.delay - grains[i].delay).toFixed(3)))).size >= 2, 'uneven volley rhythm');
+  assert.ok(cast.some(v => v.url.endsWith('/cold-breath.wav') && v.delay === 0));
+  assert.ok(impact.some(v => v.url.endsWith('/ice-crack.wav') && v.delay === 0));
+  assert.ok(impact.some(v => v.url.endsWith('/snow-crush.wav') && v.delay > 0));
+  assert.equal(pulse.length, 1);
+  assert.ok(pulse[0].url.endsWith('/ice-tick.wav'));
+  assert.ok(pulse[0].gain >= 0.1 && pulse[0].gain <= 0.18);
+  assert.ok(pulse[0].gain < Math.min(...grains.map(v => v.gain)));
+  const manifest = JSON.parse(readFileSync(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url)));
+  const crops = Object.values(manifest).find(value => Array.isArray(value) && value.some(item => item.file));
   for (const sequence of Object.values(presentation.sounds)) {
-    assert.ok(sequence.length > 0 && sequence.length <= 8);
+    assert.ok(sequence.length >= 1 && sequence.length <= 4);
+    assert.ok(sequence.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const voice of sequence) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
+      assert.equal(voice.kind, 'recording');
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      const crop = crops.find(item => voice.url.endsWith('/' + item.file));
+      assert.ok(crop, 'recording has crop provenance');
+      assert.ok(manifest.sources.some(source => source.id === crop.sourceId && source.license), 'original recording has a documented license');
     }
+  }
+});
+
+test('Icicle Blitz plays file buffers at authored volley times without synthesized voices', async () => {
+  for (const [stage, recipe] of Object.entries(presentation.sounds)) {
+    const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
+    const handles = playSpellSound(fake.engine, { stage, presentation, x: 3, y: 4 });
+    assert.equal(handles.length, recipe.length);
+    const sources = fake.nodes.filter(node => node.kind === 'source');
+    assert.equal(sources.length, recipe.length);
+    sources.forEach((source, index) => {
+      assert.equal(source.buffer.id, recipe[index].url.split('/').at(-1));
+      assert.equal(source.starts[0], fake.context.currentTime + recipe[index].delay);
+      assert.ok(source.buffer.duration > 0);
+    });
+    assert.ok(fake.nodes.every(node => node.kind !== 'oscillator'));
+    assert.deepEqual(fake.allocations, [], 'no synthesized noise buffers');
+    assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === 4));
+    assert.deepEqual(fake.invalid, []);
+    handles.forEach(handle => handle.stop());
+    assert.ok(fake.routes.every(route => route.disposals === 1));
   }
 });

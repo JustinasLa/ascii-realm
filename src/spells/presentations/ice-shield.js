@@ -413,28 +413,22 @@ export default {
   duration: 1.18,
   draw,
   sounds: {
-    // Glacial pressure gathers, then staggered slab locks seat the haunted ward.
+    // Real ice-field strain gathers beneath the shell; a lake crack locks it shut.
     cast: [
-      { kind: 'tone', delay: 0, duration: 1.24, gain: 0.083, attack: 0.12, decay: 0.24, sustain: 0.64, release: 0.65, frequency: 82, endFrequency: 66, type: 'triangle', cutoff: 310, Q: 0.6 },
-      { kind: 'noise', delay: 0.025, duration: 0.65, gain: 0.052, attack: 0.15, decay: 0.17, sustain: 0.48, release: 0.29, cutoff: 690, filterType: 'bandpass', Q: 0.85, playbackRate: 0.65 },
-      { kind: 'noise', delay: 0.24, duration: 0.19, gain: 0.061, attack: 0.006, decay: 0.055, sustain: 0.22, release: 0.12, cutoff: 1050, filterType: 'bandpass', Q: 1.1, playbackRate: 0.78 },
-      { kind: 'noise', delay: 0.43, duration: 0.25, gain: 0.068, attack: 0.008, decay: 0.065, sustain: 0.25, release: 0.16, cutoff: 780, filterType: 'lowpass', Q: 0.9, playbackRate: 0.55 },
-      { kind: 'tone', delay: 0.48, duration: 1.05, gain: 0.047, attack: 0.018, decay: 0.2, sustain: 0.32, release: 0.72, frequency: 174, endFrequency: 163, type: 'sine', cutoff: 500, Q: 0.5 },
-      { kind: 'tone', delay: 0.49, duration: 0.93, gain: 0.025, attack: 0.025, decay: 0.17, sustain: 0.22, release: 0.64, frequency: 251, endFrequency: 244, type: 'triangle', cutoff: 670, Q: 0.6 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.36, rate: 0.78, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.22, rate: 0.82, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.38, rate: 0.86, delay: 0.48 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.15, rate: 0.88, delay: 0.66 },
     ],
-    // A blunt ice-shell strike, splinter grit and a low, inharmonic plate groan.
+    // A fractured lake slab answers the blow, then loose ice and snow settle.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.48, gain: 0.084, attack: 0.004, decay: 0.1, sustain: 0.24, release: 0.32, frequency: 116, endFrequency: 53, type: 'triangle', cutoff: 430, Q: 0.6 },
-      { kind: 'noise', delay: 0, duration: 0.16, gain: 0.065, attack: 0.003, decay: 0.037, sustain: 0.18, release: 0.11, cutoff: 1450, filterType: 'bandpass', Q: 0.8, playbackRate: 0.72 },
-      { kind: 'noise', delay: 0.055, duration: 0.3, gain: 0.032, attack: 0.012, decay: 0.07, sustain: 0.21, release: 0.2, cutoff: 870, filterType: 'bandpass', Q: 1.4, playbackRate: 0.58 },
-      { kind: 'tone', delay: 0.018, duration: 0.86, gain: 0.042, attack: 0.009, decay: 0.15, sustain: 0.31, release: 0.58, frequency: 181, endFrequency: 163, type: 'sine', cutoff: 500, Q: 0.5 },
-      { kind: 'tone', delay: 0.04, duration: 0.63, gain: 0.021, attack: 0.012, decay: 0.13, sustain: 0.19, release: 0.44, frequency: 274, endFrequency: 249, type: 'sine', cutoff: 650, Q: 0.5 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.49, rate: 0.79, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.21, rate: 0.84, delay: 0.075 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.16, rate: 0.9, delay: 0.23 },
     ],
-    // Repeated frost fronts whisper through the ward instead of ringing brightly.
+    // A single quiet recorded ice grain keeps repeated ward movement restrained.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.22, gain: 0.013, attack: 0.035, decay: 0.045, sustain: 0.28, release: 0.12, cutoff: 820, filterType: 'bandpass', Q: 0.7, playbackRate: 0.65 },
-      { kind: 'tone', delay: 0.01, duration: 0.26, gain: 0.017, attack: 0.04, decay: 0.055, sustain: 0.34, release: 0.145, frequency: 91, endFrequency: 82, type: 'sine', cutoff: 260, Q: 0.5 },
-      { kind: 'tone', delay: 0.025, duration: 0.23, gain: 0.008, attack: 0.03, decay: 0.045, sustain: 0.23, release: 0.14, frequency: 245, endFrequency: 238, type: 'triangle', cutoff: 460, Q: 0.5 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 0.87, delay: 0.035 },
     ],
   },
 };

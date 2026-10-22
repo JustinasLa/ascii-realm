@@ -456,48 +456,22 @@ export default {
     }
   },
   sounds: {
-    // A glacier groans in the hand, then one dry cleavage releases the shard.
+    // Recorded ice under strain opens into one crisp launch crack and cold air.
     cast: [
-      { kind: 'tone', type: 'sine', delay: 0, duration: 0.62, gain: 0.075,
-        attack: 0.045, decay: 0.13, sustain: 0.36, release: 0.32, frequency: 126, endFrequency: 74 },
-      { kind: 'tone', type: 'triangle', delay: 0.018, duration: 0.38, gain: 0.035,
-        attack: 0.065, decay: 0.07, sustain: 0.3, release: 0.2, frequency: 311, endFrequency: 257,
-        filterType: 'lowpass', cutoff: 740, Q: 0.8 },
-      { kind: 'noise', delay: 0, duration: 0.2, gain: 0.045,
-        attack: 0.075, decay: 0.035, sustain: 0.24, release: 0.075,
-        filterType: 'bandpass', cutoff: 920, Q: 1.4, playbackRate: 0.65 },
-      { kind: 'noise', delay: 0.095, duration: 0.115, gain: 0.068,
-        attack: 0.002, decay: 0.022, sustain: 0.16, release: 0.085,
-        filterType: 'bandpass', cutoff: 1940, Q: 0.85, playbackRate: 0.85 },
-      { kind: 'tone', type: 'sine', delay: 0.1, duration: 0.3, gain: 0.027,
-        attack: 0.003, decay: 0.055, sustain: 0.18, release: 0.22, frequency: 843, endFrequency: 677 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.26, rate: 0.96, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.56, rate: 1.08, delay: 0.085 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.12, rate: 1.05, delay: 0.1 },
     ],
-    // Fracture and the slow binding share this cue; a hollow body outlasts the crack.
+    // A physical lake fracture lands first; loose ice settles behind it.
+    // This also accompanies the runtime's repeated slow-aura binding.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.14, gain: 0.078,
-        attack: 0.002, decay: 0.027, sustain: 0.19, release: 0.105,
-        filterType: 'bandpass', cutoff: 1750, Q: 1.1, playbackRate: 0.75 },
-      { kind: 'tone', type: 'triangle', delay: 0.008, duration: 0.33, gain: 0.037,
-        attack: 0.004, decay: 0.065, sustain: 0.23, release: 0.24, frequency: 573, endFrequency: 412,
-        filterType: 'lowpass', cutoff: 1050, Q: 0.65 },
-      { kind: 'tone', type: 'sine', delay: 0.012, duration: 0.78, gain: 0.064,
-        attack: 0.013, decay: 0.12, sustain: 0.32, release: 0.55, frequency: 92, endFrequency: 57 },
-      { kind: 'noise', delay: 0.064, duration: 0.24, gain: 0.033,
-        attack: 0.003, decay: 0.048, sustain: 0.15, release: 0.17,
-        filterType: 'bandpass', cutoff: 1230, Q: 1.8, playbackRate: 0.6 },
-      { kind: 'tone', type: 'sine', delay: 0.09, duration: 0.58, gain: 0.023,
-        attack: 0.012, decay: 0.09, sustain: 0.2, release: 0.44, frequency: 227, endFrequency: 209 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.52, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.23, rate: 1.08, delay: 0.075 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.16, rate: 0.9, delay: 0.035 },
     ],
-    // Quiet frost shed in flight: short enough for the runtime's 280 ms pulse gate.
+    // A single quiet recorded grain; no persistent bed on repeated trail ticks.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.15, gain: 0.018,
-        attack: 0.012, decay: 0.028, sustain: 0.22, release: 0.095,
-        filterType: 'bandpass', cutoff: 1370, Q: 1.25, playbackRate: 0.7 },
-      { kind: 'tone', type: 'sine', delay: 0.006, duration: 0.22, gain: 0.014,
-        attack: 0.008, decay: 0.04, sustain: 0.16, release: 0.15, frequency: 367, endFrequency: 321 },
-      { kind: 'noise', delay: 0.04, duration: 0.17, gain: 0.012,
-        attack: 0.015, decay: 0.03, sustain: 0.25, release: 0.11,
-        filterType: 'lowpass', cutoff: 490, Q: 0.75, playbackRate: 0.55 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.12, rate: 1.2, delay: 0 },
     ],
   },
 };

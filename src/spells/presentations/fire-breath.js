@@ -479,22 +479,21 @@ export default {
   duration: 1.08,
   draw,
   sounds: {
+    // Recorded air leads a real blowtorch ignition; the longer torch take
+    // carries the exhalation and naturally dies into its own fire texture.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.19, gain: 0.035, attack: 0.04, release: 0.09, cutoff: 640, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.04, duration: 0.83, gain: 0.065, attack: 0.12, release: 0.28, frequency: 87, endFrequency: 54, type: 'triangle', cutoff: 230 },
-      { kind: 'noise', delay: 0.1, duration: 0.56, gain: 0.085, attack: 0.09, release: 0.24, cutoff: 1050, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.27, duration: 0.57, gain: 0.065, attack: 0.08, release: 0.3, cutoff: 1550, filterType: 'bandpass' },
-      { kind: 'noise', delay: 0.46, duration: 0.51, gain: 0.045, attack: 0.05, release: 0.32, cutoff: 2200, filterType: 'lowpass' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.12, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.3, rate: 0.9, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.54, rate: 0.86, delay: 0.24 },
     ],
+    // A real fireplace pop lands first, followed by a subdued ember bed.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.15, gain: 0.065, attack: 0.003, release: 0.12, cutoff: 2800, filterType: 'highpass' },
-      { kind: 'noise', delay: 0.062, duration: 0.1, gain: 0.035, attack: 0.002, release: 0.085, cutoff: 3900, filterType: 'bandpass' },
-      { kind: 'noise', delay: 0.145, duration: 0.09, gain: 0.027, attack: 0.002, release: 0.075, cutoff: 3200, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.015, duration: 0.19, gain: 0.026, attack: 0.003, release: 0.15, frequency: 132, endFrequency: 67, type: 'triangle' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.24, rate: 0.89, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.11, rate: 0.94, delay: 0.09 },
     ],
+    // Repeated mouth/zone cues stay beneath the continuous breath recording.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.1, gain: 0.018, attack: 0.003, release: 0.08, cutoff: 1900, filterType: 'bandpass' },
-      { kind: 'noise', delay: 0.045, duration: 0.065, gain: 0.009, attack: 0.002, release: 0.05, cutoff: 2700, filterType: 'highpass' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.1, delay: 0 },
     ],
   },
 };

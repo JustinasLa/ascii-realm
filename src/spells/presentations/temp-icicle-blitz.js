@@ -362,28 +362,22 @@ export default {
   duration: 1.02,
   draw,
   sounds: {
-    // Frozen breath and strained glacier bass carry an uneven, brittle volley.
+    // Close ice grains leave in an uneven volley through a restrained breath.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.61, gain: 0.025, attack: 0.055, decay: 0.13, sustain: 0.25, release: 0.29, cutoff: 1150, filterType: 'bandpass', Q: 0.7, playbackRate: 0.65 },
-      { kind: 'tone', delay: 0, duration: 0.66, gain: 0.05, attack: 0.025, decay: 0.15, sustain: 0.3, release: 0.32, frequency: 117, endFrequency: 76, type: 'triangle', cutoff: 360, filterType: 'lowpass', Q: 0.6 },
-      { kind: 'tone', delay: 0.071, duration: 0.15, gain: 0.042, attack: 0.002, decay: 0.037, sustain: 0.14, release: 0.10, frequency: 1260, endFrequency: 730, type: 'triangle', cutoff: 1650, filterType: 'lowpass', Q: 0.65 },
-      { kind: 'tone', delay: 0.133, duration: 0.17, gain: 0.035, attack: 0.002, decay: 0.045, sustain: 0.12, release: 0.11, frequency: 960, endFrequency: 590, type: 'triangle', cutoff: 1500, filterType: 'lowpass', Q: 0.65 },
-      { kind: 'tone', delay: 0.224, duration: 0.18, gain: 0.039, attack: 0.002, decay: 0.05, sustain: 0.1, release: 0.12, frequency: 1430, endFrequency: 820, type: 'triangle', cutoff: 1750, filterType: 'lowpass', Q: 0.7 },
-      { kind: 'tone', delay: 0.408, duration: 0.22, gain: 0.032, attack: 0.003, decay: 0.065, sustain: 0.13, release: 0.14, frequency: 1080, endFrequency: 630, type: 'sine', cutoff: 1450, filterType: 'lowpass', Q: 0.65 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.14, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.31, rate: 1.08, delay: 0.071 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.25, rate: 0.93, delay: 0.224 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.28, rate: 1.16, delay: 0.408 },
     ],
-    // A close ice fracture, its dense frozen core, then chips in a hollow tail.
+    // A physical lake fracture lands in compressed snow, with loose ice settling.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.18, gain: 0.065, attack: 0.002, decay: 0.035, sustain: 0.16, release: 0.12, cutoff: 1900, filterType: 'bandpass', Q: 0.9, playbackRate: 0.8 },
-      { kind: 'tone', delay: 0, duration: 0.28, gain: 0.048, attack: 0.003, decay: 0.06, sustain: 0.17, release: 0.19, frequency: 185, endFrequency: 67, type: 'triangle', cutoff: 540, filterType: 'lowpass', Q: 0.65 },
-      { kind: 'tone', delay: 0.019, duration: 0.29, gain: 0.027, attack: 0.002, decay: 0.065, sustain: 0.12, release: 0.21, frequency: 1187, endFrequency: 879, type: 'sine', cutoff: 1550, filterType: 'lowpass', Q: 0.7 },
-      { kind: 'noise', delay: 0.061, duration: 0.13, gain: 0.021, attack: 0.002, decay: 0.028, sustain: 0.12, release: 0.09, cutoff: 2500, filterType: 'bandpass', Q: 0.8, playbackRate: 0.7 },
-      { kind: 'noise', delay: 0.12, duration: 0.38, gain: 0.014, attack: 0.022, decay: 0.07, sustain: 0.2, release: 0.26, cutoff: 690, filterType: 'lowpass', Q: 0.6, playbackRate: 0.55 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.45, rate: 1.05, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.27, rate: 0.88, delay: 0.025 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.14, rate: 1.12, delay: 0.11 },
     ],
-    // Projectile/field repeats: a quiet splinter with breath and buried ice strain.
+    // A single subdued grain keeps repeated projectile cues light.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.13, gain: 0.014, attack: 0.002, decay: 0.028, sustain: 0.12, release: 0.09, frequency: 790, endFrequency: 565, type: 'triangle', cutoff: 1250, filterType: 'lowpass', Q: 0.6 },
-      { kind: 'noise', delay: 0.012, duration: 0.17, gain: 0.011, attack: 0.008, decay: 0.04, sustain: 0.17, release: 0.11, cutoff: 1370, filterType: 'bandpass', Q: 0.7, playbackRate: 0.65 },
-      { kind: 'tone', delay: 0.027, duration: 0.21, gain: 0.012, attack: 0.012, decay: 0.043, sustain: 0.18, release: 0.14, frequency: 134, endFrequency: 98, type: 'sine', cutoff: 320, filterType: 'lowpass', Q: 0.6 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 0.97, delay: 0.017 },
     ],
   },
 };

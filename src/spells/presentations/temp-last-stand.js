@@ -450,24 +450,25 @@ export default {
   duration: 1.45,
   draw,
   sounds: {
+    // Recorded flame ignition gathers at the blade. Cloth wings and a fire
+    // thrust mark the backward launch; the bamboo sweep follows the dive.
     cast: [
-      { kind: 'tone', delay: 0, type: 'sawtooth', frequency: 98, endFrequency: 110, cutoff: 560, duration: 0.48, gain: 0.04, attack: 0.07, release: 0.16 },
-      { kind: 'tone', delay: 0.04, type: 'triangle', frequency: 147, endFrequency: 147, duration: 0.34, gain: 0.035, attack: 0.04, release: 0.13 },
-      { kind: 'tone', delay: 0.16, type: 'triangle', frequency: 196, endFrequency: 196, duration: 0.12, gain: 0.055, attack: 0.012, release: 0.06 },
-      { kind: 'tone', delay: 0.27, type: 'triangle', frequency: 247, endFrequency: 247, duration: 0.12, gain: 0.05, attack: 0.012, release: 0.06 },
-      { kind: 'tone', delay: 0.43, type: 'triangle', frequency: 294, endFrequency: 294, duration: 0.12, gain: 0.055, attack: 0.012, release: 0.06 },
-      { kind: 'tone', delay: 0.54, type: 'triangle', frequency: 392, endFrequency: 392, duration: 0.19, gain: 0.045, attack: 0.012, release: 0.11 },
-      { kind: 'noise', delay: 0.36, filterType: 'bandpass', cutoff: 1900, duration: 0.36, gain: 0.04, attack: 0.08, release: 0.17 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.3, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.38, rate: 0.9, delay: 0.6 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.2, rate: 0.85, delay: 0.6 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.26, rate: 1.05, delay: 1.2 },
     ],
+    // The landing breaks timber over a low thunder body, followed by a coal
+    // fracture. Every layer retains the irregular texture of physical foley.
     impact: [
-      { kind: 'tone', delay: 0, type: 'sine', frequency: 92, endFrequency: 42, duration: 0.25, gain: 0.1, attack: 0.004, release: 0.2 },
-      { kind: 'noise', delay: 0, filterType: 'lowpass', cutoff: 680, duration: 0.12, gain: 0.075, attack: 0.004, release: 0.1 },
-      { kind: 'tone', delay: 0.015, type: 'triangle', frequency: 392, endFrequency: 294, duration: 0.17, gain: 0.028, attack: 0.003, release: 0.14 },
-      { kind: 'tone', delay: 0.055, type: 'triangle', frequency: 588, endFrequency: 392, duration: 0.15, gain: 0.022, attack: 0.003, release: 0.12 },
-      { kind: 'noise', delay: 0.11, filterType: 'lowpass', cutoff: 1200, duration: 0.1, gain: 0.023, attack: 0.008, release: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.46, rate: 0.8, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/thunder-impact.wav', gain: 0.38, rate: 0.75, delay: 0.02 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.16, rate: 0.85, delay: 0.1 },
     ],
+    // Repeated shockwaves carry a restrained air push and loose embers.
     pulse: [
-      { kind: 'tone', delay: 0, type: 'triangle', frequency: 196, endFrequency: 147, duration: 0.1, gain: 0.015, attack: 0.012, release: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.12, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.15, delay: 0.04 },
     ],
   },
 };

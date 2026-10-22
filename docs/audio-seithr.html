@@ -19,7 +19,7 @@
 <script type="module">
 import { seithr as ids } from '../src/spells/elements/seithr.js';
 import { AudioEngine } from '../src/audio/engine.js';
-import { playSpellSound } from '../src/audio/spells.js';
+import { playSpellSound, prepareSpellSounds } from '../src/audio/spells.js';
 const engine = new AudioEngine({ storage: null });
 engine.setVolume('master', 0.6);
 const status = document.querySelector('#status'), grid = document.querySelector('#spells');
@@ -36,11 +36,17 @@ async function play(spell, stage) {
   status.textContent = 'Starting ' + spell.name + '…';
   if (!await engine.unlock()) { if (request === generation) status.textContent = 'Audio could not start. Try the sound button again.'; return; }
   if (request !== generation) return;
+  status.textContent = 'Loading recordings…';
+  const ready = await prepareSpellSounds(engine, spell);
+  if (request !== generation) return;
+  if (!ready) { status.textContent = 'A recording could not load. Try again in a few seconds.'; return; }
   active = playSpellSound(engine, { presentation: spell.presentation, stage, x: 0, y: 0 });
   status.textContent = active.length ? spell.name + ' · ' + stage : 'No cue for this stage.';
 }
 try {
-  const spells = await Promise.all(ids.map(async id => (await import('../src/spells/definitions/' + id + '.js')).default));
+  const requested = new URLSearchParams(location.search).get('spell');
+  const chosen = ids.includes(requested) ? [requested] : ids;
+  const spells = await Promise.all(chosen.map(async id => (await import('../src/spells/definitions/' + id + '.js')).default));
   for (const spell of spells) {
     const card = document.createElement('article'), heading = document.createElement('h2'), meta = document.createElement('small'), actions = document.createElement('div');
     heading.textContent = spell.name; meta.textContent = 'Choose a sound cue';
@@ -54,7 +60,7 @@ try {
     }
     card.append(heading, meta, actions); grid.append(card);
   }
-  status.textContent = spells.length + ' spells ready to hear.';
+  status.textContent = spells.length + (spells.length === 1 ? ' spell ready to hear.' : ' spells ready to hear.');
 } catch { status.textContent = 'Could not load the spell archive. Reload this page to retry.'; }
 document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
 window.addEventListener('pagehide', () => { stop(); void engine.dispose(); });

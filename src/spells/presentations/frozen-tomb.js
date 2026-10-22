@@ -430,53 +430,23 @@ export default {
     }
   },
   sounds: {
-    // A buried glacier wakes: bowed pressure climbs beneath the coffin rune,
-    // with rough ice grinding against stone and a hollow, detuned tomb groan.
+    // Actual ice-field strain and rumble carry the rising coffin's mass;
+    // compressed snow scuffs beneath it as the ground opens.
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 46, endFrequency: 91, duration: 1.16,
-        cutoff: 270, gain: 0.084, attack: 0.17, decay: 0.24, sustain: 0.74, release: 0.46 },
-      { kind: 'noise', delay: 0.025, duration: 0.94, gain: 0.068, cutoff: 360,
-        filterType: 'lowpass', Q: 1.1, playbackRate: 0.64,
-        attack: 0.15, decay: 0.22, sustain: 0.65, release: 0.34 },
-      { kind: 'tone', type: 'sawtooth', delay: 0.08, frequency: 121, endFrequency: 157,
-        cutoff: 440, filterType: 'lowpass', Q: 1.3, detune: -17, duration: 0.91,
-        gain: 0.036, attack: 0.2, decay: 0.19, sustain: 0.59, release: 0.38 },
-      { kind: 'noise', delay: 0.31, duration: 0.52, gain: 0.041, cutoff: 820,
-        filterType: 'bandpass', Q: 1.8, playbackRate: 0.76,
-        attack: 0.09, decay: 0.12, sustain: 0.42, release: 0.25 },
-      { kind: 'tone', type: 'sine', delay: 0.43, frequency: 211, endFrequency: 166,
-        duration: 0.75, gain: 0.043, attack: 0.075, decay: 0.19, sustain: 0.47, release: 0.39 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.48, rate: 0.83, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.31, rate: 0.78, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.14, rate: 0.88, delay: 0.26 },
     ],
-    // The slab seals with a crushing low fracture, then its enormous cavity
-    // answers. A later muffled crack supplies ice texture without a glass chime.
+    // A recorded lake fracture seals the slab; snow compression and small
+    // hydrophone-recorded ice debris follow the heavy initial split.
     impact: [
-      { kind: 'tone', type: 'triangle', frequency: 119, endFrequency: 39,
-        cutoff: 310, duration: 0.79, gain: 0.112,
-        attack: 0.008, decay: 0.15, sustain: 0.34, release: 0.46 },
-      { kind: 'noise', duration: 0.29, gain: 0.096, cutoff: 640,
-        filterType: 'lowpass', Q: 1.25, playbackRate: 0.58,
-        attack: 0.004, decay: 0.065, sustain: 0.23, release: 0.19 },
-      { kind: 'tone', type: 'sine', delay: 0.055, frequency: 181, endFrequency: 124,
-        duration: 1.07, gain: 0.054,
-        attack: 0.045, decay: 0.21, sustain: 0.38, release: 0.64 },
-      { kind: 'noise', delay: 0.115, duration: 0.22, gain: 0.044, cutoff: 1150,
-        filterType: 'bandpass', Q: 1.5, playbackRate: 0.7,
-        attack: 0.006, decay: 0.05, sustain: 0.19, release: 0.145 },
-      { kind: 'noise', delay: 0.23, duration: 0.78, gain: 0.031, cutoff: 230,
-        filterType: 'lowpass', Q: 0.8, playbackRate: 0.55,
-        attack: 0.06, decay: 0.15, sustain: 0.42, release: 0.48 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.64, rate: 0.77, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.31, rate: 0.8, delay: 0.055 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.14, rate: 0.86, delay: 0.19 },
     ],
-    // Repeated frost pulses are small internal stresses, not repeated slams.
+    // Repeated frost pulses use one quiet physical ice tick, never another slam.
     pulse: [
-      { kind: 'tone', type: 'triangle', frequency: 103, endFrequency: 77,
-        cutoff: 270, duration: 0.22, gain: 0.024,
-        attack: 0.014, decay: 0.045, sustain: 0.32, release: 0.13 },
-      { kind: 'noise', duration: 0.17, gain: 0.022, cutoff: 690,
-        filterType: 'bandpass', Q: 1.4, playbackRate: 0.63,
-        attack: 0.008, decay: 0.035, sustain: 0.25, release: 0.11 },
-      { kind: 'tone', type: 'sine', delay: 0.035, frequency: 246, endFrequency: 208,
-        duration: 0.24, gain: 0.012,
-        attack: 0.018, decay: 0.055, sustain: 0.25, release: 0.145 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 0.81, delay: 0.045 },
     ],
   },
 };

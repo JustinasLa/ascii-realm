@@ -4,6 +4,8 @@ import presentation from '../../src/spells/presentations/ice-shield.js';
 import spell from '../../src/spells/definitions/ice-shield.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
 import { runeScene } from '../../test-support/spells.js';
+import { readFile } from 'node:fs/promises';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { GameAudio } from '../../src/audio/audio.js';
 
@@ -27,7 +29,7 @@ function cells(stage, progress, { radius = 0.8, heading = 0, life = LIFE, x = 0,
 }
 const mean = (points, key) => points.reduce((sum, point) => sum + key(point), 0) / Math.max(1, points.length);
 
-test('a real Ice Shield cast paints its honeycomb shield and routes its chord as a typed spell cue', () => {
+test('a real Ice Shield cast paints its honeycomb shield and routes recorded slab locks as a typed spell cue', async () => {
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
@@ -49,10 +51,13 @@ test('a real Ice Shield cast paints its honeycomb shield and routes its chord as
     assert.ok(points.some(point => point[2] === char), `the live renderer draws plate seams and cores (${char})`);
   }
   const fake = fakeRecordedAudio(), audio = new GameAudio({}, fake.engine);
+  await prepareRecordedSpellTest(fake, presentation);
   const voices = audio.play(castCue);
   assert.equal(voices.length, presentation.sounds.cast.length);
   assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === scene.player.x && route.y === scene.player.y));
   assert.deepEqual(fake.invalid, []);
+  assert.ok(fake.nodes.every(node => node.kind !== 'oscillator'), 'no synthetic tones');
+  assert.equal(fake.nodes.filter(node => node.kind === 'source').length, voices.length);
   audio.play({ type: 'spell-stop', owner: castCue.owner });
   assert.ok(voices.every(voice => voice.ended));
 });
@@ -182,22 +187,37 @@ test('Ice Shield stages keep finite local ASCII geometry, a bounded draw budget,
   }
 });
 
-test('Ice Shield locks heavy slabs over a sustained dark ward resonance', () => {
+test('Ice Shield layers documented physical slab recordings with a delayed lock and snow settle', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.filter(v => v.kind === 'noise' && v.delay > 0.2).length >= 2, 'staggered slab locks');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.duration > 0.8), 'contact rings through the shield');
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
+  const manifest = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
+  const find = (voices, file) => voices.find(voice => voice.url.endsWith('/' + file));
+  const strain = find(cast, 'ice-strain.wav'), rumble = find(cast, 'ice-rumble.wav');
+  const lock = find(cast, 'ice-crack.wav'), settle = find(cast, 'snow-crush.wav');
+  assert.ok(strain.rate < 1 && rumble.rate < 1, 'slowed physical ice gives the ward its weight');
+  assert.ok(strain.delay < rumble.delay && rumble.delay < lock.delay && lock.delay < settle.delay,
+    'strain builds into the slab lock, then snow settles');
+  assert.ok(Math.abs(lock.delay - LIFE * 0.42) < 0.06, 'the crack follows the visible plate lock');
+  assert.ok(find(impact, 'ice-split.wav').delay < find(impact, 'ice-grit.wav').delay);
+  assert.ok(find(impact, 'ice-grit.wav').delay < find(impact, 'snow-scuff.wav').delay);
+  assert.equal(pulse.length, 1, 'repeat cues use a single grain');
+  assert.ok(find(pulse, 'ice-tick.wav'));
+  assert.ok(pulse[0].gain >= 0.1 && pulse[0].gain <= 0.18);
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
+      assert.equal(voice.kind, 'recording');
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.match(voice.url, /^\/assets\/audio\/spells\/seithr\/[a-z-]+\.wav$/);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
-      if (voice.kind === 'tone') assert.ok(voice.frequency >= 20 && voice.frequency <= 20000);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      const clip = manifest.clips.find(clip => voice.url.endsWith('/' + clip.file));
+      assert.ok(clip, 'every clip has documented provenance');
+      assert.ok(manifest.sources.some(source => source.id === clip.sourceId && source.license && source.provenance));
+      const bytes = await readFile(new URL('../..' + voice.url, import.meta.url));
+      assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
     }
   }
 });

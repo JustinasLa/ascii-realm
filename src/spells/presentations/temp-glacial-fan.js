@@ -202,28 +202,21 @@ export default {
   },
   sounds: {
     cast: [
-      // Icy breath and deep glacier strain support an opening fan of heavy knives.
-      // Staggered, overlapping crack bands trace the sweep without a shrill edge.
-      { kind: 'noise', duration: 0.95, gain: 0.055, cutoff: 980, filterType: 'bandpass', Q: 0.8, playbackRate: 0.72, attack: 0.13, decay: 0.2, sustain: 0.5, release: 0.42 },
-      { kind: 'tone', type: 'triangle', frequency: 96, endFrequency: 67, duration: 1.08, gain: 0.07, cutoff: 370, filterType: 'lowpass', attack: 0.055, decay: 0.22, sustain: 0.38, release: 0.55 },
-      { kind: 'noise', delay: 0.08, duration: 0.31, gain: 0.065, cutoff: 660, filterType: 'bandpass', Q: 1.8, playbackRate: 0.63, attack: 0.004, decay: 0.07, sustain: 0.24, release: 0.18 },
-      { kind: 'noise', delay: 0.23, duration: 0.34, gain: 0.05, cutoff: 1140, filterType: 'bandpass', Q: 1.4, playbackRate: 0.79, attack: 0.006, decay: 0.08, sustain: 0.21, release: 0.2 },
-      { kind: 'noise', delay: 0.4, duration: 0.36, gain: 0.04, cutoff: 1760, filterType: 'bandpass', Q: 1.1, playbackRate: 0.87, attack: 0.008, decay: 0.08, sustain: 0.18, release: 0.23 },
-      { kind: 'tone', type: 'sine', frequency: 243, endFrequency: 203, delay: 0.16, duration: 0.91, gain: 0.025, attack: 0.11, decay: 0.2, sustain: 0.37, release: 0.46 },
+      // Recorded breath opens wide; staggered snow scuffs and ice grains follow
+      // the fan's physical sweep, with a final natural lake fracture.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.3, rate: 0.91, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.26, rate: 0.94, delay: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.25, rate: 1.07, delay: 0.25 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.24, rate: 1.12, delay: 0.43 },
     ],
     impact: [
-      // A blade bites with a buried thud, splinter crack and dull crystal groan.
-      { kind: 'tone', type: 'sine', frequency: 139, endFrequency: 53, duration: 0.32, gain: 0.066, attack: 0.003, decay: 0.055, sustain: 0.22, release: 0.22 },
-      { kind: 'noise', duration: 0.2, gain: 0.064, cutoff: 1420, filterType: 'bandpass', Q: 0.85, playbackRate: 0.8, attack: 0.002, decay: 0.045, sustain: 0.15, release: 0.14 },
-      { kind: 'tone', type: 'triangle', frequency: 393, endFrequency: 288, delay: 0.015, duration: 0.48, gain: 0.027, cutoff: 790, filterType: 'lowpass', attack: 0.004, decay: 0.08, sustain: 0.19, release: 0.34 },
-      { kind: 'tone', type: 'sine', frequency: 557, endFrequency: 431, delay: 0.032, duration: 0.42, gain: 0.017, attack: 0.005, decay: 0.065, sustain: 0.17, release: 0.31 },
-      { kind: 'noise', delay: 0.075, duration: 0.36, gain: 0.026, cutoff: 870, filterType: 'bandpass', Q: 1.2, playbackRate: 0.6, attack: 0.014, decay: 0.07, sustain: 0.23, release: 0.24 },
+      // A crisp recorded fracture bites first; loose grains settle behind it.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.45, rate: 1.04, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.18, rate: 0.96, delay: 0.065 },
     ],
     pulse: [
-      // Small ground crystals and repeat contacts: hushed fractures under the volley.
-      { kind: 'noise', duration: 0.17, gain: 0.022, cutoff: 1240, filterType: 'bandpass', Q: 1.1, playbackRate: 0.72, attack: 0.004, decay: 0.03, sustain: 0.16, release: 0.12 },
-      { kind: 'tone', type: 'triangle', frequency: 173, endFrequency: 118, duration: 0.24, gain: 0.017, cutoff: 430, filterType: 'lowpass', attack: 0.009, decay: 0.045, sustain: 0.2, release: 0.17 },
-      { kind: 'noise', delay: 0.04, duration: 0.2, gain: 0.011, cutoff: 690, filterType: 'bandpass', Q: 0.9, playbackRate: 0.6, attack: 0.02, decay: 0.04, sustain: 0.23, release: 0.13 },
+      // One tiny physical ice tick keeps repeated shard contacts unobtrusive.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 1.09, delay: 0.027 },
     ],
   },
 };
