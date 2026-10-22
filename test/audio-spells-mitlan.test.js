@@ -92,7 +92,7 @@ test('Mitlan CC0 recordings retain source detail with clean bounded PCM and docu
   const directory = new URL('../assets/audio/spells/mitlan/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('sources.json', directory), 'utf8'));
   assert.equal(manifest.license, 'CC0-1.0');
-  assert.equal(manifest.clips.length, 19);
+  assert.equal(manifest.clips.length, 21);
   const sourceNames = new Set(manifest.sources.map(source => source.file));
   assert.ok(!sourceNames.has('boiling.mp3') && !sourceNames.has('wading.mp3'), 'no boiling or close foot splashes');
   for (const source of manifest.sources) {
@@ -128,7 +128,7 @@ test('Mitlan CC0 recordings retain source detail with clean bounded PCM and docu
     for (const layer of recipe) assert.ok(files.has(layer.url), 'every used recording has provenance');
   }
   // Different filenames or small pitch/gain changes can still mask the same
-  // foreground material. The seven revised casts must use different recordings.
+  // foreground material. The revised casts and Mana Spring use different sources.
   const sourceByFile = new Map(manifest.clips.map(clip => [clip.file, clip.source]));
   const materials = spells.filter(spell => !['lightning', 'drowning-prison'].includes(spell.id)).map(spell => {
     const lead = spell.presentation.sounds.cast.reduce((a, b) => a.gain > b.gain ? a : b);

@@ -17,8 +17,8 @@ export default {
     }
   },
   sounds: {
-    cast: [{ kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.18, rate: 1.15, delay: 0 }],
-    impact: [{ kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.1, rate: 1.12, delay: 0 }],
-    pulse: [{ kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.1, rate: 1.18, delay: 0 }],
+    cast: [{ kind: 'recording', url: '/assets/audio/spells/mitlan/spring-draw.wav', gain: 0.18, rate: 1.15, delay: 0 }],
+    impact: [{ kind: 'recording', url: '/assets/audio/spells/mitlan/spring-return.wav', gain: 0.1, rate: 1.12, delay: 0 }],
+    pulse: [{ kind: 'recording', url: '/assets/audio/spells/mitlan/spring-return.wav', gain: 0.05, rate: 1.18, delay: 0 }],
   },
 };

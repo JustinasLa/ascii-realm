@@ -416,6 +416,38 @@
       "modulationHz": 0,
       "sampleRate": 44100,
       "sha256": "fdbfe6f00ecd55403991bf5be35545f53c26c5ffe1f6777c689df38621cf07a3"
+    },
+    {
+      "file": "spring-draw.wav",
+      "source": "cloth.mp3",
+      "start": 8.2,
+      "duration": 0.6,
+      "fadeIn": 0.18,
+      "fadeOut": 0.22,
+      "peak": 0.46,
+      "rmsCeiling": 0.11,
+      "highPassHz": 900,
+      "lowPassHz": 3400,
+      "reversed": false,
+      "modulationHz": 0,
+      "sampleRate": 44100,
+      "sha256": "b6fb9cd5df264fb7b6659b9f1ac714bed5fd1adc533ab2a327a6dc93b4c0291a"
+    },
+    {
+      "file": "spring-return.wav",
+      "source": "cloth.mp3",
+      "start": 9.1,
+      "duration": 0.32,
+      "fadeIn": 0.1,
+      "fadeOut": 0.18,
+      "peak": 0.46,
+      "rmsCeiling": 0.11,
+      "highPassHz": 750,
+      "lowPassHz": 2800,
+      "reversed": true,
+      "modulationHz": 0,
+      "sampleRate": 44100,
+      "sha256": "d1336245ebefa6425ccd2b25c2b44631120b76d52cbdf7822aef668e792a3c16"
     }
   ]
 }
