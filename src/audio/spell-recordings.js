@@ -7,6 +7,11 @@ const audible = engine => engine.context?.state === 'running' && !engine.muted
   && engine.volumes?.master !== 0 && engine.volumes?.sfx !== 0;
 const disconnect = node => { try { node?.disconnect(); } catch { /* Already released. */ } };
 
+// Recipes use project-root asset keys; deployments may live below a URL prefix.
+export function resolveSpellRecordingUrl(url, moduleUrl = import.meta.url) {
+  return localRecording(url) ? new URL(`../..${url}`, moduleUrl) : null;
+}
+
 function stateFor(engine) {
   let state = states.get(engine);
   if (!state) {
@@ -31,7 +36,7 @@ function load(state, url) {
     let buffer;
     if (state.options.loadBuffer) buffer = await state.options.loadBuffer(url, context);
     else {
-      const response = await (state.options.fetcher ?? globalThis.fetch)(url);
+      const response = await (state.options.fetcher ?? globalThis.fetch)(resolveSpellRecordingUrl(url));
       if (!response.ok) throw new Error('Spell recording unavailable');
       buffer = await context.decodeAudioData(await response.arrayBuffer());
     }

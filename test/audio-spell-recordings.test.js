@@ -3,11 +3,41 @@ import assert from 'node:assert/strict';
 import { prepareSpellSounds, playSpellSound } from '../src/audio/spells.js';
 import { GameAudio } from '../src/audio/audio.js';
 import { fakeRecordedAudio } from '../test-support/recorded-audio.js';
+import { resolveSpellRecordingUrl } from '../src/audio/spell-recordings.js';
 
 const url = '/assets/audio/spells/oseni/fire-test.wav';
 const profile = { sounds: { cast: [{ kind: 'recording', url, gain: 0.45, rate: 0.9, delay: 0.1 }] } };
 const event = { type: 'spell', presentation: profile, stage: 'cast', x: 3, y: 7 };
 const flush = async () => { for (let i = 0; i < 8; i++) await Promise.resolve(); };
+
+test('recording URLs preserve root and nested deployment paths for every rune family', () => {
+  for (const prefix of ['/', '/ascii-realm/', '/preview/game/']) {
+    for (const family of ['oseni', 'mitlan', 'seithr', 'cerrith']) {
+      const asset = `/assets/audio/spells/${family}/sample.wav`;
+      assert.equal(resolveSpellRecordingUrl(asset, `https://example.com${prefix}src/audio/spell-recordings.js`).href,
+        `https://example.com${prefix}${asset.slice(1)}`);
+    }
+  }
+  assert.equal(resolveSpellRecordingUrl('https://example.com/sample.wav'), null);
+  assert.equal(resolveSpellRecordingUrl('/assets/audio/spells/oseni/../sample.wav'), null);
+});
+
+test('the recording loader fetches the module-relative asset and decodes it for gameplay', async () => {
+  const fake = fakeRecordedAudio(), requested = [], bytes = new ArrayBuffer(8);
+  fake.context.decodeAudioData = async data => {
+    assert.equal(data, bytes);
+    return { duration: 0.8 };
+  };
+  assert.equal(await prepareSpellSounds(fake.engine, profile, { fetcher: async asset => {
+    requested.push(String(asset));
+    return { ok: true, arrayBuffer: async () => bytes };
+  } }), true);
+  assert.deepEqual(requested, [new URL(`..${url}`, import.meta.url).href]);
+  const [voice] = playSpellSound(fake.engine, event);
+  assert.equal(voice.ended, false);
+  assert.equal(fake.nodes.find(node => node.kind === 'source').starts.length, 1);
+  voice.stop();
+});
 
 test('recordings register while locked and deduplicate simultaneous decoding per context', async () => {
   const fake = fakeRecordedAudio(); let loads = 0;
