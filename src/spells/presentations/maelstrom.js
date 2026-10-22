@@ -453,24 +453,29 @@ export default {
     }
   },
   sounds: {
+    // Three staggered currents sink around a detuned abyssal throat. Their
+    // overlapping envelopes give the vortex a revolving, inward pull.
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 74, endFrequency: 48, duration: 1.25, gain: 0.052, attack: 0.14, release: 0.45 },
-      { kind: 'noise', cutoff: 220, filterType: 'lowpass', duration: 1.1, gain: 0.045, attack: 0.18, release: 0.5 },
-      { kind: 'tone', type: 'sine', frequency: 510, endFrequency: 124, delay: 0.04, duration: 0.64, gain: 0.056, attack: 0.06, release: 0.3 },
-      { kind: 'tone', type: 'sine', frequency: 390, endFrequency: 96, delay: 0.25, duration: 0.71, gain: 0.05, attack: 0.08, release: 0.35 },
-      { kind: 'tone', type: 'sine', frequency: 288, endFrequency: 71, delay: 0.49, duration: 0.76, gain: 0.042, attack: 0.1, release: 0.4 },
-      { kind: 'noise', cutoff: 730, filterType: 'bandpass', delay: 0.67, duration: 0.55, gain: 0.055, attack: 0.23, release: 0.28 },
+      { kind: 'tone', type: 'triangle', frequency: 74, endFrequency: 48, detune: -11, cutoff: 190, duration: 1.25, gain: 0.052, attack: 0.14, decay: 0.24, sustain: 0.66, release: 0.45 },
+      { kind: 'noise', cutoff: 220, filterType: 'lowpass', Q: 1.1, playbackRate: 0.66, duration: 1.1, gain: 0.045, attack: 0.18, decay: 0.17, sustain: 0.58, release: 0.5 },
+      { kind: 'tone', type: 'sine', frequency: 510, endFrequency: 124, detune: -19, cutoff: 530, delay: 0.04, duration: 0.64, gain: 0.046, attack: 0.06, decay: 0.12, sustain: 0.45, release: 0.3 },
+      { kind: 'tone', type: 'sine', frequency: 390, endFrequency: 96, detune: 17, cutoff: 440, delay: 0.25, duration: 0.71, gain: 0.043, attack: 0.08, decay: 0.12, sustain: 0.5, release: 0.35 },
+      { kind: 'tone', type: 'sine', frequency: 288, endFrequency: 71, detune: -23, cutoff: 350, delay: 0.49, duration: 0.76, gain: 0.039, attack: 0.1, decay: 0.15, sustain: 0.48, release: 0.4 },
+      { kind: 'noise', cutoff: 730, filterType: 'bandpass', Q: 2.4, playbackRate: 0.72, delay: 0.67, duration: 0.55, gain: 0.047, attack: 0.2, decay: 0.06, sustain: 0.56, release: 0.28 },
     ],
+    // A waterlogged implosion, then two hollow descents swallowed by suction.
     impact: [
-      { kind: 'noise', cutoff: 500, filterType: 'lowpass', duration: 0.7, gain: 0.075, attack: 0.09, release: 0.46 },
-      { kind: 'tone', type: 'triangle', frequency: 98, endFrequency: 35, duration: 0.7, gain: 0.07, attack: 0.025, release: 0.48 },
-      { kind: 'tone', type: 'sine', frequency: 244, endFrequency: 54, delay: 0.06, duration: 0.56, gain: 0.057, attack: 0.035, release: 0.32 },
-      { kind: 'tone', type: 'sine', frequency: 172, endFrequency: 44, delay: 0.19, duration: 0.51, gain: 0.044, attack: 0.05, release: 0.35 },
-      { kind: 'noise', cutoff: 980, filterType: 'bandpass', delay: 0.12, duration: 0.47, gain: 0.062, attack: 0.22, release: 0.24 },
+      { kind: 'noise', cutoff: 500, filterType: 'lowpass', Q: 0.85, playbackRate: 0.6, duration: 0.7, gain: 0.075, attack: 0.04, decay: 0.15, sustain: 0.32, release: 0.46 },
+      { kind: 'tone', type: 'triangle', frequency: 98, endFrequency: 35, cutoff: 190, duration: 0.7, gain: 0.07, attack: 0.025, decay: 0.12, sustain: 0.4, release: 0.48 },
+      { kind: 'tone', type: 'sine', frequency: 244, endFrequency: 54, detune: -21, delay: 0.06, duration: 0.56, gain: 0.052, attack: 0.035, decay: 0.1, sustain: 0.46, release: 0.32 },
+      { kind: 'tone', type: 'sine', frequency: 172, endFrequency: 44, detune: 16, delay: 0.19, duration: 0.51, gain: 0.04, attack: 0.05, decay: 0.08, sustain: 0.38, release: 0.35 },
+      { kind: 'noise', cutoff: 780, filterType: 'bandpass', Q: 2.8, playbackRate: 0.7, delay: 0.12, duration: 0.55, gain: 0.052, attack: 0.21, decay: 0.07, sustain: 0.5, release: 0.24 },
     ],
+    // Quiet two-part churning ticks stay compact when zones pulse repeatedly.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 184, endFrequency: 68, duration: 0.19, gain: 0.018, attack: 0.02, release: 0.13 },
-      { kind: 'noise', cutoff: 490, filterType: 'lowpass', duration: 0.17, gain: 0.014, attack: 0.03, release: 0.11 },
+      { kind: 'tone', type: 'sine', frequency: 184, endFrequency: 68, detune: -17, duration: 0.19, gain: 0.016, attack: 0.02, decay: 0.03, sustain: 0.35, release: 0.13 },
+      { kind: 'noise', cutoff: 390, filterType: 'bandpass', Q: 1.4, playbackRate: 0.65, duration: 0.17, gain: 0.012, attack: 0.03, decay: 0.025, sustain: 0.4, release: 0.11 },
+      { kind: 'tone', type: 'sine', frequency: 131, endFrequency: 51, detune: 19, delay: 0.055, duration: 0.16, gain: 0.009, attack: 0.025, decay: 0.025, sustain: 0.3, release: 0.1 },
     ],
   },
 };

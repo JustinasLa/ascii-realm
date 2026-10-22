@@ -113,23 +113,28 @@ test('all Scalding Wave stages are deterministic, bounded, evolving, and fade ou
   }
 });
 
-test('Scalding Wave layers hot hiss and bubbling under a sharp impact steam release', () => {
+test('Scalding Wave layers dark boiling pressure and bubbles under softened steam', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'highpass' && v.attack >= 0.05));
-  assert.ok(cast.some(v => v.kind === 'noise' && v.cutoff < 400), 'low bubbling texture');
-  const bubbles = cast.filter(v => v.kind === 'tone');
+  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'bandpass' && v.cutoff < 2000 && v.attack >= 0.05), 'soft steam swell');
+  assert.ok(cast.some(v => v.kind === 'noise' && v.cutoff < 500), 'low bubbling texture');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 100 && v.frequency < v.endFrequency), 'abyssal pressure rises');
+  const bubbles = cast.filter(v => v.kind === 'tone' && v.type === 'sine');
   assert.ok(bubbles.length >= 2 && bubbles[0].delay !== bubbles[1].delay);
   assert.ok(bubbles.every(v => v.type === 'sine' && v.frequency > v.endFrequency));
-  assert.ok(impact.some(v => v.kind === 'noise' && v.cutoff > 5000 && v.attack < 0.005), 'sharp pressure release');
+  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < 60 && v.attack < 0.015), 'wet low pressure impact');
+  assert.ok([...cast, ...impact, ...pulse].filter(v => v.kind === 'noise').every(v => v.cutoff < 2000 && v.filterType !== 'highpass'), 'steam stays dark rather than shrill');
   assert.ok(impact.some(v => v.release > 0.2), 'steam tail');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain <= 0.025 && v.duration < 0.1), 'repeated simmer stays quiet');
+  assert.ok(pulse.every(v => v.gain <= 0.03 && v.duration < 0.4), 'repeated simmer stays quiet and brief');
   for (const [stage, recipe] of Object.entries(presentation.sounds)) {
     assert.ok(recipe.length > 0 && recipe.length <= 8);
+    assert.ok(recipe.reduce((total, voice) => total + voice.gain, 0) <= 0.45);
     for (const voice of recipe) {
       assert.ok(voice.gain > 0 && voice.gain <= 0.25);
       assert.ok(voice.duration > 0 && voice.duration <= 2.5);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.ok([voice.attack, voice.decay, voice.sustain, voice.release].every(Number.isFinite));
+      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration, 'authored envelope fits the voice');
     }
     const fake = fakeRecordedAudio();
     const handles = playSpellSound(fake.engine, { stage, presentation, x: 2, y: 4 });

@@ -146,24 +146,29 @@ test('all stages remain deterministic, finite and within budget, then fade clean
   }
 });
 
-test('sound phrase has three timed liquid glides over a submerged hum and a separate droplet seal', () => {
+test('sound phrase inscribes a drowned seal, ruptures into surf and keeps zone ticks quiet', () => {
   const cast = presentation.sounds.cast;
   const hum = cast.find(v => v.kind === 'tone' && v.frequency < 200);
   assert.ok(hum.duration > 0.8 && hum.attack > 0.1 && hum.cutoff < 500);
   const notes = cast.filter(v => v.kind === 'tone' && v !== hum);
-  assert.equal(notes.length, 3);
-  assert.ok(notes.every(v => v.type === 'sine' && v.endFrequency < v.frequency && v.attack < 0.01));
-  assert.ok(notes[0].frequency < notes[1].frequency && notes[1].frequency < notes[2].frequency);
-  assert.ok(Math.abs((notes[1].delay - notes[0].delay) - (notes[2].delay - notes[1].delay)) < 1e-9);
-  assert.ok(presentation.sounds.impact.some(v => v.kind === 'tone' && v.frequency > 1000 && v.attack < 0.005));
+  assert.equal(notes.length, 2);
+  assert.ok(notes.every(v => v.endFrequency < v.frequency && v.cutoff < 500));
+  assert.ok(notes[1].delay > notes[0].delay + 0.2, 'the seal has deliberate ritual strokes');
+  assert.ok(presentation.sounds.impact.some(v => v.kind === 'noise' && v.gain > 0.07), 'geyser has a broad surf body');
+  assert.ok(presentation.sounds.impact.some(v => v.kind === 'tone' && v.endFrequency < 60), 'pressure collapses into the depths');
   assert.notDeepEqual(presentation.sounds.impact, cast);
-  assert.ok(presentation.sounds.pulse.every(v => v.gain < 0.025 && v.duration < 0.15));
+  assert.ok(presentation.sounds.pulse.every(v => v.gain < 0.025 && v.duration <= 0.2));
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 8);
+    assert.ok(voices.some(v => v.kind === 'tone') && voices.some(v => v.kind === 'noise'));
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45);
     for (const voice of voices) {
       assert.ok(voice.duration > 0 && voice.duration <= 2.5);
       assert.ok(voice.gain > 0 && voice.gain <= 0.25);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
+      assert.ok(voice.sustain >= 0 && voice.sustain <= 1);
+      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration);
       assert.ok(Object.values(voice).filter(v => typeof v === 'number').every(Number.isFinite));
     }
   }
@@ -171,7 +176,7 @@ test('sound phrase has three timed liquid glides over a submerged hum and a sepa
 
 test('authored liquid layers schedule their delays through the spatial effects bus', () => {
   const fake = fakeRecordedAudio();
-  for (const stage of ['cast', 'impact']) {
+  for (const stage of ['cast', 'impact', 'pulse']) {
     const before = fake.nodes.length;
     const handles = playSpellSound(fake.engine, { type: 'spell', stage, presentation, x: 3, y: 9 });
     const sources = fake.nodes.slice(before).filter(n => n.kind === 'oscillator' || n.kind === 'source');

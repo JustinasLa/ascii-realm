@@ -161,17 +161,27 @@ test('Maelstrom layers a low rumble and overlapping descending water tones with 
   assert.ok(descents.length >= 3);
   for (let i = 0; i < descents.length; i++) {
     assert.ok(descents[i].endFrequency < descents[i].frequency / 2, 'audible downward glide');
-    if (i > 0) assert.ok(descents[i].delay < descents[i - 1].delay + descents[i - 1].duration, 'water tones overlap');
+    assert.ok(Math.abs(descents[i].detune) >= 10, 'hollow currents are detuned');
+    if (i > 0) {
+      assert.ok(descents[i].delay > descents[i - 1].delay, 'currents enter in successive turns');
+      assert.ok(descents[i].delay < descents[i - 1].delay + descents[i - 1].duration, 'water tones overlap');
+    }
   }
   assert.ok(presentation.sounds.impact.some(voice => voice.kind === 'noise' && voice.filterType === 'bandpass'
     && voice.attack > 0.15 && voice.release > 0.15), 'rounded sucking release');
   assert.notDeepEqual(presentation.sounds.cast, presentation.sounds.impact);
   for (const [stage, voices] of Object.entries(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 6);
+    assert.ok(voices.some(voice => voice.kind === 'tone') && voices.some(voice => voice.kind === 'noise'));
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= (stage === 'pulse' ? 0.05 : 0.45));
     for (const voice of voices) {
       assert.ok(voice.gain > 0 && voice.gain <= (stage === 'pulse' ? 0.025 : 0.25));
       assert.ok(voice.duration > 0 && voice.duration <= 2.5);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
+      assert.ok(voice.sustain > 0 && voice.sustain < 1);
+      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration + 1e-9, 'authored envelope fits its voice');
+      if (stage === 'pulse') assert.ok((voice.delay ?? 0) + voice.duration <= 0.25, 'recurring churn stays short');
     }
     const fake = fakeRecordedAudio();
     const handles = playSpellSound(fake.engine, { stage, presentation, x: 4, y: 8 });

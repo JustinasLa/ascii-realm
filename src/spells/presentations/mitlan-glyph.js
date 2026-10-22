@@ -323,21 +323,27 @@ export default {
     core('@', shade(0.85 + 0.15 * flash), level * Math.max(0.8 * (1 - dis), flash));
   },
   sounds: {
+    // A drowned seal: stone-deep pressure, uneven ritual strokes and silt drawing inward.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 122, endFrequency: 116, duration: 1.05, gain: 0.038, attack: 0.13, release: 0.32, cutoff: 360 },
-      { kind: 'tone', type: 'sine', frequency: 540, endFrequency: 360, delay: 0.06, duration: 0.23, gain: 0.075, attack: 0.004, release: 0.19 },
-      { kind: 'tone', type: 'sine', frequency: 675, endFrequency: 450, delay: 0.3, duration: 0.23, gain: 0.068, attack: 0.004, release: 0.19 },
-      { kind: 'tone', type: 'sine', frequency: 810, endFrequency: 540, delay: 0.54, duration: 0.27, gain: 0.062, attack: 0.004, release: 0.23 },
-      { kind: 'noise', delay: 0.08, duration: 0.76, gain: 0.018, attack: 0.12, release: 0.3, cutoff: 520, filterType: 'lowpass' },
+      { kind: 'tone', type: 'sine', frequency: 84, endFrequency: 63, duration: 1.16, gain: 0.058, attack: 0.18, decay: 0.22, sustain: 0.65, release: 0.44, cutoff: 260 },
+      { kind: 'tone', type: 'triangle', frequency: 193, endFrequency: 171, delay: 0.09, duration: 0.56, gain: 0.036, attack: 0.025, decay: 0.12, sustain: 0.3, release: 0.3, cutoff: 460 },
+      { kind: 'tone', type: 'triangle', frequency: 227, endFrequency: 184, detune: -19, delay: 0.43, duration: 0.64, gain: 0.032, attack: 0.04, decay: 0.13, sustain: 0.35, release: 0.35, cutoff: 480 },
+      { kind: 'noise', delay: 0.02, duration: 0.92, gain: 0.038, attack: 0.25, decay: 0.16, sustain: 0.55, release: 0.32, cutoff: 390, filterType: 'bandpass', Q: 1.6, playbackRate: 0.65 },
+      { kind: 'noise', delay: 0.65, duration: 0.37, gain: 0.025, attack: 0.035, decay: 0.08, sustain: 0.25, release: 0.21, cutoff: 760, filterType: 'lowpass', playbackRate: 0.8 },
     ],
+    // The seal ruptures into a heavy geyser; its spray falls into a hollow undertow.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 1260, endFrequency: 730, duration: 0.24, gain: 0.09, attack: 0.003, release: 0.2 },
-      { kind: 'tone', type: 'sine', frequency: 365, endFrequency: 182, delay: 0.04, duration: 0.42, gain: 0.052, attack: 0.015, release: 0.33 },
-      { kind: 'noise', delay: 0.015, duration: 0.21, gain: 0.027, attack: 0.008, release: 0.17, cutoff: 1100, filterType: 'bandpass' },
-      { kind: 'tone', type: 'sine', frequency: 1460, endFrequency: 980, delay: 0.15, duration: 0.16, gain: 0.028, attack: 0.002, release: 0.14 },
+      { kind: 'tone', type: 'sine', frequency: 118, endFrequency: 43, duration: 0.68, gain: 0.088, attack: 0.008, decay: 0.15, sustain: 0.32, release: 0.38, cutoff: 240 },
+      { kind: 'noise', duration: 0.58, gain: 0.085, attack: 0.018, decay: 0.16, sustain: 0.4, release: 0.32, cutoff: 1200, filterType: 'lowpass', playbackRate: 0.7 },
+      { kind: 'noise', delay: 0.09, duration: 0.72, gain: 0.042, attack: 0.07, decay: 0.16, sustain: 0.38, release: 0.4, cutoff: 560, filterType: 'bandpass', Q: 2.3, playbackRate: 0.6 },
+      { kind: 'tone', type: 'triangle', frequency: 173, endFrequency: 91, detune: -13, delay: 0.055, duration: 0.83, gain: 0.033, attack: 0.045, decay: 0.18, sustain: 0.3, release: 0.47, cutoff: 370 },
+      { kind: 'noise', delay: 0.27, duration: 0.48, gain: 0.024, attack: 0.08, decay: 0.1, sustain: 0.24, release: 0.26, cutoff: 830, filterType: 'bandpass', Q: 0.8, playbackRate: 0.8 },
     ],
+    // A restrained submerged knock and its silt ripple accompany repeated zone ticks.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 450, endFrequency: 360, duration: 0.12, gain: 0.016, attack: 0.004, release: 0.1 },
+      { kind: 'tone', type: 'sine', frequency: 126, endFrequency: 76, duration: 0.2, gain: 0.018, attack: 0.009, decay: 0.04, sustain: 0.22, release: 0.13, cutoff: 260 },
+      { kind: 'noise', duration: 0.18, gain: 0.012, attack: 0.018, decay: 0.035, sustain: 0.2, release: 0.105, cutoff: 420, filterType: 'bandpass', Q: 1.3, playbackRate: 0.65 },
+      { kind: 'tone', type: 'triangle', frequency: 189, endFrequency: 152, delay: 0.035, duration: 0.16, gain: 0.007, attack: 0.015, decay: 0.03, sustain: 0.16, release: 0.1, cutoff: 330 },
     ],
   },
 };

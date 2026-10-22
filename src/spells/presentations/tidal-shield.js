@@ -321,23 +321,26 @@ export default {
     else if (effect.stage === 'zone') pool(effect, put);
     else surf(effect, put);
   },
+  // A submerged bulwark rises with dragging surf, seals with a low pressure
+  // knock, then sheds short muffled wavelets. No bright musical chord.
   sounds: {
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 160, endFrequency: 220, duration: 0.75, gain: 0.055, attack: 0.1, release: 0.24, cutoff: 1100 },
-      { kind: 'tone', type: 'sine', delay: 0.035, frequency: 237, endFrequency: 330, duration: 0.73, gain: 0.04, attack: 0.12, release: 0.26, cutoff: 1400 },
-      { kind: 'tone', type: 'triangle', delay: 0.07, frequency: 326, endFrequency: 440, duration: 0.68, gain: 0.025, attack: 0.1, release: 0.25, cutoff: 850 },
-      { kind: 'noise', delay: 0.12, duration: 0.16, gain: 0.045, attack: 0.045, release: 0.1, cutoff: 740, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.36, duration: 0.2, gain: 0.035, attack: 0.06, release: 0.12, cutoff: 970, filterType: 'lowpass' },
+      { kind: 'noise', filterType: 'lowpass', cutoff: 480, Q: 0.7, playbackRate: 0.65, duration: 0.74, gain: 0.072, attack: 0.18, decay: 0.14, sustain: 0.65, release: 0.3 },
+      { kind: 'tone', type: 'sine', frequency: 64, endFrequency: 92, duration: 0.86, gain: 0.085, attack: 0.16, decay: 0.2, sustain: 0.6, release: 0.34 },
+      { kind: 'tone', type: 'triangle', delay: 0.09, frequency: 131, endFrequency: 111, cutoff: 310, duration: 0.74, gain: 0.036, attack: 0.12, decay: 0.18, sustain: 0.45, release: 0.3 },
+      { kind: 'noise', delay: 0.32, filterType: 'bandpass', cutoff: 620, Q: 1.8, playbackRate: 0.7, duration: 0.46, gain: 0.052, attack: 0.08, decay: 0.1, sustain: 0.35, release: 0.23 },
+      { kind: 'tone', type: 'sine', delay: 0.46, frequency: 128, endFrequency: 49, duration: 0.48, gain: 0.065, attack: 0.012, decay: 0.12, sustain: 0.32, release: 0.3 },
     ],
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 280, endFrequency: 125, duration: 0.32, gain: 0.08, attack: 0.004, release: 0.27 },
-      { kind: 'tone', type: 'triangle', delay: 0.022, frequency: 560, endFrequency: 260, duration: 0.23, gain: 0.027, attack: 0.006, release: 0.2, cutoff: 900 },
-      { kind: 'noise', delay: 0.018, duration: 0.16, gain: 0.05, attack: 0.015, release: 0.13, cutoff: 1250, filterType: 'bandpass' },
-      { kind: 'tone', type: 'sine', delay: 0.14, frequency: 190, endFrequency: 95, duration: 0.22, gain: 0.035, attack: 0.015, release: 0.18 },
+      { kind: 'tone', type: 'sine', frequency: 136, endFrequency: 41, duration: 0.46, gain: 0.105, attack: 0.006, decay: 0.1, sustain: 0.32, release: 0.3 },
+      { kind: 'noise', filterType: 'lowpass', cutoff: 730, Q: 0.9, playbackRate: 0.6, duration: 0.36, gain: 0.085, attack: 0.01, decay: 0.08, sustain: 0.4, release: 0.22 },
+      { kind: 'tone', type: 'triangle', delay: 0.025, frequency: 231, endFrequency: 84, cutoff: 460, duration: 0.3, gain: 0.03, attack: 0.008, decay: 0.075, sustain: 0.25, release: 0.19 },
+      { kind: 'noise', delay: 0.14, filterType: 'bandpass', cutoff: 390, Q: 2.2, playbackRate: 0.65, duration: 0.32, gain: 0.038, attack: 0.04, decay: 0.07, sustain: 0.3, release: 0.2 },
     ],
     pulse: [
-      { kind: 'noise', duration: 0.12, gain: 0.018, attack: 0.025, release: 0.08, cutoff: 680, filterType: 'lowpass' },
-      { kind: 'tone', type: 'sine', delay: 0.025, frequency: 105, endFrequency: 80, duration: 0.13, gain: 0.018, attack: 0.025, release: 0.08 },
+      { kind: 'noise', filterType: 'lowpass', cutoff: 420, Q: 0.7, playbackRate: 0.65, duration: 0.15, gain: 0.019, attack: 0.025, decay: 0.025, sustain: 0.35, release: 0.09 },
+      { kind: 'tone', type: 'sine', delay: 0.012, frequency: 83, endFrequency: 57, duration: 0.14, gain: 0.022, attack: 0.02, decay: 0.025, sustain: 0.3, release: 0.085 },
+      { kind: 'noise', delay: 0.04, filterType: 'bandpass', cutoff: 610, Q: 1.6, playbackRate: 0.7, duration: 0.1, gain: 0.009, attack: 0.015, decay: 0.02, sustain: 0.25, release: 0.06 },
     ],
   },
 };

@@ -123,21 +123,25 @@ test('every stage stays finite, bounded, deterministic, moving and fully faded',
   }
 });
 
-test('surf gathers in staggered noise layers, then a deep thump leads a long foam hiss', () => {
+test('abyssal surf gathers in staggered layers, then a bass slam leads a softened foam wash', () => {
   const { cast, impact, pulse } = profile.sounds;
   const rush = cast.filter(v => v.kind === 'noise');
   assert.ok(rush.length >= 3 && new Set(rush.map(v => v.delay ?? 0)).size === rush.length);
   assert.ok(rush[0].attack > 0.2, 'the surf swells instead of clicking');
   const thump = impact.find(v => v.kind === 'tone');
-  const hiss = impact.find(v => v.kind === 'noise' && v.filterType === 'highpass');
+  const foam = impact.find(v => v.kind === 'noise' && v.duration > 1);
   assert.ok(thump.frequency < 120 && thump.endFrequency < thump.frequency);
-  assert.ok(hiss.delay > 0 && hiss.duration > 1 && hiss.release > 1, 'foam outlasts the breaker hit');
+  assert.ok(foam.delay > 0 && foam.release > 1 && foam.filterType === 'bandpass', 'softened foam outlasts the breaker hit');
   assert.ok(pulse.every(v => v.gain <= 0.02 && v.duration <= 0.1), 'repeating tick foam stays quiet');
   for (const voices of Object.values(profile.sounds)) {
-    assert.ok(voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 8);
+    assert.ok(voices.some(v => v.kind === 'tone') && voices.some(v => v.kind === 'noise'));
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45, 'layer peaks leave mixing headroom');
     for (const v of voices) {
       assert.ok(v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5);
       assert.ok((v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2);
+      assert.ok(v.attack > 0 && v.decay > 0 && v.release > 0 && v.sustain > 0 && v.sustain <= 1);
+      assert.ok(v.attack + v.decay + v.release <= v.duration, 'authored envelope fits without runtime clamping');
     }
   }
   const fake = fakeRecordedAudio();

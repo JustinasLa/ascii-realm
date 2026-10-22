@@ -243,20 +243,28 @@ export default {
     }
   },
   sounds: {
+    // Storm pressure builds into a beating electrical hum and muted static.
     cast: [
-      { kind: 'noise', duration: 0.5, gain: 0.05, cutoff: 3200, filterType: 'highpass', attack: 0.2, release: 0.2 },
-      { kind: 'tone', type: 'sawtooth', frequency: 70, endFrequency: 140, duration: 0.5, gain: 0.018, attack: 0.25, release: 0.2 },
-      { kind: 'noise', delay: 0.24, duration: 0.06, gain: 0.07, cutoff: 4200, filterType: 'bandpass', attack: 0.002, release: 0.05 },
-      { kind: 'noise', delay: 0.31, duration: 0.05, gain: 0.06, cutoff: 5200, filterType: 'bandpass', attack: 0.002, release: 0.04 },
+      { kind: 'tone', type: 'sawtooth', frequency: 57, endFrequency: 94, cutoff: 480, duration: 0.64, gain: 0.055, attack: 0.19, decay: 0.11, sustain: 0.72, release: 0.27 },
+      { kind: 'tone', type: 'triangle', frequency: 61, endFrequency: 101, cutoff: 360, duration: 0.63, gain: 0.036, attack: 0.23, decay: 0.08, sustain: 0.67, release: 0.26 },
+      { kind: 'noise', duration: 0.57, gain: 0.042, cutoff: 680, filterType: 'bandpass', Q: 0.8, attack: 0.18, decay: 0.1, sustain: 0.56, release: 0.23 },
+      { kind: 'noise', delay: 0.29, duration: 0.09, gain: 0.033, cutoff: 1350, filterType: 'lowpass', attack: 0.003, decay: 0.018, sustain: 0.25, release: 0.06 },
+      { kind: 'noise', delay: 0.41, duration: 0.12, gain: 0.027, cutoff: 980, filterType: 'bandpass', Q: 0.7, attack: 0.004, decay: 0.026, sustain: 0.22, release: 0.08 },
     ],
+    // A rounded crack tears into two late thunder rolls; no exposed high hiss.
     impact: [
-      { kind: 'noise', duration: 0.18, gain: 0.22, cutoff: 1800, filterType: 'highpass', attack: 0.001, release: 0.16 },
-      { kind: 'tone', type: 'square', frequency: 1900, endFrequency: 140, duration: 0.14, gain: 0.03, attack: 0.001, release: 0.12 },
-      { kind: 'noise', delay: 0.01, duration: 0.5, gain: 0.12, cutoff: 900, filterType: 'bandpass', attack: 0.003, release: 0.45 },
-      { kind: 'tone', type: 'sine', frequency: 70, endFrequency: 32, duration: 1.4, gain: 0.1, attack: 0.01, release: 1.3 },
-      { kind: 'noise', delay: 0.06, duration: 1.8, gain: 0.07, cutoff: 260, filterType: 'lowpass', attack: 0.08, release: 1.5 },
-      { kind: 'noise', delay: 0.28, duration: 0.12, gain: 0.08, cutoff: 2400, filterType: 'highpass', attack: 0.002, release: 0.1 },
+      { kind: 'noise', duration: 0.22, gain: 0.12, cutoff: 1900, filterType: 'lowpass', Q: 0.6, attack: 0.002, decay: 0.035, sustain: 0.28, release: 0.17 },
+      { kind: 'tone', type: 'sawtooth', frequency: 174, endFrequency: 53, cutoff: 760, duration: 0.29, gain: 0.042, attack: 0.003, decay: 0.06, sustain: 0.27, release: 0.21 },
+      { kind: 'noise', delay: 0.065, duration: 0.3, gain: 0.063, cutoff: 820, filterType: 'bandpass', Q: 0.65, attack: 0.006, decay: 0.06, sustain: 0.34, release: 0.22 },
+      { kind: 'tone', type: 'sine', frequency: 73, endFrequency: 31, duration: 1.85, gain: 0.085, attack: 0.018, decay: 0.22, sustain: 0.52, release: 1.5 },
+      { kind: 'noise', delay: 0.19, duration: 1.38, gain: 0.065, cutoff: 240, filterType: 'lowpass', Q: 0.75, playbackRate: 0.64, attack: 0.095, decay: 0.18, sustain: 0.48, release: 1.05 },
+      { kind: 'noise', delay: 0.56, duration: 1.6, gain: 0.043, cutoff: 165, filterType: 'lowpass', Q: 0.8, playbackRate: 0.51, attack: 0.17, decay: 0.2, sustain: 0.38, release: 1.15 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.12, gain: 0.02, cutoff: 3600, filterType: 'bandpass', attack: 0.01, release: 0.1 }],
+    // Small, dry discharges retain the storm's low body between full strikes.
+    pulse: [
+      { kind: 'noise', duration: 0.13, gain: 0.024, cutoff: 1050, filterType: 'lowpass', attack: 0.004, decay: 0.026, sustain: 0.23, release: 0.09 },
+      { kind: 'tone', type: 'triangle', frequency: 116, endFrequency: 63, cutoff: 420, duration: 0.24, gain: 0.021, attack: 0.008, decay: 0.045, sustain: 0.32, release: 0.17 },
+      { kind: 'noise', delay: 0.065, duration: 0.16, gain: 0.014, cutoff: 430, filterType: 'bandpass', Q: 0.75, attack: 0.012, decay: 0.03, sustain: 0.2, release: 0.11 },
+    ],
   },
 };

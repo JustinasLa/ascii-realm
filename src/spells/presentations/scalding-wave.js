@@ -278,21 +278,26 @@ export default {
     (stages[effect.stage] ?? cast)(state, lifted(effect, plot));
   },
   sounds: {
+    // A cauldron-deep pressure swell, uneven boiling beads, then muffled steam.
     cast: [
-      { kind: 'noise', duration: 0.48, gain: 0.075, cutoff: 2300, filterType: 'highpass', attack: 0.075, release: 0.2 },
-      { kind: 'noise', delay: 0.025, duration: 0.5, gain: 0.065, cutoff: 260, filterType: 'bandpass', attack: 0.035, release: 0.2 },
-      { kind: 'tone', type: 'sine', delay: 0.07, duration: 0.11, gain: 0.045, frequency: 165, endFrequency: 69, attack: 0.006, release: 0.08 },
-      { kind: 'tone', type: 'sine', delay: 0.19, duration: 0.14, gain: 0.04, frequency: 210, endFrequency: 84, attack: 0.008, release: 0.1 },
+      { kind: 'tone', type: 'triangle', duration: 0.95, gain: 0.105, frequency: 58, endFrequency: 103, cutoff: 320, attack: 0.19, decay: 0.19, sustain: 0.6, release: 0.38 },
+      { kind: 'noise', delay: 0.055, duration: 0.92, gain: 0.095, cutoff: 410, filterType: 'lowpass', Q: 0.8, playbackRate: 0.65, attack: 0.17, decay: 0.21, sustain: 0.66, release: 0.36 },
+      { kind: 'tone', type: 'sine', delay: 0.12, duration: 0.19, gain: 0.04, frequency: 242, endFrequency: 87, attack: 0.012, decay: 0.05, sustain: 0.3, release: 0.11 },
+      { kind: 'tone', type: 'sine', delay: 0.32, duration: 0.24, gain: 0.035, frequency: 185, endFrequency: 61, attack: 0.015, decay: 0.065, sustain: 0.26, release: 0.14 },
+      { kind: 'noise', delay: 0.48, duration: 0.65, gain: 0.055, cutoff: 1380, filterType: 'bandpass', Q: 0.65, playbackRate: 0.75, attack: 0.12, decay: 0.14, sustain: 0.42, release: 0.32 },
     ],
+    // Burn ticks land as a wet low slap; steam falls away without a sharp hiss.
     impact: [
-      { kind: 'noise', duration: 0.065, gain: 0.09, cutoff: 5200, filterType: 'highpass', attack: 0.002, release: 0.055 },
-      { kind: 'noise', delay: 0.018, duration: 0.36, gain: 0.08, cutoff: 3800, filterType: 'bandpass', attack: 0.012, release: 0.28 },
-      { kind: 'noise', delay: 0.04, duration: 0.25, gain: 0.05, cutoff: 390, filterType: 'bandpass', attack: 0.01, release: 0.18 },
-      { kind: 'tone', type: 'sine', delay: 0.04, duration: 0.1, gain: 0.045, frequency: 230, endFrequency: 76, attack: 0.005, release: 0.075 },
-      { kind: 'tone', type: 'sine', delay: 0.115, duration: 0.08, gain: 0.03, frequency: 175, endFrequency: 63, attack: 0.005, release: 0.06 },
+      { kind: 'tone', type: 'sine', duration: 0.27, gain: 0.07, frequency: 136, endFrequency: 46, attack: 0.009, decay: 0.055, sustain: 0.28, release: 0.17 },
+      { kind: 'noise', duration: 0.22, gain: 0.065, cutoff: 570, filterType: 'lowpass', Q: 0.9, attack: 0.008, decay: 0.045, sustain: 0.34, release: 0.14 },
+      { kind: 'noise', delay: 0.045, duration: 0.44, gain: 0.045, cutoff: 1620, filterType: 'bandpass', Q: 0.7, playbackRate: 0.8, attack: 0.055, decay: 0.085, sustain: 0.32, release: 0.26 },
+      { kind: 'tone', type: 'sine', delay: 0.105, duration: 0.15, gain: 0.027, frequency: 273, endFrequency: 92, attack: 0.009, decay: 0.031, sustain: 0.22, release: 0.095 },
     ],
+    // Restrained rolling backwash under the repeated cone visuals.
     pulse: [
-      { kind: 'noise', duration: 0.075, gain: 0.018, cutoff: 2800, filterType: 'highpass', attack: 0.015, release: 0.055 },
+      { kind: 'noise', duration: 0.32, gain: 0.026, cutoff: 440, filterType: 'lowpass', playbackRate: 0.7, attack: 0.045, decay: 0.065, sustain: 0.38, release: 0.17 },
+      { kind: 'tone', type: 'sine', delay: 0.025, duration: 0.19, gain: 0.023, frequency: 166, endFrequency: 62, attack: 0.012, decay: 0.045, sustain: 0.3, release: 0.11 },
+      { kind: 'noise', delay: 0.08, duration: 0.28, gain: 0.018, cutoff: 1190, filterType: 'bandpass', Q: 0.65, attack: 0.045, decay: 0.055, sustain: 0.3, release: 0.16 },
     ],
   },
 };

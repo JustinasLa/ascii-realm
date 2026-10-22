@@ -373,18 +373,28 @@ export default {
     (STAGES[effect.stage] ?? cast)(pen(effect, plot), effect);
   },
   sounds: {
+    // A hollow pressure chamber buckles; uneven bubbles tear through its film.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 470, endFrequency: 155, delay: 0, duration: 0.14, gain: 0.075, attack: 0.008, release: 0.1 },
-      { kind: 'tone', type: 'sine', frequency: 730, endFrequency: 285, delay: 0.14, duration: 0.105, gain: 0.063, attack: 0.006, release: 0.08 },
-      { kind: 'tone', type: 'sine', frequency: 350, endFrequency: 115, delay: 0.38, duration: 0.17, gain: 0.07, attack: 0.01, release: 0.13 },
-      { kind: 'noise', delay: 0.025, duration: 0.07, gain: 0.014, cutoff: 1700, filterType: 'lowpass', attack: 0.008, release: 0.05 },
+      { kind: 'tone', type: 'sine', frequency: 214, endFrequency: 61, detune: -19, delay: 0, duration: 0.5, gain: 0.086, attack: 0.035, decay: 0.11, sustain: 0.32, release: 0.27 },
+      { kind: 'tone', type: 'triangle', frequency: 219, endFrequency: 66, detune: 13, cutoff: 430, delay: 0.015, duration: 0.46, gain: 0.035, attack: 0.046, decay: 0.09, sustain: 0.26, release: 0.25 },
+      { kind: 'noise', filterType: 'bandpass', cutoff: 380, Q: 3.4, playbackRate: 0.63, delay: 0.025, duration: 0.32, gain: 0.037, attack: 0.06, decay: 0.055, sustain: 0.42, release: 0.18 },
+      { kind: 'tone', type: 'sine', frequency: 303, endFrequency: 87, detune: -31, delay: 0.147, duration: 0.2, gain: 0.043, attack: 0.009, decay: 0.045, sustain: 0.19, release: 0.135 },
+      { kind: 'tone', type: 'sine', frequency: 171, endFrequency: 49, detune: 22, delay: 0.389, duration: 0.29, gain: 0.035, attack: 0.014, decay: 0.065, sustain: 0.22, release: 0.2 },
+      { kind: 'noise', filterType: 'bandpass', cutoff: 880, Q: 2.1, playbackRate: 0.72, delay: 0.397, duration: 0.14, gain: 0.019, attack: 0.008, decay: 0.025, sustain: 0.15, release: 0.1 },
     ],
+    // A submerged rupture followed by a second, smaller collapse and wet grit.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 820, endFrequency: 235, delay: 0, duration: 0.085, gain: 0.067, attack: 0.004, release: 0.065 },
-      { kind: 'tone', type: 'sine', frequency: 570, endFrequency: 190, delay: 0.065, duration: 0.11, gain: 0.057, attack: 0.006, release: 0.08 },
-      { kind: 'tone', type: 'sine', frequency: 960, endFrequency: 310, delay: 0.19, duration: 0.075, gain: 0.044, attack: 0.004, release: 0.055 },
-      { kind: 'noise', delay: 0.035, duration: 0.08, gain: 0.022, cutoff: 1400, filterType: 'bandpass', attack: 0.004, release: 0.06 },
+      { kind: 'tone', type: 'sine', frequency: 264, endFrequency: 47, detune: -24, delay: 0, duration: 0.38, gain: 0.082, attack: 0.006, decay: 0.065, sustain: 0.26, release: 0.28 },
+      { kind: 'tone', type: 'triangle', frequency: 271, endFrequency: 53, detune: 17, cutoff: 580, delay: 0.008, duration: 0.29, gain: 0.031, attack: 0.009, decay: 0.05, sustain: 0.19, release: 0.22 },
+      { kind: 'noise', filterType: 'bandpass', cutoff: 690, Q: 2.7, playbackRate: 0.66, delay: 0, duration: 0.2, gain: 0.048, attack: 0.005, decay: 0.039, sustain: 0.24, release: 0.15 },
+      { kind: 'tone', type: 'sine', frequency: 189, endFrequency: 57, detune: -37, delay: 0.173, duration: 0.25, gain: 0.032, attack: 0.012, decay: 0.045, sustain: 0.21, release: 0.18 },
+      { kind: 'noise', filterType: 'lowpass', cutoff: 460, Q: 0.9, playbackRate: 0.55, delay: 0.231, duration: 0.31, gain: 0.024, attack: 0.027, decay: 0.06, sustain: 0.22, release: 0.21 },
     ],
-    pulse: [{ kind: 'tone', type: 'sine', frequency: 380, endFrequency: 220, duration: 0.045, gain: 0.012, attack: 0.003, release: 0.035 }],
+    // Quiet, short pressure leaks keep the frequent flight ticks submerged.
+    pulse: [
+      { kind: 'tone', type: 'sine', frequency: 143, endFrequency: 69, detune: -18, delay: 0, duration: 0.15, gain: 0.012, attack: 0.012, decay: 0.028, sustain: 0.23, release: 0.1 },
+      { kind: 'tone', type: 'sine', frequency: 197, endFrequency: 81, detune: 29, delay: 0.067, duration: 0.12, gain: 0.007, attack: 0.009, decay: 0.025, sustain: 0.17, release: 0.08 },
+      { kind: 'noise', filterType: 'bandpass', cutoff: 410, Q: 3.1, playbackRate: 0.58, delay: 0.019, duration: 0.16, gain: 0.009, attack: 0.018, decay: 0.027, sustain: 0.2, release: 0.105 },
+    ],
   },
 };

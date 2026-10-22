@@ -122,24 +122,25 @@ test('all stages are deterministic, bounded, printable, and fade completely', ()
   }
 });
 
-test('water audio combines a smooth rising chord, spaced laps, hollow contact, and quiet pulse', () => {
+test('water audio raises a heavy liquid bulwark, shoves with pressure, and leaves quiet wavelets', () => {
   const { cast, impact, pulse } = profile.sounds;
-  const chord = cast.filter(v => v.kind === 'tone');
-  assert.ok(chord.length >= 3 && chord.every(v => v.endFrequency > v.frequency && v.attack >= 0.07));
-  assert.ok(chord.some(v => v.type === 'sine'), 'rounded tones carry the water chord');
-  const laps = cast.filter(v => v.kind === 'noise');
-  assert.ok(laps.length >= 2 && laps[1].delay > laps[0].delay + laps[0].duration, 'separate wave laps have audible space');
-  assert.ok(laps.every(v => v.filterType === 'lowpass'), 'laps are soft water rather than bright fracture noise');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < v.frequency && v.attack < 0.02));
-  assert.ok(pulse.every(v => v.gain <= 0.025 && v.duration <= 0.15), 'repeated laps remain quiet');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 100 && v.endFrequency > v.frequency && v.attack >= 0.1), 'submerged pressure slowly builds');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.delay >= 0.4 && v.endFrequency < 60), 'a low knock seals the shell');
+  assert.ok(cast.filter(v => v.kind === 'noise').length >= 2, 'layers of filtered surf form the walls');
+  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < 50 && v.attack < 0.02), 'a descending pressure wave drives contact');
+  assert.ok(pulse.every(v => v.gain <= 0.025 && v.duration <= 0.15), 'repeated wavelets remain quiet and short');
   for (const [stage, voices] of Object.entries(profile.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 6);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45, 'combined layers respect the stage headroom');
     const fake = fakeRecordedAudio();
     const handles = playSpellSound(fake.engine, { stage, x: 2, y: 3, presentation: profile });
     assert.equal(handles.length, voices.length, 'each authored layer reaches the real voice instruments');
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 3));
     assert.deepEqual(fake.invalid, []);
     for (const voice of voices) {
+      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
+      assert.ok(voice.sustain >= 0 && voice.sustain <= 1);
+      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration, 'authored envelope fits without runtime truncation');
       assert.ok(voice.gain > 0 && voice.gain <= 0.25);
       assert.ok(voice.duration > 0 && voice.duration <= 2.5);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);

@@ -284,18 +284,29 @@ export default {
     }
   },
   sounds: {
+    // A low pressure swell lifts a broad, hollow wall of water. Staggered surf
+    // bands keep the crest grainy without the bright hiss of steam.
     cast: [
-      { kind: 'noise', duration: 0.68, gain: 0.07, cutoff: 520, filterType: 'lowpass', attack: 0.3, release: 0.3 },
-      { kind: 'noise', delay: 0.12, duration: 0.56, gain: 0.055, cutoff: 950, filterType: 'bandpass', attack: 0.18, release: 0.3 },
-      { kind: 'tone', type: 'sine', frequency: 80, endFrequency: 48, duration: 0.66, gain: 0.032, attack: 0.2, release: 0.4 },
-      { kind: 'noise', delay: 0.35, duration: 0.38, gain: 0.04, cutoff: 2300, filterType: 'highpass', attack: 0.12, release: 0.22 },
+      { kind: 'noise', duration: 0.88, gain: 0.07, cutoff: 310, filterType: 'lowpass', Q: 0.7, attack: 0.29, decay: 0.12, sustain: 0.72, release: 0.4 },
+      { kind: 'tone', type: 'sine', frequency: 71, endFrequency: 48, duration: 0.94, gain: 0.055, attack: 0.24, decay: 0.16, sustain: 0.7, release: 0.46 },
+      { kind: 'noise', delay: 0.12, duration: 0.72, gain: 0.058, cutoff: 610, filterType: 'bandpass', Q: 0.75, attack: 0.21, decay: 0.1, sustain: 0.65, release: 0.36 },
+      { kind: 'tone', type: 'triangle', frequency: 116, endFrequency: 64, cutoff: 240, duration: 0.72, delay: 0.16, gain: 0.026, attack: 0.19, decay: 0.13, sustain: 0.55, release: 0.34 },
+      { kind: 'noise', delay: 0.34, duration: 0.58, gain: 0.035, cutoff: 1700, filterType: 'bandpass', Q: 0.6, attack: 0.11, decay: 0.12, sustain: 0.4, release: 0.3 },
     ],
+    // The breaker folds into a bass-water slam. A delayed, softened foam wash
+    // recedes behind the impact instead of turning into a sharp spray burst.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 104, endFrequency: 34, duration: 0.42, gain: 0.12, attack: 0.006, release: 0.38 },
-      { kind: 'noise', duration: 0.32, gain: 0.08, cutoff: 340, filterType: 'lowpass', attack: 0.005, release: 0.28 },
-      { kind: 'noise', delay: 0.035, duration: 0.9, gain: 0.1, cutoff: 1400, filterType: 'bandpass', attack: 0.012, release: 0.7 },
-      { kind: 'noise', delay: 0.13, duration: 1.45, gain: 0.055, cutoff: 2900, filterType: 'highpass', attack: 0.16, release: 1.12 },
+      { kind: 'tone', type: 'sine', frequency: 96, endFrequency: 31, duration: 0.58, gain: 0.115, attack: 0.007, decay: 0.09, sustain: 0.48, release: 0.45 },
+      { kind: 'tone', type: 'triangle', frequency: 153, endFrequency: 49, cutoff: 320, delay: 0.014, duration: 0.44, gain: 0.038, attack: 0.01, decay: 0.08, sustain: 0.35, release: 0.32 },
+      { kind: 'noise', duration: 0.46, gain: 0.08, cutoff: 390, filterType: 'lowpass', Q: 0.8, attack: 0.009, decay: 0.08, sustain: 0.52, release: 0.34 },
+      { kind: 'noise', delay: 0.028, duration: 0.92, gain: 0.077, cutoff: 1120, filterType: 'bandpass', Q: 0.65, attack: 0.022, decay: 0.16, sustain: 0.48, release: 0.7 },
+      { kind: 'noise', delay: 0.16, duration: 1.48, gain: 0.043, cutoff: 2100, filterType: 'bandpass', Q: 0.55, attack: 0.13, decay: 0.16, sustain: 0.45, release: 1.14 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.08, gain: 0.016, cutoff: 1200, filterType: 'bandpass', attack: 0.015, release: 0.06 }],
+    // Short submerged wake ticks remain well below the single crashing hit.
+    pulse: [
+      { kind: 'noise', duration: 0.095, gain: 0.014, cutoff: 470, filterType: 'lowpass', Q: 0.7, attack: 0.015, decay: 0.02, sustain: 0.45, release: 0.055 },
+      { kind: 'noise', delay: 0.012, duration: 0.085, gain: 0.009, cutoff: 1300, filterType: 'bandpass', Q: 0.6, attack: 0.012, decay: 0.018, sustain: 0.35, release: 0.05 },
+      { kind: 'tone', type: 'sine', frequency: 66, endFrequency: 43, duration: 0.09, gain: 0.012, attack: 0.012, decay: 0.018, sustain: 0.4, release: 0.055 },
+    ],
   },
 };

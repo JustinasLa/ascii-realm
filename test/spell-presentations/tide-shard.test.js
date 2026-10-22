@@ -167,24 +167,26 @@ test('the paint adapter keeps every stage under its glyph cap', () => {
   }
 });
 
-test('the sound recipe has a high plip, reversing low liquid wobble and crisp splash tail', () => {
+test('the sound recipe draws pressure, strikes with a wet implosion and keeps flight wakes quiet', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const tones = cast.filter(v => v.kind === 'tone');
-  assert.ok(tones.every(v => v.type === 'sine'), 'rounded liquid tones avoid metallic harmonics');
-  assert.ok(tones[0].frequency > 1000 && tones[0].endFrequency < tones[0].frequency);
-  assert.ok(tones[1].frequency < 300 && tones[1].endFrequency < tones[1].frequency);
-  assert.equal(tones[1].endFrequency, tones[2].frequency);
-  assert.ok(tones[2].endFrequency > tones[2].frequency && tones[2].delay > tones[1].delay, 'low wobble reverses direction after the plip');
-  const sharp = impact.find(v => v.kind === 'noise' && v.filterType === 'highpass');
-  const body = impact.find(v => v.kind === 'noise' && v.filterType === 'bandpass');
+  assert.ok(tones.every(v => ['sine', 'triangle'].includes(v.type) && v.frequency < 400), 'dark rounded tones carry the pressure');
+  assert.ok(tones.some(v => v.frequency < 150 && v.endFrequency > v.frequency), 'pressure rises into release');
+  assert.ok(tones.some(v => v.endFrequency < v.frequency && v.delay > 0), 'a short descending spear follows');
+  const sharp = impact.find(v => v.kind === 'noise' && v.filterType === 'bandpass');
+  const body = impact.find(v => v.kind === 'noise' && v.filterType === 'lowpass');
   assert.ok(sharp.attack <= 0.002 && sharp.duration < body.duration && body.delay > 0, 'splash opens crisply before a liquid wash');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.delay > 0.1), 'a final water bead follows the splash');
-  assert.ok(pulse.every(v => v.gain < 0.025 && v.duration < 0.1), 'repeating ticks remain quiet and short');
+  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < 60), 'impact falls into an abyssal pressure thud');
+  assert.ok(pulse.every(v => v.gain < 0.025 && v.duration <= 0.16), 'repeating ticks remain quiet and short');
   for (const recipe of [cast, impact, pulse]) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
+    assert.ok(recipe.length >= 3 && recipe.length <= 6);
+    assert.ok(recipe.some(v => v.kind === 'tone') && recipe.some(v => v.kind === 'noise'));
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 0.45);
     for (const v of recipe) {
       assert.ok(v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5);
       assert.ok((v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2);
+      assert.ok(v.attack > 0 && v.decay > 0 && v.release > 0 && v.sustain > 0 && v.sustain < 1);
+      assert.ok(v.attack + v.decay + v.release <= v.duration, 'authored envelope fits without clamping');
     }
   }
   const fake = fakeRecordedAudio();

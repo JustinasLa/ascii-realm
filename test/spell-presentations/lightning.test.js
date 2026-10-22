@@ -142,23 +142,34 @@ test('all stages remain deterministic, finite, ASCII and within budget, then fad
   }
 });
 
-test('the strike cracks sharply over a low rumble and plays through the effects bus', () => {
-  const { impact, cast } = presentation.sounds;
-  assert.ok(impact.some(v => v.kind === 'noise' && v.filterType === 'highpass' && v.attack <= 0.002 && v.gain >= 0.15), 'a sharp crack');
+test('the strike cracks through a dark filter over staggered thunder and plays through the effects bus', () => {
+  const { impact, cast, pulse } = presentation.sounds;
+  assert.ok(impact.some(v => v.kind === 'noise' && v.filterType === 'lowpass' && v.attack <= 0.002 && v.gain >= 0.1), 'a sharp crack with its high hiss filtered');
   assert.ok(impact.some(v => v.kind === 'tone' && v.frequency < 100 && v.duration > 1), 'a low rumble');
+  const rolls = impact.filter(v => v.kind === 'noise' && v.cutoff < 300 && v.duration > 1);
+  assert.ok(rolls.length >= 2 && rolls[1].delay > rolls[0].delay + 0.2, 'thunder rolls arrive in staggered swells');
   assert.ok(cast.some(v => v.kind === 'tone' && v.endFrequency > v.frequency), 'the charge hum rises');
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < 0.08, 'chain discharges stay quiet');
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 6);
+    assert.ok(voices.some(v => v.kind === 'tone') && voices.some(v => v.kind === 'noise'));
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45);
     for (const voice of voices) {
       assert.ok(voice.duration > 0 && voice.duration <= 2.5 && voice.gain > 0 && voice.gain <= 0.25);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
+      assert.ok(voice.sustain >= 0 && voice.sustain <= 1);
+      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration);
+      assert.notEqual(voice.filterType, 'highpass', 'no exposed high hiss');
     }
   }
-  const fake = fakeRecordedAudio();
-  const handles = playSpellSound(fake.engine, { type: 'spell', stage: 'impact', presentation, x: 3, y: 9 });
-  assert.equal(handles.length, impact.length);
-  handles.forEach(handle => handle.stop());
-  assert.deepEqual(fake.invalid, []);
+  for (const stage of ['cast', 'impact', 'pulse']) {
+    const fake = fakeRecordedAudio();
+    const handles = playSpellSound(fake.engine, { type: 'spell', stage, presentation, x: 3, y: 9 });
+    assert.equal(handles.length, presentation.sounds[stage].length);
+    handles.forEach(handle => handle.stop());
+    assert.deepEqual(fake.invalid, []);
+  }
 });
 
 test('a real cast shows the charge ring, then one strike with a single crack cue', () => {

@@ -167,15 +167,20 @@ test('all Bubble Shard stages use finite ASCII geometry, bounded light, budgets,
   assert.equal(new Set(signatures).size, 6, 'every stage has its own form');
 });
 
-test('bubbly sound uses three unevenly spaced falling plops and a softer rounded pop cluster', () => {
-  for (const stage of ['cast', 'impact']) {
+test('Bubble Shard sounds use detuned pressure drops, irregular ruptures, and quiet wet flight ticks', () => {
+  for (const stage of ['cast', 'impact', 'pulse']) {
     const voices = presentation.sounds[stage], tones = voices.filter(v => v.kind === 'tone');
-    assert.equal(tones.length, 3);
-    assert.ok(tones.every(v => v.type === 'sine' && v.endFrequency < v.frequency && v.release > v.attack));
-    assert.notEqual(tones[1].delay - tones[0].delay, tones[2].delay - tones[1].delay, 'irregular rhythm');
-    assert.equal(new Set(tones.map(v => v.frequency)).size, 3, 'each bubble has a different pitch');
-    assert.ok(voices.some(v => v.kind === 'noise' && v.gain < 0.025), 'soft film texture under the rounded tones');
-    assert.ok(voices.length <= 8 && voices.every(v => v.gain <= 0.1 && v.duration <= 2.5 && (v.delay ?? 0) <= 2));
+    assert.ok(tones.length >= 2);
+    assert.ok(tones.every(v => v.frequency < 350 && v.endFrequency < v.frequency && v.release > v.attack && v.detune !== 0));
+    if (stage !== 'pulse') {
+      assert.notEqual(tones[1].delay - tones[0].delay, tones[2].delay - tones[1].delay, 'irregular rupture rhythm');
+    }
+    assert.equal(new Set(tones.map(v => v.frequency)).size, tones.length, 'each bubble has a different pitch');
+    assert.ok(voices.some(v => v.kind === 'noise' && v.cutoff < 1000 && v.playbackRate < 1), 'dark filtered wet texture');
+    assert.ok(voices.length >= 3 && voices.length <= 8 && voices.every(v => v.gain <= 0.1 && v.duration <= 2.5 && (v.delay ?? 0) <= 2));
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.45);
+    assert.ok(voices.every(v => v.attack > 0 && v.decay > 0 && v.sustain > 0 && v.sustain < 1
+      && v.release > 0 && v.attack + v.decay + v.release <= v.duration), 'authored envelopes fit their durations');
     const fake = fakeRecordedAudio();
     assert.equal(playSpellSound(fake.engine, { stage, presentation, x: 3, y: 7 }).length, voices.length);
     assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === 7));
@@ -184,7 +189,8 @@ test('bubbly sound uses three unevenly spaced falling plops and a softer rounded
     assert.deepEqual(fake.invalid, []);
   }
   assert.notDeepEqual(presentation.sounds.cast, presentation.sounds.impact);
-  assert.ok(presentation.sounds.pulse.every(v => v.gain < 0.02 && v.duration < 0.06), 'repeated projectile ticks stay quiet');
+  assert.ok(presentation.sounds.pulse.reduce((sum, v) => sum + v.gain, 0) < 0.03
+    && presentation.sounds.pulse.every(v => v.delay + v.duration < 0.28), 'flight ticks remain quiet and finish before the next cue');
 });
 
 test('real Bubble Shard cast renders the profile, emits typed cues, and preserves damage and slowing', () => {

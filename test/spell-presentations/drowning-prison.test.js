@@ -188,11 +188,16 @@ test('the sound phrase combines a hollow gong, accelerating rising bubbles and a
   assert.ok(impact.some(voice => voice.kind === 'noise' && voice.cutoff < 500));
   assert.ok(pulse.every(voice => voice.gain <= 0.025 && voice.duration <= 0.15), 'hold ticks stay quiet and brief');
   for (const voices of Object.values(profile.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 6);
+    assert.ok(voices.some(voice => voice.kind === 'tone') && voices.some(voice => voice.kind === 'noise'), 'each stage mixes submerged resonance and water texture');
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 0.45, 'layer peaks leave mix headroom');
     for (const voice of voices) {
       assert.ok(voice.gain > 0 && voice.gain <= 0.25);
       assert.ok(voice.duration > 0 && voice.duration <= 2.5);
       assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.ok(voice.attack > 0 && voice.decay > 0 && voice.release > 0);
+      assert.ok(voice.sustain > 0 && voice.sustain < 1);
+      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration, 'authored envelope fits its voice without runtime clamping');
       assert.ok(Object.values(voice).filter(value => typeof value === 'number').every(Number.isFinite));
     }
   }
