@@ -1,6 +1,6 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
-import { ASPECT } from './world.js';
+import { ASPECT, GRASS, SHORE } from './world.js';
 
 // Night greens against the near-black ground, kept a step below rocks and
 // trees so the meadow reads as background: blue-green fine blades, leafy
@@ -138,7 +138,7 @@ export function flowerAt(wx, wy, seed, style, height, elev) {
 // chunk: its height, its flower or seed head, and its own shade of green,
 // which drifts from clump to clump so neighbouring tufts differ.
 // Without `flora` the meadow is grass alone: no flowers, ferns or cattails.
-export function grassRoots(chunk, seed, size, { flora = true } = {}) {
+export function grassRoots(chunk, seed, size, { flora = true, meadow = false } = {}) {
   const roots = [];
   const present = new Uint8Array(size * size);
   const rows = new Uint16Array(size + 1);
@@ -157,11 +157,17 @@ export function grassRoots(chunk, seed, size, { flora = true } = {}) {
       const grass = chunk.grassHeight[i];
       // Burnt ground keeps only its stubble and ash.
       if (chunk.burnt?.[i] || grass < 2) continue;
+      if (meadow && chunk.type[i] !== GRASS && chunk.type[i] !== SHORE) continue;
       // Flowers and reeds share the islands, so gaps stay visibly open.
       // Reject bare ground before the more expensive habitat lookups.
-      if (hash2(wx, wy, seed + 1322) >= patchAt(wx, wy, seed)) continue;
+      // The ruin meadow is a continuous sward, with gentle variation instead
+      // of isolated islands. Terrain edits supply its worn paths and gaps.
+      const patch = meadow ? 0.88 + valueNoise(wx * ASPECT * 0.045, wy * 0.045, seed + 1321) * 0.12
+        : patchAt(wx, wy, seed);
+      if (hash2(wx, wy, seed + 1322) >= patch) continue;
       const elev = chunk.elev?.[i] ?? 0.55;
-      const flower = flora ? flowerAt(wx, wy, seed, style, grass, elev) : 0;
+      const flower = meadow && hash2(wx, wy, seed + 1414) > 0.985 ? DAISY
+        : flora ? flowerAt(wx, wy, seed, style, grass, elev) : 0;
       const density = chunk.grassDensity[i] * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1) *
         clumpAt(wx, wy, seed);
       // Flowers grow mostly within the clumps; a few stand alone in the
@@ -183,7 +189,10 @@ export function grassRoots(chunk, seed, size, { flora = true } = {}) {
       const [r, g, b] = PALETTES[style];
       const bright = 0.84 + valueNoise(wx * ASPECT * 0.11, wy * 0.11, seed + 1430) * 0.32;
       const warm = (valueNoise(wx * ASPECT * 0.04, wy * 0.04, seed + 1431) - 0.5) * 18;
-      tones.push((r + warm) * bright, (g + warm * 0.2) * bright, (b - warm * 0.6) * bright);
+      const glint = meadow && hash2(wx, wy, seed + 1432) > 0.82 ? 1.45 : 1;
+      tones.push((r + warm) * bright * (meadow ? 1.1 * glint : 1),
+        (g + warm * 0.2) * bright * (meadow ? 1.3 * glint : 1),
+        (b - warm * 0.6) * bright * (meadow ? 1.1 * glint : 1));
     }
   }
   rows[size] = roots.length;

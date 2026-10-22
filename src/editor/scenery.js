@@ -285,10 +285,14 @@ export class Scenery {
 
   _apply(scene, preparedProps) {
     const props = preparedProps ?? scene.props.map((definition) => this._restoreProp(definition));
-    this.world.clearScenery();
-    for (const { x, y, type } of scene.terrain) this.world.setTerrain(x, y, type);
-    for (const prop of props) this.world.addProp(prop);
-    for (const id of scene.removed) this.world.removedProps.add(id);
+    // Regrow each touched chunk after the complete snapshot is installed,
+    // rather than rebuilding its thousands of blades after every cell edit.
+    this.world.batchScenery(() => {
+      this.world.clearScenery();
+      for (const { x, y, type } of scene.terrain) this.world.setTerrain(x, y, type);
+      for (const prop of props) this.world.addProp(prop);
+      for (const id of scene.removed) this.world.removedProps.add(id);
+    });
     this._nextId = 1;
     for (const prop of props) this._nextId = Math.max(this._nextId, Number(prop.id.slice(2)) + 1);
   }

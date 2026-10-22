@@ -34,9 +34,17 @@ test('scaling changes silhouettes and collision footprints without duplicate cel
       assert.equal(prop.scale, scale);
       assert.equal(prop.footW, original.footW * scale);
       assert.equal(prop.footH, original.footH * scale);
-      assert.equal(blocks(prop, 10, 20), prop.solid);
-      assert.equal(blocks(prop, 10 + prop.footW * 0.9, 20), prop.solid);
-      assert.equal(blocks(prop, 10, 20 + prop.footH * 0.9), prop.solid);
+      if (prop.collisionRects) {
+        for (const rect of prop.collisionRects) {
+          assert.equal(blocks(prop, 10 + (rect.minX + rect.maxX) / 2,
+            20 + (rect.minY + rect.maxY) / 2), prop.solid);
+        }
+        if (kind === 'stone-gate') assert.equal(blocks(prop, 10, 20), false, 'arch center stays open');
+      } else {
+        assert.equal(blocks(prop, 10, 20), prop.solid);
+        assert.equal(blocks(prop, 10 + prop.footW * 0.9, 20), prop.solid);
+        assert.equal(blocks(prop, 10, 20 + prop.footH * 0.9), prop.solid);
+      }
       assert.ok(!blocks(prop, 10 + prop.footW * 1.1, 20));
       assert.ok(!blocks(prop, 10, 20 + prop.footH * 1.1));
       // One base cell per spot; layered cells stack over the base before them.
@@ -48,7 +56,8 @@ test('scaling changes silhouettes and collision footprints without duplicate cel
         const before = prop.cells[i - 1];
         if (before.dx === cell.dx && before.dy === cell.dy) assert.equal(before.g & LAYER, 0);
       });
-      assert.ok(prop.cells.length > 0 && prop.cells.length < 12000);
+      const budget = PROP_CATALOG.find(p => p.kind === kind).group === 'Architecture' ? 60000 : 12000;
+      assert.ok(prop.cells.length > 0 && prop.cells.length < budget);
       const top = Math.min(...prop.cells.map(({ dy }) => dy));
       const originalTop = Math.min(...original.cells.map(({ dy }) => dy));
       // Props are re-drawn at their new size, so thin tips can gain a row or two.

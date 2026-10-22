@@ -10,6 +10,8 @@ import { withLayers } from './helpers/renderer.js';
 const expectedKinds = [
   'tree', 'rock', 'bush', 'pine', 'stump', 'log', 'flowers', 'mushrooms', 'reeds',
   'crate', 'barrel', 'fence', 'tent', 'campfire', 'signpost',
+  'stone-gate', 'stone-tower', 'column-short', 'column-broken', 'column-tall',
+  'wall-low', 'wall-broken', 'rubble-small', 'rubble-large',
 ];
 const decorativeKinds = new Set(['flowers', 'mushrooms', 'reeds']);
 
@@ -50,8 +52,9 @@ test('every catalog prop survives placement, erase history, and JSON save/load',
 
       const prop = scene.place(kind, x, y, { scale: 1.5, seed: 27 });
       const original = structuredClone(prop);
+      const anchorWalkable = !solid || kind === 'stone-gate';
       assert.equal(prop.solid, solid);
-      assert.equal(world.isWalkable(x, y), !solid);
+      assert.equal(world.isWalkable(x, y), anchorWalkable);
       assert.ok(world.propsIn(x, y, x, y).some(({ id }) => id === prop.id), 'placed prop is visible to world queries');
 
       assert.equal(scene.erase(x, y, 0), 1);
@@ -59,7 +62,7 @@ test('every catalog prop survives placement, erase history, and JSON save/load',
       assert.equal(world.isWalkable(x, y), true);
       assert.equal(scene.undo(), true);
       assert.deepEqual(world.addedProps.get(prop.id), original);
-      assert.equal(world.isWalkable(x, y), !solid);
+      assert.equal(world.isWalkable(x, y), anchorWalkable);
       assert.equal(scene.redo(), true);
       assert.equal(world.addedProps.has(prop.id), false);
       assert.equal(world.isWalkable(x, y), true);
@@ -76,7 +79,7 @@ test('every catalog prop survives placement, erase history, and JSON save/load',
       assert.equal(restoredScene.load(saved), true);
       assert.deepEqual(restoredScene.serialize(), saved);
       assert.deepEqual(restoredWorld.addedProps.get(prop.id), original, 'load preserves glyphs, colors, footprint, solid flag, id, scale and seed');
-      assert.equal(restoredWorld.isWalkable(x, y), !solid);
+      assert.equal(restoredWorld.isWalkable(x, y), anchorWalkable);
       assert.equal(restoredScene.undo(), true, 'loading a scene is undoable');
       assert.equal(restoredWorld.addedProps.has(prop.id), false);
       assert.equal(restoredScene.redo(), true);

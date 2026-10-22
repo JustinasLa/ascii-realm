@@ -16,6 +16,15 @@ export const PROP_CATALOG = Object.freeze([
   { kind: 'tent', label: 'Tent', symbol: 'A', group: 'Camp', solid: true },
   { kind: 'campfire', label: 'Campfire', symbol: '*', group: 'Camp', solid: true },
   { kind: 'signpost', label: 'Signpost', symbol: '>', group: 'Camp', solid: true },
+  { kind: 'stone-gate', label: 'Stone gate', symbol: 'n', group: 'Architecture', solid: true },
+  { kind: 'stone-tower', label: 'Stone tower', symbol: '#', group: 'Architecture', solid: true },
+  { kind: 'column-short', label: 'Short column', symbol: 'i', group: 'Architecture', solid: true },
+  { kind: 'column-broken', label: 'Broken column', symbol: '/', group: 'Architecture', solid: true },
+  { kind: 'column-tall', label: 'Tall column', symbol: 'I', group: 'Architecture', solid: true },
+  { kind: 'wall-low', label: 'Low wall', symbol: '=', group: 'Architecture', solid: true },
+  { kind: 'wall-broken', label: 'Broken wall', symbol: '%', group: 'Architecture', solid: true },
+  { kind: 'rubble-small', label: 'Small rubble', symbol: '.', group: 'Architecture', solid: true },
+  { kind: 'rubble-large', label: 'Large rubble', symbol: ':', group: 'Architecture', solid: true },
 ].map(Object.freeze));
 
 export const PROP_KINDS = new Set(PROP_CATALOG.map(({ kind }) => kind));

@@ -3,7 +3,7 @@
 Press `B` to enter build mode and open the testing panel; press it again to return
 to play. You can also open the panel by clicking its summary, then choose
 **Start building**. Paint grass, dirt, shore, water or stone with terrain brushes,
-or choose from the **Nature** and **Camp** prop palettes: trees, pines, rocks,
+or choose from the **Nature**, **Camp** and **Architecture** prop palettes: trees, pines, rocks,
 bushes, stumps, logs, flowers, mushrooms, reeds, crates, barrels, fences, tents,
 campfires and signposts. Flowers, mushrooms and reeds are decorative and can be
 walked through; the other props block movement. Adjust the brush radius or prop
@@ -23,3 +23,53 @@ generated world and can be undone.
 
 Add `?builder` to the URL to open the panel automatically. With `?debug`, the
 current scene is available as `window.game.builder.scene` for inspection.
+
+## Stone ruins
+
+The **Architecture** palette contains a stone gate, battlement tower, short,
+broken and tall columns, low and broken walls, and small and large rubble.
+The gate's two piers block movement while its centre is walkable. The tower
+is solid. These are outdoor scenery props: there are no functional doors or
+interiors. Placement, scale, variation, save/load and undo work as for other props.
+
+Choose **Add stone ruins** in the builder's **Test scene** section to add twelve
+props covering all nine kinds around the current view centre. The preset has a
+foreground of monumental columns and fallen stone, an open melee court, and
+a gate, tower and wall fragments farther north. It has
+narrow worn paths north, south and sideways. Grass grows around scattered paving;
+small bare patches surround the stone bases. It prepares dry local ground
+and removes generated obstacles, including fallen trunks extending into the site.
+Terrain and props outside the site are retained. If a placed prop overlaps the
+site, placement is refused: pan to an empty area and try again. Terrain changes
+inside the site are intentional and are restored by undo.
+
+The entire preset is one undo step, including terrain and generated-prop
+removals. Save locally or export JSON to retain it. Opening `?scene=ruins` adds
+the same preset at the starting view and opens build mode automatically;
+`?scene=ruins&debug` also exposes the debug state. It does not overwrite a local
+save. A site's prop variations are stable for its world seed and position.
+The direct ruin preview uses a dense green meadow, low fog and a wider view,
+following the video reference. Other worlds keep their normal vegetation.
+Use `?scene=ruins&play` to start directly in play with the builder panel closed.
+
+To test the scene:
+
+1. Open `?scene=ruins&debug` and press `B` to play. The initial player position is
+   inside the court. Follow the path north through the centre of the gate, then approach
+   each stone pier and confirm it blocks movement. Circle the columns, tower
+   and wall fragments, checking that the player draws in front of or behind
+   their bases appropriately.
+2. Open **Weather & seasons**, choose **Foggy stillness**, and increase **Intensity**.
+   Walk through the arch and across the court to inspect fog around the masonry
+   and the wake left by movement. The preview starts in fog; adding a preset
+   with the builder button keeps the current weather settings.
+3. Move and swing the sword in the open court. For enemies, add `&skeletons=2`
+   to the preview URL. Check that melee movement and dodging remain possible
+   through the central route and around the broken columns and rubble.
+4. Return to building with `B`; undo once to restore the previous scene, then
+   redo. Save locally, reset, and load to check that the ruins and open gate
+   collision return with the same shapes and colours.
+
+When placing a second site after panning, the existing builder's return-to-play
+behaviour keeps the player near their previous position; travel to the new site
+to test it. Use the direct preview URL for a ruin at the starting player location.
