@@ -153,6 +153,22 @@ export class Combat {
     return this.charge >= CHARGE_TIME;
   }
 
+  // How far through the swing under way the blade is: winding up, cutting
+  // or recovering, with how far through that part (0..1), and whether the
+  // swing winds up at all. Animations follow this so the cut they show
+  // lands when the blade really strikes. Null outside a swing.
+  get swingStage() {
+    const steps = MOVES[this.move];
+    const first = steps?.findIndex((s) => s.trail) ?? -1;
+    if (first < 0) return null;
+    const last = steps.findLastIndex((s) => s.trail);
+    const span = (from, to) => steps.slice(from, to).reduce((sum, s) => sum + s.time, 0);
+    const part = this.step < first ? 'wind' : this.step <= last ? 'cut' : 'recover';
+    const [from, to] = { wind: [0, first], cut: [first, last + 1], recover: [last + 1, steps.length] }[part];
+    const u = Math.min(1, (span(from, this.step) + this.t) / (span(from, to) || 1));
+    return { part, u, windUp: first > 0 };
+  }
+
   // Swing (drawing the sword first if needed), or queue the next swing of
   // the combo if one is already under way. `ctx` says whether the warrior
   // is sprinting or in the air, which picks a different attack.
