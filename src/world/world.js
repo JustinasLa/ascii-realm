@@ -4,6 +4,7 @@ import { rockTypeAt } from './geology.js';
 import { blocks, generateProps } from './props.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
+import { createSpawnRuins } from './spawn-ruins.js';
 
 export const WATER = 0;
 export const SHORE = 1;
@@ -39,7 +40,7 @@ export class World {
   constructor(seed = 1, options = {}) {
     // A bare number is the chunk cache size.
     // `flora` brings back the wild flowers, ferns and cattails among the grass.
-    const { season = 'summer', maxChunks = 128, flora = false, meadow = false } = typeof options === 'number' ? { maxChunks: options } : options;
+    const { season = 'summer', maxChunks = 128, flora = false, meadow = false, spawnRuins = false } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
     this.flora = flora;
     this.meadow = meadow;
@@ -74,6 +75,13 @@ export class World {
     this.propFootW = 10;
     this.propFootH = 2;
     this.spawn = this.findSpawn();
+    if (spawnRuins) {
+      this.spawnRuins = createSpawnRuins(seed, this.spawn);
+      // Spawn discovery uses the untouched landscape. Rebuild those few
+      // terrain chunks with the starter site's dry ground as their baseline.
+      this.chunks.clear();
+      for (const prop of this.spawnRuins.props) this.measureProp(prop);
+    }
   }
 
   chunk(cx, cy) {
@@ -137,6 +145,12 @@ export class World {
         let t = GRASS;
         if (e < WATER_LEVEL) t = WATER;
         else if (e < SHORE_LEVEL) t = SHORE;
+
+        const starter = this.spawnRuins?.terrainAt(x, y);
+        if (starter !== undefined) {
+          t = starter;
+          e = EDIT_ELEVATION[starter];
+        }
 
         type[i] = t;
         elev[i] = e;
@@ -267,15 +281,19 @@ export class World {
     if (this.addedProps.has(prop.id)) this.deleteProp(prop.id);
     this.addedProps.set(prop.id, prop);
     this.coverGrass(prop, 1);
+    this.measureProp(prop);
+    const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
+    if (!this.addedPropChunks.has(key)) this.addedPropChunks.set(key, new Map());
+    this.addedPropChunks.get(key).set(prop.id, prop);
+  }
+
+  measureProp(prop) {
     for (const cell of prop.cells) {
       this.propRenderW = Math.max(this.propRenderW, Math.abs(cell.dx));
       this.propRenderH = Math.max(this.propRenderH, -cell.dy);
     }
     this.propFootW = Math.max(this.propFootW, prop.footW);
     this.propFootH = Math.max(this.propFootH, prop.footH);
-    const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
-    if (!this.addedPropChunks.has(key)) this.addedPropChunks.set(key, new Map());
-    this.addedPropChunks.get(key).set(prop.id, prop);
   }
 
   deleteProp(id) {
@@ -358,6 +376,7 @@ export class World {
     this.propRenderH = 50;
     this.propFootW = 10;
     this.propFootH = 2;
+    for (const prop of this.spawnRuins?.props ?? []) this.measureProp(prop);
   }
 
   // Metres below the surface, rising gently from the bank and capped at
@@ -449,8 +468,13 @@ export class World {
         typeAt: (x, y) => this.originalTypeAt(x, y),
       };
       c.props = generateProps(original, cx, cy, CHUNK);
-      c.props.forEach((prop, i) => {
-        prop.id = `p:${cx}:${cy}:${i}`;
+      c.props.forEach((prop, i) => { prop.id = `p:${cx}:${cy}:${i}`; });
+      if (this.spawnRuins) {
+        c.props = c.props.filter(prop => !this.spawnRuins.exclude(prop));
+        c.props.push(...this.spawnRuins.props.filter(prop =>
+          Math.floor(prop.x / CHUNK) === cx && Math.floor(prop.y / CHUNK) === cy));
+      }
+      c.props.forEach((prop) => {
         const hits = this.treeHits.get(prop.id);
         if (hits) {
           prop.hits = hits;

@@ -96,7 +96,7 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
       if (created.length >= roomsPerMinute) return fail(socket, 'Too many lobbies created. Try again in a minute.');
       created.push(now);
       const seed = cleanSeed(request.seed);
-      room = { code: newCode(), seed, world: new World(seed), createdAt: Date.now(), players: new Map() };
+      room = { code: newCode(), seed, world: new World(seed, { spawnRuins: true }), createdAt: Date.now(), players: new Map() };
       rooms.set(room.code, room);
     } else {
       if (!validCode(request.code)) return fail(socket, 'Enter a six-character lobby code.');
