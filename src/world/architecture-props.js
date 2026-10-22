@@ -34,19 +34,28 @@ export function rotateArchitectureGround(dxWorld, dyWorld, degrees) {
 // reference: broad readable light bands across the sculpted stone surfaces.
 export function makeArchitectureProp(kind, x, y, rand, seed, bake, rotation = 0) {
   if (!isArchitectureKind(kind)) return null;
-  const { mesh, footW, footH, collisionRects } = GEOMETRY[kind](rand, seed);
+  const { mesh, footW, footH, collisionRects, groundFootprints } = GEOMETRY[kind](rand, seed);
   mesh.yaw(rotation);
-  const collisionPolygons = rotation && collisionRects?.map(({ minX, maxX, minY, maxY }) =>
+  const angle = (rotation % 360) * Math.PI / 180, c = Math.cos(angle), s = Math.sin(angle);
+  // Turn actual footing corners before projecting them. A projected rectangle
+  // includes empty space beside an arch, which becomes an invisible obstacle
+  // when that rectangle is subsequently rotated.
+  const collisionPolygons = rotation && (groundFootprints
+    ? groundFootprints.map(polygon => polygon.map(([x, z]) => {
+      const xx = c * x + s * z, zz = -s * x + c * z;
+      return [(xx + 0.55 * zz) / ASPECT, -0.45 * zz];
+    }))
+    : collisionRects?.map(({ minX, maxX, minY, maxY }) =>
     [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]].map(([dx, dy]) => {
       const p = rotateArchitectureGround(dx, dy, rotation);
       return [p.x, p.y];
-    }));
+    })));
   const { bounds, sample } = mesh.compile();
   const radius = Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX));
   const surface = (px, py) => {
     if (!rotation && py > 0) return null;
     const hit = sample(px, py);
-    return hit ? shadeArchitecture(hit, seed) : null;
+    return hit ? { ...shadeArchitecture(hit, seed), depth: -0.45 * hit.point[2] } : null;
   };
   const w = Math.ceil(radius / ASPECT) + 1;
   const top = Math.floor(bounds.minY) - 1;

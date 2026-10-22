@@ -42,7 +42,7 @@ import { Harvesting } from './world/harvesting.js';
 import { drawResource } from './world/item-draw.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
 import { Projectiles } from './world/projectiles.js';
-import { drawProp, propInView } from './world/props.js';
+import { drawProp, propDepthSlices, propInView } from './world/props.js';
 import { bakeFine, fineBakesPending, fineOf, startFineWorkers } from './world/fine-bakes.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
@@ -937,11 +937,17 @@ function frame(now) {
   // Reflections first, each prop measured about its own base.
   const reflections = props.filter((p) => propInView(view, p, true)).map((p) => ({ y: p.y,
     draw: () => drawProp(renderer, view, p, mirror, time, null, seed, true) }));
-  const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).map((p) => ({ y: p.y,
-    draw: () => {
+  const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).flatMap((p) => {
+    // A turned arch spans several ground rows. Interleave its stone surfaces
+    // with actors and grass instead of drawing both piers at one anchor depth.
+    const slices = propDepthSlices(p);
+    if (slices) return slices.map(({ depth, cells }) => ({ y: p.y + depth,
+      draw: () => drawProp(renderer, view, p, undefined, time, player, seed, false, cells) }));
+    return [{ y: p.y, draw: () => {
       drawProp(renderer, view, p, undefined, time, player, seed);
       drawLeaves(renderer, view, p, time, seed);
-    } }));
+    } }];
+  });
   for (const fire of visibleFires) {
     reflections.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time, mirror) });
     drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });

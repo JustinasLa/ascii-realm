@@ -55,10 +55,11 @@ export function createSpawnRuins(seed, spawn) {
   const gate = add('stone-gate', 0, -30, 0.72, 0, rotation);
   const left = add('wall-broken', 0, -30, 0.85, 0, rotation);
   const right = add('wall-broken', 0, -30, 0.85, 0, rotation);
-  // Use the final, varied collision widths. Each wall bites into its gate
-  // pier by 2.5 columns, leaving the central passage completely open.
+  // The pier's actual projected footing is slanted even before yaw. Seat the
+  // wall deeply enough into it to join both the front and rear stone faces.
+  const pierOverlap = 7, wallOverlap = 2.5;
   for (const [prop, side] of [[left, -1], [right, 1]]) {
-    const distance = gate.unrotatedFootW + prop.unrotatedFootW - 2.5;
+    const distance = gate.unrotatedFootW + prop.unrotatedFootW - pierOverlap;
     const { x: dx, y: dy } = rotateArchitectureGround(side * distance, 0, rotation);
     prop.x = x + dx;
     prop.y = gateY + dy;
@@ -73,7 +74,7 @@ export function createSpawnRuins(seed, spawn) {
   // courses lengthen both walls into a low, continuous ruined enclosure.
   for (const [inner, side] of [[left, -1], [right, 1]]) {
     const outer = add('wall-low', 0, -30, 0.85, 0, rotation);
-    const distance = gate.unrotatedFootW + 2 * inner.unrotatedFootW + outer.unrotatedFootW - 5;
+    const distance = gate.unrotatedFootW + 2 * inner.unrotatedFootW + outer.unrotatedFootW - pierOverlap - wallOverlap;
     const { x: dx, y: dy } = rotateArchitectureGround(side * distance, 0, rotation);
     outer.x = x + dx;
     outer.y = gateY + dy;

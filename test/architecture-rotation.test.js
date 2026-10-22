@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scenery } from '../src/editor/scenery.js';
+import { mulberry32 } from '../src/core/rng.js';
+import { makeGateGeometry } from '../src/world/architecture-buildings.js';
 import { ArchitectureMesh, project } from '../src/world/architecture-mesh.js';
 import { rotateArchitectureGround } from '../src/world/architecture-props.js';
 import { blocks, createProp, propInView } from '../src/world/props.js';
@@ -17,6 +19,11 @@ const yaw = ([x, h, z], degrees) => {
 };
 const centre = (polygon) => polygon.reduce(([x, y], p) =>
   [x + p[0] / polygon.length, y + p[1] / polygon.length], [0, 0]);
+const gateGeometry = (seed) => makeGateGeometry(mulberry32(seed), seed);
+const groundPoint = ([x, z], rotation = 0, scale = 1) => {
+  const [px, py] = project(yaw([x, 0, z], rotation));
+  return [px / ASPECT * scale, py * scale];
+};
 
 class EmptyWorld extends World {
   findSpawn() { return { x: 0.5, y: 0.5 }; }
@@ -64,15 +71,36 @@ test('zero rotation retains all legacy architecture output and rectangle collisi
   }
 });
 
-test('45 and negative yaw transform the exact collider union and keep gate passages open', () => {
+test('gate ground footprints follow both deepest footings in translated model space', () => {
+  const seed = 7, rand = mulberry32(seed);
+  const radius = 22 + rand() * 0.45, opening = 15.4 + rand() * 0.2;
+  const depth = 8.2, shift = depth * 0.275;
+  const geometry = gateGeometry(seed);
+  assert.deepEqual(geometry.groundFootprints, [
+    [[-radius - 0.65 - shift, 0.08], [-opening + 0.15 - shift, 0.08],
+      [-opening + 0.15 - shift, depth], [-radius - 0.65 - shift, depth]],
+    [[opening - 0.15 - shift, 0.08], [radius + 0.65 - shift, 0.08],
+      [radius + 0.65 - shift, depth], [opening - 0.15 - shift, depth]],
+  ]);
+  near(geometry.footW, radius + 0.65 + shift);
+  near(geometry.footH, depth * 0.45);
+  assert.equal(geometry.collisionRects.length, 2, 'legacy zero-yaw collision remains available');
+});
+
+test('45 and negative yaw transform actual gate footings and legacy wall collider unions', () => {
   for (const rotation of [45, -45]) for (const scale of [0.25, 1, 3]) {
     for (const kind of ['stone-gate', 'wall-low', 'wall-broken']) {
       const options = { seed: 19, variant: 0, scale };
       const source = createProp(kind, 0, 0, options);
+      const ground = kind === 'stone-gate' ? gateGeometry(options.seed).groundFootprints : null;
+      const sourceCollision = ground ? { ...source, collisionRects: undefined,
+        collisionPolygons: ground.map(polygon => polygon.map(point => groundPoint(point, 0, scale))) } : source;
       const rotated = createProp(kind, 64.5, -0.5, { ...options, rotation });
       assert.equal(rotated.rotation, rotation);
       assert.ok(!('collisionRects' in rotated));
       assert.equal(rotated.collisionPolygons.length, source.collisionRects.length);
+      if (ground) ground.forEach((polygon, i) => polygon.forEach((point, j) =>
+        vectorNear(rotated.collisionPolygons[i][j], groundPoint(point, rotation, scale))));
       for (const polygon of rotated.collisionPolygons) {
         const [x, y] = centre(polygon);
         assert.equal(blocks(rotated, rotated.x + x, rotated.y + y), true);
@@ -87,12 +115,47 @@ test('45 and negative yaw transform the exact collider union and keep gate passa
       for (let x = -1.2; x <= 1.2; x += 0.17) for (let y = -1.4; y <= 1.4; y += 0.19) {
         const dx = x * source.footW, dy = y * source.footH;
         const p = rotateArchitectureGround(dx, dy, rotation);
-        assert.equal(blocks(rotated, rotated.x + p.x, rotated.y + p.y), blocks(source, dx, dy));
+        assert.equal(blocks(rotated, rotated.x + p.x, rotated.y + p.y), blocks(sourceCollision, dx, dy));
       }
       if (kind === 'stone-gate') for (let step = -20; step <= 20; step++) {
         const p = rotateArchitectureGround(0, step * scale, rotation);
         assert.equal(blocks(rotated, rotated.x + p.x, rotated.y + p.y), false, 'full passage remains open');
       }
+    }
+  }
+});
+
+test('17-degree gate blocks stone on both sides while narrow paths beside the true tunnel edges stay walkable', () => {
+  const seed = 7, scale = 0.72, rotation = 17;
+  const geometry = gateGeometry(seed);
+  const world = new EmptyWorld(42);
+  const gate = Object.assign(createProp('stone-gate', 64.5, -0.5,
+    { seed, scale, rotation, variant: 0 }), { id: 's:1' });
+  world.addProp(gate);
+  for (const [i, polygon] of geometry.groundFootprints.entries()) {
+    const xs = polygon.map(p => p[0]), zs = polygon.map(p => p[1]);
+    const side = i === 0 ? -1 : 1;
+    const inner = side < 0 ? Math.max(...xs) : Math.min(...xs);
+    const outer = side < 0 ? Math.min(...xs) : Math.max(...xs);
+    const front = Math.min(...zs), back = Math.max(...zs);
+    // The clearance is measured after scale in physical model units. The
+    // old projected rectangle blocks the left path despite .85 units of air.
+    for (const [edge, direction] of [[inner, -side], [outer, side]]) {
+      for (let step = 0; step <= 40; step++) {
+        const z = front - 1 + (back - front + 2) * step / 40;
+        for (const [x, stone] of [[edge + direction * 0.85 / scale, false],
+          [edge - direction * 0.3 / scale, z > front && z < back]]) {
+          const [dx, dy] = groundPoint([x, z], rotation, scale);
+          const at = [gate.x + dx, gate.y + dy];
+          assert.equal(blocks(gate, ...at), stone, `footing ${i}, edge ${edge}, depth ${z}`);
+          assert.equal(world.isWalkable(...at), !stone, 'world collision agrees at the actual floor edge');
+        }
+      }
+    }
+    for (let step = 0; step <= 40; step++) {
+      const z = front - 1 + (back - front + 2) * step / 40;
+      const [dx, dy] = groundPoint([inner - side * 0.85 / scale, z], rotation, scale);
+      assert.equal(world.isWalkable(gate.x + dx, gate.y + dy), true, 'narrow tunnel-edge path stays open end to end');
     }
   }
 });

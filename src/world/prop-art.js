@@ -12,6 +12,7 @@ import { ASPECT } from './world.js';
 //   c   base colour, shaded here by the light
 //   g   optional glyph that overrides the material's texture
 //   acc optional accent { g, c } layered over the cell (moss, a nail...)
+//   depth optional projected ground row, relative to the prop's anchor
 // Fully covered cells get a texture chosen by material and light and a dark
 // background in the material's own colour, so a form reads as one solid
 // mass. Partly covered cells become outline glyphs pointing at the solid
@@ -138,8 +139,10 @@ function average(samples, m) {
 
 // Every prop cell has the same shape, so the per-frame draw loop sees one
 // kind of object; a cell that keeps the ground behind it has no background.
-export function makeCell(dx, dy, g, r, gg, b, br = undefined, bgG = undefined, bb = undefined) {
-  return { dx, dy, g, r, gg, b, br, bgG, bb };
+export function makeCell(dx, dy, g, r, gg, b, br = undefined, bgG = undefined, bb = undefined, depth = undefined) {
+  const cell = { dx, dy, g, r, gg, b, br, bgG, bb };
+  if (Number.isFinite(depth)) cell.depth = depth;
+  return cell;
 }
 
 // Light shapes a material's colour from 55% in shadow to 115% fully lit.
@@ -207,7 +210,7 @@ export function bakeSurface(w, top, bottom, sample, seed, { shadow, extras, x0 =
         const level = cover < 0.42 ? 0 : cover < 0.63 ? 1 : 2;
         g = (ROUGH.has(m) ? t.cutR : t.cutS)[d][level];
       }
-      const cell = makeCell(dx, dy, g, colour[0], colour[1], colour[2]);
+      const cell = makeCell(dx, dy, g, colour[0], colour[1], colour[2], undefined, undefined, undefined, mid.depth);
       if (back) {
         const kb = mid.back ?? BACK[m] ?? 0.3;
         cell.br = colour[0] * kb;
@@ -217,7 +220,8 @@ export function bakeSurface(w, top, bottom, sample, seed, { shadow, extras, x0 =
       }
       cells.push(cell);
       const acc = mid.acc ?? samples.find((s) => s?.acc)?.acc;
-      if (acc && (back || acc.edge)) cells.push(makeCell(dx, dy, over(acc.g), acc.c[0], acc.c[1], acc.c[2]));
+      if (acc && (back || acc.edge)) cells.push(makeCell(dx, dy, over(acc.g), acc.c[0], acc.c[1], acc.c[2],
+        undefined, undefined, undefined, cell.depth));
     }
   }
   if (extras) {
