@@ -13,3 +13,9 @@ export function putCell(r, sx, sy, g, cr, cg, cb, base, br, bgG, bb) {
   r.put(sx, sy, g, cr, cg, cb);
   if (br !== undefined) r.putBg(sx, sy, br, bgG, bb);
 }
+
+// Keep the player's full-size letters, with the same thin dark border as props.
+export function putOutlinedCell(r, sx, sy, g, cr, cg, cb, base, br, bgG, bb) {
+  putCell(r, sx, sy, g, cr, cg, cb, base, br, bgG, bb);
+  if (br !== undefined) r.outlineCell(sx, sy, br, bgG, bb);
+}

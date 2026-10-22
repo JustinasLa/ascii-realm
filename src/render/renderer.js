@@ -244,9 +244,13 @@ void main() {
         near = min(near, length(off));
       }
     }
-    float width = small.y * ${HALO_WIDTH.toFixed(2)};
     float strength = flags / ${FINE_HALO.toFixed(1)};
-    color = mix(color, ${vec3(NIGHT)} * 0.5, (1.0 - smoothstep(width * 0.6, width, near)) * strength);
+    // Faint outlines are narrower and fade from the silhouette itself.
+    // Full-strength scenery retains its original width and firm inner edge.
+    float width = small.y * ${HALO_WIDTH.toFixed(2)} * mix(0.25, 1.0, strength);
+    float inner = width * 0.6 * max(0.0, (strength - 0.4) / 0.6);
+    color = mix(color, ${vec3(NIGHT)} * 0.5,
+      (1.0 - smoothstep(inner, width, near)) * strength);
   }
 
   if (uFog.x > 0.0) {
@@ -560,6 +564,22 @@ export class AsciiRenderer {
     this.fineBg[i + 3] = flags;
     this.fineMark[((fy / FINE) | 0) * this.cols + ((fx / FINE) | 0)] = 1;
     this.fineUsed = true;
+  }
+
+  // A full-size character cell can use the fine sprite border too. Lay a
+  // solid backing under its existing glyph; later scenery still covers it.
+  outlineCell(x, y, br, bgG, bb) {
+    if (x < 0 || y < 0 || x >= this.cols || y >= this.rows) return;
+    for (let j = 0; j < FINE; j++) {
+      for (let i = 0; i < FINE; i++) {
+        const fx = x * FINE + i;
+        const fy = y * FINE + j;
+        this.fineAt(fx, fy, 0, 0, 0, 0, br, bgG, bb, 0);
+        // A distinct but soft border, still narrower than the prop outlines.
+        this.haloAround(fx, fy, 10);
+      }
+    }
+    this.overFine(y * this.cols + x, FINE_UNDER);
   }
 
   // Marks the empty small cells around a solid one as its outline.
