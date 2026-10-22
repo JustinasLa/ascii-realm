@@ -46,6 +46,9 @@ function groundOf(chunk, seed) {
 
 // `loadedOnly` leaves chunks that are not generated yet as night ground.
 export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false) {
+  // The ground starts each frame afresh, and so does the fine grid of
+  // small cells that trees and rocks are drawn into.
+  r.clearFine?.();
   for (let sy = 0; sy < view.rows; sy++) {
     const wy = view.y0 + sy;
     const cy = Math.floor(wy / CHUNK_SIZE);

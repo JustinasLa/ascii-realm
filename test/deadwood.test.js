@@ -14,7 +14,8 @@ const remains = (condition, x = 63.5, y = 24.5) =>
 test('trunk girth varies independently of height and stays seeded', () => {
   const tree = girth => makeTree(100.5, 300.5, mulberry32(42), { species: 'oak', seed: 42, girth });
   const thin = tree(0.6), thick = tree(2);
-  assert.equal(thin.height, thick.height);
+  // As tall as each other; the thick one only spreads wider roots.
+  assert.equal(thin.top, thick.top);
   assert.ok(thick.footW > thin.footW * 3);
   const lowerWood = p => p.cells.filter(c => !c.foliage && c.dy > -20).length;
   assert.ok(lowerWood(thick) > lowerWood(thin) * 1.5);

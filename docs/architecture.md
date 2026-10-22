@@ -8,10 +8,11 @@ src/
   editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   inventory/         items, satchel, equipment, quick slots and carry weight
-  render/            glyph atlas, WebGL renderer, cell writers
+  render/            glyph atlas, WebGL renderer (with a fine grid for trees and rocks), cell writers
   spells/            rune casting simulation, rune definitions by element, animations and sounds
   ui/                status frames, inventory panel, item art and notifications
-  world/             terrain, grass and water shading, props, sky, reflections, fireflies, campfires, dust
+  world/             terrain, grass and water shading, props and their fine bakes (with a worker),
+                     sky, reflections, fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement
 ```
 

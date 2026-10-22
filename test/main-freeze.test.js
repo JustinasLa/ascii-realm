@@ -107,7 +107,8 @@ async function loadGame(move = { x: 0, y: 0 }) {
       draw() {}
     },
     buildAtlas: noop, glyph: noop, drawGround: noop, drawSkyReflection: noop,
-    drawShadow: noop, drawProp: noop, reflector: noop, dressFigure: noop,
+    drawShadow: noop, drawProp: noop, fineOf: noop, fineBakesPending: () => false, bakeFine: noop, startFineWorkers: noop,
+    reflector: noop, dressFigure: noop,
     drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop,
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },

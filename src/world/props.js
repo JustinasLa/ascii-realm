@@ -1,12 +1,14 @@
 import { fbm, valueNoise } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
-import { putCell } from '../render/cells.js';
+import { FINE, putCell } from '../render/cells.js';
 import { dg, LAYER, over } from '../render/glyphs.js';
 import { MOSS, STONE_MID } from '../render/palette.js';
 import { makeCampProp } from './camp-props.js';
 import { deadwoodBlocks } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
-import { bakeSurface, cellBounds, makeCell, ringGlyph } from './prop-art.js';
+import { fineOf } from './fine-bakes.js';
+import { shade } from './glow.js';
+import { bakeSurface, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
 import { makeBush, makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
@@ -216,7 +218,16 @@ function bakeBoulder(rock, seed, bakeFn) {
   return bakeFn(rock.w, rock.top, 0, rock.sample, seed, { shadow: rock.shadow, extras: rock.extras });
 }
 
-function makeRock(x, y, rand, seed = x * 17 + y, bakeFn = bake) {
+// The rock alone, without its shadow and pebbles, in small letters (FINE
+// to a cell) for the fine grid. A rock is small enough to bake in one step.
+function fineBoulder(rock, seed, bakeFn) {
+  return function* fine() {
+    return bakeFn(rock.w * FINE, rock.top * FINE, 0, (px, py) => rock.sample(px / FINE, py / FINE), seed);
+  };
+}
+
+function makeRock(x, y, stream, seed = x * 17 + y, bakeFn = bake) {
+  const { random: rand, draws } = recording(stream);
   const rx = 2.6 + rand() * 3.2;
   const ry = rx * (0.65 + rand() * 0.2);
   const lavender = rand();
@@ -224,13 +235,15 @@ function makeRock(x, y, rand, seed = x * 17 + y, bakeFn = bake) {
   const rock = boulder(rand, seed, { rx, ry, sides: 7 + Math.floor(rand() * 3), roundness: 0.66, stone,
     mossCoverage: 0.25 + rand() * 0.35 });
   const cells = bakeBoulder(rock, seed, bakeFn);
-  return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4, bounds: cellBounds(cells), cells };
+  return withFine({ kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4, bounds: cellBounds(cells), cells },
+    fineBoulder(rock, seed, bakeFn), { make: 'rock', x, y, draws, seed });
 }
 
 // A landmark boulder, many times a scattered rock's size: a broad, jagged
 // mass with bedding lines, forked fissures, a mossy crown, a dark undercut
 // and scree at its foot.
-function makeBigRock(x, y, rand, seed = x * 23 + y) {
+function makeBigRock(x, y, stream, seed = x * 23 + y) {
+  const { random: rand, draws } = recording(stream);
   const rx = 12 + rand() * 8;
   const ry = rx * (0.58 + rand() * 0.22);
   const lavender = rand();
@@ -240,7 +253,8 @@ function makeBigRock(x, y, rand, seed = x * 23 + y) {
     mossCoverage: 0.4 + rand() * 0.4, grit: 1, strata: 3.6 + rand() * 1.8, undercut: 0.16,
     cracks: 2 + Math.floor(rand() * 2), crackWidth: 0.36, talus: 10 + Math.floor(rand() * 8) });
   const cells = bake(rock.w, rock.top, 0, rock.sample, seed, { shadow: rock.shadow, extras: rock.extras });
-  return { kind: 'rock', x, y, footW: rx * 0.9 / ASPECT, footH: Math.max(2, ry * 0.3), bounds: cellBounds(cells), cells };
+  return withFine({ kind: 'rock', x, y, footW: rx * 0.9 / ASPECT, footH: Math.max(2, ry * 0.3),
+    bounds: cellBounds(cells), cells }, fineBoulder(rock, seed, bake), { make: 'bigRock', x, y, draws, seed });
 }
 
 // Where a big rock stands nothing else grows: its face and a margin around
@@ -315,7 +329,8 @@ function makeSceneryRock(x, y, rand, seed, bakeFn = bake) {
   const stone = colors[Math.floor(rand() * colors.length)];
   const mossCoverage = rand() * 0.65;
   const rock = boulder(rand, seed, { rx, ry, sides: count - 1, roundness: 0.6, stone, mossCoverage, grit: 1 });
-  return { kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4, cells: bakeBoulder(rock, seed, bakeFn) };
+  return withFine({ kind: 'rock', x, y, footW: rx / ASPECT, footH: 1.4, cells: bakeBoulder(rock, seed, bakeFn) },
+    fineBoulder(rock, seed, bakeFn));
 }
 
 function makeBuilderBush(x, y, rand, seed, bakeFn = bake) {
@@ -443,8 +458,14 @@ export function createProp(kind, x, y, options = {}) {
   if (!used.baked) cells = scaleCells(cells, width * scale, height * scale);
   if (variant === 1) {
     const shade = (value, offset = 0) => Math.max(0, Math.min(255, value * brightness + offset));
-    cells = cells.map((c) => makeCell(c.dx, c.dy, c.g, shade(c.r, warmth), shade(c.gg), shade(c.b, -warmth), c.br, c.bgG, c.bb));
+    const shadeAll = (list) => list.map((c) => makeCell(c.dx, c.dy, c.g, shade(c.r, warmth), shade(c.gg),
+      shade(c.b, -warmth), c.br, c.bgG, c.bb));
+    cells = shadeAll(cells);
+    const fine = fineRecipe(prop);
+    if (fine) withFine(prop, function* shaded() { return shadeAll(yield* fine()); });
   }
+  // A worker remakes a builder prop from the same options.
+  if (fineRecipe(prop)) withFine(prop, fineRecipe(prop), { make: 'prop', kind, x, y, options: { scale, seed, variant } });
   prop.cells = cells;
   prop.footW *= width;
   prop.footH *= height;
@@ -469,6 +490,17 @@ export function propInView(view, prop, reflected = false, marginX = 3) {
   const top = reflected ? y - b.maxY + 1 : y + b.minY;
   const bottom = reflected ? y - b.minY + 1 : y + b.maxY;
   return x + b.maxX + marginX >= 0 && x + b.minX - marginX < view.cols && bottom >= 0 && top < view.rows;
+}
+
+// Makes a prop again from the source of its fine bake (see withFine). With
+// `fineOnly` a tree skips its ordinary bake.
+export function rebuildProp(source, fineOnly = false) {
+  const draws = source.draws && replaying(source.draws);
+  if (source.make === 'tree') return makeTree(source.x, source.y, draws ?? undefined, { ...source.options, fineOnly });
+  if (source.make === 'rock') return makeRock(source.x, source.y, draws, source.seed);
+  if (source.make === 'bigRock') return makeBigRock(source.x, source.y, draws, source.seed);
+  if (source.make === 'prop') return createProp(source.kind, source.x, source.y, source.options);
+  return null;
 }
 
 // Terrain-only queries are safe while a chunk's props are being generated.
@@ -645,11 +677,128 @@ function rowsOf(cells) {
   return rows;
 }
 
+// The moon, up and to the left in front of the viewer, throws a tree's
+// shadow back and to the right over the ground around its foot. The grass
+// there, already drawn, is darkened rather than replaced; grass drawn in
+// front of the tree afterwards stays in the light.
+function groundShadow(r, view, prop, bx, by) {
+  const rx = prop.footW * 2.4;
+  const ry = Math.max(1.2, prop.footH * 1.4);
+  const ox = prop.footW * 0.9;
+  const oy = -ry * 0.45;
+  for (let dy = Math.floor(oy - ry); dy <= 0; dy++) {
+    const sy = by + dy;
+    if (sy < 0 || sy >= view.rows) continue;
+    for (let dx = Math.floor(ox - rx); dx <= Math.ceil(ox + rx); dx++) {
+      const sx = bx + dx;
+      if (sx < 0 || sx >= view.cols) continue;
+      const nx = (dx - ox) / rx;
+      const ny = (dy - oy) / ry;
+      const d = nx * nx + ny * ny;
+      if (d >= 1) continue;
+      shade(r, (sy * r.cols + sx) * 4, 0.6 * (1 - d) ** 1.5);
+    }
+  }
+}
+
+// Rows above its base where a prop's outline of nothing starts, and over
+// how many more rows it grows to full strength.
+const GROUND_HALO = 1;
+const HALO_RISE = 3;
+const clamp = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+
+// Draws a prop's fine bake (see fine-bakes.js) into the renderer's small
+// cells, with its ground cells beneath it on the ordinary grid.
+function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
+  const { cells: p, ground } = baked;
+  if (prop.kind === 'tree') groundShadow(r, view, prop, bx, by);
+  for (const c of ground) {
+    const sy = by + c.dy;
+    if (sy >= 0 && sy < view.rows) putCell(r, bx + c.dx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
+  }
+  const tree = prop.kind === 'tree' || prop.kind === 'bush';
+  const sway = tree ? treeWind(prop, t, seed) * FINE : 0;
+  const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
+  const sin = tree ? Math.sin(t * 1.4) : 0;
+  const cos = tree ? Math.cos(t * 1.4) : 0;
+  const sheen = Math.max(0, gust - 0.55) * 0.18;
+  const reveal = player && prop.y > player.y ? player.foliageBounds : null;
+  const burn = prop.burning ? prop.burning.progress : 0;
+  const char = 1 - burn * 0.85;
+  // Small cell (FINE * bx + dx + FINE / 2, FINE * (by + 1) + dy - 1) is the
+  // one whose middle lies over the prop's own point dx, dy (see bake).
+  const fx0 = FINE * bx + (FINE >> 1);
+  const fy0 = FINE * (by + 1) - 1;
+  const top = -fy0;
+  const bottom = view.rows * FINE - fy0;
+  const right = view.cols * FINE - fx0;
+  const { dx: cdx, dy: cdy, g: cg, rustle, color, back, solid, foliage, flex, phaseSin, phaseCos, rows } = p;
+  let lastDx = 0;
+  let lastDy = 0;
+  let lastShift = 0;
+  let lastHidden = true;
+  for (let q = 0; q < rows.length; q += 5) {
+    const y = rows[q + 2];
+    // The outline of nothing fades out toward the ground the prop stands
+    // on: none at its foot, all of it a few rows up.
+    const halo = Math.round(15 * clamp((-y / FINE - GROUND_HALO) / HALO_RISE));
+    if (y < top || y >= bottom || rows[q + 4] < -fx0 || rows[q + 3] >= right) {
+      lastDx = lastDy = NaN;
+      lastHidden = true;
+      continue;
+    }
+    for (let i = rows[q]; i < rows[q + 1]; i++) {
+      const g = cg[i];
+      let shift = 0;
+      if (g >= LAYER && cdx[i] === lastDx && cdy[i] === lastDy) {
+        if (lastHidden) continue;
+        shift = lastShift;
+      } else {
+        lastDx = cdx[i];
+        lastDy = cdy[i];
+        lastHidden = true;
+        if (foliage[i]) shift = Math.round(sway * flex[i]);
+        lastShift = shift;
+      }
+      const dx = cdx[i] + shift;
+      if (foliage[i] && reveal && g < LAYER) {
+        const nx = (Math.floor(prop.x) + dx / FINE - reveal.x) / reveal.rx;
+        const ny = (Math.floor(prop.y) + y / FINE - reveal.y) / reveal.ry;
+        const d2 = nx * nx + ny * ny;
+        if (d2 < 1 && hash2(cdx[i], y, prop.textureSeed) < (1 - d2) * 0.93) continue;
+      }
+      if (g < LAYER) lastHidden = false;
+      const k = i * 3;
+      const br = solid[i] ? back[k] : undefined;
+      if (!foliage[i]) {
+        r.fineAt(fx0 + dx, fy0 + y, g, color[k], color[k + 1], color[k + 2], br, back[k + 1], back[k + 2], halo);
+        continue;
+      }
+      const flutter = sin * phaseCos[i] + cos * phaseSin[i];
+      const light = 1 + flutter * 0.035 + sheen;
+      const ch = flutter > 0.94 && gust > 0.58 ? rustle[i] : g;
+      let red = color[k] * light, green = color[k + 1] * light, blue = color[k + 2] * light;
+      if (burn) {
+        const ember = burn * prop.burning.heat * (0.7 + Math.sin(t * 7 + cdx[i] + y) * 0.3);
+        red = red * char + 95 * ember;
+        green = green * char + 26 * ember;
+        blue *= char;
+      }
+      r.fineAt(fx0 + dx, fy0 + y, ch, red, green, blue, br, back[k + 1], back[k + 2], halo);
+    }
+  }
+}
+
 export function drawProp(r, view, prop, write = putCell, t = 0, player = null, seed = 1, reflected = false) {
   const direct = write === putCell;
   if (direct && !propInView(view, prop)) return;
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
+  const baked = direct && r.fine && !prop.chopped ? fineOf(prop, true) : null;
+  if (baked) {
+    drawFine(r, view, prop, baked, t, player, seed, bx, by);
+    return;
+  }
   if (prop.chopped) {
     for (const c of stumpCells(prop)) {
       const char = prop.burnt ? 0.24 : 1;

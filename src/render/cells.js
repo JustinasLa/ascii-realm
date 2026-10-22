@@ -5,6 +5,10 @@
 //
 // `base` is the screen row the sprite stands on. A sprite may also pass a
 // background colour to blot out whatever is behind a cell it fully covers.
+// Trees and rocks are drawn in small cells, FINE across and down each cell
+// (see renderer.js), so they stand apart from the grass around them.
+export const FINE = 2;
+
 export function putCell(r, sx, sy, g, cr, cg, cb, base, br, bgG, bb) {
   r.put(sx, sy, g, cr, cg, cb);
   if (br !== undefined) r.putBg(sx, sy, br, bgG, bb);

@@ -14,26 +14,31 @@ import { createScene, scenarios } from '../bench/scene.js';
 // and after trees and monsters were thinned out to declutter the screen and
 // scattered stones gave way to big boulders, and once more when the wild
 // was pared down to grass, trees, rocks and a few lakes, then when trees
-// grew five times rarer.
+// grew five times rarer, and when trees and rocks moved to the fine grid of
+// small letters (the fine buffers are part of the snapshot since), and when
+// trunks became round, rooted and shadowed, then outlined like the trees
+// drawn in ordinary cells, and once more when the trunk's foot and roots
+// became one solid, modelled in 3D, and when trees and rocks were ringed by
+// an outline of nothing.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
-  ['31f3eed696e49ed69ffdb84e640ead44be1b9554e7c6c425824a11f03f035c65',
-    '506d87cfb81a647c06b7784f7e08be99d6041fd3e00a86806836ee16c281ab70',
-    '43dc4cc0f518ec5f20254af9853223291730624d5897e973957a951db3568fba',
-    'fad97ba0a60a9789731d3bc83fef12e7ee88bae4b7df527b69dee050b804d899'],
-  ['a128b6a9665c74cd7fd0a62ed631ac873a802dbb28b55a1d0cbbf395618fa209',
-    '89409934cf159e239bef6875426b84a4f26603db97bb1954b9214897b448c71a',
-    'f9bf2a54bacdc3a2e31107d09ab3aa40bffad433ec6d13238cd377798e2c9b65',
-    'd69dfe5329889fb5ad10f7ff145fa12b6b7435777367b3a582d1df4aec8dfb64'],
-  ['52a428682e2ccb026347f8e0742ba9286c51d5cad43085c87173718d7bd3052e',
-    '8503f8d288e0b3e82fb922cdce6055b92bc8233d3920f518066bc38894c30c42',
-    'cbe2604d8d358a22e26d8f5e93d644c488105df4ab0c5942e662dedbb7ab911b',
-    '58af74de929929b130a52e90e5f0fc360695ca310663ad40ab8707fb64c29318'],
-  ['7f9232efc65c4f68a8d2e7e871419eee72762dd0165616a0057e32a579d3d7a8',
-    '9a6485baf8fc962e649e5a811cc6ca3a9365274a50ef36b0e7f081071b361a54',
-    '249dc41bfc8b284f41fc7b53fcb9b0afc5d9d2fb716aceb2fb0c3d1037c512b8',
-    '51657d46d891460257f2af2c4d95e3b96eef337f1dae1b0ba12b3e0411699b62'],
+  ['f1b6ad4187ea57ff5c49f23bfe30f25ab7c15616270114899bd1244a78124d8d',
+    '0b2281c8bdded2d8be27edb0a515cc13f906bc6ed276c814d326190e0d19d7c7',
+    '7ff7d11c4a6f43c8137b15e3b64060cfd69a309a28b4275cd48994b9a08cebc5',
+    '40e2e25ed15b4c2bc8492648d219594e1c2949372f965e85953f57f9e94ff574'],
+  ['5e54c48f2a966a143127a22348711e20a67be2436c0a0974196fc5a9f762968d',
+    'adef3dd61d38e1c49ff82ad01161e0668ef0eb223a390e8d551f44265e8fb7e2',
+    'b4e71eaf4eb14af8361bd36ce5d2c7422a8e47a2fb4d667818b285d03dd3e449',
+    '33dcfb247c51d4b81952dc7b2f0797088485f74128fa0f70a8343a509e14411c'],
+  ['2b0e86d77d8aecacf67dd17b1c78e25cf4858d3e454fa8a07cae5ee24b7361a5',
+    '5c058034fd275183790614d4aab134febee7cf1e9bbcd080c11c5dc74bd4faf5',
+    'a456c48aedf5ba56492ff48cebb35091ef5f5171caa5a08fe7bb9826a6af0611',
+    '947fbdd4da537502a8d9f3558d91db617e4accbc988b5ff7e01d20c4b27b40e7'],
+  ['c77bba0992b36ed1990a4947ffe3856a719691c3b29f5d1bb0eeb5fb4035140a',
+    'bb495155323f319ef89f42afe45c39f2e615197bef71c9e3cde453a2cc555f38',
+    '23e3b1eae340b9214acfded3bcca17c9c470c32cf6a5b14a358c2d6564bc03b8',
+    '9e95dd06439b226b0ba552c171205a11747ac8ead53713a1a3f0d4dcf4368bb0'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.
@@ -58,7 +63,8 @@ for (let index = 0; index < scenarios.length; index++) {
       scene.frame();
       if (![0, 29, 59, 89].includes(frame)) continue;
       const r = scene.renderer;
-      const hash = createHash('sha256').update(r.fg).update(r.ov).update(r.bg).update(r.mask).digest('hex');
+      const hash = createHash('sha256').update(r.fg).update(r.ov).update(r.bg).update(r.mask)
+        .update(r.fine).update(r.fineBg).digest('hex');
       assert.equal(hash, reference[index][sample++], `frame ${frame}`);
     }
   });

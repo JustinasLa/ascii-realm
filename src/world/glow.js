@@ -26,6 +26,19 @@ export function lighten(r, o, k, cr, cg, cb, ground = 0.2) {
   r.bg[o] += cr * k * ground;
   r.bg[o + 1] += cg * k * ground;
   r.bg[o + 2] += cb * k * ground;
+  if (r.fineMark?.[o >> 2]) r.lightFine(o >> 2, cr * k, cg * k, cb * k, ground);
+}
+
+// Darkens a cell, as a shadow falling over it does: k = 1 is black. Its
+// glyphs stay, so grass in the shade is still grass.
+export function shade(r, o, k) {
+  const keep = 1 - k;
+  for (let c = 0; c < 3; c++) {
+    r.fg[o + c] *= keep;
+    r.ov[o + c] *= keep;
+    r.bg[o + c] *= keep;
+  }
+  if (r.fineMark?.[o >> 2]) r.blendFine(o >> 2, keep, 0, 0, 0, 0, 0, 0, 0, 1);
 }
 
 // Blends a cell toward a colour, as a veil of mist or smoke does: the glyphs
@@ -43,6 +56,7 @@ export function veil(r, o, k, cr, cg, cb, ground = 0.55) {
   bg[o] += (cr * ground - bg[o]) * k;
   bg[o + 1] += (cg * ground - bg[o + 1]) * k;
   bg[o + 2] += (cb * ground - bg[o + 2]) * k;
+  if (r.fineMark?.[o >> 2]) r.blendFine(o >> 2, 1, k, cr, cg, cb, 0, 0, 0, ground);
 }
 
 // A soft round halo around the cell at sx, sy: the eight neighbours take a

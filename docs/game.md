@@ -29,6 +29,17 @@ short version see the [README](../README.md).
 - **One-pass WebGL2 renderer.** The CPU fills a cell buffer (glyph + colours);
   a fragment shader draws every glyph from a font atlas, so the screen can hold
   tens of thousands of characters at full frame rate.
+- **Trees and rocks in finer letters.** Trees and boulders are drawn on a
+  second, finer grid, two small characters across and down each cell, over a
+  near-black silhouette. They read as dense masses of small letters with a hard
+  edge against the grass, ringed by a thin outline of empty night that fades
+  out where they meet the ground, so they stay planted in it. A trunk's foot is
+  modelled as one solid with its roots and lit by the moon. Anything in front
+  of them (the outlaw, grass, rain, fireflies) is still drawn over them, and
+  over their outline, in painter's order. Their fine
+  versions are baked by web workers once they come near the view; until a
+  tree's is ready it is drawn in ordinary cells. Reflections stay in ordinary
+  cells.
 - **Infinite seeded world.** Lakes, shoreline, meadows, dirt paths and rocky
   outcrops from layered noise, generated in 64×64 chunks as you walk. Add
   `?seed=42` to the URL for a different world.

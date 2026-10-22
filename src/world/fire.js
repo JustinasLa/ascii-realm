@@ -148,6 +148,7 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
       r.ov[o] += 156 * k;
       r.ov[o + 1] += 72 * k;
       r.ov[o + 2] += 12 * k;
+      if (r.fineMark?.[o >> 2]) r.lightFine(o >> 2, 156 * k, 72 * k, 12 * k);
       r.bg[o] += 34 * k;
       r.bg[o + 1] += 16 * k;
       r.bg[o + 2] += 4 * k;
