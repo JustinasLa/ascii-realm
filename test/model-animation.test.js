@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
 import { GRASS } from '../src/world/world.js';
+import { SCALE } from '../src/entities/rig.js';
+import { Vector3 } from '../vendor/three/three.module.min.js';
+import { runeScene } from '../test-support/spells.js';
+import fireRain from '../src/spells/definitions/fire-rain.js';
 
 const dataURL = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
 const threeURL = new URL('../vendor/three/three.module.min.js', import.meta.url).href;
@@ -183,6 +187,33 @@ function fixture(buffered = false) {
   });
   return { model, calls };
 }
+
+test('Fire Rain keeps the whole jumping skeleton inside the render window through landing', async () => {
+  const model = await figure();
+  model.renderer = fixture().model.renderer;
+  const { player, cast } = runeScene(fireRain);
+  assert.equal(cast().ok, true);
+  let peak = 0;
+  for (let frame = 0; frame < 150; frame++) {
+    player.updateJump(1 / 60);
+    model.update(1 / 60, player);
+    model.renderPose(100.25, 100.75);
+    model.camera.updateMatrixWorld(true);
+    peak = Math.max(peak, player.air);
+    for (const joint of Object.values(model.bones)) {
+      const point = joint.getWorldPosition(new Vector3()).project(model.camera);
+      assert.ok(point.y > -1 && point.y < 1, `${joint.name} clipped at height ${player.air}`);
+    }
+    const cells = model.rasterise({ x0: 10, y0: 20 }, 100.25, 100.75);
+    // The synthetic source cell is at the top of the image: map it back
+    // through the camera to check raster placement and fractional alignment.
+    const top = 100.75 - model.camera.top * SCALE;
+    assert.ok(Math.abs(cells[0].sy - (top - 20)) < 1e-9);
+    assert.equal(model.base, 80, 'depth sorting stays anchored to the ground');
+  }
+  assert.ok(peak > 5, 'exercise the full Fire Rain launch');
+  assert.equal(player.air, 0);
+});
 
 test('early GPU submission and immediate rasterisation produce identical cells without a second render', () => {
   const { model, calls } = fixture();
