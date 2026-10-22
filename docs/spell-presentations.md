@@ -1,7 +1,7 @@
 # Spell presentations
 
 Rune gameplay remains in `src/spells/definitions`. A rune opts into authored
-animation and synthesized sound by importing its own default profile from
+animation and authored sound by importing its own default profile from
 `../presentations/<spell-id>.js` and adding `presentation` to the definition.
 Unconverted runes and practice spells retain their existing generic effects.
 
@@ -21,11 +21,16 @@ Only finite coordinates within 48 local metres are accepted. Colors and light
 are clamped. Profiles must use bounded loops and must not allocate timers.
 
 `sounds.cast` and `sounds.impact` are arrays of layered voice specifications;
-`sounds.pulse` is optional. Each layer uses `kind: 'tone' | 'noise'` and the
-existing Web Audio voice options: duration, gain, delay, frequency,
-endFrequency, type, cutoff, filterType, attack, and release. Up to eight layers
-play per cue on the existing SFX bus. Each layer lasts at most 2.5 seconds
-and starts within two seconds. Impact cues are limited to one per 120 ms per
+`sounds.pulse` is optional. Natural foley layers use `kind: 'recording'`, a
+local `url` under `/assets/audio/spells/<family>/`, `gain` (up to 0.8), `rate`
+(0.75 to 1.2), and `delay` (up to two seconds). Recordings retain their own
+transients and tails, with small boundary fades. Source clips are limited to
+12 seconds and are decoded once per audio context. Keep source credits and
+processing provenance alongside each family's assets.
+
+The adapter also accepts legacy `tone` and `noise` voice options; those layers
+remain limited to 2.5 seconds and 0.25 gain. Up to eight layers play per cue
+on the existing SFX bus. Impact cues are limited to one per 120 ms per
 spell, pulse cues to one per 280 ms. Rejected casts emit no cue.
 
 `Spellcasting.present` connects source visuals, successful casts, damage,
