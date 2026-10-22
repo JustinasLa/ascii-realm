@@ -18,8 +18,13 @@ definition. No credentials, live player data or Minecraft assets are included.
 `tools/export-tf-spells.py` regenerates definitions from an existing local snapshot
 (offline authoring only; requires PyYAML). Mitlan's Lightning is authored for
 this game in the same graph format: a 0.6 s charge ring at the aimed point, then
-a strike that damages and briefly stuns everything within 2.5 m. Its
-`fakelightning` step reaches the host through `onLightning`, which the game
+one bolt on the foe nearest its centre (or the bare ground when the ring is
+empty) for full damage and a short stun. Lightning then chains, nearest first,
+to every other foe inside the ring or within 3 m of the last one struck, for
+half damage. The chain is MythicMobs' `chain` mechanic (`bounces`,
+`bounceradius`, `bouncedelay`, `onbounce`, `hittarget`, `hitplayers`) plus our
+`originradius`, which also admits anything that close to the skill's origin.
+Its `fakelightning` step reaches the host through `onLightning`, which the game
 answers with the storm's recorded thunder.
 
 The runtime preserves configured modifiers, conditions, targeting, repeats,

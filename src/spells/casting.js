@@ -184,6 +184,11 @@ export class Spellcasting {
       else if (op === 'crouching') pass = false;
       else if (op === 'incombat') pass = this.time - (this.state(entity).lastCombat ?? -Infinity) < 8;
       else if (op === 'mmocantarget') pass = entity !== ctx.caster && !isPlayer(entity);
+      else if (op === 'entitiesinradius' || op === 'eir') {
+        const origin = ctx.origin ?? ctx.caster, r = this.number(a.r ?? a.radius, ctx, 5);
+        const count = this.entities().filter(e => e !== ctx.caster && distance(e, origin) <= r).length;
+        pass = this.compare(count, a.amount ?? a.a ?? '>0', ctx);
+      }
       else if (op === 'distance') pass = entity && this.compare(distance(ctx.caster, entity), a.d, ctx);
       else if (op === 'healthpercent') pass = entity && this.compare(health(entity) / maxHealth(entity) * 100, a.p ?? a.h ?? a.amount, ctx);
       else if (op === 'health') pass = entity && this.compare(health(entity), a.h ?? a.amount, ctx);
@@ -353,6 +358,7 @@ export class Spellcasting {
           break;
         case 'remove': if (target.summoned) target.health = 0; break;
         case 'summon': this.summon(a, ctx, target); break;
+        case 'chain': this.chain(target, a, ctx); break;
         case 'actionmessage': case 'message': if (target === this.player && a.m) this.notify(a.m.replace(/<[^>]+>|&[0-9a-fklmnor]/gi, '')); break;
         // The bolt is a presentation; the host may answer it with its own thunder.
         case 'lightning': case 'fakelightning':
@@ -493,6 +499,35 @@ export class Spellcasting {
     this.zones.push(z);
     this.run(a.os ?? a.onstart, { ...ctx, origin: z });
     this.present(ctx, z, 'zone', { shape: 'vortex', radius: z.radius, life: Math.min(8, z.until - this.time), follow: z.follow });
+  }
+
+  // MythicMobs' chain: onbounce hops from the target to the nearest entity not
+  // yet struck within bounceradius of the last link. originradius (ours) also
+  // lets it reach anything within that distance of the skill's origin.
+  chain(first, a, ctx) {
+    const n = (key, fallback) => this.number(a[key], ctx, fallback);
+    const bounces = clamp(Math.floor(n('bounces', n('b', 2))), 0, 16);
+    const reach = n('bounceradius', n('br', 2)), around = n('originradius', 0);
+    const delay = Math.max(0, n('bouncedelay', n('bd', 0))) / 20, skill = a.onbounce ?? a.ob;
+    const center = ctx.origin ?? first, hit = new Set([ctx.caster, first]);
+    if (a.hittarget === undefined || TRUE(a.hittarget)) this.run(skill, { ...ctx, target: first, origin: first });
+    let from = first;
+    for (let i = 1; i <= bounces; i++) {
+      const next = this.entities().filter(e => !hit.has(e) && (a.hitplayers !== 'false' || !isPlayer(e))
+        && (distance(e, from) <= reach || around > 0 && distance(e, center) <= around))
+        .sort((x, y) => distance(x, from) - distance(y, from))[0];
+      if (!next) break;
+      hit.add(next);
+      const link = { x: from.x, y: from.y };
+      const bounce = () => {
+        if (!alive(next)) return;
+        const [mx, mz] = toMetres(next.x - link.x, next.y - link.y);
+        this.present(ctx, link, 'pulse', { shape: 'chain', radius: Math.hypot(mx, mz), heading: Math.atan2(mx, mz), life: 0.35 });
+        this.run(skill, { ...ctx, target: next, origin: next });
+      };
+      if (delay * i > 0) this.schedule(delay * i, bounce, ctx); else bounce();
+      from = next;
+    }
   }
 
   summon(a, ctx, target) {
