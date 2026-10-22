@@ -284,20 +284,17 @@ export default {
     }
   },
   sounds: {
-    // Recorded water displacement gathers at the caster before the crest lifts.
+    // A broad displacement lands in a granular impact, followed by a short recoil.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.55, rate: 0.88, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.25, rate: 0.94, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/crest-push.wav', gain: 0.31, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker-hit.wav', gain: 0.12, rate: 1, delay: 0.32 },
     ],
-    // Keep the complete splash and its natural texture; a later wash carries
-    // the broken wave back out after the heavy crest lands.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker.wav', gain: 0.76, rate: 0.9, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.3, rate: 0.88, delay: 1.8 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker-hit.wav', gain: 0.34, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/crest-push.wav', gain: 0.17, rate: 0.9, delay: 0.09 },
     ],
-    // Sparse real droplets make the repeated wake audible without another slam.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.1, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/crest-push.wav', gain: 0.065, rate: 1.1, delay: 0 },
     ],
   },
 };

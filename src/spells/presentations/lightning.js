@@ -243,18 +243,15 @@ export default {
     }
   },
   sounds: {
-    // Physical rain gathers before the strike; its irregular drops carry the tension.
+    // A brief air charge precedes compact thunder; rain is absent from every stage.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-rain.wav', gain: 0.29, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.22, rate: 1, delay: 0 },
     ],
-    // Preserve the recorded thunderclap and its complete rolling tail at natural pitch.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/thunder-clap.wav', gain: 0.76, rate: 1, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-rain.wav', gain: 0.15, rate: 1, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/thunder-clap.wav', gain: 0.34, rate: 1, delay: 0 },
     ],
-    // Quiet rain ticks accompany the ground charge and chained effects.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-rain.wav', gain: 0.12, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.05, rate: 1.18, delay: 0 },
     ],
   },
 };

@@ -19,12 +19,13 @@ for (const spell of spells) {
     for (const stage of ['cast', 'impact', 'pulse']) {
       const recipe = sounds[stage];
       assert.ok(Array.isArray(recipe) && recipe.length >= 1 && recipe.length <= 4, stage);
-      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2, `${stage} gain headroom`);
+      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 0.65, `${stage} gain headroom`);
       for (const layer of recipe) {
         assert.ok(Object.keys(layer).every(key => supported.has(key)), 'no silently ignored options');
         assert.equal(layer.kind, 'recording', 'no oscillator or generated-noise substitute');
         assert.match(layer.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-        assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+        assert.ok(layer.gain >= 0.04 && layer.gain <= 0.35);
+        if (stage === 'pulse') assert.ok(layer.gain <= 0.07, 'repeated movement stays unobtrusive');
         assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2, 'retain recognizable natural texture');
         assert.ok((layer.delay ?? 0) >= 0 && (layer.delay ?? 0) <= 2);
       }
@@ -76,17 +77,24 @@ for (const spell of spells) {
   });
 }
 
-test('Mitlan spells have individual recorded arrangements', () => {
-  const signatures = spells.map(spell => JSON.stringify(spell.presentation.sounds));
-  assert.equal(new Set(signatures).size, signatures.length, 'no copied complete spell arrangements');
+test('Mitlan spells do not reuse one another\'s foreground recordings', () => {
+  const owners = new Map();
+  for (const spell of spells) {
+    for (const voice of Object.values(spell.presentation.sounds).flat()) {
+      const owner = owners.get(voice.url);
+      assert.ok(!owner || owner === spell.id, `${spell.id} reuses ${owner}'s texture: ${voice.url}`);
+      owners.set(voice.url, spell.id);
+    }
+  }
 });
 
 test('Mitlan CC0 recordings retain source detail with clean bounded PCM and documented provenance', async () => {
   const directory = new URL('../assets/audio/spells/mitlan/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('sources.json', directory), 'utf8'));
   assert.equal(manifest.license, 'CC0-1.0');
-  assert.equal(manifest.clips.length, 9);
+  assert.equal(manifest.clips.length, 19);
   const sourceNames = new Set(manifest.sources.map(source => source.file));
+  assert.ok(!sourceNames.has('boiling.mp3') && !sourceNames.has('wading.mp3'), 'no boiling or close foot splashes');
   for (const source of manifest.sources) {
     assert.equal(source.license, 'CC0-1.0');
     assert.match(source.page, /^https:\/\/(freesound.org|opengameart.org)\//);
@@ -101,16 +109,17 @@ test('Mitlan CC0 recordings retain source detail with clean bounded PCM and docu
     assert.equal(bytes.readUInt16LE(22), 1, 'mono spatial foley');
     assert.equal(bytes.readUInt32LE(24), 44100, 'retain original preview bandwidth');
     assert.equal(bytes.readUInt16LE(34), 16);
-    assert.ok(clip.duration >= 0.3 && clip.duration <= (clip.file === 'thunder-clap.wav' ? 5 : 3));
+    assert.ok(clip.duration >= 0.14 && clip.duration <= (clip.file === 'thunder-clap.wav' ? 1.4 : 0.96));
     const samples = (bytes.length - 44)/2;
     let sum = 0, sumSquares = 0, peak = 0;
     for (let index = 0; index < samples; index++) {
       const value = bytes.readInt16LE(44+index*2)/32768;
       sum += value; sumSquares += value*value; peak = Math.max(peak, Math.abs(value));
     }
-    assert.ok(peak > 0.5 && peak <= 0.85, `${clip.file}: balanced unclipped peak`);
+    assert.ok(peak > 0.1 && peak <= 0.581, `${clip.file}: restrained unclipped peak`);
     assert.ok(Math.abs(sum/samples) < 0.0001, `${clip.file}: removed DC`);
-    assert.ok(Math.sqrt(sumSquares/samples) > 0.01, `${clip.file}: audible recorded material`);
+    const rms = Math.sqrt(sumSquares/samples);
+    assert.ok(rms > 0.005 && rms <= clip.rmsCeiling + 0.001, `${clip.file}: audible but restrained body`);
     assert.equal(bytes.readInt16LE(44), 0, 'click-free opening');
     assert.equal(bytes.readInt16LE(bytes.length-2), 0, 'click-free close');
   }
@@ -118,4 +127,12 @@ test('Mitlan CC0 recordings retain source detail with clean bounded PCM and docu
   for (const spell of spells) for (const recipe of Object.values(spell.presentation.sounds)) {
     for (const layer of recipe) assert.ok(files.has(layer.url), 'every used recording has provenance');
   }
+  // Different filenames or small pitch/gain changes can still mask the same
+  // foreground material. The seven revised casts must use different recordings.
+  const sourceByFile = new Map(manifest.clips.map(clip => [clip.file, clip.source]));
+  const materials = spells.filter(spell => !['lightning', 'drowning-prison'].includes(spell.id)).map(spell => {
+    const lead = spell.presentation.sounds.cast.reduce((a, b) => a.gain > b.gain ? a : b);
+    return sourceByFile.get(lead.url.split('/').at(-1));
+  });
+  assert.equal(new Set(materials).size, materials.length, 'foreground casts use different source materials');
 });
