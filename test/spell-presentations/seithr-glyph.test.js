@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { playSpellSound } from '../../src/audio/spells.js';
+import { fakeRecordedAudio, sources } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import presentation from '../../src/spells/presentations/seithr-glyph.js';
 import definition from '../../src/spells/definitions/seithr-glyph.js';
 import { runeScene } from '../../test-support/spells.js';
@@ -189,28 +193,61 @@ test('every stage stays finite, bounded, deterministic and fades to clear terrai
   }
 });
 
-test('six crystalline steps precede a drone, simultaneous sealing chord and quiet pulse', () => {
-  const cast = presentation.sounds.cast;
-  const steps = cast.filter(voice => voice.type === 'sine');
-  assert.equal(steps.length, 6);
-  assert.ok(steps.every((voice, index) => index === 0 ||
-    (voice.delay > steps[index - 1].delay && voice.frequency > steps[index - 1].frequency)));
-  const drone = cast.find(voice => voice.type === 'triangle');
-  assert.ok(drone.duration > steps.at(-1).delay + steps.at(-1).duration);
-  assert.ok(drone.gain < Math.min(...steps.map(voice => voice.gain)));
-  const chord = presentation.sounds.impact.filter(voice => voice.delay === 0);
-  assert.ok(chord.length >= 3 && new Set(chord.map(voice => voice.frequency)).size === chord.length);
-  for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length <= 8);
-    for (const voice of voices) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
+test('Seithr Glyph etches recorded ice grains over physical rumble before the seal cracks', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
+  const { cast, impact, pulse } = presentation.sounds;
+  const clip = (layers, name) => layers.find(layer => layer.url.endsWith('/' + name + '.wav'));
+  const strokes = cast.filter(layer => layer.url.endsWith('/ice-grit.wav'));
+  assert.equal(strokes.length, 2, 'two physical engraving strokes');
+  assert.ok(clip(cast, 'ice-rumble').delay < strokes[0].delay);
+  assert.ok(strokes[0].delay < strokes[1].delay && strokes[0].rate !== strokes[1].rate);
+  assert.ok(strokes[1].delay < clip(cast, 'ice-crack').delay, 'lock follows the traced strokes');
+  assert.equal(clip(impact, 'ice-crack').delay, 0, 'contact fractures immediately');
+  assert.ok(clip(impact, 'snow-crush').delay > clip(impact, 'ice-split').delay, 'debris settles after splitting');
+  assert.equal(pulse.length, 1, 'frequent glyph cues carry no accumulating rumble');
+  assert.ok(clip(pulse, 'ice-tick').gain <= 0.18);
+  const tick = manifest.clips.find(entry => entry.file === 'ice-tick.wav');
+  assert.ok(tick.duration / pulse[0].rate + pulse[0].delay < 0.28, 'tick finishes before the next pulse gate');
+  for (const layers of Object.values(presentation.sounds)) {
+    assert.ok(layers.length >= 1 && layers.length <= 4);
+    assert.ok(layers.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2);
+    for (const layer of layers) {
+      assert.equal(layer.kind, 'recording');
+      assert.match(layer.url, /^\/assets\/audio\/spells\/seithr\/[a-z-]+\.wav$/);
+      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2);
+      assert.ok(layer.delay >= 0 && layer.delay <= 2);
+      assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      const entry = manifest.clips.find(entry => layer.url.endsWith('/' + entry.file));
+      assert.ok(entry, 'recording has local provenance');
+      const source = manifest.sources.find(source => source.id === entry.sourceId);
+      assert.ok(source?.page && source?.license && source?.provenance, 'clip traces to an attributed physical recording');
     }
   }
-  assert.ok(presentation.sounds.pulse.every(voice => voice.gain <= 0.02 && voice.duration <= 0.2));
+});
+
+test('Seithr Glyph plays positional recordings without synthetic audio nodes', async () => {
+  for (const stage of ['cast', 'impact', 'pulse']) {
+    const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, presentation), true);
+    const handles = playSpellSound(fake.engine, { presentation, stage, x: 4, y: -2 });
+    const layers = presentation.sounds[stage];
+    assert.equal(handles.length, layers.length);
+    assert.equal(sources(fake).length, layers.length);
+    assert.ok(fake.nodes.every(node => node.kind === 'source' || node.kind === 'gain'));
+    assert.deepEqual(fake.allocations, [], 'no generated noise buffers');
+    sources(fake).forEach((source, index) => {
+      assert.equal(source.buffer.id, layers[index].url.split('/').at(-1));
+      assert.equal(source.loop, false);
+      assert.equal(source.starts[0], 10 + layers[index].delay);
+      assert.equal(source.playbackRate.calls[0].args[0], layers[index].rate);
+    });
+    assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 4 && route.y === -2));
+    handles.forEach(handle => handle.stop());
+    assert.ok(handles.every(handle => handle.ended));
+    assert.ok(fake.routes.every(route => route.disposals === 1));
+    assert.deepEqual(fake.invalid, []);
+  }
 });
 
 test('real Seithr Glyph casts render the authored runes and emit typed crystal cues', () => {
@@ -234,7 +271,7 @@ test('real Seithr Glyph casts render the authored runes and emit typed crystal c
   scene.advance(1.2);
   assert.ok(scene.aura(scene.foe, 'Frozen'), 'the existing armed glyph still freezes contacts');
   assert.ok(scene.casting.effects.list.some(effect => effect.stage === 'aura' && effect.presentation === presentation));
-  assert.ok(events.some(event => event.stage === 'impact'), 'freeze seals with the authored chord');
+  assert.ok(events.some(event => event.stage === 'impact'), 'freeze seals with the recorded fracture');
   assert.ok(events.every(event => event.type === 'spell' && event.spellId === definition.id
     && event.presentation === presentation), 'all spell cues carry this profile instead of draw/slam');
 });

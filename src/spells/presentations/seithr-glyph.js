@@ -401,29 +401,21 @@ export default {
   },
   sounds: {
     cast: [
-      // Six even glass steps trace the six arms; a quiet lower partial holds them together.
-      ...[784, 988, 1175, 1568, 1976, 2350].map((frequency, index) => ({
-        kind: 'tone', type: 'sine', delay: index * 0.105, duration: 0.31,
-        frequency, endFrequency: frequency * 0.997, gain: 0.043 - index * 0.002,
-        attack: 0.003, release: 0.25,
-      })),
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 1.04,
-        frequency: 392, endFrequency: 392, gain: 0.018, attack: 0.16, release: 0.4,
-        cutoff: 1100, filterType: 'lowpass' },
+      // Actual ice-field rumble carries two granular strokes, then the seal locks.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.3, rate: 0.86, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.31, rate: 0.93, delay: 0.14 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.18, rate: 1.07, delay: 0.5 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.25, rate: 0.89, delay: 1 },
     ],
     impact: [
-      // The sealing chord arrives together, unlike the arm-by-arm cast.
-      ...[587, 784, 1175].map(frequency => ({
-        kind: 'tone', type: 'triangle', delay: 0, duration: 0.65,
-        frequency, endFrequency: frequency * 0.993, gain: 0.037,
-        attack: 0.004, release: 0.52, cutoff: 3400, filterType: 'lowpass',
-      })),
-      { kind: 'tone', type: 'sine', delay: 0.065, duration: 0.38,
-        frequency: 3136, endFrequency: 2349, gain: 0.022, attack: 0.002, release: 0.32 },
+      // A lake fracture closes the trap; loose ice and packed snow settle beneath it.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.48, rate: 0.81, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.21, rate: 0.91, delay: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.17, rate: 0.85, delay: 0.24 },
     ],
     pulse: [
-      { kind: 'tone', type: 'sine', delay: 0, duration: 0.13,
-        frequency: 1568, endFrequency: 1560, gain: 0.012, attack: 0.003, release: 0.1 },
+      // One quiet recorded ice grain marks the frequent glyph flickers.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.12, rate: 1.18, delay: 0.005 },
     ],
   },
 };

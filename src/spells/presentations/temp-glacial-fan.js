@@ -202,19 +202,21 @@ export default {
   },
   sounds: {
     cast: [
-      // Three shorter, closer swishes make the unfolding fan audibly accelerate.
-      { kind: 'noise', delay: 0, duration: 0.22, gain: 0.065, cutoff: 1500, filterType: 'bandpass', attack: 0.055, release: 0.12 },
-      { kind: 'noise', delay: 0.23, duration: 0.17, gain: 0.075, cutoff: 2400, filterType: 'bandpass', attack: 0.035, release: 0.1 },
-      { kind: 'noise', delay: 0.38, duration: 0.12, gain: 0.085, cutoff: 3700, filterType: 'highpass', attack: 0.018, release: 0.085 },
-      { kind: 'tone', type: 'triangle', frequency: 460, endFrequency: 920, delay: 0.02, duration: 0.44, gain: 0.025, attack: 0.06, release: 0.16 },
+      // Recorded breath opens wide; staggered snow scuffs and ice grains follow
+      // the fan's physical sweep, with a final natural lake fracture.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.3, rate: 0.91, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.26, rate: 0.94, delay: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.25, rate: 1.07, delay: 0.25 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.24, rate: 1.12, delay: 0.43 },
     ],
     impact: [
-      { kind: 'noise', duration: 0.14, gain: 0.105, cutoff: 4600, filterType: 'highpass', attack: 0.002, release: 0.13 },
-      { kind: 'tone', type: 'triangle', frequency: 622, endFrequency: 540, duration: 0.36, gain: 0.05, attack: 0.003, release: 0.3 },
-      { kind: 'tone', type: 'sine', frequency: 932, endFrequency: 854, delay: 0.012, duration: 0.4, gain: 0.04, attack: 0.003, release: 0.32 },
-      { kind: 'tone', type: 'triangle', frequency: 1480, endFrequency: 1250, delay: 0.026, duration: 0.3, gain: 0.028, attack: 0.002, release: 0.26 },
-      { kind: 'noise', delay: 0.075, duration: 0.25, gain: 0.03, cutoff: 2600, filterType: 'bandpass', attack: 0.004, release: 0.23 },
+      // A crisp recorded fracture bites first; loose grains settle behind it.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.45, rate: 1.04, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.18, rate: 0.96, delay: 0.065 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.055, gain: 0.018, cutoff: 3300, filterType: 'highpass', attack: 0.003, release: 0.045 }],
+    pulse: [
+      // One tiny physical ice tick keeps repeated shard contacts unobtrusive.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 1.09, delay: 0.027 },
+    ],
   },
 };

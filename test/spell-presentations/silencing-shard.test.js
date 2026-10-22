@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { playSpellSound } from '../../src/audio/spells.js';
+import { fakeRecordedAudio, sources } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import presentation from '../../src/spells/presentations/silencing-shard.js';
 import spell from '../../src/spells/definitions/silencing-shard.js';
 import { runeScene } from '../../test-support/spells.js';
@@ -180,31 +184,43 @@ test('a side-on projectile keeps every glyph, including the tip glint, under the
   }
 });
 
-test('sound is a hollow damped bell, descending notch breath and abrupt quiet cutoff', () => {
-  const { cast, impact } = presentation.sounds;
-  const bell = cast.filter(voice => voice.kind === 'tone');
-  const breath = cast.filter(voice => voice.kind === 'noise');
-  assert.equal(bell.length, 2, 'bell uses separate body and inharmonic partial');
-  const ratio = bell[1].frequency / bell[0].frequency;
-  assert.ok(ratio > 1.5 && ratio < 1.7, 'a hollow non-octave bell avoids a melodic chord');
-  assert.ok(bell.every(v => v.release > v.duration * 0.6));
-  assert.ok(breath.length >= 3 && breath.every(v => v.filterType === 'notch'));
-  for (let i = 1; i < breath.length; i++) {
-    assert.ok(breath[i].delay > breath[i - 1].delay && breath[i].cutoff < breath[i - 1].cutoff,
-      'breath descends through progressively lower missing bands');
-    assert.ok(breath[i].gain < breath[i - 1].gain, 'air is damped as the ring closes');
-  }
-  const click = impact.at(-1);
-  assert.ok(click.delay >= Math.max(...impact.slice(0, -1).map(v => v.delay + v.duration)), 'click follows the soft cutoff');
-  assert.ok(click.duration < 0.03 && click.gain < 0.03, 'cutoff click is tiny and brief');
-  assert.notDeepEqual(cast, impact);
-  for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length <= 8);
-    for (const voice of voices) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
-      assert.ok(voice.delay >= 0 && voice.delay <= 2 && voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
+test('Silencing Shard uses sourced breath and ice recordings with a quiet repeat grain', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
+  const { cast, impact, pulse } = presentation.sounds;
+  assert.deepEqual(Object.keys(presentation.sounds).sort(), ['cast', 'impact', 'pulse']);
+  assert.ok(cast[0].url.endsWith('/cold-breath.wav'), 'physical breath opens the cast');
+  assert.ok(cast[1].url.endsWith('/ice-crack.wav') && cast[1].delay > cast[0].delay,
+    'a restrained fracture enters after the breath');
+  assert.ok(impact.some(layer => layer.url.endsWith('/ice-grit.wav')), 'close ice creaks mark the seal');
+  assert.ok(impact.every(layer => !cast.some(other => other.url === layer.url)), 'the seal has its own physical textures');
+  assert.equal(pulse.length, 1, 'repeated flight cues use one grain');
+  assert.ok(pulse[0].url.endsWith('/ice-tick.wav') && pulse[0].gain <= 0.18);
+  for (const layers of Object.values(presentation.sounds)) {
+    assert.ok(layers.length >= 1 && layers.length <= 4);
+    assert.ok(layers.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2);
+    for (const layer of layers) {
+      assert.equal(layer.kind, 'recording');
+      assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2 && layer.delay >= 0 && layer.delay <= 2);
+      const clip = manifest.clips.find(entry => layer.url === `/assets/audio/spells/seithr/${entry.file}`);
+      assert.ok(clip, 'every cue names a documented clip');
+      const source = manifest.sources.find(entry => entry.id === clip.sourceId);
+      assert.ok(source?.provenance && source?.licenseUrl && source?.page, 'the physical recording is attributed');
     }
   }
+  const fake = fakeRecordedAudio();
+  await prepareRecordedSpellTest(fake, presentation);
+  for (const [stage, layers] of Object.entries(presentation.sounds)) {
+    const before = sources(fake).length;
+    const handles = playSpellSound(fake.engine, { presentation, stage, x: 2, y: 3 });
+    assert.equal(handles.length, layers.length, `${stage} plays all recorded layers`);
+    const played = sources(fake).slice(before);
+    assert.deepEqual(played.map(node => node.buffer.id), layers.map(layer => layer.url.split('/').at(-1)));
+    assert.deepEqual(played.map(node => node.starts[0]), layers.map(layer => fake.context.currentTime + layer.delay));
+    handles.forEach(handle => handle.stop());
+  }
+  assert.ok(!fake.nodes.some(node => node.kind === 'oscillator'), 'no synthesized tones accompany the recordings');
+  assert.equal(fake.allocations.length, 0, 'no synthesized noise buffers are allocated');
+  assert.deepEqual(fake.invalid, []);
 });

@@ -271,19 +271,20 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'noise', duration: 0.86, gain: 0.032, attack: 0.18, release: 0.44, cutoff: 4300, filterType: 'highpass' },
-      { kind: 'tone', type: 'sine', frequency: 1568, endFrequency: 1480, duration: 0.92, gain: 0.027, attack: 0.16, release: 0.48 },
-      { kind: 'tone', type: 'sine', frequency: 2352, endFrequency: 2217, delay: 0.17, duration: 0.76, gain: 0.018, attack: 0.18, release: 0.4 },
-      { kind: 'tone', type: 'triangle', frequency: 1110, endFrequency: 410, delay: 0.32, duration: 0.88, gain: 0.033, attack: 0.2, release: 0.43, cutoff: 2400, filterType: 'lowpass' },
+      // Real outdoor wind opens the veil; a restrained breath and close ice creak follow.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/wind-swell.wav', gain: 0.36, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.18, rate: 0.96, delay: 0.22 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.12, rate: 0.88, delay: 0.48 },
     ],
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 1175, endFrequency: 784, duration: 0.42, gain: 0.035, attack: 0.06, release: 0.28 },
-      { kind: 'tone', type: 'sine', frequency: 1762, endFrequency: 1175, delay: 0.08, duration: 0.48, gain: 0.023, attack: 0.08, release: 0.32 },
-      { kind: 'noise', delay: 0.12, duration: 0.56, gain: 0.032, attack: 0.13, release: 0.36, cutoff: 5400, filterType: 'highpass' },
+      // A soft physical scuff settles the curtain into an exhaled, wind-carried hush.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.18, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.2, rate: 0.88, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/wind-swell.wav', gain: 0.22, rate: 1.04, delay: 0.28 },
     ],
     pulse: [
-      { kind: 'noise', duration: 0.11, gain: 0.009, attack: 0.025, release: 0.07, cutoff: 6100, filterType: 'highpass' },
-      { kind: 'tone', type: 'sine', frequency: 2093, endFrequency: 1976, duration: 0.13, gain: 0.008, attack: 0.025, release: 0.085 },
+      // Dense silence-field repeats use just one quiet piece of recorded ice foley.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.1, rate: 1.19, delay: 0.009 },
     ],
   },
 };

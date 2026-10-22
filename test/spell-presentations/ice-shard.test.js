@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { playSpellSound } from '../../src/audio/spells.js';
+import { fakeRecordedAudio, sources } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import presentation from '../../src/spells/presentations/ice-shard.js';
 import spell from '../../src/spells/definitions/ice-shard.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
@@ -187,29 +191,57 @@ test('every supported stage is deterministic, bounded and fades to nothing', () 
   }
 });
 
-test('glass plink and rising whistle resolve into an irregular high-frequency fracture cluster', () => {
-  const { cast, impact } = presentation.sounds;
-  const plink = cast[0];
-  assert.equal(plink.kind, 'tone');
-  assert.ok(plink.attack < 0.005 && plink.frequency > 2000 && plink.duration < 0.15);
-  const whistle = cast.find(voice => voice.endFrequency > voice.frequency);
-  assert.ok(whistle && whistle.delay > plink.delay && whistle.attack > plink.attack);
-  assert.ok(cast.some(voice => voice.kind === 'noise' && voice.filterType === 'highpass'));
-  assert.equal(impact[0].kind, 'noise');
-  assert.ok(impact.filter(voice => voice.kind === 'tone' && voice.endFrequency < voice.frequency).length >= 3);
-  assert.ok(new Set(impact.slice(1).map((voice, index) =>
-    Math.round((voice.delay - impact[index].delay) * 1000))).size > 3,
-  'falling glass fragments land at uneven intervals');
+test('Ice Shard uses sourced recordings for strain, a deliberate crack and physical shatter', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
+  const { cast, impact, pulse } = presentation.sounds;
+  const clip = (layers, name) => layers.find(layer => layer.url.endsWith('/' + name + '.wav'));
+  assert.ok(clip(cast, 'ice-strain').delay < clip(cast, 'ice-crack').delay, 'strain precedes the single release');
+  assert.ok(clip(cast, 'cold-breath').gain < clip(cast, 'ice-crack').gain, 'breath supports the crisp crack');
+  assert.equal(clip(impact, 'ice-split').delay, 0, 'fracture marks contact immediately');
+  assert.ok(clip(impact, 'ice-grit').delay > 0, 'loose fragments settle after the fracture');
   assert.notDeepEqual(cast, impact);
-  for (const voices of [cast, impact]) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
-    for (const voice of voices) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
-      assert.ok(Object.values(voice).every(value => typeof value !== 'number' || Number.isFinite(value)));
+  assert.equal(pulse.length, 1, 'repeated wake has no accumulating ambience layers');
+  assert.ok(clip(pulse, 'ice-tick').gain <= 0.18, 'wake grain stays quiet');
+  const tick = manifest.clips.find(entry => entry.file === 'ice-tick.wav');
+  assert.ok(tick.duration / pulse[0].rate + pulse[0].delay < 0.28, 'wake ends before the next pulse gate');
+  for (const layers of Object.values(presentation.sounds)) {
+    assert.ok(layers.length >= 1 && layers.length <= 4);
+    assert.ok(layers.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2);
+    for (const layer of layers) {
+      assert.equal(layer.kind, 'recording');
+      assert.match(layer.url, /^\/assets\/audio\/spells\/seithr\/[a-z-]+\.wav$/);
+      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2);
+      assert.ok(layer.delay >= 0 && layer.delay <= 2);
+      assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      const entry = manifest.clips.find(entry => layer.url.endsWith('/' + entry.file));
+      assert.ok(entry, 'each clip has local provenance');
+      const source = manifest.sources.find(source => source.id === entry.sourceId);
+      assert.ok(source?.page && source?.license && source?.provenance, 'each clip traces to an attributed recording');
     }
+  }
+});
+
+test('Ice Shard plays each recording through positional SFX without synthesizers', async () => {
+  for (const stage of ['cast', 'impact', 'pulse']) {
+    const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, presentation), true, 'real recording files load');
+    const handles = playSpellSound(fake.engine, { presentation, stage, x: 4, y: -2 });
+    const layers = presentation.sounds[stage];
+    assert.equal(handles.length, layers.length);
+    assert.equal(sources(fake).length, layers.length);
+    assert.ok(fake.nodes.every(node => node.kind === 'source' || node.kind === 'gain'), 'no oscillator or noise filter nodes');
+    assert.deepEqual(fake.allocations, [], 'no procedural noise buffers');
+    sources(fake).forEach((source, index) => {
+      assert.equal(source.buffer.id, layers[index].url.split('/').at(-1));
+      assert.equal(source.loop, false);
+      assert.equal(source.starts[0], 10 + layers[index].delay);
+      assert.equal(source.playbackRate.calls[0].args[0], layers[index].rate);
+    });
+    assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 4 && route.y === -2));
+    handles.forEach(handle => handle.stop());
+    assert.ok(handles.every(handle => handle.ended));
+    assert.ok(fake.routes.every(route => route.disposals === 1));
+    assert.deepEqual(fake.invalid, []);
   }
 });

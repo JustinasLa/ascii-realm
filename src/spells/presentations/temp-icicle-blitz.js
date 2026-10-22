@@ -362,25 +362,22 @@ export default {
   duration: 1.02,
   draw,
   sounds: {
+    // Close ice grains leave in an uneven volley through a restrained breath.
     cast: [
-      { kind: 'tone', delay: 0, duration: 0.08, gain: 0.045, attack: 0.002, release: 0.065, frequency: 1820, endFrequency: 1680, type: 'triangle' },
-      { kind: 'noise', delay: 0.025, duration: 0.065, gain: 0.026, attack: 0.006, release: 0.045, cutoff: 4200, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.061, duration: 0.075, gain: 0.039, attack: 0.002, release: 0.06, frequency: 2460, endFrequency: 2220, type: 'sine' },
-      { kind: 'tone', delay: 0.155, duration: 0.09, gain: 0.047, attack: 0.002, release: 0.07, frequency: 2160, endFrequency: 2050, type: 'triangle' },
-      { kind: 'noise', delay: 0.178, duration: 0.08, gain: 0.023, attack: 0.008, release: 0.055, cutoff: 4900, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.229, duration: 0.065, gain: 0.037, attack: 0.001, release: 0.05, frequency: 3020, endFrequency: 2710, type: 'sine' },
-      { kind: 'noise', delay: 0.303, duration: 0.075, gain: 0.028, attack: 0.005, release: 0.055, cutoff: 3500, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.346, duration: 0.105, gain: 0.043, attack: 0.002, release: 0.085, frequency: 2640, endFrequency: 2310, type: 'triangle' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.14, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.31, rate: 1.08, delay: 0.071 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.25, rate: 0.93, delay: 0.224 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.28, rate: 1.16, delay: 0.408 },
     ],
+    // A physical lake fracture lands in compressed snow, with loose ice settling.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.115, gain: 0.072, attack: 0.001, release: 0.1, cutoff: 2900, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0.012, duration: 0.065, gain: 0.035, attack: 0.001, release: 0.055, frequency: 1460, endFrequency: 960, type: 'triangle' },
-      { kind: 'noise', delay: 0.043, duration: 0.055, gain: 0.032, attack: 0.001, release: 0.045, cutoff: 5900, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.072, duration: 0.09, gain: 0.022, attack: 0.001, release: 0.08, frequency: 3330, endFrequency: 2280, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.45, rate: 1.05, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.27, rate: 0.88, delay: 0.025 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.14, rate: 1.12, delay: 0.11 },
     ],
+    // A single subdued grain keeps repeated projectile cues light.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.055, gain: 0.018, attack: 0.002, release: 0.045, frequency: 2380, endFrequency: 2100, type: 'sine' },
-      { kind: 'noise', delay: 0.018, duration: 0.045, gain: 0.012, attack: 0.002, release: 0.035, cutoff: 4700, filterType: 'highpass' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 0.97, delay: 0.017 },
     ],
   },
 };

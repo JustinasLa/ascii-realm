@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
 import presentation from '../../src/spells/presentations/ice-wave.js';
 import spell from '../../src/spells/definitions/ice-wave.js';
 import { runeScene } from '../../test-support/spells.js';
-import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { fakeRecordedAudio, sources } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 
 // Radii and lives match what the rune actually spawns: the cast flash (0.8 m),
@@ -38,7 +40,7 @@ test('Ice Wave opts into its own presentation while retaining its rune cost and 
   assert.equal(spell.source.sha256, 'dd420157d6e6bbbfa6a8aa60a51f3e625b8a4885f4070cfc3fb59b94b1130599');
 });
 
-test('a real rune cast renders the authored effects and emits typed spatial cast/impact cues', () => {
+test('a real rune cast renders the authored effects and emits typed spatial cast/impact cues', async () => {
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
@@ -62,6 +64,7 @@ test('a real rune cast renders the authored effects and emits typed spatial cast
   assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a second cast');
   assert.equal(events.length, count, 'rejected casts remain silent');
   const audio = fakeRecordedAudio();
+  assert.equal(await prepareRecordedSpellTest(audio, presentation), true);
   const handles = playSpellSound(audio.engine, castCue);
   assert.equal(handles.length, presentation.sounds.cast.length);
   assert.ok(audio.routes.every(route => route.bus === 'sfx' && route.x === castCue.x && route.y === castCue.y));
@@ -193,34 +196,54 @@ test('the wave moves smoothly between 60 fps frames', () => {
   }
 });
 
-test('sound is a long snow scrape over cold air with irregular crystal teeth and a short collapse', () => {
+test('Ice Wave rolls recorded ice and wind into a split followed by snow scrape', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const scrape = cast.find(voice => voice.kind === 'noise' && voice.filterType === 'highpass');
-  const air = cast.find(voice => voice.kind === 'noise' && voice.filterType === 'lowpass');
-  const teeth = cast.filter(voice => voice.kind === 'tone');
-  assert.ok(scrape.duration > 0.7 && scrape.attack > 0.1);
-  assert.ok(air.cutoff < 600 && air.duration > 0.6);
-  assert.equal(teeth.length, 4);
-  assert.ok(teeth.every((voice, i) => i === 0 || voice.delay > teeth[i - 1].delay));
-  assert.ok(teeth[1].frequency < teeth[0].frequency && teeth[2].frequency > teeth[0].frequency,
-    'the teeth chatter, rather than playing a scale');
-  assert.ok(teeth[3].delay - teeth[2].delay > teeth[1].delay - teeth[0].delay);
-  assert.ok(impact.some(voice => voice.kind === 'noise' && voice.attack < 0.01));
-  assert.ok(impact.some(voice => voice.kind === 'tone' && voice.endFrequency < 100));
-  assert.ok(impact.filter(voice => voice.frequency > 1000).length >= 3);
+  const file = layer => layer.url.split('/').at(-1);
+  const rumble = cast.find(layer => file(layer) === 'ice-rumble.wav');
+  const wind = cast.find(layer => file(layer) === 'wind-swell.wav');
+  const split = cast.find(layer => file(layer) === 'ice-split.wav');
+  const scrape = cast.find(layer => file(layer) === 'snow-scuff.wav');
+  assert.ok(rumble && wind && split && scrape, 'physical ice-field, wind, fracture and snow layers');
+  assert.ok(rumble.delay < split.delay && wind.delay < split.delay && split.delay < scrape.delay,
+    'the front builds, splits and leaves a scraping wake');
+  assert.ok(rumble.rate < wind.rate && split.rate < 1, 'modest slowdown adds weight to recorded ice');
+  assert.equal(file(impact[0]), 'ice-crack.wav');
+  assert.equal(impact[0].delay, 0, 'the target fracture responds immediately');
+  assert.ok(impact.some(layer => file(layer) === 'snow-crush.wav' && layer.delay > 0));
+  assert.ok(impact.some(layer => file(layer) === 'ice-grit.wav' && layer.delay > 0.1));
+  assert.equal(pulse.length, 1);
+  assert.equal(file(pulse[0]), 'ice-tick.wav');
+  assert.ok(pulse[0].gain >= 0.1 && pulse[0].gain <= 0.18, 'repeat cues remain quiet');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(voice => voice.gain <= 0.02 && voice.duration < 0.15));
-  for (const sequence of Object.values(presentation.sounds)) {
-    assert.ok(sequence.length > 0 && sequence.length <= 8);
-    for (const voice of sequence) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
-      if (voice.kind === 'tone') {
-        assert.ok(voice.frequency > 20 && voice.endFrequency > 20);
-      }
+
+  const manifest = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
+  for (const [stage, sequence] of Object.entries(presentation.sounds)) {
+    assert.ok(sequence.length >= 1 && sequence.length <= 4);
+    assert.ok(sequence.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2);
+    for (const layer of sequence) {
+      assert.equal(layer.kind, 'recording');
+      assert.match(layer.url, /^\/assets\/audio\/spells\/seithr\/[a-z-]+\.wav$/);
+      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2);
+      assert.ok(layer.delay >= 0 && layer.delay <= 2);
+      assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      const clip = manifest.clips.find(entry => entry.file === file(layer));
+      assert.ok(clip, `${file(layer)} has provenance`);
+      assert.ok(manifest.sources.some(source => source.id === clip.sourceId && source.license && source.provenance));
     }
+    const audio = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(audio, presentation), true);
+    const handles = playSpellSound(audio.engine, { presentation, stage, x: 7, y: -3 });
+    const played = sources(audio);
+    assert.equal(played.length, sequence.length, `${stage} plays decoded recordings`);
+    assert.deepEqual(played.map(source => source.buffer.id), sequence.map(file));
+    assert.deepEqual(played.map(source => source.starts[0]), sequence.map(layer => audio.context.currentTime + layer.delay));
+    assert.deepEqual(played.map(source => source.playbackRate.calls[0].args[0]), sequence.map(layer => layer.rate));
+    assert.ok(audio.routes.every(route => route.bus === 'sfx' && route.x === 7 && route.y === -3));
+    assert.equal(audio.nodes.filter(node => node.kind === 'oscillator' || node.kind === 'filter').length, 0);
+    assert.deepEqual(audio.allocations, [], 'no synthesized noise buffers');
+    assert.deepEqual(audio.invalid, []);
+    for (const handle of handles) handle.stop();
+    assert.ok(audio.routes.every(route => route.disposals === 1));
   }
 });

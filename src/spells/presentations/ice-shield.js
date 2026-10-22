@@ -413,22 +413,22 @@ export default {
   duration: 1.18,
   draw,
   sounds: {
+    // Real ice-field strain gathers beneath the shell; a lake crack locks it shut.
     cast: [
-      { kind: 'tone', delay: 0, duration: 0.78, gain: 0.046, attack: 0.045, release: 0.46, frequency: 493.88, endFrequency: 523.25, type: 'sine' },
-      { kind: 'tone', delay: 0.09, duration: 0.82, gain: 0.036, attack: 0.055, release: 0.5, frequency: 622.25, endFrequency: 659.25, type: 'triangle', cutoff: 2800 },
-      { kind: 'tone', delay: 0.18, duration: 0.88, gain: 0.027, attack: 0.065, release: 0.56, frequency: 739.99, endFrequency: 783.99, type: 'sine' },
-      { kind: 'noise', delay: 0.04, duration: 0.38, gain: 0.024, attack: 0.07, release: 0.22, cutoff: 4300, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.22, duration: 0.92, gain: 0.028, attack: 0.08, release: 0.62, frequency: 261.63, endFrequency: 262.5, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.36, rate: 0.78, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.22, rate: 0.82, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.38, rate: 0.86, delay: 0.48 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.15, rate: 0.88, delay: 0.66 },
     ],
+    // A fractured lake slab answers the blow, then loose ice and snow settle.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.72, gain: 0.075, attack: 0.008, release: 0.61, frequency: 220, endFrequency: 215, type: 'sine' },
-      { kind: 'tone', delay: 0.012, duration: 0.56, gain: 0.034, attack: 0.006, release: 0.49, frequency: 354.2, endFrequency: 349.8, type: 'sine' },
-      { kind: 'tone', delay: 0.035, duration: 0.34, gain: 0.02, attack: 0.005, release: 0.28, frequency: 580.8, endFrequency: 575, type: 'triangle', cutoff: 2200 },
-      { kind: 'noise', delay: 0, duration: 0.11, gain: 0.021, attack: 0.005, release: 0.09, cutoff: 5400, filterType: 'highpass' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.49, rate: 0.79, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.21, rate: 0.84, delay: 0.075 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.16, rate: 0.9, delay: 0.23 },
     ],
+    // A single quiet recorded ice grain keeps repeated ward movement restrained.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.18, gain: 0.012, attack: 0.018, release: 0.14, frequency: 1046.5, endFrequency: 988, type: 'sine' },
-      { kind: 'tone', delay: 0.045, duration: 0.21, gain: 0.009, attack: 0.02, release: 0.17, frequency: 523.25, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 0.87, delay: 0.035 },
     ],
   },
 };

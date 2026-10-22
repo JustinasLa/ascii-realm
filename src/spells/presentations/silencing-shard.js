@@ -383,26 +383,20 @@ export default {
   draw,
   sounds: {
     cast: [
-      // Two non-harmonic partials make a hollow, deliberately damped bell.
-      { kind: 'tone', delay: 0, duration: 0.27, gain: 0.07, attack: 0.003, release: 0.2,
-        frequency: 428, endFrequency: 397, type: 'sine', cutoff: 1200, filterType: 'lowpass' },
-      { kind: 'tone', delay: 0.012, duration: 0.19, gain: 0.032, attack: 0.002, release: 0.16,
-        frequency: 677, endFrequency: 628, type: 'triangle', cutoff: 1000, filterType: 'lowpass' },
-      // Descending notch centres remove successively lower bands of breath.
-      { kind: 'noise', delay: 0.13, duration: 0.11, gain: 0.035, attack: 0.025, release: 0.07,
-        cutoff: 1750, filterType: 'notch' },
-      { kind: 'noise', delay: 0.22, duration: 0.1, gain: 0.027, attack: 0.018, release: 0.06,
-        cutoff: 880, filterType: 'notch' },
-      { kind: 'noise', delay: 0.30, duration: 0.075, gain: 0.02, attack: 0.012, release: 0.009,
-        cutoff: 390, filterType: 'notch' },
+      // Close recorded breath withdraws as a small lake fracture takes its
+      // place. Restrained levels let the space around the shard feel empty.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.27, rate: 1.18, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.19, rate: 0.88, delay: 0.38 },
     ],
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.105, gain: 0.06, attack: 0.003, release: 0.009,
-        frequency: 262, endFrequency: 106, type: 'sine', cutoff: 650, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.018, duration: 0.075, gain: 0.035, attack: 0.01, release: 0.008,
-        cutoff: 680, filterType: 'notch' },
-      { kind: 'tone', delay: 0.105, duration: 0.018, gain: 0.022, attack: 0.001, release: 0.012,
-        frequency: 1020, endFrequency: 740, type: 'triangle', cutoff: 1500, filterType: 'lowpass' },
+      // A close ice-cube creak and a soft snow crush close the seal without
+      // a ringing tail; the physical textures carry the hush themselves.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.28, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.18, rate: 0.91, delay: 0.035 },
+    ],
+    pulse: [
+      // Flight ticks and the shatter burst share a quiet recorded ice grain.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.12, rate: 1.16, delay: 0 },
     ],
   },
 };

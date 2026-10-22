@@ -358,24 +358,23 @@ export default {
   duration: 1.15,
   draw,
   sounds: {
+    // Recorded ice-field rumble and forest wind carry a broad advancing front.
+    // A lake split breaks through the swell; a snow scrape trails its crest.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.82, gain: 0.07, attack: 0.19, release: 0.36, cutoff: 2400, filterType: 'highpass' },
-      { kind: 'noise', delay: 0.05, duration: 0.72, gain: 0.045, attack: 0.17, release: 0.3, cutoff: 470, filterType: 'lowpass' },
-      { kind: 'tone', delay: 0.14, duration: 0.12, gain: 0.03, attack: 0.002, release: 0.1, frequency: 1760, endFrequency: 1510, type: 'triangle' },
-      { kind: 'tone', delay: 0.27, duration: 0.1, gain: 0.034, attack: 0.002, release: 0.085, frequency: 1290, endFrequency: 1170, type: 'triangle' },
-      { kind: 'tone', delay: 0.43, duration: 0.14, gain: 0.038, attack: 0.002, release: 0.12, frequency: 2180, endFrequency: 1840, type: 'triangle' },
-      { kind: 'tone', delay: 0.62, duration: 0.11, gain: 0.027, attack: 0.002, release: 0.095, frequency: 1490, endFrequency: 1340, type: 'triangle' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.31, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/wind-swell.wav', gain: 0.19, rate: 0.94, delay: 0.04 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.34, rate: 0.86, delay: 0.25 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.18, rate: 0.91, delay: 0.64 },
     ],
+    // A close lake fracture lands first, followed by crushed snow and ice grit.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.23, gain: 0.09, attack: 0.003, release: 0.2, cutoff: 4100, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0, duration: 0.28, gain: 0.055, attack: 0.004, release: 0.24, frequency: 196, endFrequency: 83, type: 'triangle' },
-      { kind: 'tone', delay: 0.015, duration: 0.13, gain: 0.04, attack: 0.002, release: 0.115, frequency: 2700, endFrequency: 2340, type: 'triangle' },
-      { kind: 'tone', delay: 0.085, duration: 0.16, gain: 0.033, attack: 0.002, release: 0.14, frequency: 1890, endFrequency: 1630, type: 'triangle' },
-      { kind: 'tone', delay: 0.19, duration: 0.1, gain: 0.025, attack: 0.002, release: 0.085, frequency: 3180, endFrequency: 2780, type: 'triangle' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.36, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.19, rate: 0.84, delay: 0.045 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.15, rate: 0.92, delay: 0.18 },
     ],
+    // A single quiet physical ice tick marks repeated frost cues.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.11, gain: 0.014, attack: 0.012, release: 0.08, cutoff: 2600, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.025, duration: 0.08, gain: 0.012, attack: 0.002, release: 0.065, frequency: 1470, endFrequency: 1320, type: 'triangle' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.12, rate: 0.89, delay: 0.035 },
     ],
   },
 };

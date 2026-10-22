@@ -430,33 +430,23 @@ export default {
     }
   },
   sounds: {
+    // Actual ice-field strain and rumble carry the rising coffin's mass;
+    // compressed snow scuffs beneath it as the ground opens.
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 57, endFrequency: 126, duration: 0.98,
-        gain: 0.055, attack: 0.18, release: 0.36 },
-      { kind: 'noise', delay: 0.03, duration: 0.86, gain: 0.045, cutoff: 420,
-        filterType: 'lowpass', attack: 0.14, release: 0.4 },
-      { kind: 'tone', type: 'sine', delay: 0.2, frequency: 680, endFrequency: 595,
-        duration: 0.12, gain: 0.048, attack: 0.002, release: 0.1 },
-      { kind: 'tone', type: 'sine', delay: 0.39, frequency: 1015, endFrequency: 920,
-        duration: 0.1, gain: 0.042, attack: 0.002, release: 0.085 },
-      { kind: 'tone', type: 'sine', delay: 0.65, frequency: 1530, endFrequency: 1390,
-        duration: 0.09, gain: 0.035, attack: 0.002, release: 0.075 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.48, rate: 0.83, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.31, rate: 0.78, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.14, rate: 0.88, delay: 0.26 },
     ],
+    // A recorded lake fracture seals the slab; snow compression and small
+    // hydrophone-recorded ice debris follow the heavy initial split.
     impact: [
-      { kind: 'tone', type: 'triangle', frequency: 120, endFrequency: 46,
-        duration: 0.38, gain: 0.09, attack: 0.003, release: 0.31 },
-      { kind: 'noise', duration: 0.17, gain: 0.1, cutoff: 600,
-        filterType: 'bandpass', attack: 0.002, release: 0.145 },
-      { kind: 'noise', duration: 0.06, gain: 0.06, cutoff: 3500,
-        filterType: 'highpass', attack: 0.001, release: 0.05 },
-      { kind: 'tone', type: 'sine', delay: 0.04, frequency: 735, endFrequency: 420,
-        duration: 0.24, gain: 0.048, attack: 0.002, release: 0.21 },
-      { kind: 'noise', delay: 0.19, duration: 0.08, gain: 0.028, cutoff: 2300,
-        filterType: 'bandpass', attack: 0.002, release: 0.065 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.64, rate: 0.77, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.31, rate: 0.8, delay: 0.055 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.14, rate: 0.86, delay: 0.19 },
     ],
+    // Repeated frost pulses use one quiet physical ice tick, never another slam.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 980, endFrequency: 870,
-        duration: 0.07, gain: 0.018, attack: 0.002, release: 0.06 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.13, rate: 0.81, delay: 0.045 },
     ],
   },
 };

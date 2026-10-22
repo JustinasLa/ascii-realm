@@ -3,6 +3,10 @@ import test from 'node:test';
 import presentation from '../../src/spells/presentations/temp-frost-bolt.js';
 import spell from '../../src/spells/definitions/temp-frost-bolt.js';
 import { runeScene } from '../../test-support/spells.js';
+import { readFile } from 'node:fs/promises';
+import { playSpellSound } from '../../src/audio/spells.js';
+import { fakeRecordedAudio, sources } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function draw(stage, progress, options = {}) {
   const points = [];
@@ -117,31 +121,53 @@ test('every effect stage is deterministic, bounded, atlas compatible, and fades 
   }
 });
 
-test('the sound is an immediate string snap, delayed falling whistle and lower crystal crunch', () => {
-  const { cast, impact } = presentation.sounds;
-  const snap = cast.find(v => v.kind === 'tone' && v.type === 'triangle' && v.delay === 0);
-  const whistle = cast.find(v => v.kind === 'tone' && v.duration > 0.3);
-  assert.ok(snap && snap.attack <= 0.003 && snap.duration < 0.12 && snap.endFrequency < snap.frequency / 2);
-  assert.ok(whistle && whistle.delay > snap.delay && whistle.endFrequency < whistle.frequency / 2);
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'highpass' && v.duration < 0.05));
-  assert.ok(impact.some(v => v.kind === 'noise' && v.filterType === 'bandpass' && v.cutoff < 1600));
-  assert.ok(impact.some(v => v.kind === 'tone' && v.frequency < whistle.endFrequency));
-  assert.ok(new Set(impact.filter(v => v.kind === 'tone').map(v => v.delay)).size >= 3,
-    'the crunch has separate irregular chip attacks');
+test('Frost Bolt uses recorded breath, a crisp ice fracture and following snow scatter', async () => {
+  const { cast, impact, pulse } = presentation.sounds;
+  const breath = cast.find(v => v.url.endsWith('/cold-breath.wav'));
+  assert.ok(breath && breath.rate > 1 && breath.delay === 0, 'compressed recorded breath starts the launch');
+  const fracture = impact.find(v => v.url.endsWith('/ice-crack.wav'));
+  const scatter = impact.find(v => v.url.endsWith('/snow-scuff.wav'));
+  assert.ok(fracture && scatter && scatter.delay > fracture.delay, 'snow scatters after the physical fracture');
+  assert.equal(pulse.length, 1, 'repeat bursts use only one quiet grain');
+  assert.ok(pulse[0].url.endsWith('/ice-tick.wav') && pulse[0].gain <= 0.18);
   assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
+  const provenance = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
+  const clips = Object.values(provenance).find(value => Array.isArray(value) && value.some(entry => entry.file));
   for (const sequence of Object.values(presentation.sounds)) {
-    assert.ok(sequence.length > 0 && sequence.length <= 8);
+    assert.ok(sequence.length > 0 && sequence.length <= 4);
+    assert.ok(sequence.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
     for (const voice of sequence) {
-      assert.ok(['tone', 'noise'].includes(voice.kind));
-      for (const [field, value] of Object.entries(voice)) {
-        if (typeof value === 'number') assert.ok(Number.isFinite(value), field);
-      }
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
+      assert.equal(voice.kind, 'recording');
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.match(voice.url, /^\/assets\/audio\/spells\/seithr\/[a-z-]+\.wav$/);
+      const clip = clips.find(entry => entry.file === voice.url.split('/').at(-1));
+      assert.ok(clip && provenance.sources.some(source => source.id === clip.sourceId && source.license), 'every clip has a licensed recording source');
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
     }
   }
+});
+
+test('Frost Bolt schedules actual recording buffers on the positional spell bus', async () => {
+  const fake = fakeRecordedAudio();
+  await prepareRecordedSpellTest(fake, presentation);
+  for (const [stage, recipe] of Object.entries(presentation.sounds)) {
+    const before = sources(fake).length;
+    const handles = playSpellSound(fake.engine, { presentation, stage, x: 3, y: -2 });
+    assert.equal(handles.length, recipe.length);
+    sources(fake).slice(before).forEach((source, i) => {
+      assert.equal(source.buffer.id, recipe[i].url.split('/').at(-1));
+      assert.equal(source.starts[0], fake.context.currentTime + recipe[i].delay);
+      assert.ok(source.buffer.duration > 0);
+    });
+    handles.forEach(handle => handle.stop());
+  }
+  assert.equal(fake.nodes.filter(node => node.kind === 'oscillator').length, 0);
+  assert.equal(fake.allocations.length, 0, 'no synthesized noise buffer');
+  assert.deepEqual(fake.invalid, []);
+  assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === -2));
 });
 
 test('a real Frost Bolt cast renders its lance and rime impact and emits typed spell cues', () => {

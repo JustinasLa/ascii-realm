@@ -456,29 +456,22 @@ export default {
     }
   },
   sounds: {
+    // Recorded ice under strain opens into one crisp launch crack and cold air.
     cast: [
-      { kind: 'tone', type: 'sine', delay: 0, duration: 0.11, gain: 0.055,
-        attack: 0.001, release: 0.095, frequency: 2840, endFrequency: 2160 },
-      { kind: 'tone', type: 'triangle', delay: 0.022, duration: 0.066, gain: 0.018,
-        attack: 0.001, release: 0.06, frequency: 4320, endFrequency: 3160 },
-      { kind: 'tone', type: 'sine', delay: 0.07, duration: 0.3, gain: 0.035,
-        attack: 0.045, release: 0.12, frequency: 980, endFrequency: 1830 },
-      { kind: 'noise', delay: 0.09, duration: 0.16, gain: 0.018,
-        attack: 0.025, release: 0.11, filterType: 'highpass', cutoff: 5900 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.26, rate: 0.96, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.56, rate: 1.08, delay: 0.085 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.12, rate: 1.05, delay: 0.1 },
     ],
+    // A physical lake fracture lands first; loose ice settles behind it.
+    // This also accompanies the runtime's repeated slow-aura binding.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.075, gain: 0.07,
-        attack: 0.001, release: 0.065, filterType: 'highpass', cutoff: 6800 },
-      { kind: 'tone', type: 'sine', delay: 0.006, duration: 0.13, gain: 0.04,
-        attack: 0.001, release: 0.12, frequency: 3200, endFrequency: 1320 },
-      { kind: 'tone', type: 'sine', delay: 0.021, duration: 0.09, gain: 0.025,
-        attack: 0.001, release: 0.08, frequency: 4720, endFrequency: 2270 },
-      { kind: 'tone', type: 'triangle', delay: 0.044, duration: 0.1, gain: 0.025,
-        attack: 0.001, release: 0.09, frequency: 2170, endFrequency: 880 },
-      { kind: 'noise', delay: 0.081, duration: 0.1, gain: 0.026,
-        attack: 0.001, release: 0.09, filterType: 'highpass', cutoff: 4100 },
-      { kind: 'tone', type: 'sine', delay: 0.128, duration: 0.17, gain: 0.018,
-        attack: 0.001, release: 0.16, frequency: 1650, endFrequency: 1510 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-split.wav', gain: 0.52, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.23, rate: 1.08, delay: 0.075 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-rumble.wav', gain: 0.16, rate: 0.9, delay: 0.035 },
+    ],
+    // A single quiet recorded grain; no persistent bed on repeated trail ticks.
+    pulse: [
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.12, rate: 1.2, delay: 0 },
     ],
   },
 };

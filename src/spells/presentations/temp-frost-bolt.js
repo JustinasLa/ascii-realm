@@ -369,20 +369,18 @@ export default {
   },
   sounds: {
     cast: [
-      // A plucked icy string snaps, then releases a falling cold-air whistle.
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.09, gain: 0.072, attack: 0.002, release: 0.078, frequency: 1180, endFrequency: 280 },
-      { kind: 'noise', delay: 0, duration: 0.035, gain: 0.038, attack: 0.001, release: 0.03, cutoff: 4200, filterType: 'highpass' },
-      { kind: 'tone', type: 'sine', delay: 0.015, duration: 0.11, gain: 0.026, attack: 0.002, release: 0.1, frequency: 1880, endFrequency: 1080 },
-      { kind: 'tone', type: 'sine', delay: 0.055, duration: 0.43, gain: 0.043, attack: 0.025, release: 0.22, frequency: 1540, endFrequency: 430 },
-      { kind: 'noise', delay: 0.065, duration: 0.28, gain: 0.025, attack: 0.025, release: 0.18, cutoff: 2100, filterType: 'bandpass' },
+      // Recorded breath rushes out with a small ice fracture at the muzzle.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.36, rate: 1.2, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.26, rate: 1.12, delay: 0.075 },
     ],
     impact: [
-      // A low crystal crunch is followed by two unevenly spaced frozen chips.
-      { kind: 'noise', delay: 0, duration: 0.15, gain: 0.084, attack: 0.002, release: 0.12, cutoff: 1200, filterType: 'bandpass' },
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.19, gain: 0.061, attack: 0.002, release: 0.17, frequency: 410, endFrequency: 105 },
-      { kind: 'tone', type: 'triangle', delay: 0.025, duration: 0.12, gain: 0.032, attack: 0.001, release: 0.11, frequency: 690, endFrequency: 420 },
-      { kind: 'tone', type: 'sine', delay: 0.085, duration: 0.13, gain: 0.024, attack: 0.001, release: 0.12, frequency: 850, endFrequency: 350 },
-      { kind: 'noise', delay: 0.085, duration: 0.08, gain: 0.028, attack: 0.001, release: 0.07, cutoff: 2400, filterType: 'highpass' },
+      // A close lake-ice fracture lands first; loose snow skitters after it.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.57, rate: 1.16, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-scuff.wav', gain: 0.29, rate: 1.1, delay: 0.09 },
+    ],
+    pulse: [
+      // The repeated visual burst only sheds one quiet physical ice grain.
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.14, rate: 1.18, delay: 0.006 },
     ],
   },
 };

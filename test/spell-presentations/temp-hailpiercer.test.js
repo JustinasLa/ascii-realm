@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import presentation, { LAUNCHES, PHASES } from '../../src/spells/presentations/temp-hailpiercer.js';
 import spell from '../../src/spells/definitions/temp-hailpiercer.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 
 function draw(stage, progress = 0.3, age = progress * presentation.duration,
@@ -141,24 +144,45 @@ test('every Hailpiercer stage is deterministic, bounded, and fades completely', 
   }
 });
 
-test('Hailpiercer sound pairs a low twang/high whizz with a pinpoint strike and diminishing rattle', () => {
+test('Hailpiercer layers recorded ice tension, a physical fracture and diminishing grains', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 300 && v.endFrequency < v.frequency));
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency > 2000 && v.endFrequency > v.frequency));
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'highpass'));
-  assert.ok(impact.some(v => (v.delay ?? 0) === 0 && v.duration < 0.08), 'short pinpoint attack');
-  const rattle = impact.filter(v => v.kind === 'noise' && v.delay > 0);
-  assert.equal(rattle.length, 3);
-  assert.ok(rattle.every((v, i) => !i || (v.delay > rattle[i - 1].delay && v.gain < rattle[i - 1].gain)), 'separate diminishing rattle grains');
-  assert.ok(pulse.every(v => v.gain <= 0.025 && v.duration <= 0.08));
+  assert.ok(cast.some(v => v.url.endsWith('/ice-strain.wav')), 'physical ice tension');
+  assert.ok(cast.some(v => v.url.endsWith('/cold-breath.wav')), 'recorded breath releases the lance');
+  assert.ok(impact[0].url.endsWith('/ice-crack.wav') && impact[0].delay === 0, 'physical fracture leads the hit');
+  const debris = impact.slice(1);
+  assert.ok(debris.length >= 2 && debris.every((v, i) => v.delay > 0 && v.gain < impact[0].gain
+    && (!i || (v.gain < debris[i - 1].gain && v.delay > debris[i - 1].delay))), 'debris diminishes after the strike');
+  assert.equal(pulse.length, 1, 'repeated cues stay sparse');
+  assert.ok(pulse[0].url.endsWith('/ice-tick.wav') && pulse[0].gain <= 0.18, 'quiet recorded ice tick');
+  const manifest = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
   for (const recipe of Object.values(presentation.sounds)) {
-    assert.ok(recipe.length <= 8);
-    assert.ok(recipe.every(v => v.gain <= 0.25 && v.duration <= 2.5 && (v.delay ?? 0) <= 2));
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    for (const v of recipe) {
+      assert.equal(v.kind, 'recording', 'no synthesized sound layers');
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8 && v.rate >= 0.75 && v.rate <= 1.2 && v.delay >= 0 && v.delay <= 2);
+      assert.match(v.url, /^\/assets\/audio\/spells\/seithr\/[a-z-]+\.wav$/);
+      const clip = manifest.clips.find(c => v.url.endsWith('/' + c.file));
+      assert.ok(clip, 'clip has provenance');
+      const source = manifest.sources.find(s => s.id === clip.sourceId);
+      assert.ok(source?.provenance && source.page && source.license, 'recording source and license are documented');
+      const bytes = await readFile(new URL('../..' + v.url, import.meta.url));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), clip.sha256, 'recording matches documented clip');
+    }
   }
   for (const stage of ['cast', 'impact', 'pulse']) {
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
     const handles = playSpellSound(fake.engine, { stage, presentation, x: 3, y: 5 });
     assert.equal(handles.length, presentation.sounds[stage].length);
+    const sources = fake.nodes.filter(node => node.kind === 'source');
+    assert.equal(sources.length, handles.length);
+    assert.ok(!fake.nodes.some(node => node.kind === 'oscillator'));
+    sources.forEach((source, i) => {
+      const spec = presentation.sounds[stage][i];
+      assert.equal(source.buffer.id, spec.url.split('/').at(-1));
+      assert.equal(source.starts[0], fake.context.currentTime + spec.delay);
+    });
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 3 && r.y === 5));
     assert.deepEqual(fake.invalid, []);
     handles.forEach(handle => handle.stop());

@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import spell from '../../src/spells/definitions/frozen-tomb.js';
 import presentation from '../../src/spells/presentations/frozen-tomb.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 // Gameplay lifetimes: cast flash, the target's 5 s tomb, the 1 s frost fields at
 // radius 4 and 3, 0.25 s visual bursts, the 0.6 s damage impact and the slow aura.
@@ -148,34 +151,47 @@ test('Frozen Tomb geometry remains finite, bounded, deterministic and fades at e
   assert.ok(step(field(0.2), field(0.2 + 1 / 60)) < 2.5, 'frost tips race smoothly between frames');
 });
 
-test('Frozen Tomb sound grows from a bass groan through climbing ticks to a heavy lid snap', () => {
+test('Frozen Tomb uses physical ice-field strain, lake fracture and compressed snow recordings', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const groan = cast.find(voice => voice.kind === 'tone' && voice.frequency < 150);
-  assert.ok(groan.endFrequency > groan.frequency && groan.attack > 0.1 && groan.duration > 0.8, 'slow ice-growing groan');
-  const ticks = cast.filter(voice => voice.kind === 'tone' && voice.frequency > 500);
-  assert.ok(ticks.length >= 3);
-  for (let i = 1; i < ticks.length; i++) {
-    assert.ok(ticks[i].frequency > ticks[i - 1].frequency && ticks[i].delay > ticks[i - 1].delay,
-      'crystal ticks climb in pitch and time');
-  }
-  assert.ok(impact.some(voice => voice.kind === 'tone' && voice.frequency < 150 && voice.endFrequency < voice.frequency), 'weighted falling lid tone');
-  assert.ok(impact.some(voice => voice.kind === 'noise' && voice.filterType === 'highpass' && voice.duration < 0.1), 'brittle sealing snap');
-  assert.ok(impact.some(voice => voice.delay > 0.15), 'late small corner crack');
-  assert.ok(pulse.every(voice => voice.gain <= 0.025 && voice.duration <= 0.1), 'repeated zone ticks stay quiet');
-  assert.notDeepEqual(cast, impact);
+  const file = voice => voice.url.split('/').at(-1);
+  assert.deepEqual(cast.map(file), ['ice-strain.wav', 'ice-rumble.wav', 'snow-scuff.wav']);
+  assert.ok(cast[0].delay < cast[1].delay && cast[1].delay < cast[2].delay,
+    'ice strain leads the rising mass and ground scuff');
+  assert.deepEqual(impact.map(file), ['ice-split.wav', 'snow-crush.wav', 'ice-grit.wav']);
+  assert.equal(impact[0].delay, 0, 'lake fracture lands with the damage');
+  assert.ok(impact[0].gain > impact[1].gain && impact[1].gain > impact[2].gain,
+    'heavy split leads compression and falling ice debris');
+  assert.ok(impact[0].delay < impact[1].delay && impact[1].delay < impact[2].delay);
+  assert.equal(pulse.length, 1, 'repeated frost only adds a quiet tick');
+  assert.equal(file(pulse[0]), 'ice-tick.wav');
+  assert.ok(pulse[0].gain >= 0.1 && pulse[0].gain <= 0.18);
+  const provenance = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url), 'utf8'));
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(Object.values(voice).filter(value => typeof value === 'number').every(Number.isFinite));
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
-      assert.ok(voice.attack + voice.release <= voice.duration, 'smooth envelope fits the voice');
+      assert.equal(voice.kind, 'recording', 'no oscillator or generated noise layers');
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.ok([voice.gain, voice.rate, voice.delay].every(Number.isFinite));
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
+      const clip = provenance.clips.find(entry => entry.file === file(voice));
+      assert.ok(clip, 'recording has a documented source clip');
+      const source = provenance.sources.find(entry => entry.id === clip.sourceId);
+      assert.ok(source?.provenance && source?.page && source?.license, 'physical recording has attribution and license');
+      const bytes = await readFile(new URL('../..' + voice.url, import.meta.url));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), clip.sha256,
+        'the played recording matches its documented derivation');
     }
   }
+  const sourceTitle = voice => provenance.sources.find(source => source.id === provenance.clips.find(clip => clip.file === file(voice)).sourceId).title;
+  assert.equal(sourceTitle(cast[0]), 'Ice Fields Moving Rumbling');
+  assert.equal(sourceTitle(impact[0]), 'Ice - Lake fractures');
+  assert.equal(sourceTitle(impact[1]), 'Snow crunch 01.WAV');
 });
 
-test('real Frozen Tomb cast renders its profile and routes typed cues while preserving root and damage', () => {
+test('real Frozen Tomb cast renders its profile and routes typed cues while preserving root and damage', async () => {
   const scene = runeScene(spell, { range: 20 });
   const events = [];
   scene.casting.onSound = event => events.push(event);
@@ -203,6 +219,7 @@ test('real Frozen Tomb cast renders its profile and routes typed cues while pres
   assert.ok(events.every(event => event.type === 'spell' && event.spellId === spell.id && event.presentation === presentation),
     'spell cues replace sword draw/slam cues for the whole cast');
   const fake = fakeRecordedAudio();
+  assert.equal(await prepareRecordedSpellTest(fake, presentation), true);
   const castEvent = events.find(event => event.stage === 'cast');
   const impactEvent = events.find(event => event.stage === 'impact');
   const castHandles = playSpellSound(fake.engine, castEvent);
@@ -210,7 +227,12 @@ test('real Frozen Tomb cast renders its profile and routes typed cues while pres
   assert.equal(castHandles.length, presentation.sounds.cast.length);
   assert.equal(impactHandles.length, presentation.sounds.impact.length);
   assert.ok(fake.routes.every(route => route.bus === 'sfx' && Number.isFinite(route.x) && Number.isFinite(route.y)));
-  assert.ok(fake.nodes.some(node => node.starts.some(time => time > fake.context.currentTime)), 'crystal ticks are scheduled in audio time');
+  assert.ok(fake.nodes.some(node => node.starts.some(time => time > fake.context.currentTime)), 'recorded compression and debris are scheduled in audio time');
+  assert.ok(!fake.nodes.some(node => node.kind === 'oscillator'), 'no synthesis is used');
+  assert.deepEqual(fake.allocations, [], 'no generated noise buffers');
+  assert.deepEqual(fake.nodes.filter(node => node.kind === 'source').map(node => node.buffer.id),
+    [...presentation.sounds.cast, ...presentation.sounds.impact].map(layer => layer.url.split('/').at(-1)),
+    'runtime plays the authored physical recordings');
   assert.deepEqual(fake.invalid, []);
   for (const handle of [...castHandles, ...impactHandles]) handle.stop();
   scene.advance(5);

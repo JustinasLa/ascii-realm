@@ -450,22 +450,21 @@ export default {
   duration: 1.15,
   draw,
   sounds: {
+    // A real exhalation draws the arms inward; close ice creaks under their pressure.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.56, gain: 0.038, attack: 0.28, release: 0.22, cutoff: 1650, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0.10, duration: 0.42, gain: 0.045, attack: 0.015, release: 0.3, frequency: 1174.66, endFrequency: 880, type: 'sine' },
-      { kind: 'tone', delay: 0.14, duration: 0.4, gain: 0.032, attack: 0.012, release: 0.3, frequency: 1760, endFrequency: 1320, type: 'triangle', cutoff: 2800 },
-      { kind: 'tone', delay: 0.34, duration: 0.4, gain: 0.04, attack: 0.012, release: 0.3, frequency: 880, endFrequency: 587.33, type: 'sine' },
-      { kind: 'tone', delay: 0.38, duration: 0.38, gain: 0.026, attack: 0.012, release: 0.28, frequency: 1320, endFrequency: 880, type: 'triangle', cutoff: 2200 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.38, rate: 0.86, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.34, rate: 0.91, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.28, rate: 0.84, delay: 0.61 },
     ],
+    // The closing bands compress snow and grind ice, leaving a weakened breath behind.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.32, gain: 0.055, attack: 0.006, release: 0.26, frequency: 1174.66, endFrequency: 587.33, type: 'sine' },
-      { kind: 'tone', delay: 0.035, duration: 0.29, gain: 0.034, attack: 0.005, release: 0.23, frequency: 1568, endFrequency: 784, type: 'triangle', cutoff: 2400 },
-      { kind: 'noise', delay: 0.16, duration: 0.075, gain: 0.05, attack: 0.002, release: 0.065, cutoff: 2500, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.18, duration: 0.21, gain: 0.035, attack: 0.003, release: 0.19, frequency: 220, endFrequency: 110, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/snow-crush.wav', gain: 0.43, rate: 0.79, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.38, rate: 0.81, delay: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.2, rate: 0.96, delay: 0.23 },
     ],
+    // One quiet physical ice tick accompanies recurring frost rings.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.12, gain: 0.018, attack: 0.005, release: 0.1, frequency: 784, endFrequency: 659.25, type: 'sine' },
-      { kind: 'tone', delay: 0.045, duration: 0.11, gain: 0.012, attack: 0.005, release: 0.09, frequency: 1046.5, endFrequency: 880, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.11, rate: 0.82, delay: 0.052 },
     ],
   },
 };

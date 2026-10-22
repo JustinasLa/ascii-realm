@@ -472,21 +472,23 @@ export default {
     }
   },
   sounds: {
+    // Physical ice-field strain under a restrained breath-driven launch.
+    // Both recordings retain their natural attack and decay across the volley.
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 238, endFrequency: 82, duration: 0.24, gain: 0.075, attack: 0.001, release: 0.21 },
-      { kind: 'tone', type: 'sine', frequency: 126, endFrequency: 104, delay: 0.009, duration: 0.32, gain: 0.024, attack: 0.002, release: 0.29 },
-      { kind: 'tone', type: 'sine', frequency: 2700, endFrequency: 3800, delay: 0.025, duration: 0.22, gain: 0.042, attack: 0.025, release: 0.15 },
-      { kind: 'noise', delay: 0.03, duration: 0.26, gain: 0.038, cutoff: 4300, filterType: 'highpass', attack: 0.015, release: 0.21 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-strain.wav', gain: 0.36, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/cold-breath.wav', gain: 0.18, rate: 1.2, delay: 0.035 },
     ],
+    // A frozen-lake fracture carries the hit, followed by increasingly quiet
+    // real ice grains; staggered foley preserves the harpoon's exit spray.
     impact: [
-      { kind: 'noise', duration: 0.035, gain: 0.095, cutoff: 3200, filterType: 'highpass', attack: 0.001, release: 0.03 },
-      { kind: 'tone', type: 'triangle', frequency: 1970, endFrequency: 910, duration: 0.07, gain: 0.06, attack: 0.001, release: 0.065 },
-      { kind: 'noise', delay: 0.075, duration: 0.035, gain: 0.042, cutoff: 6100, filterType: 'bandpass', attack: 0.001, release: 0.03 },
-      { kind: 'noise', delay: 0.135, duration: 0.028, gain: 0.028, cutoff: 5200, filterType: 'bandpass', attack: 0.001, release: 0.024 },
-      { kind: 'noise', delay: 0.225, duration: 0.03, gain: 0.016, cutoff: 4400, filterType: 'bandpass', attack: 0.001, release: 0.025 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-crack.wav', gain: 0.58, rate: 0.93, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.23, rate: 1.16, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-grit.wav', gain: 0.13, rate: 0.89, delay: 0.32 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.1, rate: 1.08, delay: 0.52 },
     ],
+    // A single quiet hydrophone-recorded ice tick leaves room for repeats.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 1550, endFrequency: 1120, duration: 0.05, gain: 0.018, attack: 0.001, release: 0.045 },
+      { kind: 'recording', url: '/assets/audio/spells/seithr/ice-tick.wav', gain: 0.12, rate: 0.96, delay: 0.007 },
     ],
   },
 };

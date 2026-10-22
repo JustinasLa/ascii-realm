@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import profile from '../../src/spells/presentations/temp-glacial-fan.js';
 import spell from '../../src/spells/definitions/temp-glacial-fan.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 import { runeScene } from '../../test-support/spells.js';
 
 function points(stage, progress = 0.4, heading = 0, { life = profile.duration, radius = 1 } = {}) {
@@ -153,30 +156,58 @@ test('slashes follow the on-screen slope of a blade whatever the heading', () =>
   assert.ok(edges(Math.PI / 2).every(c => c === '-'), 'a shot flying across the screen is horizontal');
 });
 
-test('Glacial Fan sound is three accelerating air cuts followed by a wide shatter chord', () => {
-  const swishes = profile.sounds.cast.filter(v => v.kind === 'noise');
-  assert.equal(swishes.length, 3);
-  assert.ok(swishes[2].delay - swishes[1].delay < swishes[1].delay - swishes[0].delay);
-  assert.ok(swishes[0].duration > swishes[1].duration && swishes[1].duration > swishes[2].duration);
-  assert.ok(swishes[0].cutoff < swishes[1].cutoff && swishes[1].cutoff < swishes[2].cutoff);
-  const chord = profile.sounds.impact.filter(v => v.kind === 'tone');
-  assert.equal(chord.length, 3);
-  assert.ok(chord[2].frequency / chord[0].frequency > 2, 'the shatter chord spans more than an octave');
-  assert.ok(chord.every(v => v.endFrequency < v.frequency));
+test('Glacial Fan sweeps recorded breath, staggered physical scuffs and ice grains into a natural fracture', async () => {
+  const cast = profile.sounds.cast;
+  assert.ok(cast[0].url.endsWith('/cold-breath.wav'), 'recorded breath carries the whole opening fan');
+  assert.deepEqual(cast.slice(1).map(v => v.url.split('/').at(-1)), ['snow-scuff.wav', 'ice-grit.wav', 'ice-crack.wav']);
+  assert.ok(cast.every((v, i) => !i || v.delay > cast[i - 1].delay), 'physical ice cuts sweep in volley order');
+  assert.ok(cast.at(-1).delay >= 0.4 && cast.at(-1).delay <= 0.65, 'the fracture accompanies the later blades');
+  assert.ok(profile.sounds.impact[0].url.endsWith('/ice-crack.wav'));
+  assert.equal(profile.sounds.impact[0].delay, 0, 'contact gets an immediate natural fracture');
+  assert.ok(profile.sounds.impact[1].delay > 0, 'loose grains settle after contact');
+  assert.equal(profile.sounds.pulse.length, 1);
+  assert.ok(profile.sounds.pulse[0].url.endsWith('/ice-tick.wav'));
+  assert.ok(profile.sounds.pulse[0].gain >= 0.1 && profile.sounds.pulse[0].gain <= 0.18);
+
+  const provenance = JSON.parse(await readFile(new URL('../../assets/audio/spells/seithr/sources.json', import.meta.url)));
   for (const recipe of Object.values(profile.sounds)) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
-    assert.ok(recipe.every(v => v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5
-      && (v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2));
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    for (const layer of recipe) {
+      assert.equal(layer.kind, 'recording', 'no synthesized oscillators or noise beds');
+      assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2 && layer.delay >= 0 && layer.delay <= 2);
+      const clip = provenance.clips.find(c => layer.url === '/assets/audio/spells/seithr/' + c.file);
+      assert.ok(clip, 'each layer has local recording provenance');
+      const source = provenance.sources.find(source => source.id === clip.sourceId);
+      assert.ok(source && source.provenance && source.page && source.licenseUrl);
+      assert.ok(['CC0-1.0', 'CC-BY-4.0'].includes(source.license));
+      const bytes = await readFile(new URL('../..' + layer.url, import.meta.url));
+      assert.equal(createHash('sha256').update(bytes).digest('hex'), clip.sha256, 'playback asset matches its sourced recording');
+    }
   }
-  assert.ok(profile.sounds.pulse.every(v => v.gain <= 0.025 && v.duration <= 0.08));
-  const fake = fakeRecordedAudio();
-  const handles = playSpellSound(fake.engine, { presentation: profile, stage: 'cast', x: -8, y: 5 });
-  assert.equal(handles.length, profile.sounds.cast.length);
-  assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === -8 && r.y === 5), 'swishes use event-location spatial routing');
-  const cuts = fake.nodes.filter(n => n.kind === 'source');
-  assert.ok(cuts[2].starts[0] - cuts[1].starts[0] < cuts[1].starts[0] - cuts[0].starts[0]);
-  assert.deepEqual(fake.invalid, []);
-  handles.forEach(h => h.stop());
+  for (const [stage, recipe] of Object.entries(profile.sounds)) {
+    const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, profile), true);
+    const handles = playSpellSound(fake.engine, { presentation: profile, stage, x: -8, y: 5 });
+    assert.equal(handles.length, recipe.length);
+    const cuts = fake.nodes.filter(n => n.kind === 'source');
+    assert.equal(cuts.length, recipe.length);
+    assert.equal(fake.nodes.filter(n => n.kind === 'oscillator').length, 0);
+    assert.deepEqual(fake.allocations, [], 'no generated noise buffers');
+    cuts.forEach((node, i) => {
+      assert.equal(node.buffer.id, recipe[i].url.split('/').at(-1));
+      assert.equal(node.starts[0], fake.context.currentTime + recipe[i].delay);
+      assert.equal(node.playbackRate.calls[0].args[0], recipe[i].rate);
+      assert.equal(node.loop, false);
+    });
+    assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === -8 && r.y === 5));
+    assert.deepEqual(fake.invalid, []);
+    handles.forEach(h => h.stop());
+    assert.ok(handles.every(h => h.ended));
+    assert.ok(fake.routes.every(r => r.disposals === 1));
+  }
 });
 
 test('a real Glacial Fan cast renders this profile and emits typed cast/impact cues without sword sounds', () => {
