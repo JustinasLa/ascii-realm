@@ -271,19 +271,25 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'noise', duration: 0.86, gain: 0.032, attack: 0.18, release: 0.44, cutoff: 4300, filterType: 'highpass' },
-      { kind: 'tone', type: 'sine', frequency: 1568, endFrequency: 1480, duration: 0.92, gain: 0.027, attack: 0.16, release: 0.48 },
-      { kind: 'tone', type: 'sine', frequency: 2352, endFrequency: 2217, delay: 0.17, duration: 0.76, gain: 0.018, attack: 0.18, release: 0.4 },
-      { kind: 'tone', type: 'triangle', frequency: 1110, endFrequency: 410, delay: 0.32, duration: 0.88, gain: 0.033, attack: 0.2, release: 0.43, cutoff: 2400, filterType: 'lowpass' },
+      // A buried glacier voice opens beneath two overlapping breaths of frozen cloth.
+      { kind: 'tone', type: 'triangle', frequency: 146, endFrequency: 98, duration: 1.48, gain: 0.055, attack: 0.24, decay: 0.28, sustain: 0.48, release: 0.66, cutoff: 430, filterType: 'lowpass', Q: 0.65 },
+      { kind: 'noise', duration: 1.24, gain: 0.045, attack: 0.28, decay: 0.24, sustain: 0.58, release: 0.54, cutoff: 780, filterType: 'bandpass', Q: 0.8, playbackRate: 0.65 },
+      { kind: 'tone', type: 'sine', frequency: 219, endFrequency: 146, detune: -14, delay: 0.14, duration: 1.52, gain: 0.028, attack: 0.33, decay: 0.25, sustain: 0.42, release: 0.72, cutoff: 520, filterType: 'lowpass' },
+      { kind: 'noise', delay: 0.35, duration: 1.35, gain: 0.035, attack: 0.36, decay: 0.24, sustain: 0.44, release: 0.61, cutoff: 1400, filterType: 'bandpass', Q: 0.7, playbackRate: 0.8 },
+      { kind: 'tone', type: 'sine', frequency: 61, endFrequency: 49, delay: 0.42, duration: 1.4, gain: 0.022, attack: 0.31, decay: 0.28, sustain: 0.36, release: 0.66 },
     ],
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 1175, endFrequency: 784, duration: 0.42, gain: 0.035, attack: 0.06, release: 0.28 },
-      { kind: 'tone', type: 'sine', frequency: 1762, endFrequency: 1175, delay: 0.08, duration: 0.48, gain: 0.023, attack: 0.08, release: 0.32 },
-      { kind: 'noise', delay: 0.12, duration: 0.56, gain: 0.032, attack: 0.13, release: 0.36, cutoff: 5400, filterType: 'highpass' },
+      // The curtain settles with a muffled seal, then draws the remaining air away.
+      { kind: 'tone', type: 'sine', frequency: 118, endFrequency: 58, duration: 0.64, gain: 0.045, attack: 0.04, decay: 0.18, sustain: 0.24, release: 0.37 },
+      { kind: 'noise', duration: 0.74, gain: 0.04, attack: 0.07, decay: 0.19, sustain: 0.31, release: 0.42, cutoff: 620, filterType: 'lowpass', Q: 0.7, playbackRate: 0.55 },
+      { kind: 'noise', delay: 0.12, duration: 0.95, gain: 0.028, attack: 0.22, decay: 0.18, sustain: 0.35, release: 0.5, cutoff: 1150, filterType: 'bandpass', Q: 1.1, playbackRate: 0.72 },
+      { kind: 'tone', type: 'triangle', frequency: 293, endFrequency: 196, delay: 0.08, duration: 0.88, gain: 0.025, attack: 0.14, decay: 0.2, sustain: 0.25, release: 0.48, cutoff: 470, filterType: 'lowpass', Q: 0.6 },
     ],
     pulse: [
-      { kind: 'noise', duration: 0.11, gain: 0.009, attack: 0.025, release: 0.07, cutoff: 6100, filterType: 'highpass' },
-      { kind: 'tone', type: 'sine', frequency: 2093, endFrequency: 1976, duration: 0.13, gain: 0.008, attack: 0.025, release: 0.085 },
+      // Dense field repeats only whisper; every layer ends before the next cue gate.
+      { kind: 'noise', duration: 0.14, gain: 0.004, attack: 0.025, decay: 0.025, sustain: 0.2, release: 0.08, cutoff: 920, filterType: 'bandpass', Q: 0.75, playbackRate: 0.65 },
+      { kind: 'tone', type: 'sine', frequency: 147, endFrequency: 139, duration: 0.16, gain: 0.003, attack: 0.03, decay: 0.03, sustain: 0.2, release: 0.09 },
+      { kind: 'noise', delay: 0.025, duration: 0.11, gain: 0.002, attack: 0.025, decay: 0.02, sustain: 0.18, release: 0.06, cutoff: 360, filterType: 'lowpass', playbackRate: 0.55 },
     ],
   },
 };

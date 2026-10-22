@@ -358,24 +358,30 @@ export default {
   duration: 1.15,
   draw,
   sounds: {
+    // A glacier exhales: a hollow bass swell carries the advancing ice front,
+    // with two staggered pressure fractures rolling across its grinding face.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.82, gain: 0.07, attack: 0.19, release: 0.36, cutoff: 2400, filterType: 'highpass' },
-      { kind: 'noise', delay: 0.05, duration: 0.72, gain: 0.045, attack: 0.17, release: 0.3, cutoff: 470, filterType: 'lowpass' },
-      { kind: 'tone', delay: 0.14, duration: 0.12, gain: 0.03, attack: 0.002, release: 0.1, frequency: 1760, endFrequency: 1510, type: 'triangle' },
-      { kind: 'tone', delay: 0.27, duration: 0.1, gain: 0.034, attack: 0.002, release: 0.085, frequency: 1290, endFrequency: 1170, type: 'triangle' },
-      { kind: 'tone', delay: 0.43, duration: 0.14, gain: 0.038, attack: 0.002, release: 0.12, frequency: 2180, endFrequency: 1840, type: 'triangle' },
-      { kind: 'tone', delay: 0.62, duration: 0.11, gain: 0.027, attack: 0.002, release: 0.095, frequency: 1490, endFrequency: 1340, type: 'triangle' },
+      { kind: 'noise', delay: 0, duration: 1.12, gain: 0.074, attack: 0.23, decay: 0.19, sustain: 0.7, release: 0.47, cutoff: 720, filterType: 'lowpass', Q: 0.8, playbackRate: 0.65 },
+      { kind: 'tone', delay: 0, duration: 1.35, gain: 0.08, attack: 0.18, decay: 0.24, sustain: 0.58, release: 0.61, frequency: 64, endFrequency: 43, type: 'sine' },
+      { kind: 'tone', delay: 0.07, duration: 0.98, gain: 0.035, attack: 0.2, decay: 0.18, sustain: 0.53, release: 0.43, frequency: 137, endFrequency: 101, type: 'triangle', cutoff: 460, filterType: 'lowpass', Q: 0.7 },
+      { kind: 'noise', delay: 0.22, duration: 0.31, gain: 0.062, attack: 0.008, decay: 0.055, sustain: 0.27, release: 0.2, cutoff: 1480, filterType: 'bandpass', Q: 1.15, playbackRate: 0.72 },
+      { kind: 'noise', delay: 0.52, duration: 0.41, gain: 0.045, attack: 0.014, decay: 0.08, sustain: 0.32, release: 0.26, cutoff: 910, filterType: 'bandpass', Q: 1.2, playbackRate: 0.58 },
+      { kind: 'tone', delay: 0.16, duration: 1.08, gain: 0.028, attack: 0.24, decay: 0.2, sustain: 0.42, release: 0.49, frequency: 239, endFrequency: 211, type: 'sine' },
     ],
+    // A thick slab breaks on contact; low pressure and a muted ice resonance
+    // outlast the initial crack, then loose fragments fall through the tail.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.23, gain: 0.09, attack: 0.003, release: 0.2, cutoff: 4100, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0, duration: 0.28, gain: 0.055, attack: 0.004, release: 0.24, frequency: 196, endFrequency: 83, type: 'triangle' },
-      { kind: 'tone', delay: 0.015, duration: 0.13, gain: 0.04, attack: 0.002, release: 0.115, frequency: 2700, endFrequency: 2340, type: 'triangle' },
-      { kind: 'tone', delay: 0.085, duration: 0.16, gain: 0.033, attack: 0.002, release: 0.14, frequency: 1890, endFrequency: 1630, type: 'triangle' },
-      { kind: 'tone', delay: 0.19, duration: 0.1, gain: 0.025, attack: 0.002, release: 0.085, frequency: 3180, endFrequency: 2780, type: 'triangle' },
+      { kind: 'noise', delay: 0, duration: 0.25, gain: 0.075, attack: 0.004, decay: 0.045, sustain: 0.23, release: 0.17, cutoff: 1850, filterType: 'bandpass', Q: 0.9, playbackRate: 0.7 },
+      { kind: 'tone', delay: 0, duration: 0.58, gain: 0.07, attack: 0.006, decay: 0.09, sustain: 0.35, release: 0.39, frequency: 106, endFrequency: 52, type: 'sine' },
+      { kind: 'noise', delay: 0.035, duration: 0.59, gain: 0.045, attack: 0.035, decay: 0.1, sustain: 0.42, release: 0.35, cutoff: 440, filterType: 'lowpass', Q: 0.85, playbackRate: 0.57 },
+      { kind: 'tone', delay: 0.022, duration: 0.61, gain: 0.03, attack: 0.009, decay: 0.11, sustain: 0.24, release: 0.39, frequency: 493, endFrequency: 411, type: 'triangle', cutoff: 1050, filterType: 'lowpass', Q: 0.65 },
+      { kind: 'noise', delay: 0.16, duration: 0.24, gain: 0.025, attack: 0.008, decay: 0.05, sustain: 0.2, release: 0.16, cutoff: 1210, filterType: 'bandpass', Q: 1.3, playbackRate: 0.78 },
     ],
+    // Small frost snaps stay hushed when the cone's visual cues repeat.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.11, gain: 0.014, attack: 0.012, release: 0.08, cutoff: 2600, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.025, duration: 0.08, gain: 0.012, attack: 0.002, release: 0.065, frequency: 1470, endFrequency: 1320, type: 'triangle' },
+      { kind: 'noise', delay: 0, duration: 0.19, gain: 0.019, attack: 0.018, decay: 0.035, sustain: 0.3, release: 0.11, cutoff: 980, filterType: 'bandpass', Q: 0.8, playbackRate: 0.7 },
+      { kind: 'tone', delay: 0.012, duration: 0.23, gain: 0.018, attack: 0.014, decay: 0.045, sustain: 0.28, release: 0.145, frequency: 173, endFrequency: 142, type: 'sine' },
+      { kind: 'noise', delay: 0.045, duration: 0.16, gain: 0.014, attack: 0.008, decay: 0.03, sustain: 0.19, release: 0.1, cutoff: 1530, filterType: 'bandpass', Q: 1.2, playbackRate: 0.62 },
     ],
   },
 };

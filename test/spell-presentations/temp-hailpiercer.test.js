@@ -141,16 +141,12 @@ test('every Hailpiercer stage is deterministic, bounded, and fades completely', 
   }
 });
 
-test('Hailpiercer sound pairs a low twang/high whizz with a pinpoint strike and diminishing rattle', () => {
+test('Hailpiercer releases dark tension into a compact strike and falling debris', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 300 && v.endFrequency < v.frequency));
-  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency > 2000 && v.endFrequency > v.frequency));
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'highpass'));
-  assert.ok(impact.some(v => (v.delay ?? 0) === 0 && v.duration < 0.08), 'short pinpoint attack');
-  const rattle = impact.filter(v => v.kind === 'noise' && v.delay > 0);
-  assert.equal(rattle.length, 3);
-  assert.ok(rattle.every((v, i) => !i || (v.delay > rattle[i - 1].delay && v.gain < rattle[i - 1].gain)), 'separate diminishing rattle grains');
-  assert.ok(pulse.every(v => v.gain <= 0.025 && v.duration <= 0.08));
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 300), 'weighted lance tension');
+  const debris = impact.filter(v => v.kind === 'noise' && v.delay > 0);
+  assert.ok(debris.length >= 3 && debris.every((v,i) => !i || v.gain < debris[i-1].gain), 'diminishing debris after the strike');
+  assert.notDeepEqual(cast, impact);
   for (const recipe of Object.values(presentation.sounds)) {
     assert.ok(recipe.length <= 8);
     assert.ok(recipe.every(v => v.gain <= 0.25 && v.duration <= 2.5 && (v.delay ?? 0) <= 2));

@@ -205,22 +205,14 @@ test('age fallback and unusual radii and headings remain safe without mutating t
   }
 });
 
-test('sound draws air inward before descending glass pairs and a compact closing crack', () => {
+test('Cold Embrace constricts frozen breath around beating tomb tones', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const suction = cast.find(voice => voice.kind === 'noise');
-  assert.equal(suction.delay, 0);
-  assert.ok(suction.attack > suction.duration * 0.4);
-  assert.equal(suction.filterType, 'bandpass');
-  const glass = cast.filter(voice => voice.kind === 'tone');
-  assert.equal(glass.length, 4);
-  assert.ok(glass.every(voice => voice.endFrequency < voice.frequency));
-  assert.ok(glass[1].delay - glass[0].delay < 0.06);
-  assert.ok(glass[3].delay - glass[2].delay < 0.06);
-  assert.ok(glass[2].delay - glass[1].delay > 0.15);
-  assert.ok(glass[2].frequency < glass[0].frequency && glass[3].frequency < glass[1].frequency);
-  const crack = impact.find(voice => voice.kind === 'noise');
-  assert.ok(crack.delay > 0.1 && crack.duration < 0.1 && crack.attack < 0.005);
-  assert.ok(pulse.every(voice => voice.gain <= 0.02 && voice.duration <= 0.15));
+  const low = cast.filter(v => v.kind === 'tone' && v.frequency < 100);
+  assert.ok(low.length >= 2 && Math.abs(low[0].frequency - low[1].frequency) < 5, 'slow beating pressure');
+  assert.ok(impact.some(v => v.kind === 'noise' && v.duration > 1), 'enclosed breath dwindles');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
+  assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length > 0 && voices.length <= 8);
     for (const voice of voices) {

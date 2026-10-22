@@ -180,24 +180,14 @@ test('a side-on projectile keeps every glyph, including the tip glint, under the
   }
 });
 
-test('sound is a hollow damped bell, descending notch breath and abrupt quiet cutoff', () => {
-  const { cast, impact } = presentation.sounds;
-  const bell = cast.filter(voice => voice.kind === 'tone');
-  const breath = cast.filter(voice => voice.kind === 'noise');
-  assert.equal(bell.length, 2, 'bell uses separate body and inharmonic partial');
-  const ratio = bell[1].frequency / bell[0].frequency;
-  assert.ok(ratio > 1.5 && ratio < 1.7, 'a hollow non-octave bell avoids a melodic chord');
-  assert.ok(bell.every(v => v.release > v.duration * 0.6));
-  assert.ok(breath.length >= 3 && breath.every(v => v.filterType === 'notch'));
-  for (let i = 1; i < breath.length; i++) {
-    assert.ok(breath[i].delay > breath[i - 1].delay && breath[i].cutoff < breath[i - 1].cutoff,
-      'breath descends through progressively lower missing bands');
-    assert.ok(breath[i].gain < breath[i - 1].gain, 'air is damped as the ring closes');
-  }
-  const click = impact.at(-1);
-  assert.ok(click.delay >= Math.max(...impact.slice(0, -1).map(v => v.delay + v.duration)), 'click follows the soft cutoff');
-  assert.ok(click.duration < 0.03 && click.gain < 0.03, 'cutoff click is tiny and brief');
+test('Silencing Shard draws breath into a damped fracture and short hush', () => {
+  const { cast, impact, pulse } = presentation.sounds;
+  const breath = cast.filter(v => v.kind === 'noise');
+  assert.ok(breath.length >= 2 && breath[1].cutoff < breath[0].cutoff, 'inward breath darkens');
+  assert.ok(Math.max(...impact.map(v => (v.delay ?? 0) + v.duration)) < 0.6, 'silence closes quickly');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
   assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length <= 8);
     for (const voice of voices) {

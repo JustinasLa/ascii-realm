@@ -383,26 +383,55 @@ export default {
   draw,
   sounds: {
     cast: [
-      // Two non-harmonic partials make a hollow, deliberately damped bell.
-      { kind: 'tone', delay: 0, duration: 0.27, gain: 0.07, attack: 0.003, release: 0.2,
-        frequency: 428, endFrequency: 397, type: 'sine', cutoff: 1200, filterType: 'lowpass' },
-      { kind: 'tone', delay: 0.012, duration: 0.19, gain: 0.032, attack: 0.002, release: 0.16,
-        frequency: 677, endFrequency: 628, type: 'triangle', cutoff: 1000, filterType: 'lowpass' },
-      // Descending notch centres remove successively lower bands of breath.
-      { kind: 'noise', delay: 0.13, duration: 0.11, gain: 0.035, attack: 0.025, release: 0.07,
-        cutoff: 1750, filterType: 'notch' },
-      { kind: 'noise', delay: 0.22, duration: 0.1, gain: 0.027, attack: 0.018, release: 0.06,
-        cutoff: 880, filterType: 'notch' },
-      { kind: 'noise', delay: 0.30, duration: 0.075, gain: 0.02, attack: 0.012, release: 0.009,
-        cutoff: 390, filterType: 'notch' },
+      // Breath gathers under glacier ice; successive narrower bands vanish
+      // into the shard. The final crooked partial is a muted fracture.
+      { kind: 'noise', delay: 0, duration: 0.39, gain: 0.062,
+        attack: 0.18, decay: 0.08, sustain: 0.42, release: 0.09,
+        cutoff: 830, filterType: 'bandpass', Q: 0.85, playbackRate: 0.62 },
+      { kind: 'noise', delay: 0.12, duration: 0.31, gain: 0.047,
+        attack: 0.13, decay: 0.07, sustain: 0.34, release: 0.06,
+        cutoff: 390, filterType: 'bandpass', Q: 1.3, playbackRate: 0.52 },
+      { kind: 'tone', delay: 0.02, duration: 0.51, gain: 0.078,
+        attack: 0.14, decay: 0.12, sustain: 0.36, release: 0.19,
+        frequency: 137, endFrequency: 92, type: 'sine', cutoff: 360, filterType: 'lowpass' },
+      { kind: 'tone', delay: 0.33, duration: 0.19, gain: 0.039,
+        attack: 0.004, decay: 0.075, sustain: 0.14, release: 0.09,
+        frequency: 493, endFrequency: 351, type: 'triangle', cutoff: 680, filterType: 'lowpass' },
+      { kind: 'noise', delay: 0.34, duration: 0.105, gain: 0.028,
+        attack: 0.003, decay: 0.035, sustain: 0.12, release: 0.055,
+        cutoff: 1180, filterType: 'bandpass', Q: 1.1, playbackRate: 0.75 },
     ],
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.105, gain: 0.06, attack: 0.003, release: 0.009,
-        frequency: 262, endFrequency: 106, type: 'sine', cutoff: 650, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.018, duration: 0.075, gain: 0.035, attack: 0.01, release: 0.008,
-        cutoff: 680, filterType: 'notch' },
-      { kind: 'tone', delay: 0.105, duration: 0.018, gain: 0.022, attack: 0.001, release: 0.012,
-        frequency: 1020, endFrequency: 740, type: 'triangle', cutoff: 1500, filterType: 'lowpass' },
+      // The silence seal closes like a tomb: blunt pressure, a cracked
+      // inharmonic crystal pair, then one last breath cut short.
+      { kind: 'tone', delay: 0, duration: 0.42, gain: 0.105,
+        attack: 0.006, decay: 0.13, sustain: 0.2, release: 0.23,
+        frequency: 154, endFrequency: 56, type: 'sine', cutoff: 260, filterType: 'lowpass' },
+      { kind: 'noise', delay: 0, duration: 0.14, gain: 0.065,
+        attack: 0.003, decay: 0.045, sustain: 0.18, release: 0.075,
+        cutoff: 720, filterType: 'bandpass', Q: 0.9, playbackRate: 0.55 },
+      { kind: 'tone', delay: 0.012, duration: 0.24, gain: 0.041,
+        attack: 0.003, decay: 0.08, sustain: 0.17, release: 0.14,
+        frequency: 367, endFrequency: 290, type: 'triangle', cutoff: 520, filterType: 'lowpass' },
+      { kind: 'tone', delay: 0.037, duration: 0.16, gain: 0.026,
+        attack: 0.002, decay: 0.054, sustain: 0.1, release: 0.09,
+        frequency: 581, endFrequency: 417, type: 'sine', cutoff: 750, filterType: 'lowpass' },
+      { kind: 'noise', delay: 0.14, duration: 0.18, gain: 0.034,
+        attack: 0.075, decay: 0.045, sustain: 0.22, release: 0.025,
+        cutoff: 330, filterType: 'bandpass', Q: 1.6, playbackRate: 0.5 },
+    ],
+    pulse: [
+      // Tick and shatter visuals share this runtime cue. Keep the frost
+      // splinters close and brief so repeated flight pulses never form a drone.
+      { kind: 'noise', delay: 0, duration: 0.15, gain: 0.026,
+        attack: 0.035, decay: 0.04, sustain: 0.19, release: 0.065,
+        cutoff: 550, filterType: 'bandpass', Q: 1.15, playbackRate: 0.6 },
+      { kind: 'tone', delay: 0.008, duration: 0.18, gain: 0.024,
+        attack: 0.008, decay: 0.055, sustain: 0.14, release: 0.1,
+        frequency: 233, endFrequency: 171, type: 'sine', cutoff: 350, filterType: 'lowpass' },
+      { kind: 'tone', delay: 0.032, duration: 0.095, gain: 0.014,
+        attack: 0.002, decay: 0.027, sustain: 0.12, release: 0.055,
+        frequency: 439, endFrequency: 326, type: 'triangle', cutoff: 510, filterType: 'lowpass' },
     ],
   },
 };

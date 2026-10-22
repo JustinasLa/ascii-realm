@@ -202,19 +202,28 @@ export default {
   },
   sounds: {
     cast: [
-      // Three shorter, closer swishes make the unfolding fan audibly accelerate.
-      { kind: 'noise', delay: 0, duration: 0.22, gain: 0.065, cutoff: 1500, filterType: 'bandpass', attack: 0.055, release: 0.12 },
-      { kind: 'noise', delay: 0.23, duration: 0.17, gain: 0.075, cutoff: 2400, filterType: 'bandpass', attack: 0.035, release: 0.1 },
-      { kind: 'noise', delay: 0.38, duration: 0.12, gain: 0.085, cutoff: 3700, filterType: 'highpass', attack: 0.018, release: 0.085 },
-      { kind: 'tone', type: 'triangle', frequency: 460, endFrequency: 920, delay: 0.02, duration: 0.44, gain: 0.025, attack: 0.06, release: 0.16 },
+      // Icy breath and deep glacier strain support an opening fan of heavy knives.
+      // Staggered, overlapping crack bands trace the sweep without a shrill edge.
+      { kind: 'noise', duration: 0.95, gain: 0.055, cutoff: 980, filterType: 'bandpass', Q: 0.8, playbackRate: 0.72, attack: 0.13, decay: 0.2, sustain: 0.5, release: 0.42 },
+      { kind: 'tone', type: 'triangle', frequency: 96, endFrequency: 67, duration: 1.08, gain: 0.07, cutoff: 370, filterType: 'lowpass', attack: 0.055, decay: 0.22, sustain: 0.38, release: 0.55 },
+      { kind: 'noise', delay: 0.08, duration: 0.31, gain: 0.065, cutoff: 660, filterType: 'bandpass', Q: 1.8, playbackRate: 0.63, attack: 0.004, decay: 0.07, sustain: 0.24, release: 0.18 },
+      { kind: 'noise', delay: 0.23, duration: 0.34, gain: 0.05, cutoff: 1140, filterType: 'bandpass', Q: 1.4, playbackRate: 0.79, attack: 0.006, decay: 0.08, sustain: 0.21, release: 0.2 },
+      { kind: 'noise', delay: 0.4, duration: 0.36, gain: 0.04, cutoff: 1760, filterType: 'bandpass', Q: 1.1, playbackRate: 0.87, attack: 0.008, decay: 0.08, sustain: 0.18, release: 0.23 },
+      { kind: 'tone', type: 'sine', frequency: 243, endFrequency: 203, delay: 0.16, duration: 0.91, gain: 0.025, attack: 0.11, decay: 0.2, sustain: 0.37, release: 0.46 },
     ],
     impact: [
-      { kind: 'noise', duration: 0.14, gain: 0.105, cutoff: 4600, filterType: 'highpass', attack: 0.002, release: 0.13 },
-      { kind: 'tone', type: 'triangle', frequency: 622, endFrequency: 540, duration: 0.36, gain: 0.05, attack: 0.003, release: 0.3 },
-      { kind: 'tone', type: 'sine', frequency: 932, endFrequency: 854, delay: 0.012, duration: 0.4, gain: 0.04, attack: 0.003, release: 0.32 },
-      { kind: 'tone', type: 'triangle', frequency: 1480, endFrequency: 1250, delay: 0.026, duration: 0.3, gain: 0.028, attack: 0.002, release: 0.26 },
-      { kind: 'noise', delay: 0.075, duration: 0.25, gain: 0.03, cutoff: 2600, filterType: 'bandpass', attack: 0.004, release: 0.23 },
+      // A blade bites with a buried thud, splinter crack and dull crystal groan.
+      { kind: 'tone', type: 'sine', frequency: 139, endFrequency: 53, duration: 0.32, gain: 0.066, attack: 0.003, decay: 0.055, sustain: 0.22, release: 0.22 },
+      { kind: 'noise', duration: 0.2, gain: 0.064, cutoff: 1420, filterType: 'bandpass', Q: 0.85, playbackRate: 0.8, attack: 0.002, decay: 0.045, sustain: 0.15, release: 0.14 },
+      { kind: 'tone', type: 'triangle', frequency: 393, endFrequency: 288, delay: 0.015, duration: 0.48, gain: 0.027, cutoff: 790, filterType: 'lowpass', attack: 0.004, decay: 0.08, sustain: 0.19, release: 0.34 },
+      { kind: 'tone', type: 'sine', frequency: 557, endFrequency: 431, delay: 0.032, duration: 0.42, gain: 0.017, attack: 0.005, decay: 0.065, sustain: 0.17, release: 0.31 },
+      { kind: 'noise', delay: 0.075, duration: 0.36, gain: 0.026, cutoff: 870, filterType: 'bandpass', Q: 1.2, playbackRate: 0.6, attack: 0.014, decay: 0.07, sustain: 0.23, release: 0.24 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.055, gain: 0.018, cutoff: 3300, filterType: 'highpass', attack: 0.003, release: 0.045 }],
+    pulse: [
+      // Small ground crystals and repeat contacts: hushed fractures under the volley.
+      { kind: 'noise', duration: 0.17, gain: 0.022, cutoff: 1240, filterType: 'bandpass', Q: 1.1, playbackRate: 0.72, attack: 0.004, decay: 0.03, sustain: 0.16, release: 0.12 },
+      { kind: 'tone', type: 'triangle', frequency: 173, endFrequency: 118, duration: 0.24, gain: 0.017, cutoff: 430, filterType: 'lowpass', attack: 0.009, decay: 0.045, sustain: 0.2, release: 0.17 },
+      { kind: 'noise', delay: 0.04, duration: 0.2, gain: 0.011, cutoff: 690, filterType: 'bandpass', Q: 0.9, playbackRate: 0.6, attack: 0.02, decay: 0.04, sustain: 0.23, release: 0.13 },
+    ],
   },
 };

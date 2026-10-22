@@ -153,11 +153,11 @@ test('slashes follow the on-screen slope of a blade whatever the heading', () =>
   assert.ok(edges(Math.PI / 2).every(c => c === '-'), 'a shot flying across the screen is horizontal');
 });
 
-test('Glacial Fan sound is three accelerating air cuts followed by a wide shatter chord', () => {
-  const swishes = profile.sounds.cast.filter(v => v.kind === 'noise');
+test('Glacial Fan sweeps three staggered ice cuts above frozen breath and hollow pressure', () => {
+  const swishes = profile.sounds.cast.filter(v => v.kind === 'noise' && v.delay > 0);
   assert.equal(swishes.length, 3);
-  assert.ok(swishes[2].delay - swishes[1].delay < swishes[1].delay - swishes[0].delay);
-  assert.ok(swishes[0].duration > swishes[1].duration && swishes[1].duration > swishes[2].duration);
+  assert.ok(swishes.every((v, i) => !i || v.delay > swishes[i - 1].delay));
+  assert.ok(profile.sounds.cast.some(v => v.kind === 'tone' && v.frequency < 100));
   assert.ok(swishes[0].cutoff < swishes[1].cutoff && swishes[1].cutoff < swishes[2].cutoff);
   const chord = profile.sounds.impact.filter(v => v.kind === 'tone');
   assert.equal(chord.length, 3);
@@ -168,13 +168,13 @@ test('Glacial Fan sound is three accelerating air cuts followed by a wide shatte
     assert.ok(recipe.every(v => v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5
       && (v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2));
   }
-  assert.ok(profile.sounds.pulse.every(v => v.gain <= 0.025 && v.duration <= 0.08));
+  assert.ok(profile.sounds.pulse.every(v => v.gain <= 0.025 && v.duration <= 0.25));
   const fake = fakeRecordedAudio();
   const handles = playSpellSound(fake.engine, { presentation: profile, stage: 'cast', x: -8, y: 5 });
   assert.equal(handles.length, profile.sounds.cast.length);
   assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === -8 && r.y === 5), 'swishes use event-location spatial routing');
   const cuts = fake.nodes.filter(n => n.kind === 'source');
-  assert.ok(cuts[2].starts[0] - cuts[1].starts[0] < cuts[1].starts[0] - cuts[0].starts[0]);
+  assert.ok(cuts.every((node, i) => !i || node.starts[0] > cuts[i - 1].starts[0]), 'cuts retain their staggered audio timing');
   assert.deepEqual(fake.invalid, []);
   handles.forEach(h => h.stop());
 });

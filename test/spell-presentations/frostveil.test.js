@@ -97,16 +97,11 @@ test('Frostveil stays deterministic, finite, ASCII, bounded and fades in every r
   }
 });
 
-test('Frostveil has a staggered upper shimmer, slow falling glissando and whisper close', () => {
+test('Frostveil unfurls frozen whispers with very quiet field pulses', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const harmonics = cast.filter(v => v.kind === 'tone' && v.type === 'sine');
-  assert.equal(harmonics.length, 2);
-  assert.ok(harmonics.every(v => v.frequency > 1400 && v.attack >= 0.1));
-  assert.ok(harmonics[1].delay > 0 && harmonics[1].frequency > harmonics[0].frequency);
-  assert.ok(cast.some(v => v.kind === 'tone' && v.duration > 0.8 && v.endFrequency < v.frequency / 2));
-  assert.ok(cast.some(v => v.kind === 'noise' && v.attack >= 0.15 && v.filterType === 'highpass'));
-  assert.ok(impact.some(v => v.kind === 'noise' && v.delay > 0 && v.release > 0.3));
-  assert.ok(pulse.every(v => v.gain < 0.015 && v.duration < 0.2), 'repeated field cues stay quiet and brief');
+  assert.ok(cast.filter(v => v.kind === 'noise' && v.duration > 1).length >= 2, 'overlapping mist curtains');
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.015, 'dense field repeats stay subdued');
+  assert.notDeepEqual(cast, impact);
   for (const [stage, voices] of Object.entries(presentation.sounds)) {
     assert.ok(voices.length > 0 && voices.length <= 8);
     for (const voice of voices) {

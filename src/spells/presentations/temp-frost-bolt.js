@@ -369,20 +369,28 @@ export default {
   },
   sounds: {
     cast: [
-      // A plucked icy string snaps, then releases a falling cold-air whistle.
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.09, gain: 0.072, attack: 0.002, release: 0.078, frequency: 1180, endFrequency: 280 },
-      { kind: 'noise', delay: 0, duration: 0.035, gain: 0.038, attack: 0.001, release: 0.03, cutoff: 4200, filterType: 'highpass' },
-      { kind: 'tone', type: 'sine', delay: 0.015, duration: 0.11, gain: 0.026, attack: 0.002, release: 0.1, frequency: 1880, endFrequency: 1080 },
-      { kind: 'tone', type: 'sine', delay: 0.055, duration: 0.43, gain: 0.043, attack: 0.025, release: 0.22, frequency: 1540, endFrequency: 430 },
-      { kind: 'noise', delay: 0.065, duration: 0.28, gain: 0.025, attack: 0.025, release: 0.18, cutoff: 2100, filterType: 'bandpass' },
+      // Air compresses in an ice cavern, then exhales a lance over a hollow groan.
+      { kind: 'noise', delay: 0, duration: 0.14, gain: 0.052, attack: 0.065, decay: 0.02, sustain: 0.72, release: 0.045, cutoff: 720, filterType: 'bandpass', Q: 1.1, playbackRate: 0.7 },
+      { kind: 'tone', type: 'sine', delay: 0, duration: 0.48, gain: 0.063, attack: 0.035, decay: 0.09, sustain: 0.34, release: 0.29, frequency: 114, endFrequency: 61 },
+      { kind: 'noise', delay: 0.075, duration: 0.25, gain: 0.077, attack: 0.009, decay: 0.05, sustain: 0.26, release: 0.18, cutoff: 1700, filterType: 'bandpass', Q: 0.85, playbackRate: 0.82 },
+      { kind: 'tone', type: 'triangle', delay: 0.078, duration: 0.22, gain: 0.041, attack: 0.004, decay: 0.035, sustain: 0.18, release: 0.17, frequency: 430, endFrequency: 163, cutoff: 850 },
+      { kind: 'tone', type: 'sine', delay: 0.11, duration: 0.46, gain: 0.025, attack: 0.018, decay: 0.07, sustain: 0.23, release: 0.33, frequency: 273, endFrequency: 189 },
     ],
     impact: [
-      // A low crystal crunch is followed by two unevenly spaced frozen chips.
-      { kind: 'noise', delay: 0, duration: 0.15, gain: 0.084, attack: 0.002, release: 0.12, cutoff: 1200, filterType: 'bandpass' },
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.19, gain: 0.061, attack: 0.002, release: 0.17, frequency: 410, endFrequency: 105 },
-      { kind: 'tone', type: 'triangle', delay: 0.025, duration: 0.12, gain: 0.032, attack: 0.001, release: 0.11, frequency: 690, endFrequency: 420 },
-      { kind: 'tone', type: 'sine', delay: 0.085, duration: 0.13, gain: 0.024, attack: 0.001, release: 0.12, frequency: 850, endFrequency: 350 },
-      { kind: 'noise', delay: 0.085, duration: 0.08, gain: 0.028, attack: 0.001, release: 0.07, cutoff: 2400, filterType: 'highpass' },
+      // A dense fracture drives into flesh; displaced ice cracks and settles low.
+      { kind: 'noise', delay: 0, duration: 0.14, gain: 0.082, attack: 0.002, decay: 0.027, sustain: 0.22, release: 0.10, cutoff: 1250, filterType: 'bandpass', Q: 0.7, playbackRate: 0.73 },
+      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.23, gain: 0.067, attack: 0.003, decay: 0.04, sustain: 0.24, release: 0.18, frequency: 218, endFrequency: 68, cutoff: 560 },
+      { kind: 'noise', delay: 0.044, duration: 0.09, gain: 0.036, attack: 0.002, decay: 0.016, sustain: 0.17, release: 0.065, cutoff: 2050, filterType: 'bandpass', Q: 1.2 },
+      { kind: 'tone', type: 'sine', delay: 0.052, duration: 0.29, gain: 0.03, attack: 0.003, decay: 0.04, sustain: 0.22, release: 0.23, frequency: 523, endFrequency: 369 },
+      { kind: 'noise', delay: 0.13, duration: 0.32, gain: 0.029, attack: 0.018, decay: 0.06, sustain: 0.18, release: 0.23, cutoff: 580, filterType: 'lowpass', playbackRate: 0.58 },
+      { kind: 'tone', type: 'sine', delay: 0.07, duration: 0.6, gain: 0.047, attack: 0.02, decay: 0.10, sustain: 0.29, release: 0.45, frequency: 86, endFrequency: 49 },
+    ],
+    pulse: [
+      // The short muzzle/end burst: a muted pressure snap and brittle rime shed.
+      { kind: 'noise', delay: 0, duration: 0.065, gain: 0.039, attack: 0.002, decay: 0.012, sustain: 0.2, release: 0.045, cutoff: 1550, filterType: 'bandpass', Q: 0.8, playbackRate: 0.85 },
+      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.14, gain: 0.028, attack: 0.003, decay: 0.027, sustain: 0.16, release: 0.1, frequency: 312, endFrequency: 138, cutoff: 650 },
+      { kind: 'noise', delay: 0.043, duration: 0.11, gain: 0.021, attack: 0.004, decay: 0.02, sustain: 0.23, release: 0.08, cutoff: 940, filterType: 'bandpass', Q: 1.3, playbackRate: 0.65 },
+      { kind: 'tone', type: 'sine', delay: 0.01, duration: 0.23, gain: 0.028, attack: 0.008, decay: 0.035, sustain: 0.2, release: 0.17, frequency: 97, endFrequency: 72 },
     ],
   },
 };

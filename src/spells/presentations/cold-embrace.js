@@ -450,22 +450,27 @@ export default {
   duration: 1.15,
   draw,
   sounds: {
+    // Frozen breath draws inward around a slow, beating tomb resonance.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.56, gain: 0.038, attack: 0.28, release: 0.22, cutoff: 1650, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0.10, duration: 0.42, gain: 0.045, attack: 0.015, release: 0.3, frequency: 1174.66, endFrequency: 880, type: 'sine' },
-      { kind: 'tone', delay: 0.14, duration: 0.4, gain: 0.032, attack: 0.012, release: 0.3, frequency: 1760, endFrequency: 1320, type: 'triangle', cutoff: 2800 },
-      { kind: 'tone', delay: 0.34, duration: 0.4, gain: 0.04, attack: 0.012, release: 0.3, frequency: 880, endFrequency: 587.33, type: 'sine' },
-      { kind: 'tone', delay: 0.38, duration: 0.38, gain: 0.026, attack: 0.012, release: 0.28, frequency: 1320, endFrequency: 880, type: 'triangle', cutoff: 2200 },
+      { kind: 'noise', delay: 0, duration: 1.12, gain: 0.062, attack: 0.34, decay: 0.2, sustain: 0.58, release: 0.42, cutoff: 760, filterType: 'bandpass', Q: 1.5, playbackRate: 0.65 },
+      { kind: 'tone', delay: 0.04, duration: 1.35, gain: 0.065, attack: 0.18, decay: 0.24, sustain: 0.62, release: 0.62, frequency: 76, endFrequency: 61, type: 'sine' },
+      { kind: 'tone', delay: 0.04, duration: 1.35, gain: 0.041, attack: 0.2, decay: 0.25, sustain: 0.58, release: 0.65, frequency: 79, endFrequency: 64, type: 'sine' },
+      { kind: 'tone', delay: 0.26, duration: 0.86, gain: 0.029, attack: 0.18, decay: 0.17, sustain: 0.42, release: 0.42, frequency: 386, endFrequency: 251, type: 'triangle', cutoff: 690, Q: 0.8 },
+      { kind: 'noise', delay: 0.64, duration: 0.24, gain: 0.034, attack: 0.018, decay: 0.06, sustain: 0.24, release: 0.15, cutoff: 1280, filterType: 'bandpass', Q: 2.1, playbackRate: 0.7 },
     ],
+    // The binding closes with a muffled ice fracture, then the enclosed air dies away.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.32, gain: 0.055, attack: 0.006, release: 0.26, frequency: 1174.66, endFrequency: 587.33, type: 'sine' },
-      { kind: 'tone', delay: 0.035, duration: 0.29, gain: 0.034, attack: 0.005, release: 0.23, frequency: 1568, endFrequency: 784, type: 'triangle', cutoff: 2400 },
-      { kind: 'noise', delay: 0.16, duration: 0.075, gain: 0.05, attack: 0.002, release: 0.065, cutoff: 2500, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.18, duration: 0.21, gain: 0.035, attack: 0.003, release: 0.19, frequency: 220, endFrequency: 110, type: 'sine' },
+      { kind: 'noise', delay: 0, duration: 0.2, gain: 0.071, attack: 0.008, decay: 0.052, sustain: 0.26, release: 0.12, cutoff: 1450, filterType: 'bandpass', Q: 1.2, playbackRate: 0.6 },
+      { kind: 'tone', delay: 0.012, duration: 0.82, gain: 0.082, attack: 0.014, decay: 0.17, sustain: 0.3, release: 0.5, frequency: 108, endFrequency: 48, type: 'sine' },
+      { kind: 'tone', delay: 0.045, duration: 0.74, gain: 0.033, attack: 0.028, decay: 0.17, sustain: 0.28, release: 0.43, frequency: 271, endFrequency: 171, type: 'triangle', cutoff: 470, Q: 0.7 },
+      { kind: 'noise', delay: 0.09, duration: 1.12, gain: 0.039, attack: 0.13, decay: 0.25, sustain: 0.27, release: 0.62, cutoff: 420, filterType: 'lowpass', Q: 0.9, playbackRate: 0.55 },
+      { kind: 'tone', delay: 0.2, duration: 1.05, gain: 0.026, attack: 0.11, decay: 0.22, sustain: 0.33, release: 0.58, frequency: 64, endFrequency: 58, type: 'sine' },
     ],
+    // Quiet recurring pressure and breath keep repeated frost rings from becoming a melody.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.12, gain: 0.018, attack: 0.005, release: 0.1, frequency: 784, endFrequency: 659.25, type: 'sine' },
-      { kind: 'tone', delay: 0.045, duration: 0.11, gain: 0.012, attack: 0.005, release: 0.09, frequency: 1046.5, endFrequency: 880, type: 'sine' },
+      { kind: 'noise', delay: 0, duration: 0.35, gain: 0.016, attack: 0.07, decay: 0.06, sustain: 0.3, release: 0.18, cutoff: 620, filterType: 'bandpass', Q: 1.3, playbackRate: 0.6 },
+      { kind: 'tone', delay: 0.015, duration: 0.39, gain: 0.021, attack: 0.045, decay: 0.09, sustain: 0.3, release: 0.2, frequency: 72, endFrequency: 59, type: 'sine' },
+      { kind: 'tone', delay: 0.045, duration: 0.31, gain: 0.009, attack: 0.06, decay: 0.07, sustain: 0.24, release: 0.15, frequency: 219, endFrequency: 183, type: 'triangle', cutoff: 360, Q: 0.7 },
     ],
   },
 };

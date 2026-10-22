@@ -117,18 +117,13 @@ test('every effect stage is deterministic, bounded, atlas compatible, and fades 
   }
 });
 
-test('the sound is an immediate string snap, delayed falling whistle and lower crystal crunch', () => {
-  const { cast, impact } = presentation.sounds;
-  const snap = cast.find(v => v.kind === 'tone' && v.type === 'triangle' && v.delay === 0);
-  const whistle = cast.find(v => v.kind === 'tone' && v.duration > 0.3);
-  assert.ok(snap && snap.attack <= 0.003 && snap.duration < 0.12 && snap.endFrequency < snap.frequency / 2);
-  assert.ok(whistle && whistle.delay > snap.delay && whistle.endFrequency < whistle.frequency / 2);
-  assert.ok(cast.some(v => v.kind === 'noise' && v.filterType === 'highpass' && v.duration < 0.05));
-  assert.ok(impact.some(v => v.kind === 'noise' && v.filterType === 'bandpass' && v.cutoff < 1600));
-  assert.ok(impact.some(v => v.kind === 'tone' && v.frequency < whistle.endFrequency));
-  assert.ok(new Set(impact.filter(v => v.kind === 'tone').map(v => v.delay)).size >= 3,
-    'the crunch has separate irregular chip attacks');
+test('Frost Bolt compresses frozen breath and scatters chips over a low body', () => {
+  const { cast, impact, pulse } = presentation.sounds;
+  assert.ok(cast.some(v => v.kind === 'noise' && v.delay > 0.05 && v.duration < 0.3), 'brief launch rush');
+  assert.ok(new Set(impact.filter(v => v.kind === 'noise').map(v => v.delay)).size >= 3, 'irregular chips');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
   assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const sequence of Object.values(presentation.sounds)) {
     assert.ok(sequence.length > 0 && sequence.length <= 8);
     for (const voice of sequence) {

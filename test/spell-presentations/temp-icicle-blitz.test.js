@@ -163,19 +163,14 @@ test('Icicle Blitz frames are deterministic, bounded, and fade away for every st
   assert.ok(peak(sample('projectile', 0.99)) < peak(sample('projectile', 0.2)) * 0.1);
 });
 
-test('Icicle Blitz uses irregular high pings, interleaved swishes, and a compact dry crunch', () => {
+test('Icicle Blitz snaps an uneven volley above low glacier strain', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const pings = cast.filter(voice => voice.kind === 'tone');
-  assert.equal(pings.length, 5);
-  const gaps = pings.slice(1).map((voice, index) => Number((voice.delay - pings[index].delay).toFixed(3)));
-  assert.ok(new Set(gaps).size >= 3, 'the volley is deliberately irregular');
-  assert.ok(pings.every(voice => voice.frequency >= 1500 && voice.endFrequency < voice.frequency));
-  assert.ok(cast.filter(voice => voice.kind === 'noise').length >= 2);
-  assert.ok(pings.at(-1).delay < 0.5, 'pings form a rapid burst');
-  assert.ok(impact.some(voice => voice.kind === 'noise' && voice.filterType === 'bandpass'));
-  assert.ok(impact.some(voice => voice.kind === 'tone' && voice.frequency < pings[0].frequency));
-  assert.ok(impact.every(voice => voice.delay + voice.duration < 0.25), 'impact stays a compact crunch');
-  assert.ok(pulse.every(voice => voice.gain <= 0.025 && voice.duration <= 0.1));
+  const snaps = cast.filter(v => v.kind === 'tone' && v.frequency > 500);
+  assert.ok(snaps.length >= 3);
+  assert.ok(new Set(snaps.slice(1).map((v, i) => Number((v.delay - snaps[i].delay).toFixed(3)))).size >= 2, 'uneven volley rhythm');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
+  assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const sequence of Object.values(presentation.sounds)) {
     assert.ok(sequence.length > 0 && sequence.length <= 8);
     for (const voice of sequence) {

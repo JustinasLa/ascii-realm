@@ -187,20 +187,13 @@ test('every supported stage is deterministic, bounded and fades to nothing', () 
   }
 });
 
-test('glass plink and rising whistle resolve into an irregular high-frequency fracture cluster', () => {
-  const { cast, impact } = presentation.sounds;
-  const plink = cast[0];
-  assert.equal(plink.kind, 'tone');
-  assert.ok(plink.attack < 0.005 && plink.frequency > 2000 && plink.duration < 0.15);
-  const whistle = cast.find(voice => voice.endFrequency > voice.frequency);
-  assert.ok(whistle && whistle.delay > plink.delay && whistle.attack > plink.attack);
-  assert.ok(cast.some(voice => voice.kind === 'noise' && voice.filterType === 'highpass'));
-  assert.equal(impact[0].kind, 'noise');
-  assert.ok(impact.filter(voice => voice.kind === 'tone' && voice.endFrequency < voice.frequency).length >= 3);
-  assert.ok(new Set(impact.slice(1).map((voice, index) =>
-    Math.round((voice.delay - impact[index].delay) * 1000))).size > 3,
-  'falling glass fragments land at uneven intervals');
+test('Ice Shard releases one strained crystal and fractures into a hollow decay', () => {
+  const { cast, impact, pulse } = presentation.sounds;
+  assert.ok(cast.some(v => v.kind === 'noise' && v.delay > 0.05 && v.duration < 0.2), 'delayed dry release');
+  assert.ok(impact.some(v => v.kind === 'tone' && v.frequency < 100 && v.duration > 0.6), 'deep settling fracture');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
   assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const voices of [cast, impact]) {
     assert.ok(voices.length > 0 && voices.length <= 8);
     for (const voice of voices) {

@@ -182,19 +182,13 @@ test('Ice Shield stages keep finite local ASCII geometry, a bounded draw budget,
   }
 });
 
-test('Ice Shield has an overlapping rising chord, snow hiss, and low inharmonic glass contact', () => {
+test('Ice Shield locks heavy slabs over a sustained dark ward resonance', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const chord = cast.slice(0, 3);
-  assert.ok(chord.every(voice => voice.kind === 'tone' && voice.endFrequency > voice.frequency));
-  assert.ok(chord[0].frequency < chord[1].frequency && chord[1].frequency < chord[2].frequency);
-  assert.ok(chord[0].delay + chord[0].duration > chord[2].delay, 'notes overlap into a chord');
-  assert.ok(cast.some(voice => voice.kind === 'noise' && voice.attack >= 0.05), 'snow forms with a soft hiss');
-  const glass = impact.filter(voice => voice.kind === 'tone');
-  assert.equal(glass.length, 3);
-  assert.ok(glass[0].frequency < chord[0].frequency);
-  assert.ok(Math.abs(glass[1].frequency / glass[0].frequency - 1.5) > 0.05, 'contact has an inharmonic rim partial');
-  assert.ok(glass[0].release > 0.5, 'the low rim rings after contact');
-  assert.ok(pulse.every(voice => voice.duration <= 0.25 && voice.gain <= 0.015));
+  assert.ok(cast.filter(v => v.kind === 'noise' && v.delay > 0.2).length >= 2, 'staggered slab locks');
+  assert.ok(impact.some(v => v.kind === 'tone' && v.duration > 0.8), 'contact rings through the shield');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
+  assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length > 0 && voices.length <= 8);
     for (const voice of voices) {

@@ -193,23 +193,13 @@ test('the wave moves smoothly between 60 fps frames', () => {
   }
 });
 
-test('sound is a long snow scrape over cold air with irregular crystal teeth and a short collapse', () => {
+test('Ice Wave rolls a deep grinding front through staggered fractures', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const scrape = cast.find(voice => voice.kind === 'noise' && voice.filterType === 'highpass');
-  const air = cast.find(voice => voice.kind === 'noise' && voice.filterType === 'lowpass');
-  const teeth = cast.filter(voice => voice.kind === 'tone');
-  assert.ok(scrape.duration > 0.7 && scrape.attack > 0.1);
-  assert.ok(air.cutoff < 600 && air.duration > 0.6);
-  assert.equal(teeth.length, 4);
-  assert.ok(teeth.every((voice, i) => i === 0 || voice.delay > teeth[i - 1].delay));
-  assert.ok(teeth[1].frequency < teeth[0].frequency && teeth[2].frequency > teeth[0].frequency,
-    'the teeth chatter, rather than playing a scale');
-  assert.ok(teeth[3].delay - teeth[2].delay > teeth[1].delay - teeth[0].delay);
-  assert.ok(impact.some(voice => voice.kind === 'noise' && voice.attack < 0.01));
-  assert.ok(impact.some(voice => voice.kind === 'tone' && voice.endFrequency < 100));
-  assert.ok(impact.filter(voice => voice.frequency > 1000).length >= 3);
+  assert.ok(cast.some(v => v.kind === 'noise' && v.duration > 1), 'long grinding front');
+  assert.ok(cast.filter(v => v.kind === 'noise' && v.delay > 0.2).length >= 2, 'rolling ice fractures');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(voice => voice.gain <= 0.02 && voice.duration < 0.15));
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const sequence of Object.values(presentation.sounds)) {
     assert.ok(sequence.length > 0 && sequence.length <= 8);
     for (const voice of sequence) {

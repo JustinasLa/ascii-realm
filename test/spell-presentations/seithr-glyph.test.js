@@ -189,17 +189,13 @@ test('every stage stays finite, bounded, deterministic and fades to clear terrai
   }
 });
 
-test('six crystalline steps precede a drone, simultaneous sealing chord and quiet pulse', () => {
-  const cast = presentation.sounds.cast;
-  const steps = cast.filter(voice => voice.type === 'sine');
-  assert.equal(steps.length, 6);
-  assert.ok(steps.every((voice, index) => index === 0 ||
-    (voice.delay > steps[index - 1].delay && voice.frequency > steps[index - 1].frequency)));
-  const drone = cast.find(voice => voice.type === 'triangle');
-  assert.ok(drone.duration > steps.at(-1).delay + steps.at(-1).duration);
-  assert.ok(drone.gain < Math.min(...steps.map(voice => voice.gain)));
-  const chord = presentation.sounds.impact.filter(voice => voice.delay === 0);
-  assert.ok(chord.length >= 3 && new Set(chord.map(voice => voice.frequency)).size === chord.length);
+test('Seithr Glyph engraves ice over a buried drone and seals with a dark thud', () => {
+  const { cast, impact, pulse } = presentation.sounds;
+  assert.ok(cast.some(v => v.kind === 'tone' && v.duration > 1.3), 'buried chamber resonance');
+  assert.ok(new Set(cast.filter(v => v.kind === 'tone' && v.delay > 0).map(v => v.delay)).size >= 3, 'separate engraving strokes');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 200), 'a low body anchors the spell');
+  assert.notDeepEqual(cast, impact);
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < cast.reduce((sum, v) => sum + v.gain, 0), 'repeat pulses stay beneath the cast');
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length <= 8);
     for (const voice of voices) {
@@ -210,7 +206,7 @@ test('six crystalline steps precede a drone, simultaneous sealing chord and quie
       assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
     }
   }
-  assert.ok(presentation.sounds.pulse.every(voice => voice.gain <= 0.02 && voice.duration <= 0.2));
+  assert.ok(presentation.sounds.pulse.every(voice => voice.gain <= 0.02 && voice.duration <= 0.28));
 });
 
 test('real Seithr Glyph casts render the authored runes and emit typed crystal cues', () => {

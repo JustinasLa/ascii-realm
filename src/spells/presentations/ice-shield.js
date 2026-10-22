@@ -413,22 +413,28 @@ export default {
   duration: 1.18,
   draw,
   sounds: {
+    // Glacial pressure gathers, then staggered slab locks seat the haunted ward.
     cast: [
-      { kind: 'tone', delay: 0, duration: 0.78, gain: 0.046, attack: 0.045, release: 0.46, frequency: 493.88, endFrequency: 523.25, type: 'sine' },
-      { kind: 'tone', delay: 0.09, duration: 0.82, gain: 0.036, attack: 0.055, release: 0.5, frequency: 622.25, endFrequency: 659.25, type: 'triangle', cutoff: 2800 },
-      { kind: 'tone', delay: 0.18, duration: 0.88, gain: 0.027, attack: 0.065, release: 0.56, frequency: 739.99, endFrequency: 783.99, type: 'sine' },
-      { kind: 'noise', delay: 0.04, duration: 0.38, gain: 0.024, attack: 0.07, release: 0.22, cutoff: 4300, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.22, duration: 0.92, gain: 0.028, attack: 0.08, release: 0.62, frequency: 261.63, endFrequency: 262.5, type: 'sine' },
+      { kind: 'tone', delay: 0, duration: 1.24, gain: 0.083, attack: 0.12, decay: 0.24, sustain: 0.64, release: 0.65, frequency: 82, endFrequency: 66, type: 'triangle', cutoff: 310, Q: 0.6 },
+      { kind: 'noise', delay: 0.025, duration: 0.65, gain: 0.052, attack: 0.15, decay: 0.17, sustain: 0.48, release: 0.29, cutoff: 690, filterType: 'bandpass', Q: 0.85, playbackRate: 0.65 },
+      { kind: 'noise', delay: 0.24, duration: 0.19, gain: 0.061, attack: 0.006, decay: 0.055, sustain: 0.22, release: 0.12, cutoff: 1050, filterType: 'bandpass', Q: 1.1, playbackRate: 0.78 },
+      { kind: 'noise', delay: 0.43, duration: 0.25, gain: 0.068, attack: 0.008, decay: 0.065, sustain: 0.25, release: 0.16, cutoff: 780, filterType: 'lowpass', Q: 0.9, playbackRate: 0.55 },
+      { kind: 'tone', delay: 0.48, duration: 1.05, gain: 0.047, attack: 0.018, decay: 0.2, sustain: 0.32, release: 0.72, frequency: 174, endFrequency: 163, type: 'sine', cutoff: 500, Q: 0.5 },
+      { kind: 'tone', delay: 0.49, duration: 0.93, gain: 0.025, attack: 0.025, decay: 0.17, sustain: 0.22, release: 0.64, frequency: 251, endFrequency: 244, type: 'triangle', cutoff: 670, Q: 0.6 },
     ],
+    // A blunt ice-shell strike, splinter grit and a low, inharmonic plate groan.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.72, gain: 0.075, attack: 0.008, release: 0.61, frequency: 220, endFrequency: 215, type: 'sine' },
-      { kind: 'tone', delay: 0.012, duration: 0.56, gain: 0.034, attack: 0.006, release: 0.49, frequency: 354.2, endFrequency: 349.8, type: 'sine' },
-      { kind: 'tone', delay: 0.035, duration: 0.34, gain: 0.02, attack: 0.005, release: 0.28, frequency: 580.8, endFrequency: 575, type: 'triangle', cutoff: 2200 },
-      { kind: 'noise', delay: 0, duration: 0.11, gain: 0.021, attack: 0.005, release: 0.09, cutoff: 5400, filterType: 'highpass' },
+      { kind: 'tone', delay: 0, duration: 0.48, gain: 0.084, attack: 0.004, decay: 0.1, sustain: 0.24, release: 0.32, frequency: 116, endFrequency: 53, type: 'triangle', cutoff: 430, Q: 0.6 },
+      { kind: 'noise', delay: 0, duration: 0.16, gain: 0.065, attack: 0.003, decay: 0.037, sustain: 0.18, release: 0.11, cutoff: 1450, filterType: 'bandpass', Q: 0.8, playbackRate: 0.72 },
+      { kind: 'noise', delay: 0.055, duration: 0.3, gain: 0.032, attack: 0.012, decay: 0.07, sustain: 0.21, release: 0.2, cutoff: 870, filterType: 'bandpass', Q: 1.4, playbackRate: 0.58 },
+      { kind: 'tone', delay: 0.018, duration: 0.86, gain: 0.042, attack: 0.009, decay: 0.15, sustain: 0.31, release: 0.58, frequency: 181, endFrequency: 163, type: 'sine', cutoff: 500, Q: 0.5 },
+      { kind: 'tone', delay: 0.04, duration: 0.63, gain: 0.021, attack: 0.012, decay: 0.13, sustain: 0.19, release: 0.44, frequency: 274, endFrequency: 249, type: 'sine', cutoff: 650, Q: 0.5 },
     ],
+    // Repeated frost fronts whisper through the ward instead of ringing brightly.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.18, gain: 0.012, attack: 0.018, release: 0.14, frequency: 1046.5, endFrequency: 988, type: 'sine' },
-      { kind: 'tone', delay: 0.045, duration: 0.21, gain: 0.009, attack: 0.02, release: 0.17, frequency: 523.25, type: 'sine' },
+      { kind: 'noise', delay: 0, duration: 0.22, gain: 0.013, attack: 0.035, decay: 0.045, sustain: 0.28, release: 0.12, cutoff: 820, filterType: 'bandpass', Q: 0.7, playbackRate: 0.65 },
+      { kind: 'tone', delay: 0.01, duration: 0.26, gain: 0.017, attack: 0.04, decay: 0.055, sustain: 0.34, release: 0.145, frequency: 91, endFrequency: 82, type: 'sine', cutoff: 260, Q: 0.5 },
+      { kind: 'tone', delay: 0.025, duration: 0.23, gain: 0.008, attack: 0.03, decay: 0.045, sustain: 0.23, release: 0.14, frequency: 245, endFrequency: 238, type: 'triangle', cutoff: 460, Q: 0.5 },
     ],
   },
 };

@@ -401,29 +401,53 @@ export default {
   },
   sounds: {
     cast: [
-      // Six even glass steps trace the six arms; a quiet lower partial holds them together.
-      ...[784, 988, 1175, 1568, 1976, 2350].map((frequency, index) => ({
-        kind: 'tone', type: 'sine', delay: index * 0.105, duration: 0.31,
-        frequency, endFrequency: frequency * 0.997, gain: 0.043 - index * 0.002,
-        attack: 0.003, release: 0.25,
+      // A buried chamber wakes beneath three uneven strokes etched into the ice.
+      { kind: 'tone', type: 'sine', delay: 0, duration: 1.45,
+        frequency: 83, endFrequency: 76, gain: 0.055,
+        attack: 0.18, decay: 0.28, sustain: 0.56, release: 0.66 },
+      { kind: 'noise', delay: 0.08, duration: 0.95, gain: 0.036,
+        filterType: 'bandpass', cutoff: 790, Q: 1.6, playbackRate: 0.65,
+        attack: 0.12, decay: 0.22, sustain: 0.32, release: 0.42 },
+      ...[231, 307, 253].map((frequency, index) => ({
+        kind: 'tone', type: 'triangle', delay: 0.12 + index * 0.19, duration: 0.68,
+        frequency, endFrequency: frequency * 0.979, gain: 0.027 - index * 0.003,
+        cutoff: 850, filterType: 'lowpass', Q: 0.6,
+        attack: 0.012, decay: 0.13, sustain: 0.24, release: 0.42,
       })),
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 1.04,
-        frequency: 392, endFrequency: 392, gain: 0.018, attack: 0.16, release: 0.4,
-        cutoff: 1100, filterType: 'lowpass' },
+      { kind: 'noise', delay: 0.64, duration: 0.28, gain: 0.025,
+        filterType: 'lowpass', cutoff: 1200, Q: 0.5, playbackRate: 0.75,
+        attack: 0.008, decay: 0.055, sustain: 0.18, release: 0.18 },
     ],
     impact: [
-      // The sealing chord arrives together, unlike the arm-by-arm cast.
-      ...[587, 784, 1175].map(frequency => ({
-        kind: 'tone', type: 'triangle', delay: 0, duration: 0.65,
-        frequency, endFrequency: frequency * 0.993, gain: 0.037,
-        attack: 0.004, release: 0.52, cutoff: 3400, filterType: 'lowpass',
-      })),
-      { kind: 'tone', type: 'sine', delay: 0.065, duration: 0.38,
-        frequency: 3136, endFrequency: 2349, gain: 0.022, attack: 0.002, release: 0.32 },
+      // The freezing seal closes like a stone lid, followed by hollow ice resonance.
+      { kind: 'noise', delay: 0, duration: 0.24, gain: 0.058,
+        filterType: 'lowpass', cutoff: 1320, Q: 0.7, playbackRate: 0.6,
+        attack: 0.004, decay: 0.05, sustain: 0.16, release: 0.16 },
+      { kind: 'tone', type: 'sine', delay: 0, duration: 0.65,
+        frequency: 119, endFrequency: 57, gain: 0.072,
+        attack: 0.007, decay: 0.16, sustain: 0.25, release: 0.4 },
+      { kind: 'tone', type: 'triangle', delay: 0.025, duration: 1.1,
+        frequency: 219, endFrequency: 214, gain: 0.034,
+        filterType: 'lowpass', cutoff: 680, Q: 0.5,
+        attack: 0.015, decay: 0.19, sustain: 0.22, release: 0.7 },
+      { kind: 'tone', type: 'sine', delay: 0.075, duration: 0.9,
+        frequency: 346, endFrequency: 337, gain: 0.019,
+        attack: 0.025, decay: 0.16, sustain: 0.18, release: 0.58 },
+      { kind: 'noise', delay: 0.13, duration: 0.62, gain: 0.021,
+        filterType: 'bandpass', cutoff: 460, Q: 1.3, playbackRate: 0.55,
+        attack: 0.06, decay: 0.12, sustain: 0.25, release: 0.34 },
     ],
     pulse: [
-      { kind: 'tone', type: 'sine', delay: 0, duration: 0.13,
-        frequency: 1568, endFrequency: 1560, gain: 0.012, attack: 0.003, release: 0.1 },
+      // Frequent glyph flickers breathe quietly through the frozen chamber.
+      { kind: 'tone', type: 'sine', delay: 0, duration: 0.24,
+        frequency: 109, endFrequency: 104, gain: 0.011,
+        attack: 0.028, decay: 0.045, sustain: 0.25, release: 0.13 },
+      { kind: 'noise', delay: 0.015, duration: 0.18, gain: 0.008,
+        filterType: 'bandpass', cutoff: 650, Q: 1.2, playbackRate: 0.6,
+        attack: 0.018, decay: 0.035, sustain: 0.18, release: 0.1 },
+      { kind: 'tone', type: 'sine', delay: 0.04, duration: 0.19,
+        frequency: 253, endFrequency: 248, gain: 0.005,
+        attack: 0.012, decay: 0.04, sustain: 0.16, release: 0.11 },
     ],
   },
 };

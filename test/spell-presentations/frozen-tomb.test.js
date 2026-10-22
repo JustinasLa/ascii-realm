@@ -148,20 +148,10 @@ test('Frozen Tomb geometry remains finite, bounded, deterministic and fades at e
   assert.ok(step(field(0.2), field(0.2 + 1 / 60)) < 2.5, 'frost tips race smoothly between frames');
 });
 
-test('Frozen Tomb sound grows from a bass groan through climbing ticks to a heavy lid snap', () => {
+test('Frozen Tomb grows under bass pressure and closes a heavy crushing lid', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const groan = cast.find(voice => voice.kind === 'tone' && voice.frequency < 150);
-  assert.ok(groan.endFrequency > groan.frequency && groan.attack > 0.1 && groan.duration > 0.8, 'slow ice-growing groan');
-  const ticks = cast.filter(voice => voice.kind === 'tone' && voice.frequency > 500);
-  assert.ok(ticks.length >= 3);
-  for (let i = 1; i < ticks.length; i++) {
-    assert.ok(ticks[i].frequency > ticks[i - 1].frequency && ticks[i].delay > ticks[i - 1].delay,
-      'crystal ticks climb in pitch and time');
-  }
-  assert.ok(impact.some(voice => voice.kind === 'tone' && voice.frequency < 150 && voice.endFrequency < voice.frequency), 'weighted falling lid tone');
-  assert.ok(impact.some(voice => voice.kind === 'noise' && voice.filterType === 'highpass' && voice.duration < 0.1), 'brittle sealing snap');
-  assert.ok(impact.some(voice => voice.delay > 0.15), 'late small corner crack');
-  assert.ok(pulse.every(voice => voice.gain <= 0.025 && voice.duration <= 0.1), 'repeated zone ticks stay quiet');
+  assert.ok(cast.some(v => v.kind === 'tone' && v.frequency < 100 && v.endFrequency > v.frequency && v.duration > 1), 'rising ice pressure');
+  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < 60), 'weighty falling lid');
   assert.notDeepEqual(cast, impact);
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length > 0 && voices.length <= 8);

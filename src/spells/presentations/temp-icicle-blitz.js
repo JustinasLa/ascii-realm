@@ -362,25 +362,28 @@ export default {
   duration: 1.02,
   draw,
   sounds: {
+    // Frozen breath and strained glacier bass carry an uneven, brittle volley.
     cast: [
-      { kind: 'tone', delay: 0, duration: 0.08, gain: 0.045, attack: 0.002, release: 0.065, frequency: 1820, endFrequency: 1680, type: 'triangle' },
-      { kind: 'noise', delay: 0.025, duration: 0.065, gain: 0.026, attack: 0.006, release: 0.045, cutoff: 4200, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.061, duration: 0.075, gain: 0.039, attack: 0.002, release: 0.06, frequency: 2460, endFrequency: 2220, type: 'sine' },
-      { kind: 'tone', delay: 0.155, duration: 0.09, gain: 0.047, attack: 0.002, release: 0.07, frequency: 2160, endFrequency: 2050, type: 'triangle' },
-      { kind: 'noise', delay: 0.178, duration: 0.08, gain: 0.023, attack: 0.008, release: 0.055, cutoff: 4900, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.229, duration: 0.065, gain: 0.037, attack: 0.001, release: 0.05, frequency: 3020, endFrequency: 2710, type: 'sine' },
-      { kind: 'noise', delay: 0.303, duration: 0.075, gain: 0.028, attack: 0.005, release: 0.055, cutoff: 3500, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.346, duration: 0.105, gain: 0.043, attack: 0.002, release: 0.085, frequency: 2640, endFrequency: 2310, type: 'triangle' },
+      { kind: 'noise', delay: 0, duration: 0.61, gain: 0.025, attack: 0.055, decay: 0.13, sustain: 0.25, release: 0.29, cutoff: 1150, filterType: 'bandpass', Q: 0.7, playbackRate: 0.65 },
+      { kind: 'tone', delay: 0, duration: 0.66, gain: 0.05, attack: 0.025, decay: 0.15, sustain: 0.3, release: 0.32, frequency: 117, endFrequency: 76, type: 'triangle', cutoff: 360, filterType: 'lowpass', Q: 0.6 },
+      { kind: 'tone', delay: 0.071, duration: 0.15, gain: 0.042, attack: 0.002, decay: 0.037, sustain: 0.14, release: 0.10, frequency: 1260, endFrequency: 730, type: 'triangle', cutoff: 1650, filterType: 'lowpass', Q: 0.65 },
+      { kind: 'tone', delay: 0.133, duration: 0.17, gain: 0.035, attack: 0.002, decay: 0.045, sustain: 0.12, release: 0.11, frequency: 960, endFrequency: 590, type: 'triangle', cutoff: 1500, filterType: 'lowpass', Q: 0.65 },
+      { kind: 'tone', delay: 0.224, duration: 0.18, gain: 0.039, attack: 0.002, decay: 0.05, sustain: 0.1, release: 0.12, frequency: 1430, endFrequency: 820, type: 'triangle', cutoff: 1750, filterType: 'lowpass', Q: 0.7 },
+      { kind: 'tone', delay: 0.408, duration: 0.22, gain: 0.032, attack: 0.003, decay: 0.065, sustain: 0.13, release: 0.14, frequency: 1080, endFrequency: 630, type: 'sine', cutoff: 1450, filterType: 'lowpass', Q: 0.65 },
     ],
+    // A close ice fracture, its dense frozen core, then chips in a hollow tail.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.115, gain: 0.072, attack: 0.001, release: 0.1, cutoff: 2900, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0.012, duration: 0.065, gain: 0.035, attack: 0.001, release: 0.055, frequency: 1460, endFrequency: 960, type: 'triangle' },
-      { kind: 'noise', delay: 0.043, duration: 0.055, gain: 0.032, attack: 0.001, release: 0.045, cutoff: 5900, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.072, duration: 0.09, gain: 0.022, attack: 0.001, release: 0.08, frequency: 3330, endFrequency: 2280, type: 'sine' },
+      { kind: 'noise', delay: 0, duration: 0.18, gain: 0.065, attack: 0.002, decay: 0.035, sustain: 0.16, release: 0.12, cutoff: 1900, filterType: 'bandpass', Q: 0.9, playbackRate: 0.8 },
+      { kind: 'tone', delay: 0, duration: 0.28, gain: 0.048, attack: 0.003, decay: 0.06, sustain: 0.17, release: 0.19, frequency: 185, endFrequency: 67, type: 'triangle', cutoff: 540, filterType: 'lowpass', Q: 0.65 },
+      { kind: 'tone', delay: 0.019, duration: 0.29, gain: 0.027, attack: 0.002, decay: 0.065, sustain: 0.12, release: 0.21, frequency: 1187, endFrequency: 879, type: 'sine', cutoff: 1550, filterType: 'lowpass', Q: 0.7 },
+      { kind: 'noise', delay: 0.061, duration: 0.13, gain: 0.021, attack: 0.002, decay: 0.028, sustain: 0.12, release: 0.09, cutoff: 2500, filterType: 'bandpass', Q: 0.8, playbackRate: 0.7 },
+      { kind: 'noise', delay: 0.12, duration: 0.38, gain: 0.014, attack: 0.022, decay: 0.07, sustain: 0.2, release: 0.26, cutoff: 690, filterType: 'lowpass', Q: 0.6, playbackRate: 0.55 },
     ],
+    // Projectile/field repeats: a quiet splinter with breath and buried ice strain.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.055, gain: 0.018, attack: 0.002, release: 0.045, frequency: 2380, endFrequency: 2100, type: 'sine' },
-      { kind: 'noise', delay: 0.018, duration: 0.045, gain: 0.012, attack: 0.002, release: 0.035, cutoff: 4700, filterType: 'highpass' },
+      { kind: 'tone', delay: 0, duration: 0.13, gain: 0.014, attack: 0.002, decay: 0.028, sustain: 0.12, release: 0.09, frequency: 790, endFrequency: 565, type: 'triangle', cutoff: 1250, filterType: 'lowpass', Q: 0.6 },
+      { kind: 'noise', delay: 0.012, duration: 0.17, gain: 0.011, attack: 0.008, decay: 0.04, sustain: 0.17, release: 0.11, cutoff: 1370, filterType: 'bandpass', Q: 0.7, playbackRate: 0.65 },
+      { kind: 'tone', delay: 0.027, duration: 0.21, gain: 0.012, attack: 0.012, decay: 0.043, sustain: 0.18, release: 0.14, frequency: 134, endFrequency: 98, type: 'sine', cutoff: 320, filterType: 'lowpass', Q: 0.6 },
     ],
   },
 };
