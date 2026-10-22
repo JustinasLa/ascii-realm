@@ -7,4 +7,5 @@ export const oseni = [
   "temp-last-stand",
   "fire-rain",
   "temp-blazing-barrage",
+  "rekindle",
 ];
