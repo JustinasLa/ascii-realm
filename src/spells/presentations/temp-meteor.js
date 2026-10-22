@@ -470,23 +470,24 @@ export default {
     }
   },
   sounds: {
+    // Recorded blowtorch ignition swells into a furnace roar; a bamboo-air
+    // pass marks the rock tearing free at the half-second projectile release.
     cast: [
-      { kind: 'tone', type: 'sawtooth', delay: 0, duration: 0.82, frequency: 165, endFrequency: 46, gain: 0.055, attack: 0.1, release: 0.34, cutoff: 190, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0, duration: 0.72, gain: 0.065, attack: 0.2, release: 0.24, cutoff: 900, filterType: 'lowpass' },
-      { kind: 'tone', type: 'triangle', delay: 0.12, duration: 0.86, frequency: 86, endFrequency: 31, gain: 0.045, attack: 0.12, release: 0.42 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.26, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.38, rate: 0.8, delay: 0.1 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.24, rate: 0.85, delay: 0.5 },
     ],
+    // Natural thunder supplies the body; a real wood fracture and a later
+    // fireplace pop give the landing rough, irregular debris detail.
     impact: [
-      { kind: 'tone', type: 'sine', delay: 0, duration: 1.08, frequency: 104, endFrequency: 29, gain: 0.13, attack: 0.004, release: 0.91 },
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.72, frequency: 62, endFrequency: 24, gain: 0.07, attack: 0.003, release: 0.65, cutoff: 170, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0, duration: 0.24, gain: 0.1, attack: 0.002, release: 0.2, cutoff: 850, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.13, duration: 0.1, gain: 0.048, attack: 0.002, release: 0.085, cutoff: 1850, filterType: 'bandpass' },
-      { kind: 'tone', type: 'square', delay: 0.24, duration: 0.055, frequency: 220, endFrequency: 96, gain: 0.032, attack: 0.002, release: 0.045, cutoff: 900, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.38, duration: 0.07, gain: 0.03, attack: 0.002, release: 0.06, cutoff: 1200, filterType: 'bandpass' },
-      { kind: 'noise', delay: 0.53, duration: 0.1, gain: 0.022, attack: 0.003, release: 0.09, cutoff: 700, filterType: 'lowpass' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/thunder-impact.wav', gain: 0.65, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.28, rate: 0.78, delay: 0.025 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.15, rate: 0.9, delay: 0.43 },
     ],
+    // Burn ticks overlap, so the recorded ember bed stays quiet and avoids
+    // repeating a hard transient beneath every visual flare.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.13, gain: 0.013, attack: 0.02, release: 0.1, cutoff: 550, filterType: 'lowpass' },
-      { kind: 'tone', type: 'triangle', delay: 0.025, duration: 0.1, frequency: 74, endFrequency: 42, gain: 0.012, attack: 0.015, release: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 0.92, delay: 0 },
     ],
   },
 };

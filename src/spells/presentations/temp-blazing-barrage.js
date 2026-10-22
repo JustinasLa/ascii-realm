@@ -462,25 +462,23 @@ export default {
   duration: DURATION,
   draw,
   sounds: {
-    // The six clipped pitch drops follow the original 3-tick firing cadence.
+    // Real torch discharges accent alternate barrels on the 3-tick grid;
+    // the longer recorded flame opens as the circles collapse into the blast.
     cast: [
-      ...[280, 320, 260, 300, 240, 280].map((frequency, i) => ({
-        kind: 'tone', type: i % 2 ? 'triangle' : 'square', delay: 0.20 + i * 0.15,
-        frequency, endFrequency: 75 + i * 3, duration: 0.075, gain: 0.045,
-        attack: 0.002, release: 0.060, cutoff: 1500,
-      })),
-      { kind: 'tone', type: 'triangle', delay: 1.25, frequency: 112, endFrequency: 38,
-        duration: 0.30, gain: 0.095, attack: 0.004, release: 0.25, cutoff: 850 },
-      { kind: 'noise', delay: 1.25, duration: 0.25, gain: 0.075,
-        attack: 0.004, release: 0.22, filterType: 'lowpass', cutoff: 1700 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.23, rate: 1.12, delay: 0.20 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.21, rate: 0.94, delay: 0.50 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.22, rate: 1.06, delay: 0.80 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.24, rate: 0.87, delay: 1.25 },
     ],
+    // A physical wood fracture under the hot discharge, leaving real embers.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.065, gain: 0.055,
-        attack: 0.002, release: 0.055, filterType: 'bandpass', cutoff: 2100 },
-      { kind: 'tone', type: 'triangle', delay: 0.015, frequency: 150, endFrequency: 52,
-        duration: 0.16, gain: 0.045, attack: 0.003, release: 0.14 },
-      { kind: 'noise', delay: 0.08, duration: 0.14, gain: 0.025,
-        attack: 0.004, release: 0.12, filterType: 'highpass', cutoff: 2600 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.20, rate: 0.83, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.25, rate: 0.97, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.10, rate: 1.12, delay: 0.15 },
+    ],
+    // Short, quiet recorded air movement follows the frequent trail puffs.
+    pulse: [
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.10, rate: 1.18, delay: 0 },
     ],
   },
 };

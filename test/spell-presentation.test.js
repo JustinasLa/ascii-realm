@@ -7,6 +7,7 @@ import { GameAudio } from '../src/audio/audio.js';
 import { playSpellSound } from '../src/audio/spells.js';
 import { runeScene } from '../test-support/spells.js';
 import { fakeRecordedAudio } from '../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../test-support/spell-audio.js';
 
 test('Fire Shard emits its authored cast/impact cues, never sword cues, and rejects silently', () => {
   const scene = runeScene(fireShard), events = [];
@@ -102,10 +103,11 @@ test('source visual spam is sound-limited and retained effects stay bounded', ()
   assert.ok(count <= 4096);
 });
 
-test('spell voices use SFX routing and stop delayed layers by casting owner', () => {
+test('spell voices use SFX routing and stop delayed layers by casting owner', async () => {
   const fake = fakeRecordedAudio(), audio = new GameAudio({}, fake.engine), owner = {};
+  await prepareRecordedSpellTest(fake, fireShard);
   const handles = audio.play({ type: 'spell', stage: 'cast', presentation: fireShard.presentation, x: 3, y: 7, owner });
-  assert.equal(handles.length, 3);
+  assert.equal(handles.length, fireShard.presentation.sounds.cast.length);
   assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 3 && r.y === 7));
   assert.ok(fake.nodes.some(n => n.starts[0] > fake.context.currentTime));
   audio.play({ type: 'spell-stop', owner });

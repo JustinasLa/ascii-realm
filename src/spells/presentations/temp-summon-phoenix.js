@@ -432,26 +432,22 @@ export default {
     }
   },
   sounds: {
+    // Real cloth wingbeats unfold over a blowtorch ignition and sustained fire rush.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.24, gain: 0.035, attack: 0.025, release: 0.17, cutoff: 900, filterType: 'bandpass' },
-      { kind: 'noise', delay: 0.18, duration: 0.27, gain: 0.048, attack: 0.025, release: 0.19, cutoff: 1700, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0.31, duration: 0.23, gain: 0.075, attack: 0.035, release: 0.11, frequency: 780, endFrequency: 1280, type: 'sine' },
-      { kind: 'tone', delay: 0.31, duration: 0.23, gain: 0.024, attack: 0.035, release: 0.11, frequency: 390, endFrequency: 640, type: 'triangle' },
-      { kind: 'tone', delay: 0.59, duration: 0.31, gain: 0.07, attack: 0.04, release: 0.18, frequency: 1160, endFrequency: 1760, type: 'sine' },
-      { kind: 'tone', delay: 0.92, duration: 0.065, gain: 0.025, attack: 0.005, release: 0.05, frequency: 2480, endFrequency: 1800, type: 'triangle' },
-      { kind: 'tone', delay: 1.05, duration: 0.085, gain: 0.018, attack: 0.005, release: 0.065, frequency: 3120, endFrequency: 2100, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.3, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.16, rate: 0.9, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.32, rate: 0.9, delay: 0.28 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.24, rate: 0.95, delay: 0.58 },
     ],
+    // Rebirth catches with a fresh ignition; cloth and fireplace embers scatter after it.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.28, gain: 0.085, attack: 0.012, release: 0.23, cutoff: 1700, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0, duration: 0.34, gain: 0.06, attack: 0.012, release: 0.27, frequency: 220, endFrequency: 440, type: 'triangle' },
-      { kind: 'tone', delay: 0.08, duration: 0.19, gain: 0.055, attack: 0.02, release: 0.14, frequency: 1040, endFrequency: 2080, type: 'sine' },
-      { kind: 'tone', delay: 0.25, duration: 0.08, gain: 0.025, attack: 0.005, release: 0.06, frequency: 2600, endFrequency: 1600, type: 'triangle' },
-      { kind: 'tone', delay: 0.37, duration: 0.07, gain: 0.018, attack: 0.005, release: 0.05, frequency: 3200, endFrequency: 2100, type: 'sine' },
-      { kind: 'tone', delay: 0.52, duration: 0.1, gain: 0.015, attack: 0.005, release: 0.08, frequency: 2100, endFrequency: 1400, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.55, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.24, rate: 1.1, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.14, rate: 0.95, delay: 0.32 },
     ],
+    // A single quiet fireplace pop keeps the frequent burning-ground ticks small.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.1, gain: 0.018, attack: 0.008, release: 0.075, cutoff: 2000, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.03, duration: 0.09, gain: 0.014, attack: 0.005, release: 0.07, frequency: 1660, endFrequency: 1320, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.1, rate: 1.15, delay: 0 },
     ],
   },
 };

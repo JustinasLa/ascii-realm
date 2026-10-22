@@ -161,25 +161,34 @@ test('fireblast trail puffs and burning auras stay lean and on theme', () => {
   assert.ok(frame('aura', 0.05).some(p => p.char === '*'), 'ignition flares on the first frames');
 });
 
-test('sound uses six clipped fireball pops and a delayed emphatic low blast', () => {
-  const pops = presentation.sounds.cast.slice(0, 6);
-  assert.ok(pops.every(p => p.kind === 'tone' && p.duration < 0.1 && p.endFrequency < p.frequency));
-  for (let i = 1; i < pops.length; i++) {
-    assert.ok(Math.abs(pops[i].delay - pops[i - 1].delay - 0.15) < 1e-8, 'shots follow the gameplay rhythm');
-    assert.notEqual(pops[i].type, pops[i - 1].type, 'alternating barrel timbres');
+test('recorded torch discharges follow barrage cadence and bloom into the fireblast', () => {
+  const shots = presentation.sounds.cast.slice(0, 3);
+  assert.equal(shots.length, 3);
+  assert.ok(shots.every(v => v.url.endsWith('/ignition.wav')), 'real torch attacks define the volley');
+  assert.equal(shots[0].delay, 0.2, 'first discharge follows the first barrel');
+  for (let i = 1; i < shots.length; i++) {
+    assert.ok(Math.abs(shots[i].delay - shots[i - 1].delay - 0.30) < 1e-8,
+      'recorded accents follow alternate shots on the 0.15 second gameplay grid');
+    assert.notEqual(shots[i].rate, shots[i - 1].rate, 'barrels vary the recorded combustion weight');
   }
-  const blast = presentation.sounds.cast.slice(6);
-  assert.ok(blast.some(v => v.kind === 'noise') && blast.some(v => v.endFrequency < 50));
-  assert.ok(blast.every(v => v.delay > pops.at(-1).delay && v.duration > pops[0].duration));
-  assert.ok(presentation.sounds.impact.some(v => v.kind === 'noise' && v.filterType === 'highpass'),
-    'impact includes a short ember fizz after the attack');
+  const blast = presentation.sounds.cast[3];
+  assert.ok(blast.url.endsWith('/fire-roar.wav'));
+  assert.equal(blast.delay, 1.25, 'long flame opens at the visual fireblast');
+  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/wood-break.wav')),
+    'impact carries physical fracture beneath the flame');
+  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/ember-bed.wav')));
+  assert.ok(presentation.sounds.pulse.every(v => v.gain <= 0.10 && v.url.endsWith('/air-swish.wav')),
+    'frequent trail puffs remain short and quiet');
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const v of voices) {
-      assert.ok(v.gain > 0 && v.gain <= 0.25);
-      assert.ok(v.duration > 0 && v.duration <= 2.5);
+      assert.deepEqual(Object.keys(v).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.equal(v.kind, 'recording');
+      assert.match(v.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8);
+      assert.ok(v.rate >= 0.75 && v.rate <= 1.2);
       assert.ok(v.delay >= 0 && v.delay <= 2);
-      assert.ok(v.attack > 0 && v.release > 0 && v.attack + v.release <= v.duration);
     }
   }
 });

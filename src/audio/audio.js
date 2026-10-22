@@ -15,7 +15,7 @@ import { Music } from './music.js';
 import { ChargeHum, playSword } from './sword.js';
 import { playWaterSound, prepareWaterSounds } from './water.js';
 import { WeatherAudio } from './weather.js';
-import { playSpellSound } from './spells.js';
+import { playSpellSound, prepareSpellSounds } from './spells.js';
 import { WATER } from '../world/world.js';
 
 // The game hands over animation events before clearing them. Audio never
@@ -113,6 +113,7 @@ export class GameAudio {
     void prepareGrassFootsteps(this.engine);
     void prepareWaterSounds(this.engine);
     void prepareLightningSounds(this.engine);
+    void prepareSpellSounds(this.engine);
     this.charge.update(player.combat.charge, player.x, player.y);
     this.music.update({ night: signals.night, time, dt,
       weather: this.weather.preset, weatherIntensity: this.weather.intensity });

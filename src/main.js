@@ -2,6 +2,7 @@ import { screenToWorld } from './core/aim.js';
 import { clearInput, isControlTarget, isDown, isGameplayBlocked, moveAxis, setGameplayBlocked, wasTapped } from './core/input.js';
 import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
+import { prepareSpellSounds } from './audio/spells.js';
 import { bindAudioControls } from './audio/controls.js';
 import { installTouchControls } from './core/touch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
@@ -461,6 +462,7 @@ const spellControls = new SpellControls(casting, { surface: canvas, touchButton:
   onBind: spell => hud.notify(`${spell.name} bound to R`, 'spell'),
   onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell') });
 loadSpells().then(spells => {
+  void prepareSpellSounds(sound.engine, spells);
   casting.spells = new Map(spells.map(s => [s.id, s]));
   casting.selected = casting.spells.has(params.get('spell')) ? params.get('spell') : spells[0]?.id ?? '';
   spellControls.populate();
