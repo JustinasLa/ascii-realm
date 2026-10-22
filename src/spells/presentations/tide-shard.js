@@ -278,17 +278,17 @@ export default {
     else eddy(o, effect);
   },
   sounds: {
-    // A light current gathers into a dry shell contact, without falling droplets.
+    // A narrow forward cut and a dry tick; no shared swelling bed.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.18, rate: 1.08, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.27, rate: 1.15, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/needle-cut.wav', gain: 0.32, rate: 1.1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shard-tick.wav', gain: 0.12, rate: 1.1, delay: 0.06 },
     ],
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.27, rate: 1.04, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.1, rate: 1.1, delay: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shard-tick.wav', gain: 0.32, rate: 1.05, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/needle-cut.wav', gain: 0.1, rate: 1.15, delay: 0.055 },
     ],
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.06, rate: 1.16, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/needle-cut.wav', gain: 0.065, rate: 1.2, delay: 0 },
     ],
   },
 };

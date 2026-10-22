@@ -148,13 +148,16 @@ test('all stages remain deterministic, finite and within budget, then fade clean
   }
 });
 
-test('glyph sound uses a rising current, compact impact and restrained wash', async () => {
+test('glyph sound uses three rising strokes and three compact marks', async () => {
   const sounds = presentation.sounds;
   assert.deepEqual(Object.keys(sounds), ['cast', 'impact', 'pulse']);
-  assert.ok(sounds.cast.some(v => v.url.endsWith('/current-rise.wav')));
-  assert.ok(sounds.cast.some(v => v.url.endsWith('/deep-fold.wav') && v.delay > 0));
-  assert.ok(sounds.impact.some(v => v.url.endsWith('/current-pass.wav')));
-  assert.ok(sounds.pulse.every(v => v.gain <= 0.15), 'recurring wash stays beneath the impact');
+  assert.ok(sounds.cast.some(v => v.url.endsWith('/glyph-trace.wav')));
+  assert.ok(sounds.cast.some(v => v.url.endsWith('/glyph-trace.wav') && v.delay > 0));
+  assert.ok(sounds.impact.some(v => v.url.endsWith('/glyph-mark.wav')));
+  assert.equal(sounds.cast.length, 3);
+  assert.equal(sounds.impact.length, 3);
+  assert.ok(sounds.cast[0].rate < sounds.cast[1].rate && sounds.cast[1].rate < sounds.cast[2].rate);
+  assert.ok(sounds.pulse.every(v => v.gain <= 0.07), 'recurring strokes stay quiet');
   for (const layers of Object.values(sounds)) {
     assert.ok(layers.length >= 1 && layers.length <= 3);
     assert.ok(layers.reduce((sum, layer) => sum + layer.gain, 0) <= 0.65);

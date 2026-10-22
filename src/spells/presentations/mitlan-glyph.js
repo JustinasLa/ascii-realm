@@ -323,17 +323,19 @@ export default {
     core('@', shade(0.85 + 0.15 * flash), level * Math.max(0.8 * (1 - dis), flash));
   },
   sounds: {
-    // The seal draws and folds inward before a compact release, without a geyser splash.
+    // Three rising dry strokes inscribe the glyph; three compact marks release it.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.24, rate: 0.98, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.16, rate: 1.08, delay: 0.34 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/glyph-trace.wav', gain: 0.2, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/glyph-trace.wav', gain: 0.21, rate: 1, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/glyph-trace.wav', gain: 0.23, rate: 1.18, delay: 0.32 },
     ],
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.3, rate: 1, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.18, rate: 1.02, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/glyph-mark.wav', gain: 0.28, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/glyph-mark.wav', gain: 0.18, rate: 1, delay: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/glyph-mark.wav', gain: 0.17, rate: 1.18, delay: 0.18 },
     ],
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/undertow.wav', gain: 0.04, rate: 1.16, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/glyph-trace.wav', gain: 0.06, rate: 1.1, delay: 0 },
     ],
   },
 };

@@ -124,12 +124,12 @@ test('every stage stays finite, bounded, deterministic, moving and fully faded',
   }
 });
 
-test('current lifts into a compact impact and a faint returning wash', async () => {
+test('a broad crest lands with a granular impact and a short recoil', async () => {
   const { cast, impact, pulse } = profile.sounds;
-  assert.ok(cast.some(v => v.url.endsWith('/current-rise.wav')));
-  const breaker = impact.find(v => v.url.endsWith('/shell-hit.wav'));
-  const wash = impact.find(v => v.url.endsWith('/undertow.wav'));
-  assert.ok(breaker && wash && wash.delay > breaker.delay, 'returning water follows the physical impact');
+  assert.ok(cast.some(v => v.url.endsWith('/crest-push.wav')));
+  const breaker = impact.find(v => v.url.endsWith('/breaker-hit.wav'));
+  const recoil = impact.find(v => v.url.endsWith('/crest-push.wav'));
+  assert.ok(breaker && recoil && recoil.delay > breaker.delay, 'recoil follows the physical impact');
   assert.ok(pulse.every(v => v.gain <= 0.12), 'repeating wake stays quiet');
   const allowed = new Set(['kind', 'url', 'gain', 'rate', 'delay']);
   for (const voices of Object.values(profile.sounds)) {
@@ -153,9 +153,9 @@ test('current lifts into a compact impact and a faint returning wash', async () 
   }
   assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 7 && r.disposals === 1));
   assert.ok(fake.nodes.every(n => n.kind !== 'oscillator' && n.kind !== 'filter'));
-  const splash = fake.nodes.find(n => n.buffer?.id === 'shell-hit.wav');
-  assert.ok(splash.buffer.duration < 0.6, 'contact ends without a long splash tail');
-  assert.ok(splash.stops[0] - splash.starts[0] >= splash.buffer.duration / breaker.rate);
+  const contact = fake.nodes.find(n => n.buffer?.id === 'breaker-hit.wav' && n.playbackRate.calls[0].args[0] === breaker.rate);
+  assert.ok(contact.buffer.duration < 0.6, 'contact ends without a long splash tail');
+  assert.ok(contact.stops[0] - contact.starts[0] >= contact.buffer.duration / breaker.rate);
   assert.deepEqual(fake.invalid, []);
 });
 

@@ -167,11 +167,11 @@ test('the paint adapter keeps every stage under its glyph cap', () => {
 
 test('the sound recipe uses current movement and dry contact with a quiet repeated wake', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.match(cast[0].url, /current-rise\.wav$/, 'current gathering leads the release');
-  assert.ok(cast.some(v => v.url.endsWith('/current-pass.wav') && v.delay > cast[0].delay));
-  assert.match(impact[0].url, /shell-hit\.wav$/, 'contact begins with a compact dry impulse');
-  assert.ok(impact.some(v => v.url.endsWith('/current-pass.wav') && v.delay > 0));
-  assert.ok(pulse.every(v => v.url.endsWith('/current-pass.wav') && v.gain <= 0.12), 'repeated wakes stay restrained');
+  assert.match(cast[0].url, /needle-cut\.wav$/, 'current gathering leads the release');
+  assert.ok(cast.some(v => v.url.endsWith('/shard-tick.wav') && v.delay > cast[0].delay));
+  assert.match(impact[0].url, /shard-tick\.wav$/, 'contact begins with a compact dry impulse');
+  assert.ok(impact.some(v => v.url.endsWith('/needle-cut.wav') && v.delay > 0));
+  assert.ok(pulse.every(v => v.url.endsWith('/needle-cut.wav') && v.gain <= 0.12), 'repeated wakes stay restrained');
   for (const recipe of [cast, impact, pulse]) {
     assert.ok(recipe.length >= 1 && recipe.length <= 3);
     assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 0.65);

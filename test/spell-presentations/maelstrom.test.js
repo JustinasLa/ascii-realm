@@ -154,12 +154,12 @@ test('Maelstrom stays within budget, prints ASCII and fades every stage', () => 
   assert.deepEqual(once, again, 'draw is a pure function of the effect state');
 });
 
-test('Maelstrom layers real returning water and staggered bubbles into a restrained whirlpool', async () => {
+test('Maelstrom uses cycling wind and a distinct inward collapse', async () => {
   assert.equal(spell.presentation, presentation);
   for (const stage of ['cast', 'impact', 'pulse']) {
     const voices = presentation.sounds[stage];
     assert.ok(voices.length >= 1 && voices.length <= 3);
-    assert.ok(voices.some(voice => voice.url.endsWith('/deep-fold.wav')));
+    assert.ok(voices.some(voice => voice.url.endsWith('/vortex-turn.wav')));
     if (stage === 'pulse') assert.equal(voices.length, 1, 'repeated pressure avoids stacked wet textures');
     else assert.ok(new Set(voices.map(voice => voice.delay)).size > 1, 'current gestures enter in staggered turns');
     assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= (stage === 'pulse' ? 0.07 : 0.65));

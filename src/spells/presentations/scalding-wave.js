@@ -278,17 +278,16 @@ export default {
     (stages[effect.stage] ?? cast)(state, lifted(effect, plot));
   },
   sounds: {
-    // Air gathers and rolls forward; the hot wave has no boiling-water bed.
+    // A continuous airy pressure release; no boiling or impact knock.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.2, rate: 0.94, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.27, rate: 0.9, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/steam-draw.wav', gain: 0.3, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/steam-cut.wav', gain: 0.16, rate: 1, delay: 0.35 },
     ],
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.2, rate: 1.06, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.12, rate: 1.12, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/steam-cut.wav', gain: 0.33, rate: 0.95, delay: 0 },
     ],
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.06, rate: 1.14, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/steam-cut.wav', gain: 0.065, rate: 1.15, delay: 0 },
     ],
   },
 };

@@ -126,10 +126,10 @@ test('all stages are deterministic, bounded, printable, and fade completely', ()
 
 test('shield audio uses rising pressure, compact impacts, and quiet folds', async () => {
   const { cast, impact, pulse } = profile.sounds;
-  assert.ok(cast[0].url.endsWith('/current-rise.wav'));
-  assert.ok(cast[1].url.endsWith('/deep-fold.wav') && cast[1].delay > cast[0].delay);
-  assert.ok(impact[0].url.endsWith('/shell-hit.wav'));
-  assert.ok(pulse.every(v => v.url.endsWith('/deep-fold.wav') && v.gain <= 0.15), 'repeated folds remain quiet');
+  assert.ok(cast[0].url.endsWith('/shell-bow.wav'));
+  assert.ok(cast[1].url.endsWith('/shield-knock.wav') && cast[1].delay > cast[0].delay);
+  assert.ok(impact[0].url.endsWith('/shield-knock.wav'));
+  assert.ok(pulse.every(v => v.url.endsWith('/shell-bow.wav') && v.gain <= 0.15), 'repeated folds remain quiet');
   for (const [stage, voices] of Object.entries(profile.sounds)) {
     const fake = fakeRecordedAudio();
     await prepareRecordedSpellTest(fake, profile);

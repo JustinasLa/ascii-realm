@@ -324,17 +324,16 @@ export default {
   // Close water displacement rises into a broad returning wash. A bucket
   // splash supplies the shove; falling creek droplets mark the quiet pulse.
   sounds: {
-    // A broad inward current wraps the shield; contact closes with a soft, hollow shove.
+    // A low-mid shell bows into place and answers contact with one firm knock.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.3, rate: 0.94, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.16, rate: 1.02, delay: 0.3 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-bow.wav', gain: 0.3, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shield-knock.wav', gain: 0.12, rate: 1, delay: 0.42 },
     ],
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.3, rate: 0.96, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.14, rate: 1.08, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shield-knock.wav', gain: 0.34, rate: 0.92, delay: 0 },
     ],
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.06, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-bow.wav', gain: 0.065, rate: 1.12, delay: 0 },
     ],
   },
 };

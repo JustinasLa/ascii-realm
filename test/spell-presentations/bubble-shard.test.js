@@ -181,10 +181,10 @@ test('Bubble Shard uses natural water recordings with irregular bubbles and a ph
     }
   }
   const cast = presentation.sounds.cast;
-  assert.ok(cast.some(v => v.url.endsWith('/deep-fold.wav')));
-  assert.ok(cast.some(v => v.url.endsWith('/current-rise.wav')));
+  assert.ok(cast.some(v => v.url.endsWith('/membrane-flex.wav')));
+  assert.ok(cast.some(v => v.url.endsWith('/hollow-pop.wav')));
   assert.notEqual(cast[1].delay - cast[0].delay, cast[2].delay - cast[1].delay, 'irregular pressure-release rhythm');
-  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/shell-hit.wav') && v.delay === 0));
+  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/hollow-pop.wav') && v.delay === 0));
   assert.ok(presentation.sounds.pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.15, 'frequent flight cues stay restrained');
 });
 

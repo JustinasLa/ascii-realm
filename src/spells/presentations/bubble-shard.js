@@ -373,18 +373,18 @@ export default {
     (STAGES[effect.stage] ?? cast)(pen(effect, plot), effect);
   },
   sounds: {
-    // An enclosed swell and uneven air gestures suggest the bubble without close gurgling.
+    // A taut membrane flexes and releases in an uneven hollow double-pop.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.23, rate: 1.05, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.15, rate: 1.12, delay: 0.137 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.1, rate: 0.98, delay: 0.367 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/membrane-flex.wav', gain: 0.28, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.13, rate: 0.95, delay: 0.23 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.1, rate: 1.12, delay: 0.55 },
     ],
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.24, rate: 1.12, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.1, rate: 1.16, delay: 0.173 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.32, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.13, rate: 1.18, delay: 0.115 },
     ],
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.055, rate: 1.2, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/membrane-flex.wav', gain: 0.065, rate: 1.12, delay: 0 },
     ],
   },
 };

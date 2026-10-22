@@ -284,18 +284,17 @@ export default {
     }
   },
   sounds: {
-    // Current and a faint wash suggest the crest; its impact clears quickly instead of splashing for seconds.
+    // A broad displacement lands in a granular impact, followed by a short recoil.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.24, rate: 0.9, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/undertow.wav', gain: 0.08, rate: 1.04, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/crest-push.wav', gain: 0.31, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker-hit.wav', gain: 0.12, rate: 1, delay: 0.32 },
     ],
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.3, rate: 0.94, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.23, rate: 0.92, delay: 0.04 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/undertow.wav', gain: 0.07, rate: 1.12, delay: 0.3 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker-hit.wav', gain: 0.34, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/crest-push.wav', gain: 0.17, rate: 0.9, delay: 0.09 },
     ],
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.07, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/crest-push.wav', gain: 0.065, rate: 1.1, delay: 0 },
     ],
   },
 };

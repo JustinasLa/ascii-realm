@@ -115,14 +115,14 @@ test('all Scalding Wave stages are deterministic, bounded, evolving, and fade ou
   }
 });
 
-test('Scalding Wave uses shaped air and compact impacts for every sound stage', async () => {
+test('Scalding Wave uses a continuous air release without a percussion layer', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.url.endsWith('/storm-air.wav')), 'soft air leads the cast');
-  assert.ok(cast.some(v => v.url.endsWith('/current-pass.wav')), 'a current follows the air swell');
-  assert.ok(impact.some(v => v.url.endsWith('/shell-hit.wav')), 'compact impact');
-  assert.ok(impact.some(v => v.url.endsWith('/current-pass.wav')), 'a short current follows the impact');
+  assert.ok(cast.some(v => v.url.endsWith('/steam-draw.wav')), 'soft air leads the cast');
+  assert.ok(cast.some(v => v.url.endsWith('/steam-cut.wav')), 'a current follows the air swell');
+  assert.equal(impact.length, 1, 'one continuous release');
+  assert.ok(impact[0].url.endsWith('/steam-cut.wav'));
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain <= 0.15 && v.url.endsWith('/storm-air.wav')), 'repeated air stays quiet');
+  assert.ok(pulse.every(v => v.gain <= 0.07 && v.url.endsWith('/steam-cut.wav')), 'repeated air stays quiet');
   assert.deepEqual(Object.keys(presentation.sounds).sort(), ['cast', 'impact', 'pulse']);
   for (const [stage, recipe] of Object.entries(presentation.sounds)) {
     assert.ok(recipe.length > 0 && recipe.length <= 3);

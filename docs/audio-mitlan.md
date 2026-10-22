@@ -1,29 +1,29 @@
-# Mitlan: currents and pressure, less wet
+# Mitlan: distinct voices, less wet
 
-Mitlan uses smooth inward movement, compact hollow impacts and soft pressure folds. Close bubbling, boiling, falling droplets, wading sounds and hard bucket-splash attacks are removed. A quiet filtered wash tail hints at water beneath a few larger spells, without dominating the cast.
+Each spell has dedicated recordings and phrasing. The earlier shared cloth swell and wood hit made the family too similar; changing gain and pitch was insufficient. No recordings are now shared between Mitlan spells, and the seven revised casts use different foreground source materials. Boiling, splashing, gurgling and droplets are absent.
 
-| Spell | Sound |
-| --- | --- |
-| Tide Shard | Light current gathering, quick release and dry shell contact |
-| Bubble Shard | Enclosed pressure swell and uneven air gestures |
-| Scalding Wave | Air gathering and a forward current, without boiling |
-| Tidal Shield | Broad inward wrap followed by a hollow shove |
-| Mitlan Glyph | Drawing and folding current before a compact release |
-| Crashing Wave | Dry crest impact with a short, faint returning wash |
-| Maelstrom | Staggered inward folds; water sits behind the movement |
-| Drowning Prison | Enclosing pressure and quiet repeated folds, without gurgling |
-| Lightning | Air charge and compact thunder; no rain layer |
+| Spell | Identity | Material and phrasing |
+| --- | --- | --- |
+| Tide Shard | Narrow cut, sharp tick | Bamboo movement and a high, dry wood transient; 0.16-0.24-second clips |
+| Bubble Shard | Taut membrane, hollow double-pop | Filtered timber strain, with an uneven two-part release |
+| Scalding Wave | Continuous airy pressure | Recorded breath builds into a soft release, with no percussion |
+| Tidal Shield | Bowing shell, firm knock | Low-mid timber cavity resonance; one contact rather than a double-pop |
+| Mitlan Glyph | Three strokes, three marks | Fine leaf texture and branch transients, rising through three short gestures |
+| Crashing Wave | Broad shove, granular impact | Jacket movement and a ground impact, followed by a short recoil |
+| Maelstrom | Turning wind, inward collapse | Forest wind with three amplitude lobes, then a reversed fold |
+| Drowning Prison | Enclosing pressure | Muted cloth folds and compact wood contact |
+| Lightning | Air charge, short thunder | Bamboo air movement and a recorded thunderclap |
 
-The seven mono PCM16 clips remain at 44.1 kHz. Most last 0.436–0.85 seconds; thunder ends after 1.4 seconds. Offline bandpass filtering, reversal on gathering cues and shaped fades suppress sharp wet transients and avoid long tails. Peaks are limited to 0.40–0.58, RMS to 0.11 (0.05 for the wash), and recurring pulse gains to 0.07. The wash is mixed at gain 0.08 or less.
+Nineteen mono PCM16 clips remain at 44.1 kHz. Most last 0.14-0.96 seconds; thunder ends after 1.4 seconds. Offline bandpass filtering, selective reversal, shaped fades and amplitude modulation give the materials different contours. Peaks are capped at 0.46-0.58, RMS at 0.11, recurring pulse gains at 0.07 and combined stage gains at 0.65. No synthetic noise or tonal layers are added.
 
-Mitlan is lighter and smoother than Oseni: higher air detail, rounded pressure and less impact weight. Spell definitions, visual choreography, damage and control effects are unchanged.
+Spell visuals, timing, damage and control effects remain unchanged. The preview's **Compare casts** button plays the nine casts in sequence; Stop or selecting another cue cancels the sequence, including during loading.
 
 ## Provenance and rebuild
 
-Five existing CC0 recordings supply bamboo movement, cloth, wood contact, a splash decay and thunder. [LICENSE.txt](../assets/audio/spells/mitlan/LICENSE.txt) and [sources.json](../assets/audio/spells/mitlan/sources.json) retain original source links, downloads, hashes, crop times, filter settings, reversal and output hashes. Freesound inputs are MP3 previews; thunder uses its original OGG. No generated noise or oscillator layers are added.
+Twelve CC0 source recordings supply the materials. [LICENSE.txt](../assets/audio/spells/mitlan/LICENSE.txt) and [sources.json](../assets/audio/spells/mitlan/sources.json) retain source links, downloads, hashes, crop times, filter settings, reversal, modulation and output hashes. Freesound inputs are MP3 previews; thunder uses its original OGG.
 
-Rebuild with `python tools/render-spell-audio-mitlan.py --sources PATH_TO_SOURCE_CACHE` using Python, NumPy, SciPy and ffmpeg. Missing source recordings download from their documented URLs.
+Rebuild with `python tools/render-spell-audio-mitlan.py --sources PATH_TO_SOURCE_CACHE` using Python, NumPy, SciPy and ffmpeg. Missing sources download from their documented URLs.
 
-Run `node --test test/audio-spells-mitlan.test.js` for sample integrity, provenance, restrained levels, runtime routing and cancellation. The spell presentation tests verify timing and unchanged gameplay.
+Run `node --test test/audio-spells-mitlan.test.js` for sample integrity, provenance, source separation, restrained levels, runtime routing and cancellation. Spell presentation tests cover audio phrasing and gameplay.
 
-[Listen to the Mitlan sound preview](audio-mitlan.html) or [try the game](../).
+[Compare the sounds](audio-mitlan.html) or [try the game](../).
