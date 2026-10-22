@@ -26,6 +26,11 @@ current scene is available as `window.game.builder.scene` for inspection.
 
 ## Stone ruins
 
+Normal games start beside a small ruin site: an arched gate with joined broken
+walls, three pillars and fallen stone. A dry path leads north from spawn through
+the gate. These are part of the generated map, so **Reset scene** restores them;
+erasing them is undoable and their removal is retained by Save/Load.
+
 The **Architecture** palette contains a stone gate, battlement tower, short,
 broken and tall columns, low and broken walls, and small and large rubble.
 The gate's two piers block movement while its centre is walkable. The tower

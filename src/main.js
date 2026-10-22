@@ -132,7 +132,8 @@ const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 let name = cleanName(params.get('name') || 'Kael');
-const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks, meadow: ruinPreview });
+const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks,
+  meadow: ruinPreview, spawnRuins: !ruinPreview });
 // Keep every chunk a zoomed-out view touches, including the tallest trees
 // above and below it, or chunks would be rebuilt every frame.
 fitChunks = () => {

@@ -66,9 +66,13 @@ async function join(port, code, name = 'Rowan', token) {
 }
 
 test('friends join by code with the same seed and receive movement, jumps and sword poses', async (t) => {
-  const { port } = await setup(t);
+  const { port, game } = await setup(t);
   const host = await create(port, 42);
   assert.match(host.lobby.code, /^[A-Z2-9]{6}$/);
+  const world = game.rooms.get(host.lobby.code).world;
+  assert.equal(world.spawnRuins.props.length, 8, 'lobby spawning uses the same ruin map as normal clients');
+  const gate = world.spawnRuins.props.find(prop => prop.kind === 'stone-gate');
+  assert.equal(world.isWalkable(gate.x, gate.y), true);
   const friend = await join(port, ` ${host.lobby.code.toLowerCase()} `);
   assert.equal(friend.lobby.seed, 42);
   assert.notEqual(friend.lobby.id, host.lobby.id);
