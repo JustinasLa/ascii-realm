@@ -21,7 +21,7 @@ import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
 import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
 import { RemotePlayers } from './multiplayer/remote-players.js';
-import { putCell, putOutlinedCell } from './render/cells.js';
+import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Hud } from './ui/hud.js';
@@ -967,7 +967,7 @@ function frame(now) {
   } });
   for (const figure of monsterCells) {
     reflections.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, mirror) });
-    drawables.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, putCell) });
+    drawables.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, putOutlinedCell) });
   }
   // Friends are drawn as the shape-built outlaw in their own gear.
   for (const peer of peers) {
