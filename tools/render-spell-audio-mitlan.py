@@ -57,6 +57,9 @@ CLIPS = [
     # Maelstrom: wind turns in three deep amplitude lobes, then folds inward.
     ('vortex-turn', 'wind.mp3', 56.6, .96, .10, .15, .50, 300, 1700, False),
     ('vortex-collapse', 'wind.mp3', 57.5, .68, .04, .30, .50, 260, 1250, True),
+    # Mana Spring: a soft rising fabric breath and short, quiet return.
+    ('spring-draw', 'cloth.mp3', 8.2, .60, .18, .22, .46, 900, 3400, False),
+    ('spring-return', 'cloth.mp3', 9.1, .32, .10, .18, .46, 750, 2800, True),
 ]
 
 def main():

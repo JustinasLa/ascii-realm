@@ -61,7 +61,9 @@ export class SpellControls {
   stats(spell) {
     const v = this.casting.variant(spell), p = v ? this.casting.modifiers(v) : {};
     return [`${p.mana ?? 0} mana`, p.damage && `${p.damage} dmg`, p.heal && `${p.heal} heal`,
-      p.shield_power && `${p.shield_power} shield`, p.duration && `${p.duration}s long`].filter(Boolean);
+      p.shield_power && `${p.shield_power} shield`, p.duration && `${p.duration}s long`,
+      p.mana_regen && `+${p.mana_regen} mana/s`,
+      spell.toggleAura && (this.casting.hasAura(this.casting.player, spell.toggleAura) ? 'Active - cast off' : 'Cast to activate')].filter(Boolean);
   }
 
   bind(spell) {

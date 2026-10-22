@@ -36,6 +36,7 @@ function choose() {
   $('description').textContent = `${spell.name} · ${spell.element} · ${p.mana ?? 0} mana`
     + (p.damage ? ` · ${p.damage} damage` : '') + (p.heal ? ` · ${p.heal} heal` : '')
     + (p.burnt_damage ? ` · ${p.burnt_damage} damage each second for ${p.burnt_duration}s` : '');
+  if (spell.description) $('description').textContent += ` · ${spell.description}`;
   const url = new URL(location.href); url.searchParams.set('spell', spell.id); history.replaceState(null, '', url);
   reset();
 }

@@ -380,8 +380,9 @@ export class Spellcasting {
     const s = this.state(target), name = lower(args.auraname ?? args.aura ?? args.event ?? 'aura');
     const previous = s.auras.get(name);
     if (previous && !args.maxstacks) this.removeAura(target, name);
-    const entry = { args, ctx, target, until: this.time + clamp(this.number(args.d ?? args.duration, ctx, 20) / 20, 0.05, 5000),
-      interval: Math.max(0.05, this.number(args.i ?? args.interval, ctx, 20) / 20), next: this.time,
+    const entry = { args, ctx, target, until: TRUE(args.permanent) ? Infinity : this.time + clamp(this.number(args.d ?? args.duration, ctx, 20) / 20, 0.05, 5000),
+      interval: Math.max(0.05, this.number(args.i ?? args.interval, ctx, 20) / 20),
+      next: this.time + clamp(this.number(args.tickdelay, ctx), 0, 2400) / 20,
       charges: this.number(args.charges, ctx, Infinity),
       stacks: Math.min(this.number(args.maxstacks, ctx, 1), (previous?.stacks ?? 0) + 1) };
     s.auras.set(name, entry);

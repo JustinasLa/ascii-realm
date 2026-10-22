@@ -8,4 +8,5 @@ export const mitlan = [
   "maelstrom",
   "drowning-prison",
   "lightning",
+  "mana-spring",
 ];

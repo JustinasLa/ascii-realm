@@ -13,8 +13,9 @@ Each spell has dedicated recordings and phrasing. The earlier shared cloth swell
 | Maelstrom | Turning wind, inward collapse | Forest wind with three amplitude lobes, then a reversed fold |
 | Drowning Prison | Enclosing pressure | Muted cloth folds and compact wood contact |
 | Lightning | Air charge, short thunder | Bamboo air movement and a recorded thunderclap |
+| Mana Spring | Rising breath, soft return | Dedicated fabric crops with a restrained recurring pulse |
 
-Nineteen mono PCM16 clips remain at 44.1 kHz. Most last 0.14-0.96 seconds; thunder ends after 1.4 seconds. Offline bandpass filtering, selective reversal, shaped fades and amplitude modulation give the materials different contours. Peaks are capped at 0.46-0.58, RMS at 0.11, recurring pulse gains at 0.07 and combined stage gains at 0.65. No synthetic noise or tonal layers are added.
+Twenty-one mono PCM16 clips remain at 44.1 kHz. Most last 0.14-0.96 seconds; thunder ends after 1.4 seconds. Offline bandpass filtering, selective reversal, shaped fades and amplitude modulation give the materials different contours. Peaks are capped at 0.46-0.58, RMS at 0.11, recurring pulse gains at 0.07 and combined stage gains at 0.65. No synthetic noise or tonal layers are added.
 
 Spell visuals, timing, damage and control effects remain unchanged. The preview's **Compare casts** button plays the nine casts in sequence; Stop or selecting another cue cancels the sequence, including during loading.
 
