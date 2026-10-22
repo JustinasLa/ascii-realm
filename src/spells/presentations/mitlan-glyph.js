@@ -323,19 +323,17 @@ export default {
     core('@', shade(0.85 + 0.15 * flash), level * Math.max(0.8 * (1 - dis), flash));
   },
   sounds: {
-    // Real displaced water draws the seal; close bubbles mark its inscription.
+    // The seal draws and folds inward before a compact release, without a geyser splash.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.43, rate: 0.88, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.29, rate: 0.92, delay: 0.34 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.24, rate: 0.98, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.16, rate: 1.08, delay: 0.34 },
     ],
-    // A physical splash opens into a full breaker and falling water.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.55, rate: 0.85, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker.wav', gain: 0.38, rate: 0.94, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.3, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.18, rate: 1.02, delay: 0.08 },
     ],
-    // Repeated glyph contact carries only a quiet returning wash.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.13, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/undertow.wav', gain: 0.04, rate: 1.16, delay: 0 },
     ],
   },
 };

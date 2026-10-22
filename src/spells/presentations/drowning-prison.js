@@ -355,20 +355,18 @@ export default {
     }
   },
   sounds: {
-    // Displaced water folds around the target, trapping a pocket of real air.
+    // An enclosing pressure fold closes with a hollow contact; recurring ticks have no bubbles.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.48, rate: 0.84, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.32, rate: 0.88, delay: 0.22 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.22, rate: 0.9, delay: 0.5 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.25, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.18, rate: 0.96, delay: 0.22 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.1, rate: 1.08, delay: 0.5 },
     ],
-    // A compact water blow closes the prison; trapped breath escapes after it.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.43, rate: 0.8, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.28, rate: 0.82, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.24, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.15, rate: 1.1, delay: 0.1 },
     ],
-    // A single restrained pocket of air marks the repeated drowning ticks.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.14, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.055, rate: 1.15, delay: 0 },
     ],
   },
 };

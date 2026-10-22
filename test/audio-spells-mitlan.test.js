@@ -19,12 +19,14 @@ for (const spell of spells) {
     for (const stage of ['cast', 'impact', 'pulse']) {
       const recipe = sounds[stage];
       assert.ok(Array.isArray(recipe) && recipe.length >= 1 && recipe.length <= 4, stage);
-      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2, `${stage} gain headroom`);
+      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 0.65, `${stage} gain headroom`);
       for (const layer of recipe) {
         assert.ok(Object.keys(layer).every(key => supported.has(key)), 'no silently ignored options');
         assert.equal(layer.kind, 'recording', 'no oscillator or generated-noise substitute');
         assert.match(layer.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-        assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+        assert.ok(layer.gain >= 0.04 && layer.gain <= 0.35);
+        if (stage === 'pulse') assert.ok(layer.gain <= 0.07, 'repeated movement stays unobtrusive');
+        if (layer.url.endsWith('/undertow.wav')) assert.ok(layer.gain <= 0.08, 'water remains a background hint');
         assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2, 'retain recognizable natural texture');
         assert.ok((layer.delay ?? 0) >= 0 && (layer.delay ?? 0) <= 2);
       }
@@ -78,8 +80,9 @@ test('Mitlan CC0 recordings retain source detail with clean bounded PCM and docu
   const directory = new URL('../assets/audio/spells/mitlan/', import.meta.url);
   const manifest = JSON.parse(await readFile(new URL('sources.json', directory), 'utf8'));
   assert.equal(manifest.license, 'CC0-1.0');
-  assert.equal(manifest.clips.length, 9);
+  assert.equal(manifest.clips.length, 7);
   const sourceNames = new Set(manifest.sources.map(source => source.file));
+  assert.ok(!sourceNames.has('boiling.mp3') && !sourceNames.has('wading.mp3'), 'no boiling or close foot splashes');
   for (const source of manifest.sources) {
     assert.equal(source.license, 'CC0-1.0');
     assert.match(source.page, /^https:\/\/(freesound.org|opengameart.org)\//);
@@ -94,16 +97,17 @@ test('Mitlan CC0 recordings retain source detail with clean bounded PCM and docu
     assert.equal(bytes.readUInt16LE(22), 1, 'mono spatial foley');
     assert.equal(bytes.readUInt32LE(24), 44100, 'retain original preview bandwidth');
     assert.equal(bytes.readUInt16LE(34), 16);
-    assert.ok(clip.duration >= 0.3 && clip.duration <= (clip.file === 'thunder-clap.wav' ? 5 : 3));
+    assert.ok(clip.duration >= 0.3 && clip.duration <= (clip.file === 'thunder-clap.wav' ? 1.4 : 0.85));
     const samples = (bytes.length - 44)/2;
     let sum = 0, sumSquares = 0, peak = 0;
     for (let index = 0; index < samples; index++) {
       const value = bytes.readInt16LE(44+index*2)/32768;
       sum += value; sumSquares += value*value; peak = Math.max(peak, Math.abs(value));
     }
-    assert.ok(peak > 0.5 && peak <= 0.85, `${clip.file}: balanced unclipped peak`);
+    assert.ok(peak > 0.1 && peak <= 0.581, `${clip.file}: restrained unclipped peak`);
     assert.ok(Math.abs(sum/samples) < 0.0001, `${clip.file}: removed DC`);
-    assert.ok(Math.sqrt(sumSquares/samples) > 0.01, `${clip.file}: audible recorded material`);
+    const rms = Math.sqrt(sumSquares/samples);
+    assert.ok(rms > 0.005 && rms <= clip.rmsCeiling + 0.001, `${clip.file}: audible but restrained body`);
     assert.equal(bytes.readInt16LE(44), 0, 'click-free opening');
     assert.equal(bytes.readInt16LE(bytes.length-2), 0, 'click-free close');
   }

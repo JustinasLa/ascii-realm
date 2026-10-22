@@ -148,21 +148,21 @@ test('all stages remain deterministic, finite and within budget, then fade clean
   }
 });
 
-test('glyph sound uses recorded inscription, geyser and restrained wash layers', async () => {
+test('glyph sound uses a rising current, compact impact and restrained wash', async () => {
   const sounds = presentation.sounds;
   assert.deepEqual(Object.keys(sounds), ['cast', 'impact', 'pulse']);
-  assert.ok(sounds.cast.some(v => v.url.endsWith('/water-lift.wav')));
-  assert.ok(sounds.cast.some(v => v.url.endsWith('/bubbles.wav') && v.delay > 0));
-  assert.ok(sounds.impact.some(v => v.url.endsWith('/breaker.wav')));
-  assert.ok(sounds.pulse.every(v => v.gain <= 0.15), 'recurring wash stays beneath the geyser');
+  assert.ok(sounds.cast.some(v => v.url.endsWith('/current-rise.wav')));
+  assert.ok(sounds.cast.some(v => v.url.endsWith('/deep-fold.wav') && v.delay > 0));
+  assert.ok(sounds.impact.some(v => v.url.endsWith('/current-pass.wav')));
+  assert.ok(sounds.pulse.every(v => v.gain <= 0.15), 'recurring wash stays beneath the impact');
   for (const layers of Object.values(sounds)) {
     assert.ok(layers.length >= 1 && layers.length <= 3);
-    assert.ok(layers.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2);
+    assert.ok(layers.reduce((sum, layer) => sum + layer.gain, 0) <= 0.65);
     for (const layer of layers) {
       assert.equal(layer.kind, 'recording');
       assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.match(layer.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.gain >= 0.04 && layer.gain <= 0.35);
       assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2);
       assert.ok(layer.delay >= 0 && layer.delay <= 2);
       const bytes = await readFile(new URL(`../../${layer.url.slice(1)}`, import.meta.url));
@@ -173,7 +173,7 @@ test('glyph sound uses recorded inscription, geyser and restrained wash layers',
   }
 });
 
-test('recorded water layers schedule their delays through the spatial effects bus', async () => {
+test('recorded layers schedule their delays through the spatial effects bus', async () => {
   const fake = fakeRecordedAudio();
   await prepareRecordedSpellTest(fake, presentation);
   for (const stage of ['cast', 'impact', 'pulse']) {

@@ -278,19 +278,17 @@ export default {
     (stages[effect.stage] ?? cast)(state, lifted(effect, plot));
   },
   sounds: {
-    // Real boiling leads the gathering pool; a close water rush rolls out behind it.
+    // Air gathers and rolls forward; the hot wave has no boiling-water bed.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/boil.wav', gain: 0.6, rate: 0.92, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.36, rate: 0.9, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.2, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.27, rate: 0.9, delay: 0.16 },
     ],
-    // A wet slap and close bubbling preserve the irregular texture of scalding water.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.38, rate: 0.93, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.34, rate: 1.04, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.2, rate: 1.06, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.12, rate: 1.12, delay: 0.08 },
     ],
-    // Quiet natural simmer under the repeated cone visuals.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/boil.wav', gain: 0.1, rate: 1.1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.06, rate: 1.14, delay: 0 },
     ],
   },
 };

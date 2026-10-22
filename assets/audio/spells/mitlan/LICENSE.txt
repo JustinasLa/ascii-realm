@@ -7,26 +7,26 @@ Source pages and licenses verified 2026-10-22.
 Freesound inputs are public HQ MP3 previews; original source rates may be higher.
 Thunder uses the original OGG download. Output is 44,100 Hz mono 16-bit PCM.
 
-Walking through water by rosenberg3
-https://freesound.org/people/rosenberg3/sounds/627004/
-https://cdn.freesound.org/previews/627/627004_13855267-hq.mp3
+Swosh / Whoosh / Air Cut by qubodup
+https://freesound.org/people/qubodup/sounds/60030/
+https://cdn.freesound.org/previews/60/60030_71257-hq.mp3
+
+Cloth Flapping On A Clothesline Thickly by leonelmail
+https://freesound.org/people/leonelmail/sounds/330638/
+https://cdn.freesound.org/previews/330/330638_4437257-hq.mp3
+
+Wood Crack 5 by utsuru
+https://freesound.org/people/utsuru/sounds/183450/
+https://cdn.freesound.org/previews/183/183450_418644-hq.mp3
 
 Water splash, emptying a bucket 2 by wormer2
 https://freesound.org/people/wormer2/sounds/415670/
 https://cdn.freesound.org/previews/415/415670_2383863-hq.mp3
 
-Water splash, emptying a bucket 3 by wormer2
-https://freesound.org/people/wormer2/sounds/415669/
-https://cdn.freesound.org/previews/415/415669_2383863-hq.mp3
-
-Boiling water.wav by xenognosis
-https://freesound.org/people/xenognosis/sounds/137229/
-https://cdn.freesound.org/previews/137/137229_2515465-hq.mp3
-
 Rain + Long Thunder by WuxiaScrub
 https://opengameart.org/content/rain-long-thunder
 https://opengameart.org/sites/default/files/rain-thunder.ogg
 
-44.1 kHz mono PCM16; DC removal, sine/cosine fades, peak balance only; no generated sound.
+44.1 kHz mono PCM16; DC removal, third-order zero-phase bandpass, optional reversal, sine/cosine fades, peak and RMS ceilings. No generated sound. Water is limited to a filtered wash tail; no boiling, droplets or wading sources.
 Exact crops, fades, input/output checksums: sources.json.
 Reproduction: python tools/render-spell-audio-mitlan.py --sources PATH

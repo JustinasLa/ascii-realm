@@ -453,23 +453,18 @@ export default {
     }
   },
   sounds: {
-    // Displaced water rolls back into the throat, with real bubbles following
-    // behind the wash to give the whirlpool a churning, circular cadence.
+    // Staggered inward folds give circular movement; the low wash stays behind the air.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.36, rate: 0.86, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.46, rate: 0.8, delay: 0.18 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.24, rate: 0.88, delay: 0.58 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.2, rate: 0.96, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.24, rate: 0.96, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/undertow.wav', gain: 0.06, rate: 1.08, delay: 0.58 },
     ],
-    // A close splash collapses into returning water and trapped air.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.48, rate: 0.8, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.36, rate: 0.9, delay: 0.13 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.22, rate: 0.78, delay: 0.36 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.22, rate: 0.98, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.18, rate: 1.02, delay: 0.13 },
     ],
-    // Gentle recurring churn leaves headroom for overlapping zone pulses.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.12, rate: 1.12, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.1, rate: 1.16, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.06, rate: 1.18, delay: 0 },
     ],
   },
 };

@@ -124,12 +124,12 @@ test('all stages are deterministic, bounded, printable, and fade completely', ()
   }
 });
 
-test('water audio uses recorded displacement, physical splash, and quiet droplets', async () => {
+test('shield audio uses rising pressure, compact impacts, and quiet folds', async () => {
   const { cast, impact, pulse } = profile.sounds;
-  assert.ok(cast[0].url.endsWith('/water-lift.wav'));
-  assert.ok(cast[1].url.endsWith('/wash.wav') && cast[1].delay > cast[0].delay);
-  assert.ok(impact[0].url.endsWith('/water-strike.wav'));
-  assert.ok(pulse.every(v => v.url.endsWith('/droplets.wav') && v.gain <= 0.15), 'repeated droplets remain quiet');
+  assert.ok(cast[0].url.endsWith('/current-rise.wav'));
+  assert.ok(cast[1].url.endsWith('/deep-fold.wav') && cast[1].delay > cast[0].delay);
+  assert.ok(impact[0].url.endsWith('/shell-hit.wav'));
+  assert.ok(pulse.every(v => v.url.endsWith('/deep-fold.wav') && v.gain <= 0.15), 'repeated folds remain quiet');
   for (const [stage, voices] of Object.entries(profile.sounds)) {
     const fake = fakeRecordedAudio();
     await prepareRecordedSpellTest(fake, profile);
@@ -139,11 +139,11 @@ test('water audio uses recorded displacement, physical splash, and quiet droplet
     assert.deepEqual(fake.invalid, []);
     handles.forEach(handle => handle.stop());
     assert.ok(voices.length >= 1 && voices.length <= 3);
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.65);
     for (const voice of voices) {
       assert.equal(voice.kind, 'recording');
       assert.ok(Object.keys(voice).every(key => ['kind', 'url', 'gain', 'rate', 'delay'].includes(key)));
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);

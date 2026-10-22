@@ -159,15 +159,15 @@ test('Maelstrom layers real returning water and staggered bubbles into a restrai
   for (const stage of ['cast', 'impact', 'pulse']) {
     const voices = presentation.sounds[stage];
     assert.ok(voices.length >= 1 && voices.length <= 3);
-    assert.ok(voices.some(voice => voice.url.endsWith('/wash.wav')));
-    assert.ok(voices.some(voice => voice.url.endsWith('/bubbles.wav')));
-    assert.ok(new Set(voices.map(voice => voice.delay)).size > 1, 'water and trapped air enter in staggered turns');
-    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= (stage === 'pulse' ? 0.3 : 1.2));
+    assert.ok(voices.some(voice => voice.url.endsWith('/deep-fold.wav')));
+    if (stage === 'pulse') assert.equal(voices.length, 1, 'repeated pressure avoids stacked wet textures');
+    else assert.ok(new Set(voices.map(voice => voice.delay)).size > 1, 'current gestures enter in staggered turns');
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= (stage === 'pulse' ? 0.07 : 0.65));
     for (const voice of voices) {
-      assert.equal(voice.kind, 'recording', 'every layer uses recorded water foley');
+      assert.equal(voice.kind, 'recording', 'every layer uses shaped recordings');
       assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }

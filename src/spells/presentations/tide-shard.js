@@ -278,19 +278,17 @@ export default {
     else eddy(o, effect);
   },
   sounds: {
-    // Real creek displacement gathers into a quick, close water strike.
+    // A light current gathers into a dry shell contact, without falling droplets.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.48, rate: 1.08, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.32, rate: 1.15, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.18, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.27, rate: 1.15, delay: 0.08 },
     ],
-    // A physical splash breaks the spear; loose droplets fall after contact.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.7, rate: 0.95, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.2, rate: 1.02, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.27, rate: 1.04, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.1, rate: 1.1, delay: 0.07 },
     ],
-    // Flight wakes keep the creek's small splashes quiet and natural.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.1, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.06, rate: 1.16, delay: 0 },
     ],
   },
 };

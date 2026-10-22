@@ -124,22 +124,22 @@ test('every stage stays finite, bounded, deterministic, moving and fully faded',
   }
 });
 
-test('recorded water lifts into a full breaker and returning wash with quiet droplet wakes', async () => {
+test('current lifts into a compact impact and a faint returning wash', async () => {
   const { cast, impact, pulse } = profile.sounds;
-  assert.ok(cast.some(v => v.url.endsWith('/water-lift.wav')));
-  const breaker = impact.find(v => v.url.endsWith('/breaker.wav'));
-  const wash = impact.find(v => v.url.endsWith('/wash.wav'));
+  assert.ok(cast.some(v => v.url.endsWith('/current-rise.wav')));
+  const breaker = impact.find(v => v.url.endsWith('/shell-hit.wav'));
+  const wash = impact.find(v => v.url.endsWith('/undertow.wav'));
   assert.ok(breaker && wash && wash.delay > breaker.delay, 'returning water follows the physical impact');
   assert.ok(pulse.every(v => v.gain <= 0.12), 'repeating wake stays quiet');
   const allowed = new Set(['kind', 'url', 'gain', 'rate', 'delay']);
   for (const voices of Object.values(profile.sounds)) {
     assert.ok(voices.length >= 1 && voices.length <= 3);
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.65);
     for (const v of voices) {
       assert.equal(v.kind, 'recording');
       assert.match(v.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-      assert.ok(Object.keys(v).every(key => allowed.has(key)), 'no synthetic oscillators, filters, or cropped envelopes');
-      assert.ok(v.gain >= 0.1 && v.gain <= 0.8 && v.rate >= 0.75 && v.rate <= 1.2);
+      assert.ok(Object.keys(v).every(key => allowed.has(key)), 'only supported recording playback parameters');
+      assert.ok(v.gain >= 0.04 && v.gain <= 0.35 && v.rate >= 0.75 && v.rate <= 1.2);
       assert.ok(v.delay >= 0 && v.delay <= 2);
     }
   }
@@ -153,8 +153,8 @@ test('recorded water lifts into a full breaker and returning wash with quiet dro
   }
   assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 7 && r.disposals === 1));
   assert.ok(fake.nodes.every(n => n.kind !== 'oscillator' && n.kind !== 'filter'));
-  const splash = fake.nodes.find(n => n.buffer?.id === 'breaker.wav');
-  assert.ok(splash.buffer.duration > 2.5, 'full recorded splash retains its natural tail');
+  const splash = fake.nodes.find(n => n.buffer?.id === 'shell-hit.wav');
+  assert.ok(splash.buffer.duration < 0.6, 'contact ends without a long splash tail');
   assert.ok(splash.stops[0] - splash.starts[0] >= splash.buffer.duration / breaker.rate);
   assert.deepEqual(fake.invalid, []);
 });

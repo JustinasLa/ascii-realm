@@ -284,20 +284,18 @@ export default {
     }
   },
   sounds: {
-    // Recorded water displacement gathers at the caster before the crest lifts.
+    // Current and a faint wash suggest the crest; its impact clears quickly instead of splashing for seconds.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.55, rate: 0.88, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.25, rate: 0.94, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.24, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/undertow.wav', gain: 0.08, rate: 1.04, delay: 0.18 },
     ],
-    // Keep the complete splash and its natural texture; a later wash carries
-    // the broken wave back out after the heavy crest lands.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker.wav', gain: 0.76, rate: 0.9, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.3, rate: 0.88, delay: 1.8 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.3, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.23, rate: 0.92, delay: 0.04 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/undertow.wav', gain: 0.07, rate: 1.12, delay: 0.3 },
     ],
-    // Sparse real droplets make the repeated wake audible without another slam.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.1, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-pass.wav', gain: 0.07, rate: 1.12, delay: 0 },
     ],
   },
 };

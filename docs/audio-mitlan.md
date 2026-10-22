@@ -1,57 +1,29 @@
-# Mitlan recorded spell sound design
+# Mitlan: currents and pressure, less wet
 
-Mitlan spells now use real water and storm recordings exclusively. Weight comes
-from physical water displacement, splashing, close bubbling and recorded thunder.
-There are no oscillator notes, pitch sweeps or synthesized noise layers. Subtle
-playback-rate changes preserve the identity of the recorded material.
+Mitlan uses smooth inward movement, compact hollow impacts and soft pressure folds. Close bubbling, boiling, falling droplets, wading sounds and hard bucket-splash attacks are removed. A quiet filtered wash tail hints at water beneath a few larger spells, without dominating the cast.
 
-| Spell | Recorded material and phrasing |
+| Spell | Sound |
 | --- | --- |
-| Tide Shard | Quick creek-water lift, compact wet strike and falling droplets. |
-| Bubble Shard | Irregular close bubbles, droplets and displaced water; a wet strike ruptures the bubble. |
-| Scalding Wave | Close-miked boiling leads into a rush, with bubbling after the impact. |
-| Tidal Shield | Lifted water spreads into broad wash, then shoves as a physical splash. |
-| Mitlan Glyph | Measured displacement and bubbling inscription give way to a geyser-like splash. |
-| Crashing Wave | A full recorded splash breaks and retreats into returning wash. |
-| Maelstrom | Staggered wash and bubbles emphasize repeated movement and churning water. |
-| Drowning Prison | Water encloses the target with close bubbling and quiet trapped-air ticks. |
-| Lightning | Rain precedes a real thunderclap and its naturally rolling tail. |
+| Tide Shard | Light current gathering, quick release and dry shell contact |
+| Bubble Shard | Enclosed pressure swell and uneven air gestures |
+| Scalding Wave | Air gathering and a forward current, without boiling |
+| Tidal Shield | Broad inward wrap followed by a hollow shove |
+| Mitlan Glyph | Drawing and folding current before a compact release |
+| Crashing Wave | Dry crest impact with a short, faint returning wash |
+| Maelstrom | Staggered inward folds; water sits behind the movement |
+| Drowning Prison | Enclosing pressure and quiet repeated folds, without gurgling |
+| Lightning | Air charge and compact thunder; no rain layer |
 
-All three emitted audio stages (cast, impact, pulse) are authored for each spell.
-Aura application uses impact; zones and visual ticks use pulse. Ongoing ticks
-are quieter than casts and hits. The spatial SFX bus, preloaded recording cache
-and owner cancellation handle sound lifecycle. Visual geometry, rune definitions,
-damage and control effects are unchanged.
+The seven mono PCM16 clips remain at 44.1 kHz. Most last 0.436–0.85 seconds; thunder ends after 1.4 seconds. Offline bandpass filtering, reversal on gathering cues and shaped fades suppress sharp wet transients and avoid long tails. Peaks are limited to 0.40–0.58, RMS to 0.11 (0.05 for the wash), and recurring pulse gains to 0.07. The wash is mixed at gain 0.08 or less.
 
-## Sources and processing
+Mitlan is lighter and smoother than Oseni: higher air detail, rounded pressure and less impact weight. Spell definitions, visual choreography, damage and control effects are unchanged.
 
-Nine mono 44,100 Hz PCM16 clips retain broadband detail: seven water textures,
-rain and thunder. All five source recordings are CC0:
+## Provenance and rebuild
 
-- [Walking through water](https://freesound.org/people/rosenberg3/sounds/627004/) by rosenberg3.
-- [Water splash, emptying a bucket 2](https://freesound.org/people/wormer2/sounds/415670/) and [take 3](https://freesound.org/people/wormer2/sounds/415669/) by wormer2.
-- [Boiling water.wav](https://freesound.org/people/xenognosis/sounds/137229/) by xenognosis, recorded close to a pot with an H4 Zoom.
-- [Rain + Long Thunder](https://opengameart.org/content/rain-long-thunder) by WuxiaScrub.
+Five existing CC0 recordings supply bamboo movement, cloth, wood contact, a splash decay and thunder. [LICENSE.txt](../assets/audio/spells/mitlan/LICENSE.txt) and [sources.json](../assets/audio/spells/mitlan/sources.json) retain original source links, downloads, hashes, crop times, filter settings, reversal and output hashes. Freesound inputs are MP3 previews; thunder uses its original OGG. No generated noise or oscillator layers are added.
 
-Freesound inputs are public HQ MP3 previews; thunder uses the original OGG.
-Processing only crops, converts to mono, removes DC, fades edit boundaries and
-balances peaks below 0.85. It adds no generated sound, filtering, reversal,
-compression or looping. Water clips last 0.56-2.68 seconds; thunder lasts 4.8
-seconds. Playback rates stay between 0.75 and 1.2; combined stage gain is at
-most 1.2.
+Rebuild with `python tools/render-spell-audio-mitlan.py --sources PATH_TO_SOURCE_CACHE` using Python, NumPy, SciPy and ffmpeg. Missing source recordings download from their documented URLs.
 
-Exact source licenses, hashes, crop timings and fades are recorded in
-assets/audio/spells/mitlan/sources.json and LICENSE.txt. Reproduce with
-Python/numpy and ffmpeg:
+Run `node --test test/audio-spells-mitlan.test.js` for sample integrity, provenance, restrained levels, runtime routing and cancellation. The spell presentation tests verify timing and unchanged gameplay.
 
-```sh
-python tools/render-spell-audio-mitlan.py --sources PATH_TO_SOURCE_CACHE
-```
-
-Missing sources download from their documented URLs. Tests check PCM sample
-rate, DC, unclipped peaks, audible signal and click-free endpoints. Family tests
-also exercise every stage through real rune casts, recording-only recipes,
-provenance, spatial routing, silent rejected casts and delayed-tail cancellation.
-
-Listen in [the Mitlan sound archive](audio-mitlan.html), or cast spells in
-[the casting simulator](casting-simulation.html).
+[Listen to the Mitlan sound preview](audio-mitlan.html) or [try the game](../).

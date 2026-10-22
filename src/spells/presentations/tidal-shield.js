@@ -324,16 +324,17 @@ export default {
   // Close water displacement rises into a broad returning wash. A bucket
   // splash supplies the shove; falling creek droplets mark the quiet pulse.
   sounds: {
+    // A broad inward current wraps the shield; contact closes with a soft, hollow shove.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.62, rate: 0.85, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.46, rate: 0.9, delay: 0.3 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.3, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.16, rate: 1.02, delay: 0.3 },
     ],
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.67, rate: 0.82, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.23, rate: 0.95, delay: 0.2 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.3, rate: 0.96, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.14, rate: 1.08, delay: 0.08 },
     ],
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.12, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.06, rate: 1.12, delay: 0 },
     ],
   },
 };

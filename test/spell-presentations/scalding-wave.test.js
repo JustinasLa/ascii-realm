@@ -115,23 +115,23 @@ test('all Scalding Wave stages are deterministic, bounded, evolving, and fade ou
   }
 });
 
-test('Scalding Wave uses natural boiling and water recordings for every sound stage', async () => {
+test('Scalding Wave uses shaped air and compact impacts for every sound stage', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.url.endsWith('/boil.wav')), 'real boiling leads the cast');
-  assert.ok(cast.some(v => v.url.endsWith('/water-lift.wav')), 'displaced water follows the boiling pool');
-  assert.ok(impact.some(v => v.url.endsWith('/water-strike.wav')), 'real water impact');
-  assert.ok(impact.some(v => v.url.endsWith('/bubbles.wav')), 'close bubbling follows the scald');
+  assert.ok(cast.some(v => v.url.endsWith('/storm-air.wav')), 'soft air leads the cast');
+  assert.ok(cast.some(v => v.url.endsWith('/current-pass.wav')), 'a current follows the air swell');
+  assert.ok(impact.some(v => v.url.endsWith('/shell-hit.wav')), 'compact impact');
+  assert.ok(impact.some(v => v.url.endsWith('/current-pass.wav')), 'a short current follows the impact');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain <= 0.15 && v.url.endsWith('/boil.wav')), 'repeated simmer stays quiet');
+  assert.ok(pulse.every(v => v.gain <= 0.15 && v.url.endsWith('/storm-air.wav')), 'repeated air stays quiet');
   assert.deepEqual(Object.keys(presentation.sounds).sort(), ['cast', 'impact', 'pulse']);
   for (const [stage, recipe] of Object.entries(presentation.sounds)) {
     assert.ok(recipe.length > 0 && recipe.length <= 3);
-    assert.ok(recipe.reduce((total, voice) => total + voice.gain, 0) <= 1.2);
+    assert.ok(recipe.reduce((total, voice) => total + voice.gain, 0) <= 0.65);
     for (const voice of recipe) {
       assert.equal(voice.kind, 'recording');
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       const wav = readFileSync(new URL(`../../${voice.url.slice(1)}`, import.meta.url));

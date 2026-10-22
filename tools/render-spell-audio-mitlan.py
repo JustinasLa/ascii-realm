@@ -1,8 +1,8 @@
-"""Reproduce Mitlan's real foley crops. Requires Python/numpy and ffmpeg.
+"""Reproduce Mitlan's restrained current and pressure cues. Requires numpy/scipy and ffmpeg.
 
 Run: python tools/render-spell-audio-mitlan.py [--sources PATH]
-Downloads missing CC0 source recordings into PATH (default .cache/mitlan-audio).
-No oscillators, generated noise, pitch sweeps, reversal or resynthesis.
+Downloads missing CC0 source recordings into PATH. Movement carries the spells;
+only a quiet, filtered wash tail remains as a hint of water. No boiling or drops.
 """
 import argparse
 import hashlib
@@ -12,26 +12,25 @@ import subprocess
 import urllib.request
 import wave
 import numpy as np
+from scipy.signal import butter, sosfiltfilt
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {
-    'wading.mp3': ('Walking through water', 'rosenberg3', 'https://freesound.org/people/rosenberg3/sounds/627004/', 'https://cdn.freesound.org/previews/627/627004_13855267-hq.mp3'),
+    'swish.mp3': ('Swosh / Whoosh / Air Cut', 'qubodup', 'https://freesound.org/people/qubodup/sounds/60030/', 'https://cdn.freesound.org/previews/60/60030_71257-hq.mp3'),
+    'cloth.mp3': ('Cloth Flapping On A Clothesline Thickly', 'leonelmail', 'https://freesound.org/people/leonelmail/sounds/330638/', 'https://cdn.freesound.org/previews/330/330638_4437257-hq.mp3'),
+    'crack.mp3': ('Wood Crack 5', 'utsuru', 'https://freesound.org/people/utsuru/sounds/183450/', 'https://cdn.freesound.org/previews/183/183450_418644-hq.mp3'),
     'splash-small.mp3': ('Water splash, emptying a bucket 2', 'wormer2', 'https://freesound.org/people/wormer2/sounds/415670/', 'https://cdn.freesound.org/previews/415/415670_2383863-hq.mp3'),
-    'splash-medium.mp3': ('Water splash, emptying a bucket 3', 'wormer2', 'https://freesound.org/people/wormer2/sounds/415669/', 'https://cdn.freesound.org/previews/415/415669_2383863-hq.mp3'),
-    'boiling.mp3': ('Boiling water.wav', 'xenognosis', 'https://freesound.org/people/xenognosis/sounds/137229/', 'https://cdn.freesound.org/previews/137/137229_2515465-hq.mp3'),
     'thunder.ogg': ('Rain + Long Thunder', 'WuxiaScrub', 'https://opengameart.org/content/rain-long-thunder', 'https://opengameart.org/sites/default/files/rain-thunder.ogg'),
 }
-# filename, source, crop start/duration, fade-in/out, peak
+# filename, source, crop start/duration, fade-in/out, peak, high/low-pass Hz, reverse
 CLIPS = [
-    ('water-strike', 'splash-small.mp3', .31, .85, .004, .16, .80),
-    ('breaker', 'splash-medium.mp3', .10, 2.68, .004, .30, .84),
-    ('wash', 'splash-small.mp3', 1.18, 1.05, .025, .18, .68),
-    ('water-lift', 'wading.mp3', .52, .62, .012, .10, .72),
-    ('droplets', 'wading.mp3', 2.315, .56, .008, .10, .62),
-    ('boil', 'boiling.mp3', 3.0, 1.5, .035, .22, .72),
-    ('bubbles', 'boiling.mp3', 7.1, .68, .02, .14, .68),
-    ('thunder-clap', 'thunder.ogg', 21.38, 4.8, .004, .8, .84),
-    ('storm-rain', 'thunder.ogg', 5.0, .9, .04, .18, .62),
+    ('current-rise', 'cloth.mp3', 12.57, .70, .20, .20, .50, 320, 2600, True),
+    ('current-pass', 'swish.mp3', 0, .436, .025, .20, .52, 350, 3200, False),
+    ('shell-hit', 'crack.mp3', .04, .45, .016, .28, .52, 420, 1900, False),
+    ('undertow', 'splash-small.mp3', 1.5, .65, .16, .32, .40, 320, 1050, True),
+    ('deep-fold', 'cloth.mp3', 12.72, .85, .24, .38, .48, 240, 1200, True),
+    ('thunder-clap', 'thunder.ogg', 21.38, 1.4, .018, .70, .58, 170, 3200, False),
+    ('storm-air', 'swish.mp3', 0, .436, .15, .16, .46, 800, 4200, True),
 ]
 
 def main():
@@ -52,10 +51,13 @@ def main():
         sources.append(dict(file=filename, title=title, author=author, page=page,
             download=download, license='CC0-1.0', sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
     clips = []
-    for name, source, start, duration, fade_in, fade_out, peak in CLIPS:
+    for name, source, start, duration, fade_in, fade_out, peak, high_pass, low_pass, reverse in CLIPS:
         samples = decoded[source][round(start*44100):round((start+duration)*44100)].copy()
         assert len(samples) == round(duration*44100), name
         samples -= samples.mean()
+        samples = sosfiltfilt(butter(3, [high_pass, low_pass], btype='bandpass', fs=44100, output='sos'), samples)
+        if reverse:
+            samples = samples[::-1].copy()
         envelope = np.ones(len(samples))
         a, b = round(fade_in*44100), round(fade_out*44100)
         envelope[:a] = np.sin(np.linspace(0, np.pi/2, a))**2
@@ -64,17 +66,20 @@ def main():
         # Remove any DC introduced by the fade without reopening its endpoints.
         samples -= envelope * samples.sum()/envelope.sum()
         samples *= peak / np.max(np.abs(samples))
+        rms_ceiling = .05 if name == 'undertow' else .11
+        samples *= min(1, rms_ceiling / max(np.sqrt(np.mean(samples*samples)), 1e-9))
         data = np.rint(samples*32767).astype('<i2')
         path = target / (name+'.wav')
         with wave.open(str(path), 'wb') as wav:
             wav.setparams((1, 2, 44100, len(data), 'NONE', 'not compressed'))
             wav.writeframes(data.tobytes())
         clips.append(dict(file=name+'.wav', source=source, start=start, duration=duration,
-            fadeIn=fade_in, fadeOut=fade_out, peak=peak, sampleRate=44100,
+            fadeIn=fade_in, fadeOut=fade_out, peak=peak, rmsCeiling=rms_ceiling,
+            highPassHz=high_pass, lowPassHz=low_pass, reversed=reverse, sampleRate=44100,
             sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
         print(name, len(samples)/44100, 'sec', path.stat().st_size, 'bytes')
     manifest = dict(license='CC0-1.0', licenseUrl='https://creativecommons.org/publicdomain/zero/1.0/',
-        processing='44.1 kHz mono PCM16; DC removal, sine/cosine fades, peak balance only; no generated sound.',
+        processing='44.1 kHz mono PCM16; DC removal, third-order zero-phase bandpass, optional reversal, sine/cosine fades, peak and RMS ceilings. No generated sound. Water is limited to a filtered wash tail; no boiling, droplets or wading sources.',
         sources=sources, clips=clips)
     (target/'sources.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
     notice = ['Mitlan recorded spell foley', '', 'All sources: Creative Commons CC0 1.0 Universal.',

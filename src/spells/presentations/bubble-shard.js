@@ -373,20 +373,18 @@ export default {
     (STAGES[effect.stage] ?? cast)(pen(effect, plot), effect);
   },
   sounds: {
-    // Close recorded bubbles swell into uneven droplets and displaced water.
+    // An enclosed swell and uneven air gestures suggest the bubble without close gurgling.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.49, rate: 0.89, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.24, rate: 1.04, delay: 0.137 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.28, rate: 0.96, delay: 0.367 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.23, rate: 1.05, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.15, rate: 1.12, delay: 0.137 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-air.wav', gain: 0.1, rate: 0.98, delay: 0.367 },
     ],
-    // A physical water strike bursts the shell, leaving little wet bubbles.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.63, rate: 0.96, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.23, rate: 1.03, delay: 0.173 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shell-hit.wav', gain: 0.24, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/current-rise.wav', gain: 0.1, rate: 1.16, delay: 0.173 },
     ],
-    // Flight sheds a restrained natural bubble texture beneath the impact.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.1, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/deep-fold.wav', gain: 0.055, rate: 1.2, delay: 0 },
     ],
   },
 };

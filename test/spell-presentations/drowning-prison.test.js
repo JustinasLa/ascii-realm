@@ -175,23 +175,23 @@ test('every stage is deterministic, moves, stays finite and within its plot budg
   }
 });
 
-test('the prison uses recorded enclosing water and restrained trapped-air ticks', () => {
+test('the prison uses enclosing pressure and restrained recurring folds', () => {
   const { cast, impact, pulse } = profile.sounds;
-  assert.ok(cast.some(voice => voice.url.endsWith('/water-lift.wav')));
-  assert.ok(cast.some(voice => voice.url.endsWith('/wash.wav') && voice.delay > 0));
-  assert.ok(impact.some(voice => voice.url.endsWith('/water-strike.wav')));
-  assert.ok(impact.some(voice => voice.url.endsWith('/bubbles.wav') && voice.delay > 0));
+  assert.ok(cast.some(voice => voice.url.endsWith('/deep-fold.wav')));
+  assert.ok(cast.some(voice => voice.url.endsWith('/current-rise.wav') && voice.delay > 0));
+  assert.ok(impact.some(voice => voice.url.endsWith('/shell-hit.wav')));
+  assert.ok(impact.some(voice => voice.url.endsWith('/deep-fold.wav') && voice.delay > 0));
   assert.equal(pulse.length, 1, 'repeated ticks do not stack water impacts');
-  assert.ok(pulse.every(voice => voice.url.endsWith('/bubbles.wav') && voice.gain <= 0.16 && voice.rate >= 1));
+  assert.ok(pulse.every(voice => voice.url.endsWith('/deep-fold.wav') && voice.gain <= 0.16 && voice.rate >= 1));
   const fields = ['delay', 'gain', 'kind', 'rate', 'url'];
   for (const voices of Object.values(profile.sounds)) {
     assert.ok(voices.length >= 1 && voices.length <= 3);
-    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 0.65);
     for (const voice of voices) {
       assert.equal(voice.kind, 'recording');
       assert.deepEqual(Object.keys(voice).sort(), fields, 'only recorded-foley parameters are authored');
       assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(Object.values(voice).filter(value => typeof value === 'number').every(Number.isFinite));
