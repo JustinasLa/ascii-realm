@@ -268,20 +268,19 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 1046.5, endFrequency: 1032, delay: 0, duration: 0.42, gain: 0.055, attack: 0.004, release: 0.37, cutoff: 3400 },
-      { kind: 'tone', type: 'triangle', frequency: 880, endFrequency: 870, delay: 0.13, duration: 0.45, gain: 0.06, attack: 0.004, release: 0.4, cutoff: 3000 },
-      { kind: 'tone', type: 'triangle', frequency: 698.46, endFrequency: 692, delay: 0.29, duration: 0.49, gain: 0.065, attack: 0.005, release: 0.44, cutoff: 2600 },
-      { kind: 'tone', type: 'sine', frequency: 523.25, endFrequency: 520, delay: 0.49, duration: 0.65, gain: 0.075, attack: 0.007, release: 0.6 },
+      // Slow water and robe breathing open a soft, organic healing channel.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-flow.wav', gain: 0.32, rate: 0.86, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.24, rate: 0.8, delay: 0.04 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-drift.wav', gain: 0.15, rate: 0.92, delay: 0.4 },
     ],
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 261.63, duration: 0.85, gain: 0.075, attack: 0.045, release: 0.66 },
-      { kind: 'tone', type: 'triangle', frequency: 329.63, duration: 0.78, gain: 0.045, attack: 0.045, release: 0.6, cutoff: 2100 },
-      { kind: 'tone', type: 'sine', frequency: 392, duration: 0.85, gain: 0.055, attack: 0.045, release: 0.66 },
-      { kind: 'tone', type: 'sine', frequency: 523.25, delay: 0.34, duration: 0.67, gain: 0.045, attack: 0.04, release: 0.55 },
-      { kind: 'tone', type: 'sine', frequency: 261.63, delay: 0.57, duration: 0.7, gain: 0.06, attack: 0.04, release: 0.58 },
+      // Small water contact and a leaf opening answer each heal without heavy tails.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.16, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.1, rate: 1.15, delay: 0.06 },
     ],
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 659.25, endFrequency: 523.25, duration: 0.16, gain: 0.014, attack: 0.007, release: 0.14 },
+      // Rapid bolt traces stay a single faint leaf movement beneath the channel.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.1, rate: 1.2, delay: 0 },
     ],
   },
 };

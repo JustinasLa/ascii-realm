@@ -356,19 +356,21 @@ export default {
     }
   },
   sounds: {
+    // Bark plates unfold with real root tension and cloth brushing past leaves.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 660, duration: 0.65, gain: 0.065, attack: 0.004, release: 0.55 },
-      { kind: 'tone', type: 'sine', frequency: 671, delay: 0.018, duration: 0.62, gain: 0.058, attack: 0.005, release: 0.52 },
-      { kind: 'tone', type: 'triangle', frequency: 165, endFrequency: 170, delay: 0.06, duration: 0.48, gain: 0.035, cutoff: 800, attack: 0.04, release: 0.3 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/root-creak.wav', gain: 0.44, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-sweep.wav', gain: 0.17, rate: 1.1, delay: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-drift.wav', gain: 0.13, rate: 0.95, delay: 0.16 },
     ],
+    // A hollow wooden clasp locks shut; its stressed frame settles afterward.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 150, endFrequency: 112, duration: 0.34, gain: 0.085, attack: 0.007, release: 0.27 },
-      { kind: 'tone', type: 'triangle', frequency: 300, endFrequency: 265, delay: 0.012, duration: 0.2, gain: 0.045, cutoff: 720, attack: 0.01, release: 0.17 },
-      { kind: 'tone', type: 'sine', frequency: 440, delay: 0.07, duration: 0.44, gain: 0.035, attack: 0.018, release: 0.38 },
-      { kind: 'tone', type: 'sine', frequency: 446, delay: 0.085, duration: 0.41, gain: 0.032, attack: 0.018, release: 0.35 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-knock.wav', gain: 0.55, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.18, rate: 0.9, delay: 0.035 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-strain.wav', gain: 0.2, rate: 0.95, delay: 0.13 },
     ],
+    // One soft leaf turn follows flight; its short tail permits gentle overlap.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 330, endFrequency: 326, duration: 0.08, gain: 0.012, attack: 0.01, release: 0.06 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.12, rate: 1.2, delay: 0 },
     ],
   },
 };

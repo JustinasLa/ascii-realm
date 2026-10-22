@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/temp-vine-wave.js';
 import { runeScene } from '../../test-support/spells.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function capture(stage, progress = 0.3, { radius = 1, life = presentation.duration, age = progress * life, heading = 0 } = {}) {
   const result = [];
@@ -139,26 +140,30 @@ test('every Vine Wave stage stays finite, ASCII, within budget, deterministic an
   }
 });
 
-test('Vine Wave sound layers rasp, alternate wood taps and release a low flexible whip', () => {
+test('Vine Wave recordings strain and swing into a physical root binding', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast[0].kind === 'noise' && cast[0].filterType === 'bandpass');
-  const taps = cast.filter(v => v.kind === 'tone' && v.duration < 0.1);
-  assert.ok(taps.length >= 3 && taps.every((v, i) => !i || v.delay > taps[i - 1].delay));
-  assert.ok(taps[0].frequency > taps[1].frequency && taps[2].frequency > taps[1].frequency, 'wood taps alternate pitch');
-  assert.ok(cast.some(v => v.kind === 'tone' && v.duration > 0.2 && v.endFrequency < 100 && v.delay > taps.at(-1).delay), 'low whip follows the taps');
-  assert.ok(impact.some(v => v.type === 'sawtooth' && v.endFrequency < v.frequency));
-  assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain <= 0.03 && v.duration <= 0.1));
+  const layer = (voices, file) => voices.find(v => v.url.endsWith('/' + file + '.wav'));
+  assert.equal(layer(cast, 'branch-strain').delay, 0, 'branch tension begins the cast');
+  assert.ok(layer(cast, 'cloth-sweep').delay > 0, 'the swing follows the strain');
+  assert.ok(layer(cast, 'leaf-drift').delay > layer(cast, 'cloth-sweep').delay, 'leaves drag behind the swinging roots');
+  assert.equal(layer(impact, 'branch-snap').delay, 0, 'contact snaps immediately');
+  assert.ok(layer(impact, 'root-creak').delay > layer(impact, 'earth-impact').delay, 'the binding strains after ground contact');
+  assert.equal(pulse.length, 1, 'travelling cues use one restrained movement');
+  assert.ok(layer(pulse, 'leaf-turn') && pulse[0].rate >= 1, 'pulse uses a short leaf movement');
   for (const [stage, voices] of Object.entries(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= (stage === 'pulse' ? 0.3 : 1.2), `${stage} leaves headroom for overlapping roots`);
     for (const v of voices) {
-      assert.ok(v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5);
-      assert.ok((v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2);
+      assert.equal(v.kind, 'recording', 'all layers use real foley');
+      assert.match(v.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8 && v.rate >= 0.75 && v.rate <= 1.2);
+      assert.ok(v.delay >= 0 && v.delay <= 2);
       assert.ok(Object.values(v).filter(value => typeof value === 'number').every(Number.isFinite));
     }
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
     const handles = playSpellSound(fake.engine, { type: 'spell', stage, presentation, x: 2, y: 4 });
-    assert.equal(handles.length, voices.length, `${stage} creates all layers`);
+    assert.equal(handles.length, voices.length, `${stage} plays all actual WAV layers`);
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 4));
     assert.deepEqual(fake.invalid, []);
     handles.forEach(handle => handle.stop());

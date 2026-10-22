@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/healing-orb.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function points(stage, progress, heading = 0, radius = 3, life = profile.duration) {
   const result = [];
@@ -114,26 +115,42 @@ test('pulses are small ground sprouts on the trail and a wide ring on the hit bu
   assert.ok(points('pulse', 0.05, 0, 3, 0.25).some(p => p[2] === '@' && dist(p) === 0), 'the centre glints first');
 });
 
-test('the seed chime rises through three pure notes before the airy landing bloom', () => {
+test('Healing Orb layers real foliage, liquid and cloth with a restrained recorded trail', async () => {
   const { cast, impact, pulse } = profile.sounds;
-  assert.equal(cast[0].type, 'sine');
-  const melody = cast.slice(1);
-  assert.equal(melody.length, 3);
-  assert.ok(melody.every(v => v.kind === 'tone' && v.type === 'sine'));
-  assert.ok(melody.every((v, i) => !i || v.frequency > melody[i - 1].frequency && v.delay > melody[i - 1].delay));
-  assert.ok(impact.some(v => v.kind === 'noise' && v.attack >= 0.08 && v.release >= 0.3), 'bloom is a soft air swell');
-  assert.ok(impact.filter(v => v.kind === 'tone').length >= 3, 'landing opens into a chord');
-  assert.ok(pulse.every(v => v.gain <= 0.02 && v.duration <= 0.15));
+  const file = v => v.url.split('/').at(-1);
+  assert.ok(cast.some(v => file(v) === 'leaf-drift.wav'), 'foliage opens around the seed');
+  assert.ok(cast.some(v => file(v) === 'cloth-breath.wav'), 'the release has a physical breath');
+  assert.ok(impact.some(v => file(v) === 'water-touch.wav' && v.delay === 0), 'gentle liquid contact marks the heal immediately');
+  assert.ok(impact.some(v => file(v) === 'leaf-turn.wav' && v.delay > 0), 'leaves unfold after contact');
+  const gain = recipe => recipe.reduce((sum, v) => sum + v.gain, 0);
+  assert.ok(gain(pulse) <= 0.3 && gain(pulse) < gain(cast) * 0.2 && gain(pulse) < gain(impact) * 0.2);
+  assert.ok(pulse.every(v => file(v) === 'leaf-turn.wav' && v.rate >= 1 && v.delay === 0), 'frequent trail uses a short, immediate leaf brush');
   for (const recipe of [cast, impact, pulse]) {
-    assert.ok(recipe.length <= 8);
-    assert.ok(recipe.every(v => v.gain > 0 && v.gain <= 0.25 && v.duration <= 2.5 && (v.delay ?? 0) <= 2));
+    assert.ok(recipe.length >= 1 && recipe.length <= 4);
+    assert.ok(gain(recipe) <= 1.2);
+    for (const v of recipe) {
+      assert.equal(v.kind, 'recording');
+      assert.match(v.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8 && v.rate >= 0.75 && v.rate <= 1.2 && v.delay >= 0 && v.delay <= 2);
+    }
   }
   const fake = fakeRecordedAudio();
+  assert.equal(await prepareRecordedSpellTest(fake, profile), true, 'all authored recordings load from real WAV files');
   for (const stage of ['cast', 'impact', 'pulse']) {
     const handles = playSpellSound(fake.engine, { stage, presentation: profile, x: 4, y: 8 });
     assert.equal(handles.length, profile.sounds[stage].length);
+    const sources = fake.nodes.filter(v => v.kind === 'source').slice(-handles.length);
+    sources.forEach((source, i) => {
+      const layer = profile.sounds[stage][i];
+      assert.equal(source.buffer.id, file(layer));
+      assert.equal(source.starts[0], fake.context.currentTime + layer.delay);
+      assert.ok(source.buffer.duration > 0 && source.buffer.duration <= 2);
+      assert.equal(source.playbackRate.calls[0].args[0], layer.rate);
+    });
     handles.forEach(handle => handle.stop());
   }
+  assert.ok(!fake.nodes.some(v => v.kind === 'oscillator'));
+  assert.deepEqual(fake.allocations, [], 'no synthesized noise buffers');
   assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 4 && r.y === 8 && r.disposals === 1));
   assert.deepEqual(fake.invalid, []);
 });

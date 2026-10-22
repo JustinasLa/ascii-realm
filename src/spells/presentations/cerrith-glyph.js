@@ -319,22 +319,21 @@ export default {
   },
   sounds: {
     cast: [
-      // A gently rolled G-major wooden chord: root, third, fifth and octave.
-      { kind: 'tone', type: 'triangle', frequency: 196, duration: 0.56, gain: 0.065, attack: 0.004, release: 0.42, cutoff: 1250 },
-      { kind: 'tone', type: 'triangle', frequency: 245, delay: 0.025, duration: 0.51, gain: 0.047, attack: 0.004, release: 0.39, cutoff: 1250 },
-      { kind: 'tone', type: 'triangle', frequency: 294, delay: 0.05, duration: 0.47, gain: 0.044, attack: 0.004, release: 0.36, cutoff: 1250 },
-      { kind: 'tone', type: 'triangle', frequency: 392, delay: 0.075, duration: 0.43, gain: 0.033, attack: 0.004, release: 0.33, cutoff: 1250 },
-      { kind: 'noise', delay: 0.04, duration: 0.62, gain: 0.018, attack: 0.12, release: 0.36, cutoff: 560, filterType: 'bandpass' },
+      // Two measured wooden contacts inscribe the seal while roots strain beneath it.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-knock.wav', gain: 0.3, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-knock.wav', gain: 0.35, rate: 0.79, delay: 0.38 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/root-creak.wav', gain: 0.29, rate: 0.85, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-drift.wav', gain: 0.16, rate: 0.93, delay: 0.27 },
     ],
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 180, endFrequency: 82, duration: 0.12, gain: 0.085, attack: 0.002, release: 0.10 },
-      { kind: 'noise', duration: 0.065, gain: 0.038, attack: 0.002, release: 0.055, cutoff: 740, filterType: 'lowpass' },
-      { kind: 'tone', type: 'triangle', frequency: 147, delay: 0.065, duration: 0.30, gain: 0.036, attack: 0.006, release: 0.25, cutoff: 950 },
-      { kind: 'tone', type: 'triangle', frequency: 196, delay: 0.095, duration: 0.36, gain: 0.031, attack: 0.006, release: 0.29, cutoff: 950 },
+      // The ward plants with packed earth and splitting timber; roots hold under tension.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/earth-impact.wav', gain: 0.46, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.28, rate: 0.89, delay: 0.035 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-strain.wav', gain: 0.3, rate: 0.83, delay: 0.13 },
     ],
     pulse: [
-      { kind: 'tone', type: 'triangle', frequency: 294, endFrequency: 280, duration: 0.10, gain: 0.010, attack: 0.012, release: 0.08, cutoff: 850 },
-      { kind: 'noise', duration: 0.08, gain: 0.006, attack: 0.018, release: 0.05, cutoff: 450, filterType: 'bandpass' },
+      // Small foliage movements keep recurring shielding contacts unobtrusive.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.12, rate: 1.16, delay: 0 },
     ],
   },
 };

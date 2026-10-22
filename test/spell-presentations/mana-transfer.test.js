@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/mana-transfer.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 const STAGES = ['cast', 'impact', 'pulse', 'aura', 'zone', 'projectile'];
 const BUDGET = { cast: 200, impact: 200, pulse: 90, aura: 160, zone: 160, projectile: 110 };
@@ -126,26 +127,28 @@ test('animation is smooth: total light never jumps between 240 Hz samples', () =
   }
 });
 
-test('sound phrase alternates hollow plunks, rises into a whistle, and resolves as a receiving pair', () => {
-  const plunks = profile.sounds.cast.filter(v => v.duration <= 0.15);
-  assert.equal(plunks.length, 4);
-  assert.ok(plunks.every(v => v.type === 'sine' && v.endFrequency < v.frequency && v.attack < 0.01));
-  assert.equal(plunks[0].frequency, plunks[2].frequency);
-  assert.equal(plunks[1].frequency, plunks[3].frequency);
-  assert.notEqual(plunks[0].frequency, plunks[1].frequency);
-  assert.ok(plunks.every((v, i) => i === 0 || v.delay > (plunks[i - 1].delay ?? 0)));
-  const whistle = profile.sounds.cast.find(v => v.endFrequency > v.frequency);
-  assert.ok(whistle && whistle.duration > 0.3 && whistle.attack > 0.03);
-  const [first, second] = profile.sounds.impact;
-  assert.equal(profile.sounds.impact.length, 2);
-  assert.ok(second.delay > 0 && second.frequency > first.frequency);
-  assert.ok(profile.sounds.pulse.every(v => v.duration < 0.1 && v.gain <= 0.02));
+test('sound carries recorded water between close breaths with a restrained liquid pulse', () => {
+  const breaths = profile.sounds.cast.filter(v => v.url.endsWith('/cloth-breath.wav'));
+  const flow = profile.sounds.cast.find(v => v.url.endsWith('/water-flow.wav'));
+  assert.equal(breaths.length, 2);
+  assert.ok(breaths[0].delay < flow.delay && flow.delay < breaths[1].delay, 'water starts between the sending and answering breaths');
+  assert.notEqual(breaths[0].rate, breaths[1].rate, 'receiver breath has its own natural pace');
+  assert.ok(profile.sounds.cast.some(v => v.url.endsWith('/root-creak.wav')), 'physical conduit opens');
+  const [arrival, breath] = profile.sounds.impact;
+  assert.ok(arrival.url.endsWith('/water-touch.wav') && breath.url.endsWith('/cloth-breath.wav'));
+  assert.ok(breath.delay > arrival.delay, 'receiver takes water before exhaling');
+  assert.equal(profile.sounds.pulse.length, 1);
+  assert.ok(profile.sounds.pulse[0].url.endsWith('/water-touch.wav'));
+  assert.ok(profile.sounds.pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.3);
   for (const voices of Object.values(profile.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }
   }
 });
@@ -174,13 +177,23 @@ test('real rune cast renders its profile and emits typed transfer cues while pre
   assert.equal(events.length, eventCount, 'ending the channel replays no cast cue');
 });
 
-test('all authored cues schedule their layers through spatial SFX without invalid audio values', () => {
+test('all authored cues play real recordings through spatial SFX without invalid audio values', async () => {
   for (const stage of ['cast', 'impact', 'pulse']) {
     const audio = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(audio, profile), true, 'authored WAV files load');
     const handles = playSpellSound(audio.engine, { presentation: profile, stage, x: 2, y: 3 });
     assert.equal(handles.length, profile.sounds[stage].length);
     assert.ok(audio.routes.every(r => r.bus === 'sfx' && r.x === 2 && r.y === 3));
-    assert.ok(audio.nodes.some(n => n.starts.some(at => at > audio.context.currentTime)), 'paired notes are scheduled');
+    const sources = audio.nodes.filter(n => n.kind === 'source');
+    assert.equal(sources.length, profile.sounds[stage].length);
+    assert.ok(audio.nodes.every(n => n.kind !== 'oscillator'), 'only physical recordings are played');
+    sources.forEach((source, i) => {
+      const layer = profile.sounds[stage][i];
+      assert.equal(source.buffer.id, layer.url.split('/').at(-1));
+      assert.equal(source.starts[0], audio.context.currentTime + layer.delay);
+      assert.equal(source.playbackRate.calls[0].args[0], layer.rate);
+      assert.ok(source.buffer.duration > 0 && source.buffer.duration < 2);
+    });
     assert.deepEqual(audio.invalid, []);
     for (const handle of handles) handle.stop();
     assert.ok(audio.routes.every(r => r.disposals === 1));

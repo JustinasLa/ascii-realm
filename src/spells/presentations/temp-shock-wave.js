@@ -362,24 +362,20 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'noise', duration: 0.3, gain: 0.025, cutoff: 520, filterType: 'bandpass', attack: 0.06, release: 0.15 },
-      { kind: 'tone', type: 'sine', frequency: 86, endFrequency: 68, duration: 0.4, gain: 0.035, attack: 0.08, release: 0.2 },
-      { kind: 'noise', delay: 0.6, duration: 0.075, gain: 0.095, cutoff: 620, filterType: 'bandpass', attack: 0.002, release: 0.065 },
-      { kind: 'tone', type: 'triangle', delay: 0.6, frequency: 146, endFrequency: 72, duration: 0.24, gain: 0.085, attack: 0.002, release: 0.22 },
-      { kind: 'tone', type: 'sine', delay: 0.615, frequency: 114, endFrequency: 101, duration: 0.58, gain: 0.06, attack: 0.004, release: 0.55 },
-      { kind: 'tone', type: 'sine', delay: 0.62, frequency: 173, endFrequency: 164, duration: 0.39, gain: 0.035, attack: 0.004, release: 0.37 },
+      // Timber strains as the mallet rises, then strikes at visual contact.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-strain.wav', gain: 0.16, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-knock.wav', gain: 0.58, rate: 0.78, delay: 0.6 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/earth-impact.wav', gain: 0.27, rate: 0.82, delay: 0.66 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.13, rate: 0.92, delay: 0.95 },
     ],
     impact: [
-      { kind: 'noise', duration: 0.07, gain: 0.11, cutoff: 720, filterType: 'bandpass', attack: 0.002, release: 0.065 },
-      { kind: 'tone', type: 'triangle', frequency: 164, endFrequency: 73, duration: 0.17, gain: 0.1, attack: 0.002, release: 0.16 },
-      { kind: 'tone', type: 'sine', frequency: 107, endFrequency: 91, duration: 0.62, gain: 0.07, attack: 0.004, release: 0.59 },
-      { kind: 'tone', type: 'sine', delay: 0.012, frequency: 159, endFrequency: 149, duration: 0.4, gain: 0.04, attack: 0.004, release: 0.38 },
-      { kind: 'noise', delay: 0.22, duration: 0.34, gain: 0.07, cutoff: 180, filterType: 'lowpass', attack: 0.03, release: 0.28 },
-      { kind: 'tone', type: 'sine', delay: 0.24, frequency: 52, endFrequency: 32, duration: 0.4, gain: 0.055, attack: 0.02, release: 0.36 },
+      // A heavy wooden blow sends dirt rolling before broken branches settle.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-crash.wav', gain: 0.56, rate: 0.78, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/earth-impact.wav', gain: 0.34, rate: 0.8, delay: 0.22 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-snap.wav', gain: 0.16, rate: 0.9, delay: 0.48 },
     ],
     pulse: [
-      { kind: 'noise', duration: 0.075, gain: 0.025, cutoff: 280, filterType: 'lowpass', attack: 0.004, release: 0.065 },
-      { kind: 'tone', type: 'sine', frequency: 73, endFrequency: 48, duration: 0.12, gain: 0.025, attack: 0.004, release: 0.11 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-knock.wav', gain: 0.19, rate: 1.16, delay: 0 },
     ],
   },
 };

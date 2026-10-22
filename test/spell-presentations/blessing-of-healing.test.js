@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/blessing-of-healing.js';
 import { runeScene } from '../../test-support/spells.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 const TAU = Math.PI * 2;
 // Lives the channel actually uses: 1.35 s cast, 1.5 s aura (0.3 s slow-potion beats),
@@ -133,30 +134,48 @@ test('gathering motes fade out instead of vanishing when the wind-up hands over 
   }
 });
 
-test('descending harp droplets lead to a major healing chord and round two-note resolve', () => {
+test('gentle water and cloth recordings sustain a quiet channel with leaf responses', async () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.ok(cast.every(v => v.kind === 'tone' && v.attack < 0.01 && v.release > v.duration * 0.8));
-  assert.ok(cast.slice(1).every((v, i) => v.frequency < cast[i].frequency && v.delay > cast[i].delay));
-  assert.ok(cast[3].delay - cast[2].delay > cast[1].delay, 'droplet rhythm relaxes into the last note');
-  const chord = impact.filter(v => !v.delay);
-  assert.equal(chord.length, 3);
-  assert.ok(Math.abs(chord[1].frequency / chord[0].frequency - 1.26) < 0.01);
-  assert.ok(Math.abs(chord[2].frequency / chord[0].frequency - 1.5) < 0.01);
-  const resolve = impact.filter(v => v.delay > 0);
-  assert.ok(resolve.length === 2 && resolve[1].frequency < resolve[0].frequency);
-  assert.ok(pulse.every(v => v.gain < 0.02 && v.duration < 0.2), 'repeating healing ticks remain quiet');
+  assert.ok(cast.some(v => v.url.endsWith('/water-flow.wav') && v.rate < 1));
+  assert.ok(cast.some(v => v.url.endsWith('/cloth-breath.wav') && v.delay < 0.1));
+  assert.ok(cast.some(v => v.url.endsWith('/leaf-drift.wav') && v.delay >= 0.3), 'leaves follow the opening breath');
+  assert.ok(impact.some(v => v.url.endsWith('/water-touch.wav')) && impact.some(v => v.url.endsWith('/leaf-turn.wav')));
+  assert.ok(impact.reduce((sum, v) => sum + v.gain, 0) <= 0.3, 'channel healing responses stay restrained');
+  assert.equal(pulse.length, 1, 'rapid traces use one soft recording');
+  assert.ok(pulse[0].gain <= 0.15 && pulse[0].delay === 0);
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25 && voice.duration <= 2.5 && (voice.delay ?? 0) <= 2);
+      assert.equal(voice.kind, 'recording', 'all layers use natural foley');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8 && voice.delay >= 0 && voice.delay <= 2);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
     }
   }
-  const fake = fakeRecordedAudio();
-  const handles = playSpellSound(fake.engine, { stage: 'cast', presentation, x: 3, y: 4 });
-  assert.equal(handles.length, cast.length);
-  assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 3 && r.y === 4));
-  assert.deepEqual(fake.invalid, []);
-  handles.forEach(h => h.stop());
+  for (const [stage, voices] of Object.entries(presentation.sounds)) {
+    const fake = fakeRecordedAudio();
+    assert.equal(await prepareRecordedSpellTest(fake, presentation), true, 'real WAV assets load');
+    const handles = playSpellSound(fake.engine, { stage, presentation, x: 3, y: 4 });
+    assert.equal(handles.length, voices.length);
+    const sources = fake.nodes.filter(node => node.kind === 'source');
+    assert.equal(sources.length, voices.length);
+    assert.ok(!fake.nodes.some(node => node.kind === 'oscillator'), 'no synthesized voices');
+    sources.forEach((source, index) => {
+      const voice = voices[index];
+      assert.equal(source.buffer.id, voice.url.split('/').at(-1));
+      assert.equal(source.starts[0], fake.context.currentTime + voice.delay);
+      assert.equal(source.playbackRate.calls[0].args[0], voice.rate);
+      const duration = source.buffer.duration / voice.rate;
+      if (stage === 'pulse') assert.ok(duration <= 0.5, 'short leaf movement limits overlapping traces');
+      if (stage === 'impact') assert.ok(duration + voice.delay < 0.75, 'healing response clears quickly');
+      assert.ok(Math.abs(source.stops[0] - source.starts[0] - duration - 0.01) < 1e-8);
+    });
+    assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 3 && r.y === 4));
+    assert.deepEqual(fake.invalid, []);
+    handles.forEach(h => h.stop());
+    assert.ok(fake.routes.every(r => r.disposals === 1), 'every layer releases its spatial route');
+  }
 });
 
 test('real channel cast renders its profile and emits typed healing cues without sword sounds', () => {

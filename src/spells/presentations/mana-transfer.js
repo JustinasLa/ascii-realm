@@ -282,19 +282,20 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 238, endFrequency: 177, duration: 0.12, gain: 0.075, attack: 0.002, release: 0.1 },
-      { kind: 'tone', type: 'sine', frequency: 356, endFrequency: 248, delay: 0.13, duration: 0.13, gain: 0.065, attack: 0.002, release: 0.11 },
-      { kind: 'tone', type: 'sine', frequency: 238, endFrequency: 177, delay: 0.29, duration: 0.12, gain: 0.055, attack: 0.002, release: 0.1 },
-      { kind: 'tone', type: 'sine', frequency: 356, endFrequency: 248, delay: 0.42, duration: 0.13, gain: 0.05, attack: 0.002, release: 0.11 },
-      { kind: 'tone', type: 'sine', frequency: 520, endFrequency: 1160, delay: 0.16, duration: 0.44, gain: 0.032, attack: 0.06, release: 0.13 },
+      // A close cloth breath opens the conduit; flowing water draws toward its answer.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.17, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/root-creak.wav', gain: 0.12, rate: 0.94, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-flow.wav', gain: 0.38, rate: 1.02, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.13, rate: 1.06, delay: 0.78 },
     ],
     impact: [
-      { kind: 'tone', type: 'triangle', frequency: 784, endFrequency: 780, duration: 0.23, gain: 0.055, attack: 0.003, release: 0.2, cutoff: 1800 },
-      { kind: 'tone', type: 'triangle', frequency: 1176, endFrequency: 1168, delay: 0.095, duration: 0.28, gain: 0.04, attack: 0.003, release: 0.24, cutoff: 2400 },
+      // The receiving end takes a small mouthful, then exhales into the link.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.26, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.14, rate: 0.98, delay: 0.16 },
     ],
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 356, endFrequency: 310, duration: 0.075, gain: 0.018, attack: 0.002, release: 0.06 },
-      { kind: 'tone', type: 'sine', frequency: 534, endFrequency: 465, delay: 0.065, duration: 0.075, gain: 0.015, attack: 0.002, release: 0.06 },
+      // One quiet liquid contact keeps recurring transfers small and physical.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.12, rate: 1.08, delay: 0 },
     ],
   },
 };

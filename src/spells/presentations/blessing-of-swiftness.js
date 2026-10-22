@@ -301,19 +301,21 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 392, endFrequency: 365, duration: 0.09, gain: 0.075, attack: 0.002, release: 0.075, cutoff: 1500 },
-      { kind: 'tone', type: 'triangle', frequency: 494, endFrequency: 465, delay: 0.055, duration: 0.085, gain: 0.067, attack: 0.002, release: 0.07, cutoff: 1700 },
-      { kind: 'tone', type: 'triangle', frequency: 659, endFrequency: 625, delay: 0.105, duration: 0.09, gain: 0.06, attack: 0.002, release: 0.075, cutoff: 1900 },
-      { kind: 'noise', delay: 0.035, duration: 0.24, gain: 0.035, attack: 0.055, release: 0.17, cutoff: 2400, filterType: 'bandpass' },
-      { kind: 'tone', type: 'sine', frequency: 1318, endFrequency: 1568, delay: 0.175, duration: 0.16, gain: 0.035, attack: 0.003, release: 0.145 },
+      // Cloth catches air, then leaves rush past in tightening footsteps.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-breath.wav', gain: 0.22, rate: 0.94, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-sweep.wav', gain: 0.34, rate: 1.06, delay: 0.19 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.25, rate: 1.16, delay: 0.32 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-drift.wav', gain: 0.16, rate: 1.2, delay: 0.4 },
     ],
     impact: [
-      { kind: 'noise', duration: 0.18, gain: 0.04, attack: 0.012, release: 0.15, cutoff: 3100, filterType: 'bandpass' },
-      { kind: 'tone', type: 'triangle', frequency: 784, endFrequency: 740, duration: 0.085, gain: 0.055, attack: 0.002, release: 0.07, cutoff: 2200 },
-      { kind: 'tone', type: 'sine', frequency: 1568, endFrequency: 1760, delay: 0.07, duration: 0.17, gain: 0.035, attack: 0.003, release: 0.15 },
+      // A close gust carries a soft heel strike and the wake of foliage.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/cloth-sweep.wav', gain: 0.38, rate: 1.18, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/wood-knock.wav', gain: 0.13, rate: 0.91, delay: 0.015 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.24, rate: 1.2, delay: 0.07 },
     ],
     pulse: [
-      { kind: 'noise', duration: 0.08, gain: 0.014, attack: 0.012, release: 0.06, cutoff: 2600, filterType: 'bandpass' },
+      // The recurring blessing leaves only a quiet, quick brush of leaves.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.14, rate: 1.2, delay: 0 },
     ],
   },
 };

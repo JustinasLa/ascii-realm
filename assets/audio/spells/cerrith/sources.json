@@ -1,0 +1,175 @@
+{
+  "license": "CC0-1.0",
+  "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+  "sampleRate": 48000,
+  "sources": [
+    {
+      "id": "creak",
+      "author": "Rudmer_Rotteveel",
+      "title": "Freesound - Wood Creak Single V7 by Rudmer_Rotteveel",
+      "source": "https://freesound.org/people/Rudmer_Rotteveel/sounds/506662/",
+      "url": "https://cdn.freesound.org/previews/506/506662_4921277-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "ca0d99357dec4aee3cbb1a32e0b4ed3d15558fb68c63e8203e52240bf7e5c301",
+      "duration": 1.5951875
+    },
+    {
+      "id": "branches",
+      "author": "Vrymaa",
+      "title": "Freesound - Dried branches by Vrymaa",
+      "source": "https://freesound.org/people/Vrymaa/sounds/734627/",
+      "url": "https://cdn.freesound.org/previews/734/734627_13973196-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "04535ca2634f877dc74252e541ce86f4b8a8d0bdf88c5e831527612780d9b95c",
+      "duration": 29.023770833333334
+    },
+    {
+      "id": "logs",
+      "author": "Vrymaa",
+      "title": "Freesound - Wood logs - woodshed by Vrymaa",
+      "source": "https://freesound.org/people/Vrymaa/sounds/734628/",
+      "url": "https://cdn.freesound.org/previews/734/734628_13973196-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "1def96c0fd6d27e142e34d9b9930e4b3380ac577156d8d46856db400c9be0cc9",
+      "duration": 15.836229166666667
+    },
+    {
+      "id": "leaves",
+      "author": "Mjeno",
+      "title": "Freesound - Autumn leaves falling on forest floor (close, loopable) by Mjeno",
+      "source": "https://freesound.org/people/Mjeno/sounds/405136/",
+      "url": "https://cdn.freesound.org/previews/405/405136_3958938-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "49fa3f09a4a323f45ca1fc1b286602973e6da03828282563d34ed67f1694dddc",
+      "duration": 9.4165625
+    },
+    {
+      "id": "cloth",
+      "author": "Nox_Sound",
+      "title": "Freesound - Foley_Whoosh_Clothes.wav by Nox_Sound",
+      "source": "https://freesound.org/people/Nox_Sound/sounds/495390/",
+      "url": "https://cdn.freesound.org/previews/495/495390_9250976-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "2b00c696b8028a79084cf54a120d12840241d05963d89fa21cc8b83b5c6a9230",
+      "duration": 6.933458333333333
+    },
+    {
+      "id": "water",
+      "author": "bart1234567",
+      "title": "Freesound - pouring water 2015.wav by bart1234567",
+      "source": "https://freesound.org/people/bart1234567/sounds/319963/",
+      "url": "https://cdn.freesound.org/previews/319/319963_4898539-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "4b7253e9d49362e2625c047108956238c3073df3c590aff5334bb7f952a3a4dc",
+      "duration": 1.846
+    },
+    {
+      "id": "dirt",
+      "author": "leonelmail",
+      "title": "Freesound - BODY FALL - V HVY - DIRT by leonelmail",
+      "source": "https://freesound.org/people/leonelmail/sounds/504626/",
+      "url": "https://cdn.freesound.org/previews/504/504626_4437257-hq.mp3",
+      "license": "CC0-1.0",
+      "sha256": "336a44d95279173764073a9b2d4d7e12f4167cfb0c1ad5c58e316895e129c6bb",
+      "duration": 1.6337291666666667
+    }
+  ],
+  "crops": [
+    {
+      "file": "root-creak.wav",
+      "source": "creak",
+      "start": 0,
+      "duration": 1.48,
+      "peak": 0.72,
+      "sha256": "520d22abdb1681d251d6c278a7832dabe8f94e6511260b100bb946af4f757b0f"
+    },
+    {
+      "file": "branch-snap.wav",
+      "source": "branches",
+      "start": 1.04,
+      "duration": 0.64,
+      "peak": 0.78,
+      "sha256": "c0d4d7f64cc20e1d4c3e3db174b66659b55d5c057b0e4022d7e0454876c01eac"
+    },
+    {
+      "file": "branch-strain.wav",
+      "source": "branches",
+      "start": 8.02,
+      "duration": 1.2,
+      "peak": 0.75,
+      "sha256": "840cdca1628ef8b532ecb1affce7713025182cbf4f8fbcaf4c53f8bf8c7f6f04"
+    },
+    {
+      "file": "leaf-drift.wav",
+      "source": "leaves",
+      "start": 3.72,
+      "duration": 1.45,
+      "peak": 0.63,
+      "sha256": "7ab0aab7c2f79b3465769f63644a29fefd5deea8d456392e5e5906355530176d"
+    },
+    {
+      "file": "leaf-turn.wav",
+      "source": "leaves",
+      "start": 7.52,
+      "duration": 0.55,
+      "peak": 0.6,
+      "sha256": "7493cb040615924baa039520a2b9813e2986075fc62e9f702bf1ff59fe533589"
+    },
+    {
+      "file": "wood-knock.wav",
+      "source": "logs",
+      "start": 0.3,
+      "duration": 0.85,
+      "peak": 0.78,
+      "sha256": "26548881ec8eb246bb85b3fb731f56c3e3b41245a210c329d79b159b4ec2799e"
+    },
+    {
+      "file": "wood-crash.wav",
+      "source": "logs",
+      "start": 9.92,
+      "duration": 1.2,
+      "peak": 0.82,
+      "sha256": "c1c1ede10466e115d4f7a455bfed727600f6217bf6ad0609092183741386da65"
+    },
+    {
+      "file": "cloth-sweep.wav",
+      "source": "cloth",
+      "start": 0.02,
+      "duration": 0.62,
+      "peak": 0.7,
+      "sha256": "b1231732f06c556a08bfa9728eee84a9abc838da44aae716efad269409d559b0"
+    },
+    {
+      "file": "cloth-breath.wav",
+      "source": "cloth",
+      "start": 1.43,
+      "duration": 0.65,
+      "peak": 0.63,
+      "sha256": "591326cd110e4652b60482c766713dce783cea86a7b62ce5f0b298cf26b12c3c"
+    },
+    {
+      "file": "water-touch.wav",
+      "source": "water",
+      "start": 0.0,
+      "duration": 0.72,
+      "peak": 0.66,
+      "sha256": "6166787a92c972771a2de4d86b17c9fcb052482c33de6eff086a499368053868"
+    },
+    {
+      "file": "water-flow.wav",
+      "source": "water",
+      "start": 0.05,
+      "duration": 1.62,
+      "peak": 0.64,
+      "sha256": "aac73d46e939dd0888bcc83897896b2e626a1627d298ae10bbef8c51fd87cd15"
+    },
+    {
+      "file": "earth-impact.wav",
+      "source": "dirt",
+      "start": 0.12,
+      "duration": 1.25,
+      "peak": 0.82,
+      "sha256": "f0590fe06aac31389fec2cef93568f536d1a04e7d687604309eaf17bddc69d48"
+    }
+  ]
+}

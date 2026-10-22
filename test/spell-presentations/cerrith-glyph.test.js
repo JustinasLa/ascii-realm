@@ -5,6 +5,7 @@ import spell from '../../src/spells/definitions/cerrith-glyph.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function capture(stage, progress = 0.4, age = progress * presentation.duration, radius = 1, life = presentation.duration, heading = 0) {
   const points = [];
@@ -109,31 +110,34 @@ test('every Cerrith stage stays finite, within its draw budget, and fades to zer
   }
 });
 
-test('the wooden four-note chord, moss breath and root knock have distinct envelopes', () => {
+test('the carved seal uses recorded ritual contacts, planting roots and quiet foliage', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const chord = cast.filter(v => v.kind === 'tone');
-  assert.equal(chord.length, 4);
-  assert.ok(chord.every(v => v.type === 'triangle' && v.attack < 0.01 && v.release > 0.3 && v.cutoff < 1500));
-  const root = chord[0].frequency;
-  assert.deepEqual(chord.map(v => v.frequency / root), [1, 1.25, 1.5, 2], 'a root/third/fifth/octave wooden chord');
-  assert.ok(chord.slice(1).every((v, i) => v.delay > (chord[i].delay ?? 0)), 'the chord rolls in quickly');
-  const breath = cast.find(v => v.kind === 'noise');
-  assert.ok(breath.filterType === 'bandpass' && breath.attack > 0.1 && breath.gain < 0.025);
-  assert.ok(impact.some(v => v.kind === 'tone' && v.endFrequency < v.frequency && v.duration < 0.15), 'a short downward root knock');
-  assert.ok(impact.some(v => v.kind === 'noise' && v.filterType === 'lowpass' && v.duration < 0.1), 'a woody contact texture');
-  assert.ok(pulse.every(v => v.gain <= 0.01 && v.duration <= 0.1), 'repeated shielding ticks stay soft and brief');
+  const knocks = cast.filter(v => v.url.endsWith('/wood-knock.wav'));
+  assert.equal(knocks.length, 2);
+  assert.ok(knocks[1].delay - knocks[0].delay >= 0.3, 'ritual contacts have measured spacing');
+  assert.ok(knocks[1].rate < knocks[0].rate, 'the final contact has heavier timber resonance');
+  assert.ok(cast.some(v => v.url.endsWith('/root-creak.wav')), 'roots strain as the seal forms');
+  assert.ok(cast.some(v => v.url.endsWith('/leaf-drift.wav')), 'foliage settles around the carving');
+  assert.ok(impact.some(v => v.url.endsWith('/earth-impact.wav') && v.delay === 0), 'planting begins with physical earth contact');
+  assert.ok(impact.some(v => v.url.endsWith('/branch-strain.wav') && v.delay >= 0.1), 'wood tension follows the landing');
+  assert.equal(pulse.length, 1, 'repeated shield ticks use one short recording');
+  assert.ok(pulse[0].url.endsWith('/leaf-turn.wav') && pulse[0].gain <= 0.3 && pulse[0].rate >= 1);
   assert.notDeepEqual(cast, impact);
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2, 'recording layers leave mixer headroom');
     for (const voice of voices) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25 && voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/cerrith\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(Object.values(voice).filter(v => typeof v === 'number').every(Number.isFinite));
     }
   }
 });
 
-test('a real Cerrith cast renders its profile, emits spell cues and retains delayed shielding', () => {
+test('a real Cerrith cast renders its profile, emits spell cues and retains delayed shielding', async () => {
   const scene = runeScene(spell, { range: 15, allyInPath: true, allyRange: 1.5 }), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
@@ -154,8 +158,9 @@ test('a real Cerrith cast renders its profile, emits spell cues and retains dela
   assert.ok(events.some(e => e.stage === 'pulse'));
   assert.ok(events.every(e => e.type === 'spell' && e.presentation === presentation && e.spellId === spell.id),
     'all cues use the typed spell profile without sword draw or slam fallbacks');
-  for (const event of [cast[0], events.find(e => e.stage === 'impact')]) {
+  for (const event of [cast[0], events.find(e => e.stage === 'impact'), events.find(e => e.stage === 'pulse')]) {
     const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
     const handles = playSpellSound(fake.engine, event);
     assert.equal(handles.length, presentation.sounds[event.stage].length);
     assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === event.x && r.y === event.y));

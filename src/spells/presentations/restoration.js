@@ -317,21 +317,20 @@ export default {
   },
   sounds: {
     cast: [
-      { kind: 'tone', type: 'triangle', frequency: 293.66, delay: 0, duration: 0.7, gain: 0.055, attack: 0.035, release: 0.5 },
-      { kind: 'tone', type: 'sine', frequency: 369.99, delay: 0.27, duration: 0.7, gain: 0.065, attack: 0.04, release: 0.48 },
-      { kind: 'tone', type: 'triangle', frequency: 440, delay: 0.62, duration: 0.75, gain: 0.05, attack: 0.04, release: 0.55 },
-      { kind: 'tone', type: 'sine', frequency: 587.33, delay: 1.02, duration: 0.9, gain: 0.045, attack: 0.06, release: 0.65 },
-      { kind: 'noise', delay: 0.08, duration: 1.65, gain: 0.025, cutoff: 1050, filterType: 'lowpass', attack: 0.28, release: 0.6 },
+      // Old roots flex open; slow water and falling leaves fill the sanctuary.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/root-creak.wav', gain: 0.36, rate: 0.8, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-flow.wav', gain: 0.38, rate: 0.85, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-drift.wav', gain: 0.23, rate: 0.9, delay: 0.48 },
     ],
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 293.66, duration: 0.7, gain: 0.06, attack: 0.04, release: 0.5 },
-      { kind: 'tone', type: 'triangle', frequency: 440, delay: 0.08, duration: 0.8, gain: 0.045, attack: 0.045, release: 0.55 },
-      { kind: 'tone', type: 'sine', frequency: 587.33, delay: 0.25, duration: 0.8, gain: 0.045, attack: 0.04, release: 0.6 },
-      { kind: 'noise', delay: 0.05, duration: 0.65, gain: 0.018, cutoff: 900, filterType: 'lowpass', attack: 0.15, release: 0.35 },
+      // Growth settles gently and the cleansing water arrives in a leaf cradle.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/branch-strain.wav', gain: 0.24, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/water-touch.wav', gain: 0.35, rate: 0.92, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.18, rate: 0.9, delay: 0.22 },
     ],
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 369.99, duration: 0.16, gain: 0.019, attack: 0.025, release: 0.11 },
-      { kind: 'tone', type: 'sine', frequency: 440, delay: 0.12, duration: 0.17, gain: 0.014, attack: 0.025, release: 0.12 },
+      // Frequent cleansing ripples only stir a quiet leaf, with no long tail.
+      { kind: 'recording', url: '/assets/audio/spells/cerrith/leaf-turn.wav', gain: 0.1, rate: 1.18, delay: 0 },
     ],
   },
 };
