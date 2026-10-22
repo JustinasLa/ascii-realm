@@ -462,23 +462,19 @@ export default {
   duration: DURATION,
   draw,
   sounds: {
-    // Real torch discharges accent alternate barrels on the 3-tick grid;
-    // the longer recorded flame opens as the circles collapse into the blast.
+    // Three restrained air discharges follow the barrel timing; repeated contacts stay beneath the cast.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.23, rate: 1.12, delay: 0.20 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.21, rate: 0.94, delay: 0.50 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.22, rate: 1.06, delay: 0.80 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.24, rate: 0.87, delay: 1.25 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.2, rate: 1.12, delay: 0.2 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.18, rate: 0.96, delay: 0.5 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.19, rate: 1.06, delay: 0.8 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.14, rate: 1.1, delay: 1.25 },
     ],
-    // A physical wood fracture under the hot discharge, leaving real embers.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.20, rate: 0.83, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.25, rate: 0.97, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.10, rate: 1.12, delay: 0.15 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.19, rate: 1.02, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.12, rate: 1.16, delay: 0.02 },
     ],
-    // Short, quiet recorded air movement follows the frequent trail puffs.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.10, rate: 1.18, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.055, rate: 1.2, delay: 0 },
     ],
   },
 };

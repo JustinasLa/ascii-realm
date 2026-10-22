@@ -432,22 +432,18 @@ export default {
     }
   },
   sounds: {
-    // Real cloth wingbeats unfold over a blowtorch ignition and sustained fire rush.
+    // Two dark wingbeats and a compact rebirth impulse; no flame bed beneath the wings.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.3, rate: 0.85, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.16, rate: 0.9, delay: 0.18 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.32, rate: 0.9, delay: 0.28 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.24, rate: 0.95, delay: 0.58 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-sweep.wav', gain: 0.28, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/dark-swell.wav', gain: 0.12, rate: 1.08, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-sweep.wav', gain: 0.22, rate: 0.97, delay: 0.58 },
     ],
-    // Rebirth catches with a fresh ignition; cloth and fireplace embers scatter after it.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.55, rate: 0.85, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.24, rate: 1.1, delay: 0.08 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.14, rate: 0.95, delay: 0.32 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.22, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-sweep.wav', gain: 0.26, rate: 1.1, delay: 0.08 },
     ],
-    // A single quiet fireplace pop keeps the frequent burning-ground ticks small.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.1, rate: 1.15, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/soft-return.wav', gain: 0.07, rate: 1.13, delay: 0 },
     ],
   },
 };

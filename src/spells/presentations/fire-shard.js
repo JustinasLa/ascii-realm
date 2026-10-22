@@ -292,21 +292,17 @@ export default {
     return cast(effect, lit, v);
   },
   sounds: {
-    // A real air cut precedes the torch catching; the coal pop closes the jaws.
+    // A compact air snap and muted contact, without a burning tail.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.34, rate: 1.12, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.48, rate: 1.08, delay: 0.025 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.2, rate: 1.04, delay: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-draw.wav', gain: 0.16, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.28, rate: 1.08, delay: 0.08 },
     ],
-    // Dry wood fractures first, followed by smaller coal debris and dying fire.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.5, rate: 1.08, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.3, rate: 0.96, delay: 0.055 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.14, rate: 1, delay: 0.11 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.28, rate: 1.1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.12, rate: 1.12, delay: 0.025 },
     ],
-    // A quiet, short air cut follows each fast-moving shard trail cue.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.1, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.07, rate: 1.18, delay: 0 },
     ],
   },
 };

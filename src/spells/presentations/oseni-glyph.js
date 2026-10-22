@@ -427,28 +427,18 @@ export default {
   duration: 1.16,
   draw,
   sounds: {
+    // The seal draws inward, closes at its flash, then leaves a quiet rounded resonance.
     cast: [
-      // Live coals stir, fuel snaps, then the traced seal catches at its flash.
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav',
-        gain: 0.18, rate: 0.88, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav',
-        gain: 0.26, rate: 0.85, delay: 0.28 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav',
-        gain: 0.48, rate: 0.91, delay: 0.78 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-draw.wav', gain: 0.18, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/dark-swell.wav', gain: 0.15, rate: 1, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.25, rate: 0.94, delay: 0.78 },
     ],
     impact: [
-      // A sharp coal fracture gives the brand weight before flame and embers settle.
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav',
-        gain: 0.47, rate: 0.78, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav',
-        gain: 0.36, rate: 1.08, delay: 0.045 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav',
-        gain: 0.16, rate: 0.96, delay: 0.16 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.25, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.18, rate: 1.05, delay: 0.035 },
     ],
     pulse: [
-      // The armed ward breathes with quiet, naturally irregular fire texture.
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav',
-        gain: 0.12, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/soft-return.wav', gain: 0.065, rate: 0.88, delay: 0 },
     ],
   },
 };

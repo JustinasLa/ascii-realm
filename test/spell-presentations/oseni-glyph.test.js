@@ -137,29 +137,29 @@ test('all effect stages stay bounded, deterministic, atlas-compatible and fade o
   }
 });
 
-test('recorded coals catch as the glyph seals, strike on impact and quietly breathe while armed', () => {
+test('the glyph draws inward, closes on its flash and leaves restrained resonance', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const asset = name => `/assets/audio/spells/oseni/${name}.wav`;
-  const coals = cast.find(v => v.url === asset('ember-bed'));
-  const snap = cast.find(v => v.url === asset('coal-crack'));
-  const seal = cast.find(v => v.url === asset('ignition'));
-  assert.ok(coals && snap && seal, 'the physical seal uses live fire and snapping fuel');
-  assert.equal(coals.delay, 0);
-  assert.ok(snap.delay > coals.delay && snap.delay < seal.delay);
-  assert.ok(seal.delay >= 0.72 && seal.delay <= 0.9, 'ignition coincides with the visible seal flash');
-  assert.ok(impact.some(v => v.url === asset('coal-crack') && v.delay === 0), 'contact starts with a sharp fracture');
-  assert.ok(impact.some(v => v.url === asset('ignition') && v.delay < 0.1), 'flame catches immediately after contact');
+  const draw = cast.find(v => v.url === asset('air-draw'));
+  const swell = cast.find(v => v.url === asset('dark-swell'));
+  const seal = cast.find(v => v.url === asset('muted-hit'));
+  assert.ok(draw && swell && seal);
+  assert.equal(draw.delay, 0);
+  assert.ok(swell.delay > draw.delay && swell.delay < seal.delay);
+  assert.ok(seal.delay >= 0.72 && seal.delay <= 0.9, 'closure coincides with the visible seal flash');
+  assert.ok(impact.some(v => v.url === asset('muted-hit') && v.delay === 0), 'contact starts with a muted hit');
+  assert.ok(impact.some(v => v.url === asset('pressure') && v.delay < 0.1), 'pressure follows contact');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.url === asset('ember-bed')), 'repeated wards use soft fire without repeated cracks');
-  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.2, 'repeated ward cues remain quiet');
+  assert.ok(pulse.every(v => v.url === asset('soft-return')), 'repeated wards avoid hard impacts');
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.08, 'repeated ward cues remain quiet');
   for (const voices of [cast, impact, pulse]) {
     assert.ok(voices.length >= 1 && voices.length <= 4);
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.75);
     for (const voice of voices) {
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.equal(voice.kind, 'recording');
       assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
     }

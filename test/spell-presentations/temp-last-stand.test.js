@@ -142,27 +142,26 @@ test('all effect stages remain deterministic, bounded, finite and fade completel
   assert.deepEqual(frame('cast', 0.3, { heading: 2 }), frame('cast', 0.3), 'heading rotation belongs to the runtime');
 });
 
-test('recorded wing and fire launches follow the flight before a separate heavy landing', () => {
+test('dark air and wing gestures follow the flight before a separate muted landing', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const clip = (layers, name) => layers.find(v => v.url.endsWith('/' + name + '.wav'));
-  assert.equal(clip(cast, 'ignition').delay, 0, 'fire gathers with the raised blade');
-  assert.equal(clip(cast, 'wing-flap').delay, 0.6, 'cloth wings open at the backward launch');
-  assert.equal(clip(cast, 'fire-roar').delay, 0.6, 'fire thrust follows the wings');
-  assert.equal(clip(cast, 'air-swish').delay, 1.2, 'the physical air sweep marks the forward dive');
-  assert.equal(clip(impact, 'wood-break').delay, 0, 'the landing starts with a solid fracture');
-  assert.ok(clip(impact, 'thunder-impact').rate <= 0.85, 'low thunder supplies landing weight');
-  assert.ok(clip(impact, 'coal-crack').delay > clip(impact, 'wood-break').delay, 'embers fracture after contact');
+  assert.equal(clip(cast, 'air-draw').delay, 0, 'air gathers with the raised blade');
+  assert.equal(clip(cast, 'wing-sweep').delay, 0.6, 'cloth wings open at the backward launch');
+  assert.equal(clip(cast, 'air-release').delay, 1.2, 'the air sweep marks the forward dive');
+  assert.equal(clip(impact, 'muted-hit').delay, 0, 'the landing starts with a solid contact');
+  assert.ok(clip(impact, 'pressure').gain <= 0.25, 'landing weight stays restrained');
+  assert.ok(clip(impact, 'pressure').delay > clip(impact, 'muted-hit').delay);
   assert.ok(pulse.every(v => v.gain <= 0.15), 'repeated waves stay quiet');
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length > 0 && voices.length <= 4);
-    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 0.75);
     for (const voice of voices) {
       assert.equal(voice.kind, 'recording');
       assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
     }
   }
   assert.notDeepEqual(cast, impact);

@@ -1,7 +1,8 @@
-"""Crop licensed physical recordings into the Oseni foley bank.
+"""Shape licensed movement recordings into Oseni's dark, non-burning spell bank.
 
-Requires Python, numpy, scipy, and ffmpeg. No synthesis, bit crushing, or musical
-pitch processing: only mono conversion, DC removal, short fades and peak gain.
+Requires Python, numpy, scipy, and ffmpeg. No fire or blowtorch recordings.
+Band-limited air, cloth and muted impacts keep weight above sub-bass; reverse
+swells and shaped decays give the magic a voice without a continuous burn bed.
 Run from any directory; --source-dir may point at an existing download cache.
 """
 import argparse
@@ -13,27 +14,25 @@ import urllib.request
 
 import numpy as np
 from scipy.io import wavfile
+from scipy.signal import butter, sosfiltfilt
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / 'assets/audio/spells/oseni'
 SOURCES = [
-    ('fire', 'Fire crackling in fireplace', 'Davor', '382616', '7094269', 'Real fireplace, Zoom H1; no EQ or effects.'),
-    ('torch', 'Chalumeau.wav', 'rombart', '197800', '2591786', 'Real blowtorch, Zoom H4n, 48 kHz / 24 bit.'),
     ('swish', 'Swosh / Whoosh / Air Cut', 'qubodup', '60030', '71257', 'Bamboo stick swung through air; Zoom H2.'),
     ('crack', 'Wood Crack 5', 'utsuru', '183450', '418644', 'Real cracking wood recorded with Zoom H4N.'),
     ('cloth', 'Cloth Flapping On A Clothesline Thickly', 'leonelmail', '330638', '4437257', 'Real cloth movement; source itself is a 128 kbps MP3.'),
     ('thunder', 'Thunder Clap And Rumble #1', 'Kinoton', '397952', '2247456', 'Real medium-distance lightning strike, DR-60D MkII and Mk 012 microphones; source denoised/compressed.'),
 ]
-# output, source, source start, seconds, entry fade, exit fade, peak
+# output, source, start, seconds, entry fade, exit fade, peak, high-pass, low-pass, reverse
 CROPS = [
-    ('ignition', 'torch', 34.32, 0.80, 0.012, 0.16, 0.80),
-    ('fire-roar', 'torch', 25.10, 1.75, 0.07, 0.30, 0.75),
-    ('coal-crack', 'fire', 49.58, 0.55, 0.008, 0.12, 0.74),
-    ('ember-bed', 'fire', 15.20, 1.15, 0.04, 0.23, 0.68),
-    ('air-swish', 'swish', 0.0, 0.436, 0.005, 0.07, 0.78),
-    ('wing-flap', 'cloth', 12.57, 0.72, 0.008, 0.13, 0.78),
-    ('wood-break', 'crack', 0.04, 0.66, 0.004, 0.14, 0.80),
-    ('thunder-impact', 'thunder', 0.47, 2.55, 0.012, 0.65, 0.80),
+    ('air-draw', 'swish', 0.0, 0.436, 0.16, 0.09, 0.52, 180, 1700, True),
+    ('air-release', 'swish', 0.0, 0.436, 0.025, 0.20, 0.55, 200, 2400, False),
+    ('muted-hit', 'crack', 0.04, 0.48, 0.018, 0.29, 0.55, 180, 1400, False),
+    ('pressure', 'thunder', 1.20, 0.80, 0.045, 0.48, 0.52, 170, 850, False),
+    ('wing-sweep', 'cloth', 12.57, 0.65, 0.035, 0.28, 0.52, 210, 1800, False),
+    ('dark-swell', 'thunder', 3.0, 0.90, 0.34, 0.30, 0.48, 200, 1200, True),
+    ('soft-return', 'cloth', 12.72, 0.45, 0.12, 0.24, 0.42, 260, 1300, True),
 ]
 
 def main():
@@ -57,26 +56,33 @@ def main():
             license='CC0-1.0', licenseUrl='https://creativecommons.org/publicdomain/zero/1.0/',
             recording=description, originalPreviewSha256=hashlib.sha256(path.read_bytes()).hexdigest()))
     clips = []
-    for name, source, start, duration, fade_in, fade_out, peak in CROPS:
+    for name, source, start, duration, fade_in, fade_out, peak, high_pass, low_pass, reverse in CROPS:
         sr, pcm = wavfile.read(args.source_dir / f'{source}-48k.wav')
         data = pcm[round(start * sr):round((start + duration) * sr)].astype(np.float64) / 32768
         assert len(data) == round(duration * sr), name
         data -= data.mean()
+        # Offline zero-phase filtering avoids adding a new runtime effect graph.
+        data = sosfiltfilt(butter(3, [high_pass, low_pass], btype='bandpass', fs=sr, output='sos'), data)
+        if reverse:
+            data = data[::-1].copy()
         entry, tail = round(fade_in * sr), round(fade_out * sr)
         data[:entry] *= np.sin(np.linspace(0, np.pi / 2, entry)) ** 2
         data[-tail:] *= np.cos(np.linspace(0, np.pi / 2, tail)) ** 2
         data *= peak / max(np.max(np.abs(data)), 1e-9)
+        # A dense rumble must not become louder than a short air transient.
+        data *= min(1, 0.12 / max(np.sqrt(np.mean(data * data)), 1e-9))
         data[0] = data[-1] = 0
         path = OUT / f'{name}.wav'
         wavfile.write(path, sr, np.round(data * 32767).astype(np.int16))
         clips.append(dict(file=path.name, source=source, startSeconds=start, durationSeconds=duration,
-            fadeInSeconds=fade_in, fadeOutSeconds=fade_out, peak=peak, sampleRate=sr,
+            fadeInSeconds=fade_in, fadeOutSeconds=fade_out, peak=peak, rmsCeiling=0.12,
+            highPassHz=high_pass, lowPassHz=low_pass, reversed=reverse, sampleRate=sr,
             sha256=hashlib.sha256(path.read_bytes()).hexdigest()))
     manifest = dict(format='mono PCM16 WAV at 48000 Hz', sources=sources, clips=clips,
-        processing='HQ MP3 previews decoded at 48 kHz, mono downmix, DC removed, cropped, cosine fades, peak normalized. No generated waveform or added noise.',
+        processing='HQ MP3 previews decoded at 48 kHz, mono downmix, DC removed, cropped, third-order zero-phase bandpass, optional reversal, cosine fades, peak ceiling and 0.12 RMS ceiling. No fire sources, generated waveform or added noise.',
         previewNote='The public high-quality MP3 previews are used; these are compressed source files, not claimed to be original lossless masters.')
     (OUT / 'sources.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf8')
-    license_lines = ['Oseni recorded foley bank', '', 'All source recordings are CC0 1.0 Universal.',
+    license_lines = ['Oseni dark movement and impact bank', '', 'All source recordings are CC0 1.0 Universal.',
         'https://creativecommons.org/publicdomain/zero/1.0/',
         'Source licenses verified on the linked Freesound pages on 2026-10-22.',
         'Credits are supplied for provenance even though CC0 does not require attribution.', '']

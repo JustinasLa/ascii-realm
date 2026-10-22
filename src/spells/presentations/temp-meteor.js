@@ -470,24 +470,17 @@ export default {
     }
   },
   sounds: {
-    // Recorded blowtorch ignition swells into a furnace roar; a bamboo-air
-    // pass marks the rock tearing free at the half-second projectile release.
+    // A dark gathering swell releases at half a second; the landing stays short and contained.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.26, rate: 0.85, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.38, rate: 0.8, delay: 0.1 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.24, rate: 0.85, delay: 0.5 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/dark-swell.wav', gain: 0.24, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.29, rate: 0.9, delay: 0.5 },
     ],
-    // Natural thunder supplies the body; a real wood fracture and a later
-    // fireplace pop give the landing rough, irregular debris detail.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/thunder-impact.wav', gain: 0.65, rate: 0.82, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.28, rate: 0.78, delay: 0.025 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.15, rate: 0.9, delay: 0.43 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.32, rate: 0.86, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.26, rate: 0.92, delay: 0.025 },
     ],
-    // Burn ticks overlap, so the recorded ember bed stays quiet and avoids
-    // repeating a hard transient beneath every visual flare.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/soft-return.wav', gain: 0.08, rate: 0.94, delay: 0 },
     ],
   },
 };

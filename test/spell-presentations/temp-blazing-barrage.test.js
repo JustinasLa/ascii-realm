@@ -161,32 +161,32 @@ test('fireblast trail puffs and burning auras stay lean and on theme', () => {
   assert.ok(frame('aura', 0.05).some(p => p.char === '*'), 'ignition flares on the first frames');
 });
 
-test('recorded torch discharges follow barrage cadence and bloom into the fireblast', () => {
+test('short air discharges follow barrage cadence and close with restrained pressure', () => {
   const shots = presentation.sounds.cast.slice(0, 3);
   assert.equal(shots.length, 3);
-  assert.ok(shots.every(v => v.url.endsWith('/ignition.wav')), 'real torch attacks define the volley');
+  assert.ok(shots.every(v => v.url.endsWith('/air-release.wav')), 'air attacks define the volley');
   assert.equal(shots[0].delay, 0.2, 'first discharge follows the first barrel');
   for (let i = 1; i < shots.length; i++) {
     assert.ok(Math.abs(shots[i].delay - shots[i - 1].delay - 0.30) < 1e-8,
       'recorded accents follow alternate shots on the 0.15 second gameplay grid');
-    assert.notEqual(shots[i].rate, shots[i - 1].rate, 'barrels vary the recorded combustion weight');
+    assert.notEqual(shots[i].rate, shots[i - 1].rate, 'barrels vary the air movement');
   }
   const blast = presentation.sounds.cast[3];
-  assert.ok(blast.url.endsWith('/fire-roar.wav'));
-  assert.equal(blast.delay, 1.25, 'long flame opens at the visual fireblast');
-  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/wood-break.wav')),
-    'impact carries physical fracture beneath the flame');
-  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/ember-bed.wav')));
-  assert.ok(presentation.sounds.pulse.every(v => v.gain <= 0.10 && v.url.endsWith('/air-swish.wav')),
+  assert.ok(blast.url.endsWith('/pressure.wav'));
+  assert.equal(blast.delay, 1.25, 'pressure marks the visual fireblast');
+  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/muted-hit.wav')),
+    'impact has a compact contact');
+  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/pressure.wav')));
+  assert.ok(presentation.sounds.pulse.every(v => v.gain <= 0.08 && v.url.endsWith('/air-release.wav')),
     'frequent trail puffs remain short and quiet');
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length >= 1 && voices.length <= 4);
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.75);
     for (const v of voices) {
       assert.deepEqual(Object.keys(v).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.equal(v.kind, 'recording');
       assert.match(v.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
-      assert.ok(v.gain >= 0.1 && v.gain <= 0.8);
+      assert.ok(v.gain >= 0.04 && v.gain <= 0.35);
       assert.ok(v.rate >= 0.75 && v.rate <= 1.2);
       assert.ok(v.delay >= 0 && v.delay <= 2);
     }

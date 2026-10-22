@@ -1,38 +1,31 @@
-# Oseni recorded spell audio
+# Oseni: dark fire without burning sounds
 
-All nine Oseni spells now use real fire and movement recordings. There are no oscillator, generated-noise, musical chime or bit-crushed layers in their recipes. Identity comes from physical material, transient timing and modest playback-rate variation.
+Oseni uses short air gestures, muted contacts and rounded resonance. There are no fireplace, coal, ignition or blowtorch layers. Its weight lives in the low midrange rather than sub-bass, with softened upper frequencies and quiet repeat cues.
 
-| Spell | Physical sound design |
+| Spell | Sound |
 | --- | --- |
-| Fire Shard | A bamboo air cut and torch ignition; breaking wood and coal on contact; quiet trailing embers |
-| Meteor | Burning approach aligned to projectile release; real thunder with wood fracture and falling coal |
-| Fire Breath | Air intake, torch ignition, sustained blowtorch flame; quieter coal contact and lingering embers |
-| Fire Phoenix | Two cloth wingbeats through real flame; ignition and scattered feather-like cloth on rebirth |
-| Oseni Glyph | Ember bed and fuel cracks gather into a timed seal ignition |
-| Flight of the Gladiator (`temp-last-stand`) | Physical cloth/air movement and fire thrust, followed by a heavy grounded stamp |
-| Fire Rain | An overhead fire rush with irregular falling coal; restrained recurring crackle |
-| Blazing Barrage | Cadenced physical fire discharges and breaking coal; quieter repeated trail puffs |
-| Rekindle | Small fuel catches and an ember bed returning to life; gentle heat on each restoration |
+| Fire Shard | Quick inward draw, air snap and muted contact |
+| Meteor | Reversed gathering swell, half-second release and compact heavy impact |
+| Fire Breath | Low intake followed by moving air, without a sustained hiss |
+| Fire Phoenix | Two cloth wingbeats and a rounded rebirth impulse |
+| Oseni Glyph | Inward draw, timed seal closure and soft resonance |
+| Flight of the Gladiator | Charge, winged launch, diving air cut and muffled landing |
+| Fire Rain | Overhead swell with separated, muted falling contacts |
+| Blazing Barrage | Three short discharges on the existing firing beats |
+| Rekindle | Soft inward cloth movement, with gentle restoration pulses |
 
-The eight mono PCM16 WAVs are 48 kHz, 0.436?2.55 seconds long, with peaks at or below 0.80. Processing is limited to decoding, mono downmix, clean crops, DC removal, short fades and gain normalization. The public high-quality MP3 previews are the inputs; these are not claimed to be lossless masters. No generated sound is added. Runtime layers use only `kind`, `url`, `gain`, `rate` and `delay`, with one to four layers per stage and restrained rate changes.
+## Bank and mix
 
-## Source recordings
+Seven mono PCM16 WAVs at 48 kHz range from 0.436 to 0.90 seconds. Third-order bandpass filtering places their low cutoffs at 170–260 Hz and their high cutoffs at 850–2400 Hz. Reversed crops supply the gathering gestures; cosine envelopes soften entries and shorten tails. Peak ceilings are 0.42–0.55, with a 0.12 RMS ceiling before the game's SFX gain. Runtime playback rates remain close to the original, and recurring pulse gains stay at or below 0.08.
 
-All six sources are CC0 1.0, verified on their original Freesound pages:
+The recordings are shaped from bamboo movement, fabric, muted wood contact and cropped thunder resonance. No synthetic tones or noise are added. The old fire bank is removed, rather than left as unused assets. Cast timing, visuals and spell mechanics are unchanged.
 
-- [Fire crackling in fireplace by Davor](https://freesound.org/people/Davor/sounds/382616/): real fireplace recorded on Zoom H1.
-- [Blowtorch by rombart](https://freesound.org/people/rombart/sounds/197800/): real blowtorch recorded on Zoom H4n.
-- [Swosh / Whoosh / Air Cut by qubodup](https://freesound.org/people/qubodup/sounds/60030/): bamboo stick swung through air, recorded on Zoom H2.
-- [Wood Crack 5 by utsuru](https://freesound.org/people/utsuru/sounds/183450/): cracking wood recorded on Zoom H4N.
-- [Cloth Flapping On A Clothesline Thickly by leonelmail](https://freesound.org/people/leonelmail/sounds/330638/): actual flapping fabric.
-- [Thunder Clap And Rumble #1 by Kinoton](https://freesound.org/people/Kinoton/sounds/397952/): a real lightning strike recorded with DR-60D MkII and Mk 012 microphones.
+## Provenance and rebuild
 
-[LICENSE.txt](../assets/audio/spells/oseni/LICENSE.txt) credits every source. [sources.json](../assets/audio/spells/oseni/sources.json) records exact download URLs, source hashes, crop positions, fades and output hashes. Rebuild with `python tools/render-spell-audio-oseni.py` (Python, NumPy, SciPy and ffmpeg).
+The four existing CC0 source recordings remain credited in [LICENSE.txt](../assets/audio/spells/oseni/LICENSE.txt). [sources.json](../assets/audio/spells/oseni/sources.json) records source/download URLs, source hashes, crop positions, filtering, reversals, envelopes and output hashes. Public MP3 previews are the inputs, not lossless masters.
 
-## Validation and audition
+Rebuild with `python tools/render-spell-audio-oseni.py` (Python, NumPy, SciPy and ffmpeg). `--source-dir` selects the original download cache.
 
-Run `node --test test/audio-spells-oseni.test.js`. It verifies real-asset provenance, PCM integrity, sample rate, duration, headroom, clean endpoints, recipe bounds, runtime event mapping, SFX spatial routing, every rendered buffer, cleanup and silence while audio is suspended. Existing presentation tests retain geometry and gameplay checks with recording-based audio assertions.
+Run `node --test test/audio-spells-oseni.test.js test/audio-spell-recordings.test.js` for provenance, PCM integrity, mix bounds, event mapping, positional routing, cleanup and suspended-audio checks. The presentation tests cover the unchanged spell timing and geometry.
 
-The existing renderer maps cast visuals to `cast`, impact/aura visuals to `impact`, and other visuals to `pulse`. Recorded samples preload/cache and use the same positional SFX bus. Visual geometry and spell gameplay are unchanged.
-
-[Open the Oseni audition page](./audio-oseni.html). Click a play control to unlock browser audio and hear individual stages.
+[Listen to each spell and stage](./audio-oseni.html). Playback starts only after pressing a button; Stop cancels the active cue.

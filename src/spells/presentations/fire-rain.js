@@ -347,22 +347,19 @@ export default {
     else drawCast(put, progress, age, radius);
   },
   sounds: {
-    // Recorded blowtorch pressure gathers overhead before an uneven shower of
-    // real fireplace pops; the gaps widen as the last coals fall from the cloud.
+    // Air gathers overhead; separated muted contacts suggest falling weight without crackling coals.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.5, rate: 0.85, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.21, rate: 1.08, delay: 0.38 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.17, rate: 0.93, delay: 0.71 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.13, rate: 1.16, delay: 1.19 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/dark-swell.wav', gain: 0.23, rate: 0.95, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.13, rate: 1.08, delay: 0.38 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.1, rate: 0.97, delay: 0.71 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.08, rate: 1.16, delay: 1.19 },
     ],
-    // A coal breaks on contact, leaving the soft sound of burning embers.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.3, rate: 0.88, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.16, rate: 1.1, delay: 0.075 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.19, rate: 1.06, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/soft-return.wav', gain: 0.09, rate: 1.1, delay: 0.065 },
     ],
-    // Frequent ward and projectile cues use only a subdued, short coal contact.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.1, rate: 1.2, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.055, rate: 1.2, delay: 0 },
     ],
   },
 };

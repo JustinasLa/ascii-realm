@@ -127,23 +127,16 @@ export default {
     }
   },
   sounds: {
-    // A real rush of air feeds a modest flame; the coal catches a moment
-    // later and settles into the soft, irregular texture of a fireplace.
+    // Healing folds a soft cloth resonance inward; restoration pulses avoid attack transients.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.16, rate: 0.83, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.25, rate: 0.88, delay: 0.13 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.13, rate: 0.9, delay: 0.37 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.19, rate: 0.92, delay: 0.47 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/soft-return.wav', gain: 0.2, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-draw.wav', gain: 0.1, rate: 0.94, delay: 0.18 },
     ],
-    // Healing stays intimate: one small coal opens under a quiet breath
-    // of ignition, both finished before the next one-second heal.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.11, rate: 0.96, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.12, rate: 1.05, delay: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/soft-return.wav', gain: 0.12, rate: 1.04, delay: 0 },
     ],
-    // Residual fire uses the recording's own soft crackle and natural decay.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.15, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/soft-return.wav', gain: 0.055, rate: 1.16, delay: 0 },
     ],
   },
 };
