@@ -84,7 +84,8 @@ test('respawning clears the fatal jump and sword animation before the next draw'
   model.update(0.2, player);
   assert.ok(model.jump);
   assert.ok(model.oneShot);
-  assert.ok(model.weights.attack > 0);
+  // In the air the swing is laid over the jump from the waist up.
+  assert.ok(model.layer.attack > 0);
 
   const respawned = new Player(0, 0);
   model.resetPose(respawned);
@@ -98,6 +99,7 @@ test('respawning clears the fatal jump and sword animation before the next draw'
   for (const [key, action] of Object.entries(model.actions)) {
     assert.equal(action.getEffectiveWeight(), key === 'idle' ? 1 : 0, key);
   }
+  assert.deepEqual(model.layer, { attack: 0, attackB: 0 });
   model.update(1 / 60, respawned);
   assert.equal(model.jump, null);
   assert.equal(model.oneShot, null, 'no deferred landing is played at spawn');
@@ -225,4 +227,125 @@ test('pixel-buffer readback queues the copy before CPU work, reuses its storage 
   buffered.model.renderPose(1.25, -2.75);
   buffered.model.rasterise(view, 1.25, -2.75);
   assert.deepEqual(buffered.calls, ['render', 'queue', 'flush', 'read']);
+});
+
+// Steps the player and the 3D character together, `move` being the keys held.
+function stepper(model, player, move = { x: 0, y: 0 }) {
+  const world = { isWalkable: () => true, typeAt: () => GRASS };
+  return (frames = 1, dt = 1 / 60) => {
+    for (let i = 0; i < frames; i++) {
+      player.update(dt, world, move, false);
+      model.update(dt, player);
+      player.events.length = 0;
+    }
+  };
+}
+
+test('a swing on the move is laid over the stride, so the legs keep walking', async () => {
+  const model = await figure();
+  const player = new Player(0, 0);
+  player.combat.inHand = true;
+  const step = stepper(model, player, { x: 1, y: 0 });
+  step(60);
+  const phase = model.phase;
+  player.attack();
+  step(12);
+  assert.ok(model.weights.walk > 0.9, 'the walk still drives the legs');
+  assert.ok(model.weights.attack < 0.05, 'the swing does not take the whole body');
+  assert.ok(model.layer.attack > 0.8, 'the swing takes the body from the waist up');
+  assert.notEqual(model.phase, phase, 'the stride carries on');
+
+  // Standing still, the same swing takes the whole body.
+  const still = await figure();
+  const idle = new Player(0, 0);
+  idle.combat.inHand = true;
+  const wait = stepper(still, idle);
+  wait(30);
+  idle.attack();
+  wait(12);
+  assert.ok(still.weights.attack > 0.8);
+  assert.ok(still.layer.attack < 0.05);
+});
+
+test('spam-clicked swings each show their cut and fade into one another', async () => {
+  const model = await figure();
+  const player = new Player(0, 0);
+  player.combat.inHand = true;
+  const step = stepper(model, player);
+  step(30);
+  const cuts = [];
+  for (let frame = 0; frame < 150; frame++) {
+    if (frame % 3 === 0) player.attack();
+    const cb = player.combat;
+    const slot = model.oneShot?.key;
+    step();
+    // Whenever the blade is cutting, the clip shows the cut, and gets
+    // through it before the next swing takes over.
+    if (cb.trailing && model.oneShot?.swing === cb.move) {
+      const at = model.actions[model.oneShot.key].time;
+      assert.ok(at <= 0.53, `cut shown at ${at.toFixed(2)}s into the clip`);
+      if (cuts.at(-1)?.key !== model.oneShot.key) cuts.push({ key: model.oneShot.key, move: cb.move, at });
+      cuts.at(-1).at = at;
+    }
+    // A new swing starts in the other slot, leaving the last one to fade.
+    if (model.oneShot?.key && slot && model.oneShot.key !== slot) {
+      assert.ok(model.weights[slot] + model.layer[slot] > 0.3, 'the last swing is still fading out');
+      assert.ok(model.actions[slot].time > 0.3, 'the last swing is not snapped back to its start');
+    }
+  }
+  const shown = cuts.map((c) => c.move);
+  for (const c of cuts.slice(0, -1)) assert.ok(c.at > 0.45, `${c.move} cut through to ${c.at.toFixed(2)}s`);
+  assert.ok(shown.length >= 4, `every swing shows a cut (${shown.join(' ')})`);
+});
+
+test('walking away from where the swing is aimed steps backwards, and sideways strafes', async () => {
+  const model = await figure();
+  const player = new Player(0, 0);
+  player.combat.inHand = true;
+  const step = stepper(model, player, { x: 1, y: 0 });
+  step(60);
+  // Aim behind: the chest turns round, the legs step backwards.
+  player.attack(-Math.PI / 2);
+  step(4);
+  assert.ok(model.backpedal);
+  const before = model.phase;
+  step(2);
+  const back = ((before - model.phase) % 1 + 1) % 1;
+  assert.ok(back > 0 && back < 0.5, 'the stride runs backwards');
+  const legs = player.heading + model.legYaw;
+  assert.ok(Math.abs(Math.atan2(Math.sin(legs + Math.PI / 2), Math.cos(legs + Math.PI / 2))) < 0.2,
+    'the legs face the way the chest does');
+
+  // Aim across the way of travel: the legs face the way they walk.
+  const side = await figure();
+  const strafer = new Player(0, 0);
+  strafer.combat.inHand = true;
+  const strafe = stepper(side, strafer, { x: 0, y: 1 });
+  strafe(60);
+  strafer.attack(Math.PI / 2);
+  strafe(12);
+  assert.equal(side.backpedal, false);
+  const going = strafer.heading + side.legYaw;
+  assert.ok(Math.abs(Math.atan2(Math.sin(going), Math.cos(going))) < 0.2, 'the legs face down the screen');
+  assert.ok(Math.abs(strafer.heading - Math.PI / 2) < 0.05, 'the chest still faces the aim');
+
+  // Once the swing is over the legs come round under the body again.
+  strafe(240);
+  assert.ok(Math.abs(side.legYaw) < 0.05);
+});
+
+test('a plunge plays its cut through the landing', async () => {
+  const model = await figure();
+  const player = new Player(0, 0);
+  player.combat.inHand = true;
+  const step = stepper(model, player);
+  step(30);
+  player.jump();
+  step(10);
+  assert.ok(player.air > 0);
+  player.attack();
+  for (let i = 0; i < 120 && player.air > 0; i++) step();
+  step(6);
+  assert.ok(model.oneShot?.swing === 'plunge', 'the landing does not replace the plunge');
+  assert.ok(model.actions[model.oneShot.key].time > 0.4);
 });

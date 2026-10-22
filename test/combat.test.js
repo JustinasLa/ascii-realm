@@ -88,3 +88,32 @@ test('jumping with attack held pauses charging until an actual release', () => {
   cb.update(1 / 60, { air: true });
   assert.equal(cb.move, 'spin');
 });
+
+test('a swing reports winding up, cutting and recovering in turn', () => {
+  const cb = new Combat();
+  cb.inHand = true;
+  assert.equal(cb.swingStage, null);
+  cb.attack();
+  assert.deepEqual(cb.swingStage, { part: 'wind', u: 0, windUp: true });
+  const parts = [];
+  for (let i = 0; i < 40 && cb.move; i++) {
+    const stage = cb.swingStage;
+    if (parts.at(-1) !== stage.part) parts.push(stage.part);
+    assert.ok(stage.u >= 0 && stage.u <= 1);
+    cb.update(1 / 60, {});
+  }
+  assert.deepEqual(parts, ['wind', 'cut', 'recover']);
+});
+
+test('a backhand cuts straight away, and a plunge holds its cut until landing', () => {
+  const cb = new Combat();
+  cb.inHand = true;
+  cb.start('b');
+  assert.deepEqual(cb.swingStage, { part: 'cut', u: 0, windUp: false });
+  cb.start('plunge');
+  run(cb, 0.5, { air: true });
+  assert.equal(cb.swingStage.part, 'cut');
+  assert.equal(cb.swingStage.u, 0);
+  run(cb, 0.1, {});
+  assert.equal(cb.swingStage.part, 'recover');
+});

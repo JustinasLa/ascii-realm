@@ -92,6 +92,49 @@ const LEG_BONES = ['DEF-thigh.L', 'DEF-shin.L', 'DEF-foot.L', 'DEF-toe.L', 'DEF-
 // up by the planted knee, so the body glides instead of bobbing.
 const BOB_KEEP = 0.4;
 
+// The library has a single sword attack. Each swing of a combo plays it in
+// one of two slots, turn about, so a swing that cuts the last one short
+// fades in over it instead of snapping it back to the start.
+const ATTACK_SLOTS = ['attack', 'attackB'];
+// The clip winds up until CUT[0] seconds in and cuts through until CUT[1].
+// It is scrubbed to the swing under way (see Combat.swingStage) so the cut
+// shown is the cut that strikes, however soon the next swing is asked for;
+// it then recovers at `rate`. `from` skips part of the wind-up where the
+// swing follows straight on from another.
+const CUT = [0.32, 0.52];
+const SWING_PLAY = {
+  a: { rate: 1.4, from: 0 },
+  b: { rate: 1.6, from: 0.24 },
+  d: { rate: 1.5, from: 0.1 },
+  c: { rate: 1.1, from: 0 },
+  thrust: { rate: 1.7, from: 0.12 },
+  plunge: { rate: 1.2, from: 0 },
+  spin: { rate: 1, from: 0 },
+};
+// On the move, a swing is played from the waist up over the stride, so the
+// legs keep walking under it. Its spine follows the swing's hips too, so
+// the chest still turns and leans into the cut.
+const WAIST = bone('DEF-spine.001');
+const HIPS = bone('DEF-hips');
+// How much of that turn and lean of the swing's hips is kept: the swing
+// lunges down low, and upright legs would leave the body folded over.
+const HIPS_KEEP = 0.55;
+// Walking one way while held facing another (a swing or spell aimed with
+// the cursor, or a bow drawn), the legs turn to the way they are going and
+// the body twists back over them. Past this angle from the way the chest
+// faces they step backwards instead, and come round to stepping forwards
+// again below the second.
+const BACKPEDAL_AT = 1.75;
+const FORWARD_AT = 1.35;
+// Share of that twist taken by each joint of the spine, from the waist up.
+const TWIST = [[bone('DEF-spine.001'), 0.35], [bone('DEF-spine.002'), 0.35], [bone('DEF-spine.003'), 0.3]];
+const UP = new THREE.Vector3(0, 1, 0);
+
+// Shortest signed angle from a to b.
+function angleTo(a, b) {
+  return Math.atan2(Math.sin(b - a), Math.cos(b - a));
+}
+
 // Scales the swing of a clip's leg rotations about their averages, in
 // place. (The body's bounce is handled each frame, see update.)
 function shortenStride(clip, k) {
@@ -270,6 +313,7 @@ export class ModelFigure {
     // its rest pose, with the hands held as in the library's jump.
     const clips = Object.fromEntries(Object.entries(CLIPS).map(([key, name]) => [key,
       gltf.animations.find((c) => c.name === name)]));
+    clips.attackB = clips.attack.clone();
     const captured = [];
     for (const [key, data] of Object.entries(CAPTURES)) {
       clips[key] = captureClip(key, data, this.model, this.bones, { hold: clips.jumpLoop });
@@ -288,7 +332,7 @@ export class ModelFigure {
       a.setEffectiveWeight(0);
       this.actions[key] = a;
     }
-    for (const k of ['attack', 'jumpStart', 'jumpLand', 'pickup', ...captured]) {
+    for (const k of [...ATTACK_SLOTS, 'jumpStart', 'jumpLand', 'pickup', ...captured]) {
       this.actions[k].setLoop(THREE.LoopOnce, 1);
       this.actions[k].clampWhenFinished = true;
     }
@@ -296,6 +340,22 @@ export class ModelFigure {
     // out of the way while they play.
     this.jumpKeys = ['jumpStart', 'jumpLoop', 'jumpLand', ...captured];
     this.weights = Object.fromEntries(Object.keys(clips).map((k) => [k, k === 'idle' ? 1 : 0]));
+    // The swing from the waist up: each bone above the hips with the
+    // attack's own track for it, sampled at either slot's moment.
+    this.upper = [];
+    this.bones[WAIST].traverse((b) => {
+      const track = clips.attack.tracks.find((t) => t.name === `${b.name}.quaternion`);
+      if (b.isBone && track) this.upper.push({ bone: b, track: track.createInterpolant() });
+    });
+    const hipsTrack = clips.attack.tracks.find((t) => t.name === `${HIPS}.quaternion`);
+    this.swingHips = hipsTrack?.createInterpolant() ?? null;
+    // How strongly each slot's swing is laid over the stride.
+    this.layer = Object.fromEntries(ATTACK_SLOTS.map((k) => [k, 0]));
+    this.slot = 1;
+    // The legs' turn away from the chest, and whether they are stepping
+    // backwards.
+    this.legYaw = 0;
+    this.backpedal = false;
 
     // How fast each locomotion clip moves over the ground, and when in it
     // the left foot touches down, measured from the feet themselves.
@@ -366,6 +426,9 @@ export class ModelFigure {
     this.turned = 0;
     this.turnLeft = 0;
     this.level = undefined;
+    for (const k in this.layer) this.layer[k] = 0;
+    this.legYaw = 0;
+    this.backpedal = false;
     for (const [key, action] of Object.entries(this.actions)) {
       action.reset().play();
       this.weights[key] = key === 'idle' ? 1 : 0;
@@ -401,12 +464,14 @@ export class ModelFigure {
     // with the ground whichever clips are mixed.
     let perMetre = 0;
     for (const g of this.gaits) perMetre += (loco[g.key] ?? 0) / g.cycle;
+    this.strafe(dt, p, moving);
     const before = this.phase;
-    const after = before + speed * dt * perMetre;
-    this.phase = after % 1;
-    const plants = moving > 0.5 && p.air === 0 && p.windUp < 0
-      && !cb.charge && (!cb.move || cb.move === 'draw' || cb.move === 'sheathe') && !this.oneShot
-      ? footPlants(before, after) : [];
+    const after = before + (this.backpedal ? -1 : 1) * speed * dt * perMetre;
+    this.phase = ((after % 1) + 1) % 1;
+    // A swing on the move leaves the legs striding, so they still sound.
+    const striding = !this.oneShot || ATTACK_SLOTS.includes(this.oneShot.key);
+    const plants = moving > 0.5 && p.air === 0 && p.windUp < 0 && !cb.charge && striding
+      ? footPlants(Math.min(before, after), Math.max(before, after)) : [];
     for (const g of this.gaits) {
       const a = this.actions[g.key];
       a.time = (((this.phase + g.strike) % 1) + 1) % 1 * a.getClip().duration;
@@ -438,19 +503,34 @@ export class ModelFigure {
     // Sword swings play the attack clip over everything else.
     const swing = cb.move && cb.move !== 'draw' && cb.move !== 'sheathe' ? cb.move : null;
     if (swing && swing !== this.lastMove) {
-      const rate = { a: 1.4, b: 1.6, d: 1.5, c: 1.1, thrust: 1.7, plunge: 1.2, spin: 1.0 }[swing] ?? 1.3;
-      this.start('attack', rate);
+      const play = SWING_PLAY[swing] ?? { rate: 1.3, from: 0 };
+      // Only a swing following straight on from another skips its wind-up.
+      const chained = ATTACK_SLOTS.includes(this.oneShot?.key);
+      this.slot = 1 - this.slot;
+      this.start(ATTACK_SLOTS[this.slot], play.rate, chained ? play.from : 0);
+      this.oneShot.swing = swing;
+      this.oneShot.at = this.oneShot.from;
     }
+    if (this.oneShot?.swing) this.followSwing(dt, cb);
     this.lastMove = cb.move;
     // Stooping to gather something plays once per pickup.
     const picking = p.pickupTime >= 0;
     if (picking && !this.picking && !swing) this.start('pickup', 1.3);
     else if (!picking && this.picking && this.oneShot?.key === 'pickup') this.oneShot = null;
     this.picking = picking;
+    const layer = Object.fromEntries(ATTACK_SLOTS.map((k) => [k, 0]));
     if (this.oneShot) {
       this.oneShot.t += dt;
-      const left = (this.oneShot.until - this.oneShot.from) / this.oneShot.rate - this.oneShot.t;
-      const k = Math.min(1, this.oneShot.t / 0.06, Math.max(0, left / 0.12));
+      const left = this.oneShot.swing ? (this.oneShot.until - this.oneShot.at) / this.oneShot.rate
+        : (this.oneShot.until - this.oneShot.from) / this.oneShot.rate - this.oneShot.t;
+      let k = Math.min(1, this.oneShot.t / 0.06, Math.max(0, left / 0.12));
+      if (ATTACK_SLOTS.includes(this.oneShot.key)) {
+        // Walking, running or in the air the legs carry on with what they
+        // were doing; the swing takes the body from the waist up.
+        const legs = p.air > 0 ? 1 : moving;
+        layer[this.oneShot.key] = k * legs;
+        k *= 1 - legs;
+      }
       for (const key in w) w[key] *= 1 - k;
       w[this.oneShot.key] = k;
       if (left <= 0) this.oneShot = null;
@@ -462,6 +542,7 @@ export class ModelFigure {
       this.weights[k] += (w[k] - this.weights[k]) * ease;
       this.actions[k].setEffectiveWeight(this.weights[k]);
     }
+    for (const k in layer) this.layer[k] += (layer[k] - this.layer[k]) * ease;
     this.mixer.update(dt);
     for (const g of this.gaits) {
       const a = this.actions[g.key];
@@ -469,12 +550,13 @@ export class ModelFigure {
     }
     for (const k in this.held) this.actions[k].time = this.held[k];
     this.mixer.update(0);
+    this.layerSwing();
 
     this.gear.apply(p.equipment);
     const weapon = p.equipment === undefined ? SHORT_SWORD : heldWeapon(p.equipment);
     this.armory.update(weapon, cb.inHand || Boolean(p.ranged?.aiming));
     this.turned = this.spinTurn(p);
-    this.model.rotation.y = p.heading + (cb.spin ?? 0) + this.turned;
+    this.model.rotation.y = p.heading + (cb.spin ?? 0) + this.turned + this.legYaw;
     // Keep the stride on the ground. The run clip throws the body well clear
     // of it between steps and drives it down into each landing, which a
     // shorter, laden stride would not; with its legs shortened, the planted
@@ -483,6 +565,7 @@ export class ModelFigure {
     // in the air.
     this.model.position.y = 0;
     this.model.updateMatrixWorld(true);
+    this.twistBack();
     for (const side of plants) {
       const foot = this.bones[bone(side === 0 ? 'DEF-foot.L' : 'DEF-foot.R')];
       const at = foot.getWorldPosition(new THREE.Vector3());
@@ -504,7 +587,9 @@ export class ModelFigure {
     this.steady(dt, grounded);
     if (p.torch) {
       const shoulder = this.torchArm.upper.getWorldPosition(new THREE.Vector3());
-      const offset = new THREE.Vector3(0.18, -0.22, 0.28).applyQuaternion(this.model.quaternion);
+      // Held ahead of the chest, which faces round from the legs.
+      const chest = new THREE.Quaternion().setFromAxisAngle(UP, this.model.rotation.y - this.legYaw);
+      const offset = new THREE.Vector3(0.18, -0.22, 0.28).applyQuaternion(chest);
       holdTorch(this.torchArm, shoulder.add(offset));
       this.torchLight.position.copy(this.torchArm.hand.getWorldPosition(new THREE.Vector3()));
       this.torchLight.position.y += 0.55;
@@ -602,6 +687,9 @@ export class ModelFigure {
   // Touching down: the rest of the clip plays out from the moment of
   // landing, and a stride picks up again on the foot that landed.
   land(j, p) {
+    // A swing under way, such as a plunge driven into the ground, plays out
+    // through the landing.
+    if (this.oneShot?.swing) return;
     if (!j.trick && j.kind === 'stand') {
       this.start('jumpLand', 1.4);
       return;
@@ -634,6 +722,85 @@ export class ModelFigure {
     };
     const from = at(this.turnFrom);
     return Math.max(0, Math.min(1, (at(this.actions.spin.time) - from) / (1 - from))) * Math.PI * 2;
+  }
+
+  // Moves a swing's clip on to match the blade: through the wind-up and the
+  // cut in step with the swing, then recovering at its own pace once the
+  // swing has struck or another has taken over. It never runs backwards.
+  followSwing(dt, cb) {
+    const shot = this.oneShot;
+    const stage = cb.move === shot.swing ? cb.swingStage : null;
+    let at;
+    if (stage?.part === 'wind') at = shot.from + (CUT[0] - shot.from) * stage.u;
+    else if (stage?.part === 'cut') {
+      // A swing straight into its cut still raises the blade first.
+      const start = stage.windUp ? CUT[0] : shot.from;
+      at = start + (CUT[1] - start) * stage.u;
+    } else at = Math.max(shot.at + dt * shot.rate, stage ? CUT[1] : 0);
+    shot.at = Math.min(shot.until, Math.max(shot.at, at));
+    this.held[shot.key] = shot.at;
+  }
+
+  // Walking one way while held facing another, turns the legs to the way
+  // they are going, stepping backwards once that is behind the chest. Turned
+  // freely, the chest soon swings round to the way the legs go, so the legs
+  // never lead it by more than they already did.
+  strafe(dt, p, moving) {
+    const h = p.heading;
+    const surge = p.surge ?? 0;
+    const vx = (p.vx ?? 0) + Math.sin(h) * surge;
+    const vz = (p.vz ?? 0) + Math.cos(h) * surge;
+    const held = p.facing != null || Boolean(p.ranged?.aiming);
+    let to = 0;
+    if (moving > 0.2 && p.air === 0 && Math.hypot(vx, vz) > 0.3) {
+      const d = angleTo(h, Math.atan2(vx, vz));
+      const flip = this.backpedal ? Math.abs(d) < FORWARD_AT : held && Math.abs(d) > BACKPEDAL_AT;
+      if (flip) this.backpedal = !this.backpedal;
+      to = this.backpedal ? angleTo(0, d + Math.PI) : d;
+      if (!held && !this.backpedal) to = Math.max(-Math.abs(this.legYaw), Math.min(Math.abs(this.legYaw), to));
+    } else this.backpedal = false;
+    this.legYaw += angleTo(this.legYaw, to) * (1 - Math.exp(-12 * dt));
+  }
+
+  // Lays the swing over the stride from the waist up, each slot with its
+  // own weight as one swing fades into the next. The pose the mixer made
+  // already holds any whole-body share of the swing.
+  layerSwing() {
+    let rest = 1;
+    for (const k of ATTACK_SLOTS) rest -= this.layer[k] + this.weights[k];
+    let sum = Math.max(0, rest);
+    const hips = this.bones[HIPS];
+    const q = new THREE.Quaternion();
+    const turn = new THREE.Quaternion();
+    const lean = new THREE.Quaternion();
+    for (const k of ATTACK_SLOTS) {
+      if (this.layer[k] < 1e-3) continue;
+      sum += this.layer[k];
+      const share = this.layer[k] / sum;
+      const t = this.actions[k].time;
+      for (const { bone: b, track } of this.upper) {
+        q.fromArray(track.evaluate(t));
+        if (b.name === WAIST && this.swingHips) {
+          // The stride keeps its own hips, so the waist takes up the turn
+          // and lean the swing gives its hips.
+          turn.copy(hips.quaternion).slerp(lean.fromArray(this.swingHips.evaluate(t)), HIPS_KEEP);
+          q.premultiply(turn).premultiply(turn.copy(hips.quaternion).invert());
+        }
+        b.quaternion.slerp(q, share);
+      }
+    }
+  }
+
+  // Turns the body from the waist up back round over legs turned to the
+  // way they walk, so the chest and the blade face where they are aimed.
+  twistBack() {
+    if (Math.abs(this.legYaw) < 1e-4) return;
+    const q = new THREE.Quaternion();
+    for (const [name, part] of TWIST) {
+      const b = this.bones[name];
+      q.setFromAxisAngle(UP, -this.legYaw * part);
+      setWorldQuaternion(b, q.multiply(b.getWorldQuaternion(new THREE.Quaternion())));
+    }
   }
 
   // Evens out the hips' rise and fall while striding. The body is moved
