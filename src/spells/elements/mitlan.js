@@ -7,4 +7,5 @@ export const mitlan = [
   "crashing-wave",
   "maelstrom",
   "drowning-prison",
+  "lightning",
 ];

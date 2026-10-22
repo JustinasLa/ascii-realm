@@ -16,8 +16,9 @@ const MAX_TASKS = 4096;
 // A bounded simulation of the gameplay mechanics in TF's configured skills.
 // Tick counts in the source are converted to seconds here; distances are metres.
 export class Spellcasting {
-  constructor({ player, world, monsters, spells = [], peers = () => [], notify = () => {}, onCast = () => {}, onSound = () => {} }) {
-    Object.assign(this, { player, world, monsters, peers, notify, onCast, onSound });
+  constructor({ player, world, monsters, spells = [], peers = () => [], notify = () => {}, onCast = () => {}, onSound = () => {},
+    onLightning = () => {} }) {
+    Object.assign(this, { player, world, monsters, peers, notify, onCast, onSound, onLightning });
     this.spells = new Map(spells.map(s => [s.id, s]));
     this.states = new Map();
     this.tasks = [];
@@ -353,6 +354,12 @@ export class Spellcasting {
         case 'remove': if (target.summoned) target.health = 0; break;
         case 'summon': this.summon(a, ctx, target); break;
         case 'actionmessage': case 'message': if (target === this.player && a.m) this.notify(a.m.replace(/<[^>]+>|&[0-9a-fklmnor]/gi, '')); break;
+        // The bolt is a presentation; the host may answer it with its own thunder.
+        case 'lightning': case 'fakelightning':
+          this.present(ctx, target, 'impact', { shape: 'bolt', radius: n('r', 1), life: n('life', 0.9) });
+          if (!this.effects.paused) this.onLightning({ x: target.x, y: target.y, strength: clamp(n('strength', 1), 0, 1) }, ctx);
+          if (step.op === 'lightning') this.damage(target, n('damage', 0), ctx, a);
+          break;
         case 'visual': this.present(ctx, target, 'pulse', { shape: a.shape ?? 'burst', radius: n('radius', 2), life: n('life', 0.5) }); break;
         default: throw new Error(`Unsupported spell mechanic: ${step.op}`);
       }

@@ -16,7 +16,11 @@ MMOItems rune parameters, MythicLib handler bindings and the corresponding
 MythicMobs gameplay graph. Source file names and a SHA-256 digest accompany each
 definition. No credentials, live player data or Minecraft assets are included.
 `tools/export-tf-spells.py` regenerates definitions from an existing local snapshot
-(offline authoring only; requires PyYAML).
+(offline authoring only; requires PyYAML). Mitlan's Lightning is authored for
+this game in the same graph format: a 0.6 s charge ring at the aimed point, then
+a strike that damages and briefly stuns everything within 2.5 m. Its
+`fakelightning` step reaches the host through `onLightning`, which the game
+answers with the storm's recorded thunder.
 
 The runtime preserves configured modifiers, conditions, targeting, repeats,
 delays, aura ticks, shields and status effects. Tick counts are converted to

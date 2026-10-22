@@ -447,7 +447,9 @@ const syncSpellPeers = () => {
   for (const id of spellPeers.keys()) if (!multiplayer.players.some(m => m.id === id)) spellPeers.delete(id);
 };
 const casting = new Spellcasting({ player, world, monsters, peers: () => [...spellPeers.values()],
-  notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e) });
+  notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e),
+  // Rune lightning (e.g. Mitlan's Lightning) answers with the storm's own thunder.
+  onLightning: ({ x, y, strength }) => sound.play({ type: 'lightning', x, y, strength }) });
 debug.casting = casting;
 hud.attachMana(casting);
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
