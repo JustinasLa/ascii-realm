@@ -4,6 +4,7 @@ import { PROP_CATALOG, PROP_KINDS, propDefinition } from '../world/prop-catalog.
 import { ASPECT, DIRT, GRASS, SHORE, STONE, WATER } from '../world/world.js';
 import { brushSize, screenToWorld, worldToScreen } from './coordinates.js';
 import { findPlayPosition } from './recovery.js';
+import { placeRuinScene } from './ruin-scene.js';
 import { Scenery } from './scenery.js';
 
 const TERRAIN = { grass: GRASS, dirt: DIRT, shore: SHORE, water: WATER, stone: STONE };
@@ -66,6 +67,7 @@ export class SceneryBuilder {
     });
     byId('undo').addEventListener('click', () => this.edit(() => this.scene.undo(), 'Undid scene edit.'));
     byId('redo').addEventListener('click', () => this.edit(() => this.scene.redo(), 'Redid scene edit.'));
+    byId('ruins').addEventListener('click', () => this.addRuins());
     byId('reset').addEventListener('click', () => this.edit(() => {
       this.scene.reset();
       this.onReset();
@@ -105,6 +107,17 @@ export class SceneryBuilder {
       this.pointer = null;
     });
     this.refresh(`Seed ${world.seed}. Choose a tool or start building.`);
+    // Defer until main has finished wiring the builder and gameplay callbacks.
+    const preview = new URLSearchParams(window.location?.search ?? '');
+    if (preview.get('scene') === 'ruins') {
+      queueMicrotask(() => {
+        this.addRuins();
+        if (preview.has('play')) {
+          this.setEnabled(false);
+          this.panel.open = false;
+        }
+      });
+    }
   }
 
   buildPalette(container) {
@@ -203,6 +216,15 @@ export class SceneryBuilder {
     } catch (error) {
       this.refresh(error.message);
     }
+  }
+
+  addRuins() {
+    this.edit(() => {
+      placeRuinScene(this.scene, this.camera);
+      this.nextSeed = this.scene.nextPropSeed();
+      this.ghost = null;
+      this.onReset();
+    }, 'Added the column ruins. Open court in the middle; follow the path north to the gate. B to play; Undo removes the preset.');
   }
 
   worldPoint(event, view = this.camera.view(this.renderer)) {

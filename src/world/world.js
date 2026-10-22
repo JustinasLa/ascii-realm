@@ -39,9 +39,11 @@ export class World {
   constructor(seed = 1, options = {}) {
     // A bare number is the chunk cache size.
     // `flora` brings back the wild flowers, ferns and cattails among the grass.
-    const { season = 'summer', maxChunks = 128, flora = false } = typeof options === 'number' ? { maxChunks: options } : options;
+    const { season = 'summer', maxChunks = 128, flora = false, meadow = false } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
     this.flora = flora;
+    this.meadow = meadow;
+    this.sceneryBatchDepth = 0;
     this.season = ['spring', 'summer', 'autumn', 'winter'].includes(season) ? season : 'summer';
     this.maxChunks = Math.max(16, Math.floor(maxChunks));
     this.clock = 0;
@@ -91,8 +93,8 @@ export class World {
     }
     c.used = ++this.clock;
     // Edits and burns mark the grass for regrowing once, not per cell.
-    if (c.stale) {
-      c.blades = grassRoots(c, this.seed, CHUNK, { flora: this.flora });
+    if (c.stale && !this.sceneryBatchDepth) {
+      c.blades = grassRoots(c, this.seed, CHUNK, { flora: this.flora, meadow: this.meadow });
       c.stale = false;
     }
     return c;
@@ -148,11 +150,11 @@ export class World {
           const lush = smoothRange(0.35, 0.68, meadow);
           let reed = false;
           if (t === GRASS) {
-            const fieldHeight = 2.6 + lush * 1.3;
+            const fieldHeight = this.meadow ? 3.1 + lush * 1.4 : 2.6 + lush * 1.3;
             const bank = wet * smoothRange(0.35, 0.6, meadow);
             const target = fieldHeight + (4.7 - fieldHeight) * bank;
             grassHeight[i] = target;
-            grassDensity[i] = 0.255 + lush * 0.025;
+            grassDensity[i] = this.meadow ? 0.34 + lush * 0.08 : 0.255 + lush * 0.025;
           } else if (meadow > 0.43) {
             // Reeds fringe the lakes.
             grassHeight[i] = 3.3 + lush * 1.3;
@@ -178,7 +180,7 @@ export class World {
       }
     }
     for (const i of this.bareGround.get(chunkKey(cx, cy))?.keys() ?? []) grassHeight[i] = 0;
-    chunk.blades = grassRoots(chunk, s, CHUNK, { flora: this.flora });
+    chunk.blades = grassRoots(chunk, s, CHUNK, { flora: this.flora, meadow: this.meadow });
     return chunk;
   }
 
@@ -227,18 +229,30 @@ export class World {
     const base = type === c.baseType[i];
     c.type[i] = type;
     c.elev[i] = base ? c.baseElev[i] : EDIT_ELEVATION[type];
-    c.baseGrass ??= { height: c.grassHeight.slice(), density: c.grassDensity.slice(),
-      style: c.grassStyle.slice() };
+    if (!c.baseGrass) {
+      c.baseGrass = { height: c.grassHeight.slice(), density: c.grassDensity.slice(), style: c.grassStyle.slice() };
+      if (this.meadow) {
+        for (const [covered, ground] of this.bareGround.get(chunkKey(c.cx, c.cy)) ?? []) {
+          c.baseGrass.height[covered] = ground.height;
+        }
+      }
+    }
     const g = c.baseGrass;
     if (base) {
       c.grassHeight[i] = g.height[i];
       c.grassDensity[i] = g.density[i];
       c.grassStyle[i] = g.style[i];
     } else if (type === GRASS) {
-      c.grassHeight[i] = 2.6;
-      c.grassDensity[i] = 0.22;
+      c.grassHeight[i] = this.meadow ? 3.8 : 2.6;
+      c.grassDensity[i] = this.meadow ? 0.38 : 0.22;
       c.grassStyle[i] = 0;
     } else {
+      c.grassHeight[i] = 0;
+    }
+    // Painting or restoring meadow beneath a solid still respects its footprint.
+    const cover = this.meadow && this.bareGround.get(chunkKey(c.cx, c.cy))?.get(i);
+    if (cover) {
+      cover.height = c.grassHeight[i];
       c.grassHeight[i] = 0;
     }
   }
@@ -285,12 +299,13 @@ export class World {
     if (prop.chopped || prop.solid === false || (prop.kind === 'bush' && prop.solid !== true)) return;
     const deadwood = prop.kind === 'deadwood';
     const rock = prop.kind === 'rock';
-    const rx = Math.ceil(deadwood ? DEADWOOD_REACH_X : (prop.footW ?? 0) + (rock ? 1 : 0));
+    const lowStone = rock || prop.kind === 'rubble-small' || prop.kind === 'rubble-large';
+    const rx = Math.ceil(deadwood ? DEADWOOD_REACH_X : (prop.footW ?? 0) + (lowStone ? 1 : 0));
     const ry = Math.ceil(deadwood ? DEADWOOD_REACH_Y : prop.footH ?? 0);
     const x0 = Math.floor(prop.x);
     const y0 = Math.floor(prop.y);
-    const below = rock ? ROCK_APRON : 0;
-    const bare = (x, y) => blocks(prop, x, y) || (rock && y > prop.y && y < prop.y + ROCK_APRON
+    const below = lowStone ? ROCK_APRON : 0;
+    const bare = (x, y) => blocks(prop, x, y) || (lowStone && y > prop.y && y < prop.y + ROCK_APRON
       && Math.abs(x - prop.x) < prop.footW + 1);
     const changed = new Set();
     for (let y = y0 - ry; y <= y0 + ry + below; y++) {
@@ -316,7 +331,17 @@ export class World {
     for (const c of changed) this.touched(c);
   }
 
+  batchScenery(action) {
+    this.sceneryBatchDepth++;
+    try { return action(); }
+    finally { this.sceneryBatchDepth--; }
+  }
+
   clearScenery() {
+    return this.batchScenery(() => this._clearScenery());
+  }
+
+  _clearScenery() {
     for (const prop of this.addedProps.values()) this.coverGrass(prop, -1);
     for (const key of this.terrainEdits.keys()) {
       const [x, y] = key.split(',').map(Number);

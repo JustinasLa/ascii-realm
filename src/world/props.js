@@ -3,6 +3,7 @@ import { hash2, mulberry32 } from '../core/rng.js';
 import { FINE, putCell } from '../render/cells.js';
 import { dg, LAYER, over } from '../render/glyphs.js';
 import { MOSS, STONE_MID } from '../render/palette.js';
+import { makeArchitectureProp } from './architecture-props.js';
 import { makeCampProp } from './camp-props.js';
 import { deadwoodBlocks } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
@@ -451,7 +452,8 @@ export function createProp(kind, x, y, options = {}) {
   const bakeFn = scaledBaker(width * scale, height * scale, used);
   const make = { tree: makeBuilderTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBuilderBush }[kind];
   const prop = make ? make(x, y, rand, seed, bakeFn)
-    : makeNaturalProp(kind, x, y, rand, seed, bakeFn) ?? makeCampProp(kind, x, y, rand, seed, bakeFn);
+    : makeNaturalProp(kind, x, y, rand, seed, bakeFn) ?? makeCampProp(kind, x, y, rand, seed, bakeFn)
+      ?? makeArchitectureProp(kind, x, y, rand, seed, bakeFn);
   if (!prop) throw new TypeError(`Scenery prop has no factory: ${kind}`);
   let cells = prop.cells;
   // Props composed glyph by glyph are resampled instead.
@@ -471,6 +473,14 @@ export function createProp(kind, x, y, options = {}) {
   prop.footH *= height;
   prop.footW *= scale;
   prop.footH *= scale;
+  // Composite footprints use local world coordinates, just like footW/H.
+  // Scale both axes with the same variation and size used for the artwork.
+  if (prop.collisionRects) {
+    prop.collisionRects = prop.collisionRects.map(({ minX, maxX, minY, maxY }) => ({
+      minX: minX * width * scale, maxX: maxX * width * scale,
+      minY: minY * height * scale, maxY: maxY * height * scale,
+    }));
+  }
   // Culling must see the final image rather than the original.
   prop.bounds = cellBounds(prop.cells);
   prop.scale = scale;
@@ -892,6 +902,12 @@ export function blocks(prop, x, y) {
   // Wild shrubs are soft; a builder bush is placed as an obstacle.
   if (prop.kind === 'bush' && prop.solid !== true) return false;
   if (prop.kind === 'deadwood') return deadwoodBlocks(prop, x, y);
+  if (prop.collisionRects) {
+    const dx = x - prop.x;
+    const dy = y - prop.y;
+    return prop.collisionRects.some(({ minX, maxX, minY, maxY }) =>
+      dx > minX && dx < maxX && dy > minY && dy < maxY);
+  }
   const dx = (x - prop.x) / prop.footW;
   const dy = (y - prop.y) / prop.footH;
   return dx * dx + dy * dy < 1;

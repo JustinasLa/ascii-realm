@@ -53,9 +53,11 @@ import { WeatherEffects } from './world/weather.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from './world/world.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
+const params = new URLSearchParams(location.search);
+const ruinPreview = params.get('scene') === 'ruins';
 // Cell height in CSS px; width follows from ASPECT so the world keeps its shape.
 // Zooming sets a target and the cell size glides toward it every frame.
-let cellH = 8;
+let cellH = ruinPreview ? 6 : 8;
 let zoomTarget = cellH;
 // The furthest zoom: below this cell height (CSS px) grass blades, swaying
 // trees and reflections would be too small to draw, so the view stops here.
@@ -126,12 +128,11 @@ window.addEventListener('keydown', (e) => {
   if (e.key === '-' || e.key === '_') zoomBy(1 / 1.15);
 });
 
-const params = new URLSearchParams(location.search);
 const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 let name = cleanName(params.get('name') || 'Kael');
-const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks });
+const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks, meadow: ruinPreview });
 // Keep every chunk a zoomed-out view touches, including the tallest trees
 // above and below it, or chunks would be rebuilt every frame.
 fitChunks = () => {
@@ -165,6 +166,11 @@ const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...
 const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
 const sound = new GameAudio(world);
+// This URL defines a misty meadow preview without saving over weather preferences.
+if (ruinPreview) {
+  sound.weather.preset = 'fog';
+  sound.weather.intensity = 0.6;
+}
 sound.weather.onLightning = event => weather.strike(world, camera.view(renderer), event);
 let summonLightning = false;
 const lightningButton = document.getElementById('lightning-test');
@@ -1015,7 +1021,9 @@ function frame(now) {
   if (debug.freeze) sound.pause();
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
-  renderer.draw(view.offX, view.offY, fog.uniforms(view));
+  const atmosphere = fog.uniforms(view);
+  if (ruinPreview) atmosphere.density *= 0.55;
+  renderer.draw(view.offX, view.offY, atmosphere);
   lastFrame = { width: canvas.width, height: canvas.height, cellW: renderer.cellW, cellH: renderer.cellH, view };
   hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)
     .map((member) => ({ id: member.id, name: member.name, health: member.state.health,
