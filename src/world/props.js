@@ -3,7 +3,7 @@ import { hash2, mulberry32 } from '../core/rng.js';
 import { FINE, putCell } from '../render/cells.js';
 import { dg, LAYER, over } from '../render/glyphs.js';
 import { MOSS, STONE_MID } from '../render/palette.js';
-import { makeArchitectureProp } from './architecture-props.js';
+import { isArchitectureKind, makeArchitectureProp } from './architecture-props.js';
 import { makeCampProp } from './camp-props.js';
 import { deadwoodBlocks } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
@@ -408,7 +408,7 @@ function scaledBaker(sx, sy, used) {
     const shadow = options.shadow && { ...options.shadow, rx: options.shadow.rx * sx,
       ry: options.shadow.ry * sy, ox: (options.shadow.ox ?? options.shadow.rx * 0.25) * sx };
     const extras = options.extras?.map((e) => ({ ...e, dx: Math.round(e.dx * sx), dy: Math.round(e.dy * sy) }));
-    return bake(Math.ceil(w * sx) + 1, Math.floor(top * sy) - 1, bottom,
+    return bake(Math.ceil(w * sx) + 1, Math.floor(top * sy) - 1, Math.ceil(bottom * sy),
       (px, py) => sample(px / sx, py / sy), seed, { ...options, shadow, extras });
   };
 }
@@ -424,7 +424,7 @@ export function createProp(kind, x, y, options = {}) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new TypeError('Scenery prop options must be an object');
   }
-  const { scale = 1, seed = 1, variant = 1 } = options;
+  const { scale = 1, seed = 1, variant = 1, rotation = 0 } = options;
   if (typeof scale !== 'number' || !Number.isFinite(scale) || scale < 0.25 || scale > 3) {
     throw new RangeError('Scenery prop scale must be a number between 0.25 and 3');
   }
@@ -432,6 +432,8 @@ export function createProp(kind, x, y, options = {}) {
     throw new TypeError('Scenery prop seed must be a finite number');
   }
   if (variant !== 0 && variant !== 1) throw new RangeError('Unknown scenery variation version');
+  if (!Number.isFinite(rotation)) throw new TypeError('Scenery prop rotation must be finite degrees');
+  if (rotation && !isArchitectureKind(kind)) throw new RangeError('Only architecture props support rotation');
   const rand = mulberry32(seed);
   // Variation is decided first so the prop can be drawn at its final size.
   let width = 1;
@@ -453,7 +455,7 @@ export function createProp(kind, x, y, options = {}) {
   const make = { tree: makeBuilderTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBuilderBush }[kind];
   const prop = make ? make(x, y, rand, seed, bakeFn)
     : makeNaturalProp(kind, x, y, rand, seed, bakeFn) ?? makeCampProp(kind, x, y, rand, seed, bakeFn)
-      ?? makeArchitectureProp(kind, x, y, rand, seed, bakeFn);
+      ?? makeArchitectureProp(kind, x, y, rand, seed, bakeFn, rotation);
   if (!prop) throw new TypeError(`Scenery prop has no factory: ${kind}`);
   let cells = prop.cells;
   // Props composed glyph by glyph are resampled instead.
@@ -467,12 +469,14 @@ export function createProp(kind, x, y, options = {}) {
     if (fine) withFine(prop, function* shaded() { return shadeAll(yield* fine()); });
   }
   // A worker remakes a builder prop from the same options.
-  if (fineRecipe(prop)) withFine(prop, fineRecipe(prop), { make: 'prop', kind, x, y, options: { scale, seed, variant } });
+  if (fineRecipe(prop)) withFine(prop, fineRecipe(prop), { make: 'prop', kind, x, y,
+    options: { scale, seed, variant, ...(rotation ? { rotation } : {}) } });
   prop.cells = cells;
   prop.footW *= width;
   prop.footH *= height;
   prop.footW *= scale;
   prop.footH *= scale;
+  if (prop.unrotatedFootW !== undefined) prop.unrotatedFootW *= width * scale;
   // Composite footprints use local world coordinates, just like footW/H.
   // Scale both axes with the same variation and size used for the artwork.
   if (prop.collisionRects) {
@@ -480,6 +484,10 @@ export function createProp(kind, x, y, options = {}) {
       minX: minX * width * scale, maxX: maxX * width * scale,
       minY: minY * height * scale, maxY: maxY * height * scale,
     }));
+  }
+  if (prop.collisionPolygons) {
+    prop.collisionPolygons = prop.collisionPolygons.map((polygon) => polygon.map(([dx, dy]) =>
+      [dx * width * scale, dy * height * scale]));
   }
   // Culling must see the final image rather than the original.
   prop.bounds = cellBounds(prop.cells);
@@ -902,6 +910,22 @@ export function blocks(prop, x, y) {
   // Wild shrubs are soft; a builder bush is placed as an obstacle.
   if (prop.kind === 'bush' && prop.solid !== true) return false;
   if (prop.kind === 'deadwood') return deadwoodBlocks(prop, x, y);
+  if (prop.collisionPolygons) {
+    const dx = x - prop.x, dy = y - prop.y;
+    return prop.collisionPolygons.some((polygon) => {
+      let sign = 0;
+      for (let i = 0; i < polygon.length; i++) {
+        const [ax, ay] = polygon[i], [bx, by] = polygon[(i + 1) % polygon.length];
+        const cross = (bx - ax) * (dy - ay) - (by - ay) * (dx - ax);
+        // Match rectangle collision's open boundary, tolerating yaw roundoff.
+        if (Math.abs(cross) <= 1e-9) return false;
+        const side = Math.sign(cross);
+        if (sign && sign !== side) return false;
+        sign = side;
+      }
+      return polygon.length >= 3;
+    });
+  }
   if (prop.collisionRects) {
     const dx = x - prop.x;
     const dy = y - prop.y;

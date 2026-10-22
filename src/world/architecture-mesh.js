@@ -13,6 +13,20 @@ const VIEW = [0.55, 0.45, -1];
 export class ArchitectureMesh {
   triangles = [];
 
+  // Upright model yaw, before projection, visibility and lighting. Normals
+  // (including smooth per-vertex normals) use the same orthogonal transform.
+  yaw(degrees) {
+    if (!degrees) return this;
+    const angle = (degrees % 360) * Math.PI / 180;
+    const c = Math.cos(angle), s = Math.sin(angle);
+    const rotate = ([x, h, z]) => [c * x + s * z, h, -s * x + c * z];
+    this.triangles = this.triangles.map((t) => ({ ...t,
+      points: t.points.map(rotate), normal: rotate(t.normal),
+      normals: t.normals?.map(rotate) ?? null,
+    }));
+    return this;
+  }
+
   // Faces are convex. Explicit outward normals make the winding immaterial.
   face(points, outward, material = {}, normals = null) {
     for (let i = 1; i < points.length - 1; i++) {
