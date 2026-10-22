@@ -21,7 +21,7 @@ for (const spell of spells) {
     for (const stage of stages) {
       const recipe = spell.presentation.sounds[stage];
       assert.ok(recipe.length >= 1 && recipe.length <= 4, `${stage}: recorded layer budget`);
-      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2,
+      assert.ok(recipe.reduce((sum, layer) => sum + layer.gain, 0) <= 0.75,
         `${stage}: leave mix headroom for simultaneous spells`);
       for (const layer of recipe) {
         for (const field of Object.keys(layer)) assert.ok(supported.has(field), `${stage}: unsupported ${field}`);
@@ -29,7 +29,8 @@ for (const spell of spells) {
         assert.match(layer.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
         assert.ok(manifest.clips.some(clip => layer.url.endsWith('/' + clip.file)), 'recording has documented provenance');
         assert.ok((layer.delay ?? 0) >= 0 && (layer.delay ?? 0) <= 2);
-        assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+        assert.ok(layer.gain >= 0.04 && layer.gain <= 0.35);
+        if (stage === 'pulse') assert.ok(layer.gain <= 0.08, 'repeated cues stay beneath the cast');
         assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2, 'physical foley keeps its natural detail');
       }
     }
@@ -90,6 +91,8 @@ test('Oseni spells have distinct cast, impact, and pulse signatures', () => {
 test('Oseni recordings retain full-rate PCM, clean ends, headroom and traceable real-world sources', () => {
   assert.ok(manifest.sources.length >= 4);
   assert.ok(manifest.sources.every(source => source.license === 'CC0-1.0' && source.author && source.recording));
+  assert.deepEqual(manifest.sources.map(source => source.id).sort(), ['cloth', 'crack', 'swish', 'thunder'],
+    'the bank contains no fireplace or blowtorch source');
   for (const clip of manifest.clips) {
     const bytes = readFileSync(new URL(clip.file, bank));
     assert.equal(createHash('sha256').update(bytes).digest('hex'), clip.sha256);
@@ -110,7 +113,7 @@ test('Oseni recordings retain full-rate PCM, clean ends, headroom and traceable 
     assert.equal(bits, 16);
     assert.ok(sampleRate >= 44100);
     const duration = pcm.length / 2 / sampleRate;
-    assert.ok(duration >= 0.3 && duration <= 3);
+    assert.ok(duration >= 0.3 && duration <= 0.9, 'short tails leave room for footsteps and ambience');
     assert.ok(Math.abs(duration - clip.durationSeconds) < 1 / sampleRate);
     assert.equal(pcm.readInt16LE(0), 0);
     assert.equal(pcm.readInt16LE(pcm.length - 2), 0);
@@ -119,8 +122,9 @@ test('Oseni recordings retain full-rate PCM, clean ends, headroom and traceable 
       const value = pcm.readInt16LE(i) / 32768;
       peak = Math.max(peak, Math.abs(value)); energy += value * value;
     }
-    assert.ok(peak > 0.2 && peak <= 0.85, `${clip.file}: intact transient with headroom`);
-    assert.ok(Math.sqrt(energy / (pcm.length / 2)) > 0.005, `${clip.file}: audible natural body`);
+    assert.ok(peak > 0.2 && peak <= 0.551, `${clip.file}: intact transient with restrained peak`);
+    const rms = Math.sqrt(energy / (pcm.length / 2));
+    assert.ok(rms > 0.005 && rms <= 0.121, `${clip.file}: audible body without a loud sustained bed`);
     assert.ok(manifest.sources.some(source => source.id === clip.source));
   }
 });

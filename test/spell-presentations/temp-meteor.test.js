@@ -170,27 +170,25 @@ test('Meteor remains deterministic, bounded and fades out in every supported sta
   }
 });
 
-test('Meteor uses recorded furnace approach, thunder fracture and quiet embers', () => {
+test('Meteor gathers dark air before release and lands with a contained muted impact', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const sample = (sequence, name) => sequence.find(layer => layer.url.endsWith(`/${name}.wav`));
-  assert.ok(sample(cast, 'ignition'));
-  assert.ok(sample(cast, 'fire-roar'));
-  assert.equal(sample(cast, 'air-swish').delay, 0.5, 'air pass follows the delayed projectile release');
-  const thunder = sample(impact, 'thunder-impact');
-  assert.equal(thunder.delay, 0);
-  assert.ok(thunder.rate < 1, 'slower natural thunder gives the meteor weight');
-  assert.ok(sample(impact, 'wood-break').delay < 0.05, 'fracture lands with the thunder');
-  assert.ok(sample(impact, 'coal-crack').delay > 0.3, 'charcoal settles after the first contact');
+  assert.ok(sample(cast, 'dark-swell'));
+  assert.equal(sample(cast, 'air-release').delay, 0.5, 'air pass follows the delayed projectile release');
+  assert.equal(sample(impact, 'muted-hit').delay, 0);
+  const pressure = sample(impact, 'pressure');
+  assert.ok(pressure.delay < 0.05, 'pressure lands with the contact');
+  assert.ok(pressure.delay + 0.8 / pressure.rate < 1, 'impact does not become a long rumble');
   assert.equal(pulse.length, 1, 'repeated burn ticks do not stack sharp impacts');
-  assert.ok(sample(pulse, 'ember-bed').gain <= 0.12);
+  assert.ok(sample(pulse, 'soft-return').gain <= 0.08);
   for (const sequence of Object.values(presentation.sounds)) {
     assert.ok(sequence.length >= 1 && sequence.length <= 4);
-    assert.ok(sequence.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2);
+    assert.ok(sequence.reduce((sum, layer) => sum + layer.gain, 0) <= 0.75);
     for (const layer of sequence) {
       assert.equal(layer.kind, 'recording');
       assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.match(layer.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
-      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.gain >= 0.04 && layer.gain <= 0.35);
       assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2);
       assert.ok(layer.delay >= 0 && layer.delay <= 2);
     }

@@ -77,21 +77,21 @@ test('all stages remain deterministic, finite, ASCII and within budget, then fad
   }
 });
 
-test('rekindle feeds recorded embers with air and keeps healing foley short and quiet', async () => {
+test('rekindle uses soft inward movement and keeps healing cues short and quiet', async () => {
   const { impact, cast, pulse } = presentation.sounds;
-  assert.ok(cast.some(v => v.url.endsWith('/air-swish.wav')));
-  assert.ok(cast.some(v => v.url.endsWith('/ignition.wav') && v.delay > 0));
-  assert.ok(impact.some(v => v.url.endsWith('/coal-crack.wav')));
+  assert.ok(cast.some(v => v.url.endsWith('/soft-return.wav')));
+  assert.ok(cast.some(v => v.url.endsWith('/air-draw.wav') && v.delay > 0));
+  assert.ok(impact.every(v => v.url.endsWith('/soft-return.wav')), 'healing has no attack transient');
   assert.ok(impact.every(v => v.gain <= 0.12), 'repeated healing stays quiet');
-  assert.ok(pulse.every(v => v.gain <= 0.1), 'residual fire stays below healing');
+  assert.ok(pulse.every(v => v.gain <= 0.08), 'resonance stays below healing');
   for (const [stage, voices] of Object.entries(presentation.sounds)) {
     assert.ok(voices.length > 0 && voices.length <= 4);
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.75);
     for (const voice of voices) {
       assert.equal(voice.kind, 'recording');
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }

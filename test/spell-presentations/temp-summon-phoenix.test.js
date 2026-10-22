@@ -177,28 +177,29 @@ test('motion is continuous between 60 fps frames instead of jumping', () => {
   }
 });
 
-test('recorded Phoenix foley unfolds cloth wings, ignites on rebirth and leaves quiet embers', () => {
+test('Phoenix unfolds dark cloth wings, pulses on rebirth and leaves a soft resonance', () => {
   const uses = (stage, file) => profile.sounds[stage].filter(v => v.url.endsWith('/' + file + '.wav'));
-  const wings = uses('cast', 'wing-flap');
+  const wings = uses('cast', 'wing-sweep');
   assert.equal(wings.length, 2, 'two physical wingbeats lift the Phoenix');
   assert.ok(wings[1].delay - wings[0].delay >= 0.4, 'wingbeats have a deliberate slow cadence');
-  assert.equal(uses('cast', 'fire-roar').length, 1, 'the wings carry a sustained fire rush');
-  const rebirth = uses('impact', 'ignition');
+  assert.equal(uses('cast', 'dark-swell').length, 1, 'a brief swell supports the wings');
+  const rebirth = uses('impact', 'pressure');
   assert.equal(rebirth.length, 1);
   assert.equal(rebirth[0].delay, 0, 'rebirth catches at the collision');
-  assert.ok(uses('impact', 'coal-crack').every(v => v.delay > rebirth[0].delay), 'embers follow ignition');
+  assert.equal(uses('impact', 'wing-sweep').length, 1);
+  assert.ok(uses('impact', 'wing-sweep')[0].delay > rebirth[0].delay, 'wings follow the rebirth impulse');
   assert.notDeepEqual(profile.sounds.impact, profile.sounds.cast);
   assert.equal(profile.sounds.pulse.length, 1, 'frequent burn ticks use one small recording');
-  assert.equal(uses('pulse', 'coal-crack').length, 1);
-  assert.ok(profile.sounds.pulse[0].gain <= 0.12, 'repeating embers stay quiet');
+  assert.equal(uses('pulse', 'soft-return').length, 1);
+  assert.ok(profile.sounds.pulse[0].gain <= 0.08, 'repeating resonance stays quiet');
   for (const event of Object.values(profile.sounds)) {
     assert.ok(event.length > 0 && event.length <= 4);
-    assert.ok(event.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
+    assert.ok(event.reduce((sum, voice) => sum + voice.gain, 0) <= 0.75);
     for (const voice of event) {
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.equal(voice.kind, 'recording');
       assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
     }

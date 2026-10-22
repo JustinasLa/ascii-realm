@@ -178,31 +178,31 @@ test('Fire Rain handles all presentation stages with finite, bounded, fading ASC
   assert.deepEqual(draw('zone', 0.3), draw('zone', 0.3), 'zone geometry is deterministic');
 });
 
-test('Fire Rain uses a recorded flame rush and uneven falling coal contacts', () => {
+test('Fire Rain uses a dark gathering swell and uneven muted contacts', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const roar = cast.find(voice => voice.url.endsWith('/fire-roar.wav'));
-  assert.ok(roar && roar.delay === 0 && roar.rate < 1, 'a slowed physical flame rush gathers first');
-  const coals = cast.filter(voice => voice.url.endsWith('/coal-crack.wav'));
-  assert.ok(coals.length >= 3, 'several real coal contacts form the rain');
-  assert.ok(coals[0].delay > roar.delay, 'falling coals follow the gathering storm');
-  const gaps = coals.slice(1).map((voice, index) => voice.delay - coals[index].delay);
+  const swell = cast.find(voice => voice.url.endsWith('/dark-swell.wav'));
+  assert.ok(swell && swell.delay === 0 && swell.rate < 1, 'a dark swell gathers first');
+  const contacts = cast.filter(voice => voice.url.endsWith('/muted-hit.wav'));
+  assert.ok(contacts.length >= 3, 'several muted contacts form the rain');
+  assert.ok(contacts[0].delay > swell.delay, 'falling contacts follow the gathering storm');
+  const gaps = contacts.slice(1).map((voice, index) => voice.delay - contacts[index].delay);
   assert.ok(gaps.every(gap => gap > 0.2), 'individual falling contacts have room');
   assert.ok(Math.max(...gaps) - Math.min(...gaps) > 0.1, 'rain falls irregularly rather than as a barrage rhythm');
-  assert.ok(new Set(coals.map(voice => voice.rate)).size > 1, 'falling coals have different physical weights');
-  assert.ok(impact.some(voice => voice.url.endsWith('/coal-crack.wav') && voice.delay === 0));
-  assert.ok(impact.some(voice => voice.url.endsWith('/ember-bed.wav') && voice.delay > 0));
+  assert.ok(new Set(contacts.map(voice => voice.rate)).size > 1, 'falling contacts have different physical weights');
+  assert.ok(impact.some(voice => voice.url.endsWith('/muted-hit.wav') && voice.delay === 0));
+  assert.ok(impact.some(voice => voice.url.endsWith('/soft-return.wav') && voice.delay > 0));
   assert.equal(pulse.length, 1, 'repeated ticks use a single restrained contact');
   assert.ok(pulse[0].gain <= 0.1 && pulse[0].rate >= 1, 'repeated contact is quiet and brisk');
   for (const voices of Object.values(presentation.sounds)) {
     assert.ok(voices.length >= 1 && voices.length <= 4);
-    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 0.75);
     for (const voice of voices) {
       assert.equal(voice.kind, 'recording');
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
       assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
     }
   }
 });

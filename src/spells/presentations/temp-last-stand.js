@@ -450,25 +450,18 @@ export default {
   duration: 1.45,
   draw,
   sounds: {
-    // Recorded flame ignition gathers at the blade. Cloth wings and a fire
-    // thrust mark the backward launch; the bamboo sweep follows the dive.
+    // A drawn-in charge, winged launch and diving air cut; a muffled landing rather than an explosion.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.3, rate: 0.9, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.38, rate: 0.9, delay: 0.6 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.2, rate: 0.85, delay: 0.6 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.26, rate: 1.05, delay: 1.2 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-draw.wav', gain: 0.17, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-sweep.wav', gain: 0.27, rate: 0.94, delay: 0.6 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.24, rate: 1.05, delay: 1.2 },
     ],
-    // The landing breaks timber over a low thunder body, followed by a coal
-    // fracture. Every layer retains the irregular texture of physical foley.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.46, rate: 0.8, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/thunder-impact.wav', gain: 0.38, rate: 0.75, delay: 0.02 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.16, rate: 0.85, delay: 0.1 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.33, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.24, rate: 1.02, delay: 0.035 },
     ],
-    // Repeated shockwaves carry a restrained air push and loose embers.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.12, rate: 0.85, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.15, delay: 0.04 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.08, rate: 0.92, delay: 0 },
     ],
   },
 };

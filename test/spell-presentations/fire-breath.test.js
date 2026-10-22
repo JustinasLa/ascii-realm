@@ -238,27 +238,26 @@ test('Fire Breath draws are reentrant and keep no shared state', () => {
   assert.deepEqual(inner, outer, 'nested and outer draws paint identical frames');
 });
 
-test('Fire Breath layers recorded air, torch ignition and sustained exhalation with quiet coal contacts', () => {
+test('Fire Breath layers short air gestures with muted contacts and quiet repeat cues', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const sample = (sequence, name) => sequence.find(voice => voice.url.endsWith(`/${name}.wav`));
-  const air = sample(cast, 'air-swish'), ignition = sample(cast, 'ignition'), roar = sample(cast, 'fire-roar');
-  assert.ok(air && ignition && roar, 'breath uses physical air and both recorded torch phases');
-  assert.ok(air.delay < ignition.delay && ignition.delay < roar.delay, 'air leads ignition and exhalation');
-  assert.ok(roar.delay < ignition.delay + 0.8 / ignition.rate, 'torch exhalation overlaps ignition');
-  assert.ok(1.75 / roar.rate > presentation.duration, 'the sustained recording carries the breath tail');
-  assert.ok(air.gain < ignition.gain && ignition.gain < roar.gain, 'air intake stays subtle');
-  const coal = sample(impact, 'coal-crack'), embers = sample(impact, 'ember-bed');
-  assert.ok(coal && embers && coal.delay < embers.delay, 'coal contact precedes residual combustion');
+  const air = sample(cast, 'air-draw'), sweep = sample(cast, 'wing-sweep'), release = sample(cast, 'air-release');
+  assert.ok(air && sweep && release, 'intake, moving air and release have distinct gestures');
+  assert.ok(air.delay < sweep.delay && sweep.delay < release.delay, 'intake leads the exhalation');
+  assert.ok(release.delay < sweep.delay + 0.65 / sweep.rate, 'moving air gestures overlap');
+  assert.ok(release.delay + 0.436 / release.rate < 1.1, 'exhalation ends without a long burning tail');
+  assert.ok(air.gain < sweep.gain, 'air intake stays subtle');
+  assert.ok(sample(impact, 'pressure').delay < sample(impact, 'muted-hit').delay);
   assert.ok(pulse.every(voice => voice.gain <= 0.12), 'repeated cues do not obscure the main exhalation');
-  assert.ok(sample(pulse, 'ember-bed'), 'repeated pulses retain real fire texture');
+  assert.ok(sample(pulse, 'air-release'), 'repeated cues use air instead of combustion');
   for (const sequence of Object.values(presentation.sounds)) {
     assert.ok(sequence.length > 0 && sequence.length <= 4);
-    assert.ok(sequence.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
+    assert.ok(sequence.reduce((sum, voice) => sum + voice.gain, 0) <= 0.75);
     for (const voice of sequence) {
       assert.equal(voice.kind, 'recording');
       assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
       assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
     }

@@ -479,21 +479,18 @@ export default {
   duration: 1.08,
   draw,
   sounds: {
-    // Recorded air leads a real blowtorch ignition; the longer torch take
-    // carries the exhalation and naturally dies into its own fire texture.
+    // A low intake opens into two moving air gestures instead of sustained torch hiss.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.12, rate: 0.82, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.3, rate: 0.9, delay: 0.12 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.54, rate: 0.86, delay: 0.24 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-draw.wav', gain: 0.19, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-sweep.wav', gain: 0.25, rate: 0.92, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.18, rate: 0.86, delay: 0.52 },
     ],
-    // A real fireplace pop lands first, followed by a subdued ember bed.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.24, rate: 0.89, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.11, rate: 0.94, delay: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/pressure.wav', gain: 0.17, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/muted-hit.wav', gain: 0.12, rate: 1.14, delay: 0.025 },
     ],
-    // Repeated mouth/zone cues stay beneath the continuous breath recording.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-release.wav', gain: 0.06, rate: 1.06, delay: 0 },
     ],
   },
 };
