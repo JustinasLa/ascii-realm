@@ -30,6 +30,13 @@ Oseni's Rekindle is authored the same way: it heals the caster 10 at once, then
 a `Rekindle` aura heals 4 more each second for four seconds, starting a second
 after the cast (26 in all). It never touches allies or foes.
 
+Mitlan's Mana Spring is a free toggle: cast once to gain 2 mana each second,
+starting one second after activation, in addition to normal mana regeneration.
+It follows the caster while moving or using other spells, caps at maximum mana,
+and never stacks. Cast again to switch it off; respawning clears it. The rune
+wheel shows its rate and active state. Its permanent aura and `tickdelay` are
+authored extensions; existing rune auras keep their original timing and expiry.
+
 The runtime preserves configured modifiers, conditions, targeting, repeats,
 delays, aura ticks, shields and status effects. Tick counts are converted to
 seconds, and metres to the game's existing world coordinates. Motion uses the

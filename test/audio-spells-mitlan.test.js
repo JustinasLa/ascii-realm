@@ -46,7 +46,14 @@ for (const spell of spells) {
     scene.casting.onSound = event => events.push(event);
     assert.equal(scene.cast().ok, true);
     const initialCount = events.length;
-    assert.equal(scene.castWithoutMana().ok, false);
+    if (scene.casting.modifiers(scene.casting.variant(spell)).mana > 0) {
+      assert.equal(scene.castWithoutMana().ok, false);
+    } else {
+      // Free toggles can cast at zero mana; silence still rejects without cues.
+      scene.casting.state().auras.set('silenced', { until: Infinity });
+      assert.equal(scene.cast().ok, false);
+      scene.casting.state().auras.delete('silenced');
+    }
     assert.equal(events.length, initialCount, 'rejected cast stays silent');
     scene.advance(10);
     const cues = events.filter(event => event.type === 'spell');
