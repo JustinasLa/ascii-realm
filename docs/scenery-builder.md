@@ -27,8 +27,9 @@ current scene is available as `window.game.builder.scene` for inspection.
 ## Stone ruins
 
 Normal games start beside a ruin site: an arched gate with joined broken
-walls turned 45 degrees, three widely spaced pillars and fallen stone. An open
-forecourt and a dry path lead from spawn through the diagonal gate passage.
+walls at a gentle angle, three widely spaced pillars and fallen stone. Longer
+low wall sections extend both flanks. An open forecourt and a dry path lead
+from spawn through the slightly turned gate passage.
 These are part of the generated map, so **Reset scene** restores them;
 erasing them is undoable and their removal is retained by Save/Load.
 

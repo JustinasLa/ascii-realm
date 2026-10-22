@@ -6,7 +6,7 @@ import { blocks, createProp } from '../src/world/props.js';
 import * as architecture from '../src/world/architecture-props.js';
 
 const seeds = [1, 42, 221];
-const ids = Array.from({ length: 8 }, (_, i) => `r:spawn:${i}`);
+const ids = Array.from({ length: 10 }, (_, i) => `r:spawn:${i}`);
 const isRuin = prop => prop.id?.startsWith('r:spawn:');
 const sorted = props => [...props].sort((a, b) => a.id.localeCompare(b.id));
 
@@ -60,7 +60,7 @@ function rotate(x, y, degrees = 45) {
 }
 
 function at(prop, x, y) {
-  const [dx, dy] = rotate(x, y);
+  const [dx, dy] = rotate(x, y, prop.rotation);
   return [prop.x + dx, prop.y + dy];
 }
 
@@ -110,7 +110,23 @@ for (const seed of seeds) {
     assert.equal(world.removedProps.size, 0);
     const gate = props.find(prop => prop.kind === 'stone-gate');
     assert.deepEqual([gate.x, gate.y], [world.spawn.x, world.spawn.y - 30]);
-    assert.equal(props.filter(prop => prop.kind.startsWith('wall-')).length, 2);
+    assert.deepEqual(props.map(prop => prop.kind), ['stone-gate', 'wall-broken', 'wall-broken',
+      'column-tall', 'column-broken', 'column-short', 'rubble-large', 'rubble-large', 'wall-low', 'wall-low'],
+      'new outer walls append slots without changing the original eight identities');
+    assert.equal(props.filter(prop => prop.kind.startsWith('wall-')).length, 4);
+    for (const [id, dx, dy] of [[3, -84, -4], [4, 90, -9], [5, 108, -72], [6, -126, -34], [7, 130, -36]]) {
+      assert.deepEqual([props[id].x, props[id].y], [world.spawn.x + dx, world.spawn.y + dy],
+        'pillars and rubble keep their spacious original positions');
+    }
+    assert.equal(gate.rotation, 17);
+    const original = unrotated(gate);
+    const minX = Math.min(...original.collisionRects.map(rect => rect.minX));
+    const maxX = Math.max(...original.collisionRects.map(rect => rect.maxX));
+    const a = at(gate, minX, 0), b = at(gate, maxX, 0);
+    const spanRatio = (b[0] - a[0]) * ASPECT / ((maxX - minX) * ASPECT);
+    assert.ok(spanRatio >= 0.76 && spanRatio <= 0.84, `gate retains about 80% of its unturned frontal span: ${spanRatio}`);
+    const screenSlope = (b[1] - a[1]) / ((b[0] - a[0]) * ASPECT);
+    assert.ok(screenSlope > 0.1 && screenSlope < 0.25, `gate has only a gentle screen slope: ${screenSlope}`);
     assert.ok(props.some(prop => prop.kind.startsWith('column-') && prop.y > gate.y), 'forecourt pillar');
     assert.ok(props.some(prop => prop.kind.startsWith('column-') && prop.y < gate.y), 'pillar behind wall');
     assert.ok(props.some(prop => prop.kind.startsWith('rubble-')), 'fallen masonry');
@@ -129,7 +145,7 @@ for (const seed of seeds) {
     dryAndWalkable(world);
     const gate = ruins(world).find(prop => prop.kind === 'stone-gate');
     const piers = unrotated(gate).collisionRects;
-    const points = world.spawnRuins.route.map(p => rotate(p.x - gate.x, p.y - gate.y, -45));
+    const points = world.spawnRuins.route.map(p => rotate(p.x - gate.x, p.y - gate.y, -gate.rotation));
     const front = Math.max(...piers.map(p => p.maxY));
     const back = Math.min(...piers.map(p => p.minY));
     let crossed = false;
@@ -146,20 +162,25 @@ for (const seed of seeds) {
     assert.ok(crossed, 'a route segment passes completely through the rotated tunnel');
   });
 
-  test(`gate piers block and both wall joins have continuous collision (seed ${seed})`, () => {
+  test(`gate piers and all four wall sections have continuous collision at every join (seed ${seed})`, () => {
     const world = new World(seed, { spawnRuins: true });
     const props = ruins(world);
     const gate = props.find(prop => prop.kind === 'stone-gate');
     assert.equal(gate.collisionPolygons?.length, 2);
     const piers = unrotated(gate).collisionRects;
     const walls = props.filter(prop => prop.kind.startsWith('wall-')).sort((a, b) =>
-      rotate(a.x - gate.x, a.y - gate.y, -45)[0] - rotate(b.x - gate.x, b.y - gate.y, -45)[0]);
+      rotate(a.x - gate.x, a.y - gate.y, -gate.rotation)[0]
+      - rotate(b.x - gate.x, b.y - gate.y, -gate.rotation)[0]);
+    assert.equal(walls.length, 4);
+    assert.deepEqual(walls.map(wall => wall.id), ['r:spawn:8', 'r:spawn:1', 'r:spawn:2', 'r:spawn:9'],
+      'each appended wall extends the corresponding original wall away from the gate');
     for (const prop of [gate, ...walls]) {
       assert.equal(prop.variant, 0, 'gate and adjoining walls share coherent, unvaried yaw');
+      assert.equal(prop.rotation, gate.rotation, 'all four wall sections use the gate yaw');
       const original = unrotated(prop);
       assert.equal(prop.collisionPolygons?.length, original.collisionRects.length);
       for (const [i, rect] of original.collisionRects.entries()) {
-        const expected = corners(rect).map(([x, y]) => rotate(x, y));
+        const expected = corners(rect).map(([x, y]) => rotate(x, y, prop.rotation));
         const polygon = prop.collisionPolygons[i];
         assert.equal(polygon.length, 4);
         for (const [x, y] of expected) {
@@ -171,35 +192,43 @@ for (const seed of seeds) {
       }
       assert.notDeepEqual(prop.cells, original.cells, 'rotation changes the rendered architecture');
     }
-    for (const [i, pier] of piers.entries()) {
+    for (const pier of piers) {
       for (const fx of [0.01, 0.5, 0.99]) for (const fy of [0.01, 0.5, 0.99]) {
         const point = at(gate, pier.minX + (pier.maxX - pier.minX) * fx,
           pier.minY + (pier.maxY - pier.minY) * fy);
         assert.equal(blocks(gate, ...point), true, 'rotated pier corners and centre remain solid');
         assert.equal(world.isWalkable(...point), false, 'world collision finds rotated piers');
       }
-      const wall = walls[i];
-      const [wx, wy] = rotate(wall.x - gate.x, wall.y - gate.y, -45);
-      near(wy, 0, 'wall stays on the gate masonry axis');
-      const faces = unrotated(wall).collisionRects.map(r => ({ minX: wx + r.minX, maxX: wx + r.maxX,
-        minY: wy + r.minY, maxY: wy + r.maxY }));
-      const wallMinX = Math.min(...faces.map(rect => rect.minX));
-      const wallMaxX = Math.max(...faces.map(rect => rect.maxX));
-      assert.ok(i === 0 ? wx < 0 : wx > 0, 'walls flank opposite piers');
-      assert.ok(Math.min(pier.maxX, wallMaxX) > Math.max(pier.minX, wallMinX), 'wall and pier physically overlap');
-      // Use several rows inside the shared wall/pier depth. Testing the
-      // continuous span catches a walkable crack at either outer pier edge.
-      const minY = Math.max(pier.minY, Math.min(...faces.map(rect => rect.minY)));
-      const maxY = Math.min(pier.maxY, Math.max(...faces.map(rect => rect.maxY)));
-      assert.ok(maxY > minY, 'wall and pier share collision depth');
-      const x0 = i === 0 ? wx : (pier.minX + pier.maxX) / 2;
-      const x1 = i === 0 ? (pier.minX + pier.maxX) / 2 : wx;
+    }
+    const sections = walls.map(wall => {
+      const [wx, wy] = rotate(wall.x - gate.x, wall.y - gate.y, -gate.rotation);
+      near(wy, 0, 'every wall stays on the gate masonry axis');
+      const faces = unrotated(wall).collisionRects;
+      return { prop: wall, minX: wx + Math.min(...faces.map(rect => rect.minX)),
+        maxX: wx + Math.max(...faces.map(rect => rect.maxX)),
+        minY: wy + Math.min(...faces.map(rect => rect.minY)),
+        maxY: wy + Math.max(...faces.map(rect => rect.maxY)) };
+    });
+    const [outerLeft, innerLeft, innerRight, outerRight] = sections;
+    assert.ok(innerLeft.maxX < 0 && innerRight.minX > 0, 'wall runs flank the open tunnel');
+    assert.ok(outerLeft.minX < innerLeft.minX && outerRight.maxX > innerRight.maxX,
+      'both low wall sections lengthen the original runs');
+    const leftPier = { ...piers[0], prop: gate }, rightPier = { ...piers[1], prop: gate };
+    for (const [left, right] of [[outerLeft, innerLeft], [innerLeft, leftPier],
+      [rightPier, innerRight], [innerRight, outerRight]]) {
+      assert.ok(Math.min(left.maxX, right.maxX) > Math.max(left.minX, right.minX),
+        'adjoining masonry physically overlaps');
+      const minY = Math.max(left.minY, right.minY), maxY = Math.min(left.maxY, right.maxY);
+      assert.ok(maxY > minY, 'adjoining masonry shares collision depth');
+      const x0 = (left.minX + left.maxX) / 2, x1 = (right.minX + right.maxX) / 2;
+      // Probe the full span between centres on several rows to catch cracks
+      // at both wall/pier joins and both inner/outer wall joins.
       for (const f of [0.2, 0.5, 0.8]) {
         const y = minY + (maxY - minY) * f;
         for (let x = x0; x <= x1; x += 0.1) {
           const point = at(gate, x, y);
-          assert.ok(blocks(gate, ...point) || blocks(wall, ...point), `masonry gap at ${point}`);
-          assert.equal(world.isWalkable(...point), false, `wall/pier gap at ${point}`);
+          assert.ok(blocks(left.prop, ...point) || blocks(right.prop, ...point), `masonry gap at ${point}`);
+          assert.equal(world.isWalkable(...point), false, `masonry join gap at ${point}`);
         }
       }
     }
@@ -233,30 +262,53 @@ for (const seed of seeds) {
     const scene = new Scenery(world);
     const baseline = structuredClone(ruins(world));
     const gate = baseline.find(prop => prop.kind === 'stone-gate');
-    assert.equal(scene.erase(gate.x, gate.y, 0), 1);
-    assert.ok(world.removedProps.has(gate.id));
-    assert.ok(!ruins(world).some(prop => prop.id === gate.id));
+    const erased = [gate.id, 'r:spawn:8', 'r:spawn:9'];
+    for (const id of erased) {
+      const prop = baseline.find(prop => prop.id === id);
+      assert.equal(scene.erase(prop.x, prop.y, 0), 1);
+      assert.ok(world.removedProps.has(id));
+      assert.ok(!ruins(world).some(prop => prop.id === id));
+      assert.equal(scene.undo(), true, `erasing ${id} can be undone`);
+      assert.ok(ruins(world).some(prop => prop.id === id));
+      assert.equal(scene.redo(), true, `erasing ${id} can be redone`);
+      assert.ok(!ruins(world).some(prop => prop.id === id));
+    }
     const x = Math.floor(world.spawn.x), y = Math.floor(world.spawn.y);
     const ground = world.originalTypeAt(x, y);
     scene.paint(x, y, 0, WATER);
     const saved = JSON.parse(JSON.stringify(scene.serialize()));
-    assert.deepEqual(saved.removed, [gate.id]);
+    assert.deepEqual(saved.removed, erased);
     assert.equal(saved.props.length, 0, 'generated defaults are not copied into scene additions');
     const restoredWorld = new World(seed, { spawnRuins: true });
     const restored = new Scenery(restoredWorld);
     restored.load(saved);
     assert.deepEqual(restored.serialize(), saved);
-    assert.deepEqual(ruins(restoredWorld), baseline.filter(prop => prop.id !== gate.id));
+    const remaining = baseline.filter(prop => !erased.includes(prop.id));
+    assert.deepEqual(ruins(restoredWorld), remaining);
     assert.equal(restoredWorld.typeAt(x, y), WATER);
     assert.equal(restored.undo(), true);
     assert.deepEqual(ruins(restoredWorld), baseline);
     assert.equal(restored.redo(), true);
-    assert.ok(!ruins(restoredWorld).some(prop => prop.id === gate.id));
+    assert.deepEqual(ruins(restoredWorld), remaining);
     assert.equal(restored.reset(), true);
     assert.deepEqual(ruins(restoredWorld), baseline);
     assert.equal(restoredWorld.typeAt(x, y), ground);
     assert.equal(restoredWorld.originalTypeAt(x, y), ground);
     assert.deepEqual(restored.serialize(), { version: 1, seed, terrain: [], props: [], removed: [] });
+    assert.equal(restored.undo(), true, 'reset can restore saved removals, including both outer walls');
+    assert.deepEqual(restored.serialize(), saved);
+    assert.deepEqual(ruins(restoredWorld), remaining);
+    assert.equal(restored.redo(), true);
+    assert.deepEqual(ruins(restoredWorld), baseline);
+    const clean = restored.serialize();
+    for (const id of ['r:spawn:10', 'r:spawn:-1', 'r:spawn:08', 'r:spawn:9:0', 'r:spawn:9x']) {
+      assert.throws(() => restored.load({ ...clean, removed: [id] }), /Invalid removed prop identifier/,
+        `out-of-range or malformed generated slot ${id} is rejected`);
+      assert.deepEqual(restored.serialize(), clean, 'invalid removals leave the scene unchanged');
+    }
+    assert.throws(() => restored.load({ ...clean, removed: ['r:spawn:8', 'r:spawn:8'] }),
+      /Duplicate removed prop identifier/);
+    assert.deepEqual(restored.serialize(), clean);
     dryAndWalkable(restoredWorld);
   });
 
