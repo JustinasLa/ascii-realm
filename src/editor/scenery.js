@@ -1,5 +1,6 @@
 import { randomSeed } from '../core/rng.js';
 import { createProp } from '../world/props.js';
+import { isArchitectureKind } from '../world/architecture-props.js';
 import { PROP_KINDS } from '../world/prop-catalog.js';
 import { ASPECT, STONE, WATER } from '../world/world.js';
 import { isSpawnRuinId } from '../world/spawn-ruins.js';
@@ -26,12 +27,14 @@ function checkType(type) {
   if (!Number.isInteger(type) || type < WATER || type > STONE) throw new Error('Terrain type must be an integer from 0 to 4.');
 }
 
-function checkProp(kind, x, y, scale, seed, variant = 1) {
+function checkProp(kind, x, y, scale, seed, variant = 1, rotation = 0) {
   checkPoint(x, y);
   if (!PROP_KINDS.has(kind)) throw new Error('Unknown scenery prop kind.');
   if (!Number.isFinite(scale) || scale < 0.25 || scale > 3) throw new Error('Prop scale must be between 0.25 and 3.');
   if (!validSeed(seed)) throw new Error('Prop seed must be a safe integer.');
   if (variant !== 0 && variant !== 1) throw new Error('Unknown scenery variation version.');
+  if (!Number.isFinite(rotation)) throw new Error('Prop rotation must be finite degrees.');
+  if (rotation && !isArchitectureKind(kind)) throw new Error('Only architecture props support rotation.');
 }
 
 function checkTerrainBudget(terrain) {
@@ -154,12 +157,12 @@ export class Scenery {
     });
   }
 
-  place(kind, x, y, { scale = 1, seed, variant = 1 } = {}) {
+  place(kind, x, y, { scale = 1, seed, variant = 1, rotation = 0 } = {}) {
     if (seed === undefined) seed = this.nextPropSeed();
-    checkProp(kind, x, y, scale, seed, variant);
+    checkProp(kind, x, y, scale, seed, variant, rotation);
     if (this.world.addedProps.size >= PROP_LIMIT) throw new Error(`Scenery supports up to ${PROP_LIMIT} placed props.`);
     // Bake before starting the transaction so a factory error changes nothing.
-    const prop = createProp(kind, x, y, { scale, seed, variant });
+    const prop = createProp(kind, x, y, { scale, seed, variant, rotation });
     return this._change(() => {
       do {
         if (this._nextId > MAX_PROP_ID) this._nextId = 1;
@@ -222,7 +225,8 @@ export class Scenery {
       const [x, y] = key.split(',').map(Number);
       return { x, y, type };
     }).sort((a, b) => a.y - b.y || a.x - b.x);
-    const props = [...this.world.addedProps.values()].map(({ id, kind, x, y, scale, seed, variant = 0 }) => ({ id, kind, x, y, scale, seed, variant }))
+    const props = [...this.world.addedProps.values()].map(({ id, kind, x, y, scale, seed, variant = 0, rotation = 0 }) =>
+      ({ id, kind, x, y, scale, seed, variant, ...(rotation ? { rotation } : {}) }))
       .sort((a, b) => Number(a.id.slice(2)) - Number(b.id.slice(2)));
     return { version: 1, seed: this.world.seed, terrain, props, removed: [...this.world.removedProps].sort() };
   }
@@ -257,12 +261,12 @@ export class Scenery {
     const definitions = data.props.map((entry) => {
       if (!entry || typeof entry !== 'object') throw new Error('Invalid prop entry.');
       // Scenes saved before per-item variation retain their original shapes.
-      const { id, kind, x, y, scale, seed, variant = 0 } = entry;
+      const { id, kind, x, y, scale, seed, variant = 0, rotation = 0 } = entry;
       if (typeof id !== 'string' || !/^s:[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id.slice(2))) || Number(id.slice(2)) > MAX_PROP_ID) throw new Error('Invalid placed prop identifier.');
       if (propIds.has(id)) throw new Error('Duplicate prop identifier.');
       propIds.add(id);
-      checkProp(kind, x, y, scale, seed, variant);
-      return { id, kind, x, y, scale, seed, variant };
+      checkProp(kind, x, y, scale, seed, variant, rotation);
+      return { id, kind, x, y, scale, seed, variant, ...(rotation ? { rotation } : {}) };
     });
     const removedIds = new Set();
     const removed = data.removed.map((id) => {

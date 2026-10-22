@@ -14,22 +14,48 @@ const GEOMETRY = {
     [kind, (rand, seed) => makeRubbleGeometry(kind, rand, seed)])),
 };
 
+export const isArchitectureKind = (kind) => Object.hasOwn(GEOMETRY, kind);
+
+// Rotate final world ground offsets about the prop anchor. World x is in
+// columns, y in rows; invert the oblique ground projection before model yaw.
+// Positive 45 degrees makes a wall's tangent run at 45 degrees on screen
+// (accounting for glyph aspect). Variation stretches the result afterwards.
+export function rotateArchitectureGround(dxWorld, dyWorld, degrees) {
+  if (!degrees) return { x: dxWorld, y: dyWorld };
+  const angle = (degrees % 360) * Math.PI / 180;
+  const c = Math.cos(angle), s = Math.sin(angle);
+  const z = -dyWorld / 0.45, x = dxWorld * ASPECT - 0.55 * z;
+  const xx = c * x + s * z, zz = -s * x + c * z;
+  return { x: (xx + 0.55 * zz) / ASPECT, y: -0.45 * zz };
+}
+
 // Geometry is rasterised once; existing prop variation and scene IO remain the
 // source of truth for size, seed and collision. Full-size letters follow the
 // reference: broad readable light bands across the sculpted stone surfaces.
-export function makeArchitectureProp(kind, x, y, rand, seed, bake) {
-  if (!Object.hasOwn(GEOMETRY, kind)) return null;
+export function makeArchitectureProp(kind, x, y, rand, seed, bake, rotation = 0) {
+  if (!isArchitectureKind(kind)) return null;
   const { mesh, footW, footH, collisionRects } = GEOMETRY[kind](rand, seed);
+  mesh.yaw(rotation);
+  const collisionPolygons = rotation && collisionRects?.map(({ minX, maxX, minY, maxY }) =>
+    [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]].map(([dx, dy]) => {
+      const p = rotateArchitectureGround(dx, dy, rotation);
+      return [p.x, p.y];
+    }));
   const { bounds, sample } = mesh.compile();
   const radius = Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX));
   const surface = (px, py) => {
-    if (py > 0) return null;
+    if (!rotation && py > 0) return null;
     const hit = sample(px, py);
     return hit ? shadeArchitecture(hit, seed) : null;
   };
   const w = Math.ceil(radius / ASPECT) + 1;
   const top = Math.floor(bounds.minY) - 1;
-  return { kind, x, y, footW: footW / ASPECT, footH,
-    ...(collisionRects ? { collisionRects } : {}),
-    cells: bake(w, top, 0, surface, seed) };
+  return { kind, x, y,
+    footW: collisionPolygons ? Math.max(...collisionPolygons.flat().map(([dx]) => Math.abs(dx))) : footW / ASPECT,
+    footH: collisionPolygons ? Math.max(...collisionPolygons.flat().map(([, dy]) => Math.abs(dy))) : footH,
+    // Connected masonry uses this width to align pieces before yaw without
+    // rasterising a second, unrotated copy just to measure its footprint.
+    ...(collisionPolygons ? { collisionPolygons, rotation, unrotatedFootW: footW / ASPECT }
+      : collisionRects ? { collisionRects } : {}),
+    cells: bake(w, top, rotation ? Math.ceil(bounds.maxY) + 1 : 0, surface, seed) };
 }
