@@ -6,7 +6,7 @@ import { ASPECT, DIRT, GRASS, STONE } from './world.js';
 // These slots belong to the generated landmark, including after an editor
 // deletes or moves one. Keep them independent of chunk order and prop seeds.
 export function isSpawnRuinId(id) {
-  return typeof id === 'string' && /^r:spawn:[0-7]$/.test(id);
+  return typeof id === 'string' && /^r:spawn:[0-9]$/.test(id);
 }
 
 function footprint(prop) {
@@ -47,16 +47,19 @@ export function createSpawnRuins(seed, spawn) {
   };
 
   const gateY = y - 30;
+  // In this oblique view, 17 degrees retains about 80% of the front span
+  // while revealing the thickness of the arch and its adjoining masonry.
+  const rotation = 17;
   // Match widths before turning the entire connected wall. Uniform variation
   // keeps its separate pieces on the same ground plane after projection.
-  const gate = add('stone-gate', 0, -30, 0.72, 0, 45);
-  const left = add('wall-broken', 0, -30, 0.85, 0, 45);
-  const right = add('wall-broken', 0, -30, 0.85, 0, 45);
+  const gate = add('stone-gate', 0, -30, 0.72, 0, rotation);
+  const left = add('wall-broken', 0, -30, 0.85, 0, rotation);
+  const right = add('wall-broken', 0, -30, 0.85, 0, rotation);
   // Use the final, varied collision widths. Each wall bites into its gate
   // pier by 2.5 columns, leaving the central passage completely open.
   for (const [prop, side] of [[left, -1], [right, 1]]) {
     const distance = gate.unrotatedFootW + prop.unrotatedFootW - 2.5;
-    const { x: dx, y: dy } = rotateArchitectureGround(side * distance, 0, 45);
+    const { x: dx, y: dy } = rotateArchitectureGround(side * distance, 0, rotation);
     prop.x = x + dx;
     prop.y = gateY + dy;
   }
@@ -66,10 +69,20 @@ export function createSpawnRuins(seed, spawn) {
   add('rubble-large', -126, -34, 1.5);
   add('rubble-large', 130, -36, 1.5);
 
+  // Keep the original eight slots stable for saved removals. New outer
+  // courses lengthen both walls into a low, continuous ruined enclosure.
+  for (const [inner, side] of [[left, -1], [right, 1]]) {
+    const outer = add('wall-low', 0, -30, 0.85, 0, rotation);
+    const distance = gate.unrotatedFootW + 2 * inner.unrotatedFootW + outer.unrotatedFootW - 5;
+    const { x: dx, y: dy } = rotateArchitectureGround(side * distance, 0, rotation);
+    outer.x = x + dx;
+    outer.y = gateY + dy;
+  }
+
   // Approach the arch along its rotated tunnel, with an open forecourt
   // between spawn and the wall rather than a tight cluster around the player.
   const through = (localY) => {
-    const { x: dx, y: dy } = rotateArchitectureGround(0, localY, 45);
+    const { x: dx, y: dy } = rotateArchitectureGround(0, localY, rotation);
     return { x: x + dx, y: gateY + dy };
   };
   const route = [{ x, y }, through(10), through(-14), through(-22)];
