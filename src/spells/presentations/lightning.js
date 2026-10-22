@@ -3,7 +3,8 @@
 // leader feels its way down out of a gathering swirl, then a white return
 // stroke slams down the same jagged channel with its forks, flickers once more
 // and fades. Sparks burst from the strike point and arcs crawl across the
-// ground to the edge of the hit radius; anything struck crackles with current.
+// ground to the edge of the hit radius; anything struck crackles with current
+// and current arcs on from body to body to the others nearby.
 const TAU = Math.PI * 2;
 // Cells per local metre (SCALE / ASPECT across, SCALE * TILT down).
 const COLS = 13 / 0.6, ROWS = 6.5;
@@ -185,6 +186,31 @@ function summon(plot, age, p, seed) {
   plot(0, -3.4, p > 0.45 && p < 0.6 ? '@' : '*', mix(ARC, CORE, p), fade * (0.4 + 0.6 * smooth(0.2, 0.5, p)));
 }
 
+// Chained lightning: a jagged arc leaps chest to chest from the last body
+// struck (the origin) to the next one, `radius` metres along the heading.
+const CHEST = 2.6;
+function arc(plot, effect, age, p, seed, c, s) {
+  const length = Math.max(0.1, Math.min(12, effect.radius)), fade = (1 - p) ** 1.2;
+  const reach = smooth(0, 0.25, p), frame = Math.floor(age * 30);
+  // One glyph per screen cell crossed, so level arcs stay unbroken.
+  const steps = Math.max(6, Math.min(96, Math.ceil(length * Math.max(Math.abs(s) * COLS, Math.abs(c) * ROWS))));
+  // Along the heading on the ground, then lifted to chest height on screen.
+  const at = (t, j) => ({ x: s * t * length + c * j, z: c * t * length - s * j - CHEST });
+  let last = at(0, 0);
+  for (let i = 1; i <= steps && i / steps <= reach; i++) {
+    const t = i / steps, sway = i === steps ? 0 : (hash(i + frame * 50, seed + 21) - 0.5) * 0.3 * Math.sin(Math.PI * t);
+    const point = at(t, sway), dx = (point.x - last.x) * COLS, dy = (point.z - last.z) * ROWS;
+    const char = Math.abs(dy) <= Math.abs(dx) * 0.45 ? '-' : Math.abs(dx) <= Math.abs(dy) * 0.45 ? '|' : dx * dy > 0 ? '\\' : '/';
+    plot(point.x, point.z, char, mix(BRIGHT, CORE, fade), fade * (0.85 + 0.15 * hash(i + frame, seed + 22)));
+    // A fainter second stroke beside it gives the arc some body.
+    const level = Math.abs(dy) <= Math.abs(dx);
+    plot(point.x + (level ? 0 : 1 / COLS), point.z + (level ? 1 / ROWS : 0), char, ARC, fade * 0.5);
+    last = point;
+  }
+  plot(0, -CHEST, '*', BRIGHT, fade);
+  if (reach >= 1) plot(s * length, c * length - CHEST, '@', CORE, fade);
+}
+
 // Generic visuals: a short burst of sparks at the configured size.
 function sparks(plot, effect, age, p, seed) {
   const R = Math.max(0.3, Math.min(4, effect.radius)), fade = Math.min(1, (1 - p) * 3);
@@ -212,7 +238,7 @@ export default {
       case 'zone': return charge(plot, effect, age, p, seed);
       case 'aura': return crackle(plot, age, p, seed);
       case 'projectile': return crackle(plot, age, p, seed, 0.6);
-      case 'pulse': return sparks(plot, effect, age, p, seed);
+      case 'pulse': return effect.shape === 'chain' ? arc(plot, effect, age, p, seed, c, s) : sparks(plot, effect, age, p, seed);
       default: return summon(plot, age, p, seed);
     }
   },

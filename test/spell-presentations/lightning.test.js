@@ -6,6 +6,7 @@ import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { Monster, toCells } from '../../src/entities/monsters.js';
 
 function draw(stage, progress = 0.35, overrides = {}) {
   const points = [];
@@ -17,7 +18,7 @@ function draw(stage, progress = 0.35, overrides = {}) {
 const boltAt = (age, overrides = {}) => draw('impact', age / 0.9, { life: 0.9, age, radius: 2.5, shape: 'bolt', ...overrides });
 const lit = points => points.filter(p => p.brightness > 0.05);
 const strokes = points => lit(points).filter(p => '|/\\'.includes(p.char));
-const BUDGET = { cast: 140, projectile: 80, impact: 230, pulse: 40, aura: 80, zone: 120 };
+const BUDGET = { cast: 140, projectile: 80, impact: 230, pulse: 200, aura: 80, zone: 120 };
 
 test('a faint leader feels its way down before the white return stroke lands', () => {
   assert.equal(spell.presentation, presentation);
@@ -73,11 +74,53 @@ test('struck targets crackle and the cast raises sparks from the hand', () => {
   assert.ok(leap.length >= 8, 'a spark leaps skyward from the raised hand');
 });
 
+test('a chain arc leaps chest to chest from the last foe struck to the next', () => {
+  const arc = (p, overrides = {}) => draw('pulse', p, { life: 0.35, age: p * 0.35, radius: 3, shape: 'chain', ...overrides });
+  const end = points => points.find(q => q.char === '@');
+  assert.ok(arc(0.1).length < arc(0.4).length, 'the arc races out from the first foe');
+  assert.equal(end(arc(0.1)), undefined);
+  const full = lit(arc(0.4));
+  assert.ok(Math.abs(end(full).z - 0.4) < 1e-9 && Math.abs(end(full).x) < 1e-9, 'it lands at chest height on the next foe');
+  assert.ok(full.every(q => q.z >= -2.6 - 0.2 && q.z <= 0.4 + 1 / 6.5 + 1e-9 && Math.abs(q.x) < 0.2), 'a narrow jagged path between them');
+  assert.ok(full.some(q => q.char === '*' && q.z === -2.6), 'it leaves the first foe at chest height');
+  assert.notDeepEqual(arc(0.4), arc(0.5), 'the arc flickers');
+  assert.ok(Math.max(...arc(0.9).map(q => q.brightness)) < 0.1, 'and fades');
+  assert.ok(lit(arc(0.4, { heading: Math.PI / 2 })).some(q => q.char === '-'), 'sideways arcs run level across the screen');
+
+  const cells = heading => {
+    const out = [];
+    paintPresentation(presentation, { x: 0, y: 0, stage: 'pulse', shape: 'chain', age: 0.14, life: 0.35, radius: 3, heading },
+      (x, y, char) => out.push({ x, y, char }));
+    return out.find(q => q.char === '@');
+  };
+  for (const heading of [0, 1, -2.3]) {
+    const [x, y] = toCells(Math.sin(heading) * 3, Math.cos(heading) * 3 - 2.6);
+    assert.ok(Math.abs(cells(heading).x - x) < 1e-6 && Math.abs(cells(heading).y - y) < 1e-6, `reaches the next foe at heading ${heading}`);
+  }
+});
+
+test('a real cast chains on to a second foe with its own arc and crackle', () => {
+  const scene = runeScene(spell, { range: 4 });
+  const other = new Monster(...toCells(1, 6), { risen: true });
+  other.health = other.maxHealth = 100;
+  scene.monsters.list.push(other); scene.casting.sync();
+  scene.cast();
+  scene.advance(0.8);
+  const chain = scene.casting.effects.list.filter(e => e.stage === 'pulse' && e.shape === 'chain');
+  assert.equal(chain.length, 1);
+  assert.equal(chain[0].presentation, presentation);
+  assert.equal(scene.casting.effects.list.filter(e => e.shape === 'bolt').length, 1, 'only one bolt');
+  const rendered = [];
+  scene.casting.effects.paint((...point) => rendered.push(point));
+  assert.ok(rendered.some(p => p[2] === '@' && Math.abs(p[0] - other.x) < 1e-6 && Math.abs(p[1] - (other.y - toCells(0, 2.6)[1])) < 1e-6),
+    'the arc reaches the second foe');
+});
+
 test('all stages remain deterministic, finite, ASCII and within budget, then fade cleanly', () => {
   const lives = { cast: [presentation.duration], projectile: [10, 1], impact: [0.6, 0.9], pulse: [0.5], aura: [1.5], zone: [0.6, 8] };
   for (const stage of Object.keys(BUDGET)) {
     for (const life of lives[stage]) {
-      for (const shape of stage === 'impact' ? ['burst', 'bolt'] : ['burst']) {
+      for (const shape of { impact: ['burst', 'bolt'], pulse: ['burst', 'chain'] }[stage] ?? ['burst']) {
         for (const size of [0.8, 1, 2.5, 6]) {
           for (const progress of [0, 0.05, 0.1, 0.25, 0.5, 0.7, 0.9, 0.99, 1]) {
             const options = { radius: size, life, shape };
