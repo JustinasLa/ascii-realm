@@ -6,6 +6,7 @@ import { paintPresentation } from '../../src/spells/presentation.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function draw(stage, progress = 0.35, overrides = {}) {
   const points = [];
@@ -76,22 +77,41 @@ test('all stages remain deterministic, finite, ASCII and within budget, then fad
   }
 });
 
-test('the cast whooshes up into a warm chime and plays through the effects bus', () => {
-  const { impact, cast } = presentation.sounds;
-  assert.ok(cast.some(v => v.kind === 'tone' && v.endFrequency > v.frequency), 'the kindling rises');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.type === 'sine'), 'each heal chimes softly');
-  for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+test('rekindle feeds recorded embers with air and keeps healing foley short and quiet', async () => {
+  const { impact, cast, pulse } = presentation.sounds;
+  assert.ok(cast.some(v => v.url.endsWith('/air-swish.wav')));
+  assert.ok(cast.some(v => v.url.endsWith('/ignition.wav') && v.delay > 0));
+  assert.ok(impact.some(v => v.url.endsWith('/coal-crack.wav')));
+  assert.ok(impact.every(v => v.gain <= 0.12), 'repeated healing stays quiet');
+  assert.ok(pulse.every(v => v.gain <= 0.1), 'residual fire stays below healing');
+  for (const [stage, voices] of Object.entries(presentation.sounds)) {
+    assert.ok(voices.length > 0 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5 && voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.equal(voice.kind, 'recording');
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }
+    const fake = fakeRecordedAudio();
+    await prepareRecordedSpellTest(fake, presentation);
+    const handles = playSpellSound(fake.engine, { type: 'spell', stage, presentation, x: 3, y: 9 });
+    assert.equal(handles.length, voices.length);
+    const sources = fake.nodes.filter(n => n.kind === 'source');
+    assert.equal(fake.nodes.filter(n => n.kind === 'oscillator').length, 0);
+    sources.forEach((source, index) => {
+      const voice = voices[index];
+      assert.equal(source.buffer.id, voice.url.split('/').at(-1));
+      assert.equal(source.starts[0], fake.context.currentTime + voice.delay);
+      if (stage === 'impact') assert.ok(voice.delay + source.buffer.duration / voice.rate < 1,
+        'the heal recording clears before the next tick');
+    });
+    assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === 9));
+    handles.forEach(handle => handle.stop());
+    assert.deepEqual(fake.invalid, []);
   }
-  const fake = fakeRecordedAudio();
-  const handles = playSpellSound(fake.engine, { type: 'spell', stage: 'cast', presentation, x: 3, y: 9 });
-  assert.equal(handles.length, cast.length);
-  handles.forEach(handle => handle.stop());
-  assert.deepEqual(fake.invalid, []);
 });
 
 test('a real cast kindles on the caster and every heal blooms there with its own cue', () => {
@@ -104,7 +124,7 @@ test('a real cast kindles on the caster and every heal blooms there with its own
   scene.advance(1.1);
   assert.ok(mine().some(e => e.stage === 'aura'), 'the burn smoulders');
   scene.advance(3.5);
-  assert.equal(events.filter(e => e.stage === 'impact').length, 5, 'one chime per heal');
+  assert.equal(events.filter(e => e.stage === 'impact').length, 5, 'one recorded cue per heal');
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
   assert.ok(events.every(e => e.type === 'spell' && e.spellId === spell.id));
 });

@@ -137,27 +137,31 @@ test('all effect stages stay bounded, deterministic, atlas-compatible and fade o
   }
 });
 
-test('sound seals a furnace drone with iron resonance, ignition and quiet ward pulses', () => {
+test('recorded coals catch as the glyph seals, strike on impact and quietly breathe while armed', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const drone = cast.find(v => v.type === 'triangle' && v.duration > 0.8);
-  assert.ok(drone && drone.frequency < 200 && drone.attack > 0.05);
-  const iron = cast.filter(v => v.kind === 'tone' && v.frequency > 200);
-  assert.ok(iron.length >= 2, 'inharmonic iron partials mark the ritual seal');
-  assert.ok(iron[1].frequency / iron[0].frequency > 1.3);
-  assert.ok(iron.every(v => v.frequency < 500 && v.release > 0.3), 'metal resonance stays low and decays gradually');
-  assert.ok(cast.some(v => v.kind === 'noise' && v.attack > 0.1), 'furnace intake swells beneath the inscription');
-  assert.ok(cast.some(v => v.kind === 'noise' && v.delay > iron.at(-1).delay && v.attack < 0.02), 'coal ignition closes the seal');
-  assert.ok(impact.some(v => v.kind === 'noise') && impact.some(v => v.frequency < 200));
+  const asset = name => `/assets/audio/spells/oseni/${name}.wav`;
+  const coals = cast.find(v => v.url === asset('ember-bed'));
+  const snap = cast.find(v => v.url === asset('coal-crack'));
+  const seal = cast.find(v => v.url === asset('ignition'));
+  assert.ok(coals && snap && seal, 'the physical seal uses live fire and snapping fuel');
+  assert.equal(coals.delay, 0);
+  assert.ok(snap.delay > coals.delay && snap.delay < seal.delay);
+  assert.ok(seal.delay >= 0.72 && seal.delay <= 0.9, 'ignition coincides with the visible seal flash');
+  assert.ok(impact.some(v => v.url === asset('coal-crack') && v.delay === 0), 'contact starts with a sharp fracture');
+  assert.ok(impact.some(v => v.url === asset('ignition') && v.delay < 0.1), 'flame catches immediately after contact');
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain < 0.025 && v.duration <= 0.4));
-  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < 0.05, 'repeated ward cues remain quiet');
+  assert.ok(pulse.every(v => v.url === asset('ember-bed')), 'repeated wards use soft fire without repeated cracks');
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.2, 'repeated ward cues remain quiet');
   for (const voices of [cast, impact, pulse]) {
-    assert.ok(voices.length >= 3 && voices.length <= 6);
+    assert.ok(voices.length >= 1 && voices.length <= 4);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
+      assert.deepEqual(Object.keys(voice).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.equal(voice.kind, 'recording');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/oseni\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
     }
   }
 });

@@ -432,30 +432,22 @@ export default {
     }
   },
   sounds: {
-    // Two furnace-fed wingbeats lift a low, answering ancestral call.
-    // Long soft attacks and dark filters keep the spirit ancient rather than shrill.
+    // Real cloth wingbeats unfold over a blowtorch ignition and sustained fire rush.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.48, gain: 0.09, attack: 0.09, decay: 0.1, sustain: 0.45, release: 0.23, cutoff: 330, filterType: 'lowpass', Q: 0.65, playbackRate: 0.65 },
-      { kind: 'noise', delay: 0.38, duration: 0.54, gain: 0.1, attack: 0.11, decay: 0.12, sustain: 0.4, release: 0.25, cutoff: 640, filterType: 'bandpass', Q: 0.75, playbackRate: 0.7 },
-      { kind: 'tone', delay: 0.04, duration: 0.86, gain: 0.055, attack: 0.16, decay: 0.18, sustain: 0.45, release: 0.38, frequency: 61, endFrequency: 48, type: 'triangle', cutoff: 190, filterType: 'lowpass' },
-      { kind: 'tone', delay: 0.2, duration: 0.34, gain: 0.075, attack: 0.07, decay: 0.08, sustain: 0.65, release: 0.16, frequency: 146, endFrequency: 189, type: 'sine' },
-      { kind: 'tone', delay: 0.78, duration: 0.4, gain: 0.06, attack: 0.09, decay: 0.08, sustain: 0.55, release: 0.2, frequency: 173, endFrequency: 224, type: 'sine', detune: -9 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.3, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.16, rate: 0.9, delay: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.32, rate: 0.9, delay: 0.28 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.24, rate: 0.95, delay: 0.58 },
     ],
-    // Rebirth is a deep furnace bloom followed by three scorched feather flecks.
-    // The octave opens in the bass; the feather transients stay short and muffled.
+    // Rebirth catches with a fresh ignition; cloth and fireplace embers scatter after it.
     impact: [
-      { kind: 'noise', delay: 0, duration: 0.54, gain: 0.115, attack: 0.012, decay: 0.1, sustain: 0.3, release: 0.34, cutoff: 560, filterType: 'lowpass', Q: 0.6, playbackRate: 0.55 },
-      { kind: 'tone', delay: 0, duration: 0.64, gain: 0.095, attack: 0.025, decay: 0.12, sustain: 0.45, release: 0.39, frequency: 52, endFrequency: 104, type: 'triangle', cutoff: 260, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.12, duration: 0.71, gain: 0.035, attack: 0.1, decay: 0.16, sustain: 0.25, release: 0.4, cutoff: 980, filterType: 'bandpass', Q: 0.7, playbackRate: 0.7 },
-      { kind: 'tone', delay: 0.29, duration: 0.08, gain: 0.025, attack: 0.006, decay: 0.016, sustain: 0.18, release: 0.05, frequency: 360, endFrequency: 145, type: 'triangle', cutoff: 620, filterType: 'lowpass' },
-      { kind: 'tone', delay: 0.43, duration: 0.09, gain: 0.018, attack: 0.007, decay: 0.018, sustain: 0.15, release: 0.06, frequency: 285, endFrequency: 110, type: 'triangle', cutoff: 480, filterType: 'lowpass' },
-      { kind: 'tone', delay: 0.65, duration: 0.1, gain: 0.013, attack: 0.008, decay: 0.018, sustain: 0.12, release: 0.07, frequency: 216, endFrequency: 83, type: 'sine' },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.55, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wing-flap.wav', gain: 0.24, rate: 1.1, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.14, rate: 0.95, delay: 0.32 },
     ],
-    // Frequent burn ticks: a tiny coal breath, low chest thud and dry feather scuff.
+    // A single quiet fireplace pop keeps the frequent burning-ground ticks small.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.1, gain: 0.014, attack: 0.01, decay: 0.018, sustain: 0.2, release: 0.065, cutoff: 420, filterType: 'lowpass', playbackRate: 0.65 },
-      { kind: 'tone', delay: 0.005, duration: 0.09, gain: 0.012, attack: 0.008, decay: 0.016, sustain: 0.25, release: 0.06, frequency: 107, endFrequency: 69, type: 'sine' },
-      { kind: 'noise', delay: 0.035, duration: 0.06, gain: 0.007, attack: 0.005, decay: 0.01, sustain: 0.15, release: 0.04, cutoff: 830, filterType: 'bandpass', Q: 0.65, playbackRate: 0.75 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.1, rate: 1.15, delay: 0 },
     ],
   },
 };

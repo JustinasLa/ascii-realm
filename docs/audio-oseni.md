@@ -1,25 +1,38 @@
-# Oseni spell audio
+# Oseni recorded spell audio
 
-Nine individually authored fire spell voices share charcoal, low furnace pressure and solemn ritual resonance. Each spell has a separate `cast`, `impact` and `pulse` recipe in its presentation module. The existing audio renderer plays these procedural layers through the spatial SFX bus; no downloaded recordings or additional assets are required.
+All nine Oseni spells now use real fire and movement recordings. There are no oscillator, generated-noise, musical chime or bit-crushed layers in their recipes. Identity comes from physical material, transient timing and modest playback-rate variation.
 
-| Spell | Cast identity | Contact / recurring identity |
-| --- | --- | --- |
-| Fire Shard | Snapping charcoal jaws, low ignition punch, a muted hot needle | Brittle splinters and cooling hiss; short ember scrape in flight |
-| Meteor | Furnace intake followed by a falling basalt growl at release | Two low detonation bodies, uneven settling coal; quiet ground-fire sighs |
-| Fire Breath | Close intake, rough dragon throat and rolling pressure roar | Coal-bed thud with staggered cracks; short mouth-flare cough |
-| Fire Phoenix | Ancestral bass calls between deep furnace wingbeats | Rebirth bloom and scorched-feather flecks; subdued chest and ember pulses |
-| Oseni Glyph | Furnace drone, coarse iron inscription and a final coal ignition | Branding blow with inharmonic iron decay; a soft ward heartbeat |
-| Flight of the Gladiator (`temp-last-stand`) | Cracked war horn and two laboured double heartbeats | Heavy bass stamp, answering beat and settling ash; paired pressure knocks |
-| Fire Rain | Gathering cinder cloud, falling pellets and irregular coal landings | Cascading ash and burn texture; brief, quiet rain ticks |
-| Blazing Barrage | Cadenced low combustion thumps alternating with scorched grit | Compact impact weight and ember texture; restrained volley pulses |
-| Rekindle | Fragile coals breathing back into a low, solemn heartbeat | Smouldering renewal and soft recurring warmth |
+| Spell | Physical sound design |
+| --- | --- |
+| Fire Shard | A bamboo air cut and torch ignition; breaking wood and coal on contact; quiet trailing embers |
+| Meteor | Burning approach aligned to projectile release; real thunder with wood fracture and falling coal |
+| Fire Breath | Air intake, torch ignition, sustained blowtorch flame; quieter coal contact and lingering embers |
+| Fire Phoenix | Two cloth wingbeats through real flame; ignition and scattered feather-like cloth on rebirth |
+| Oseni Glyph | Ember bed and fuel cracks gather into a timed seal ignition |
+| Flight of the Gladiator (`temp-last-stand`) | Physical cloth/air movement and fire thrust, followed by a heavy grounded stamp |
+| Fire Rain | An overhead fire rush with irregular falling coal; restrained recurring crackle |
+| Blazing Barrage | Cadenced physical fire discharges and breaking coal; quieter repeated trail puffs |
+| Rekindle | Small fuel catches and an ember bed returning to life; gentle heat on each restoration |
 
-Every layer specifies attack, decay, sustain and release. The recipes use three to six layers per stage, at most 0.25 gain per layer and 0.45 summed gain per cue. Repeated pulse textures are substantially quieter than primary casts. Low oscillators, restrained upper frequencies and filtered noise keep the family ominous without piercing whistles or bright arcade chimes.
+The eight mono PCM16 WAVs are 48 kHz, 0.436?2.55 seconds long, with peaks at or below 0.80. Processing is limited to decoding, mono downmix, clean crops, DC removal, short fades and gain normalization. The public high-quality MP3 previews are the inputs; these are not claimed to be lossless masters. No generated sound is added. Runtime layers use only `kind`, `url`, `gain`, `rate` and `delay`, with one to four layers per stage and restrained rate changes.
 
-`Spellcasting.present` maps cast visuals to `cast`, impacts and auras to `impact`, and other effect visuals to `pulse`. Existing cue throttling, routing, node cleanup, visual geometry and gameplay remain unchanged. The previously missing Blazing Barrage pulse now has an authored recipe.
+## Source recordings
+
+All six sources are CC0 1.0, verified on their original Freesound pages:
+
+- [Fire crackling in fireplace by Davor](https://freesound.org/people/Davor/sounds/382616/): real fireplace recorded on Zoom H1.
+- [Blowtorch by rombart](https://freesound.org/people/rombart/sounds/197800/): real blowtorch recorded on Zoom H4n.
+- [Swosh / Whoosh / Air Cut by qubodup](https://freesound.org/people/qubodup/sounds/60030/): bamboo stick swung through air, recorded on Zoom H2.
+- [Wood Crack 5 by utsuru](https://freesound.org/people/utsuru/sounds/183450/): cracking wood recorded on Zoom H4N.
+- [Cloth Flapping On A Clothesline Thickly by leonelmail](https://freesound.org/people/leonelmail/sounds/330638/): actual flapping fabric.
+- [Thunder Clap And Rumble #1 by Kinoton](https://freesound.org/people/Kinoton/sounds/397952/): a real lightning strike recorded with DR-60D MkII and Mk 012 microphones.
+
+[LICENSE.txt](../assets/audio/spells/oseni/LICENSE.txt) credits every source. [sources.json](../assets/audio/spells/oseni/sources.json) records exact download URLs, source hashes, crop positions, fades and output hashes. Rebuild with `python tools/render-spell-audio-oseni.py` (Python, NumPy, SciPy and ffmpeg).
 
 ## Validation and audition
 
-Run `node --test test/audio-spells-oseni.test.js` for family-level coverage. It checks every exported Oseni spell, stage mapping, successful and rejected gameplay casts, spatial SFX rendering, node cleanup, suspended-audio behavior, distinct identities, authored envelopes and renderer bounds. Existing spell presentation suites continue to verify geometry, timing and gameplay. Legacy Glyph, Fire Rain and Barrage audio assertions are updated to the new dark palette while preserving their behavioral checks.
+Run `node --test test/audio-spells-oseni.test.js`. It verifies real-asset provenance, PCM integrity, sample rate, duration, headroom, clean endpoints, recipe bounds, runtime event mapping, SFX spatial routing, every rendered buffer, cleanup and silence while audio is suspended. Existing presentation tests retain geometry and gameplay checks with recording-based audio assertions.
 
-Open [the Oseni audition page](./audio-oseni.html) to hear individual spell stages in the browser. Audio requires a user interaction to unlock the browser audio context.
+The existing renderer maps cast visuals to `cast`, impact/aura visuals to `impact`, and other visuals to `pulse`. Recorded samples preload/cache and use the same positional SFX bus. Visual geometry and spell gameplay are unchanged.
+
+[Open the Oseni audition page](./audio-oseni.html). Click a play control to unlock browser audio and hear individual stages.

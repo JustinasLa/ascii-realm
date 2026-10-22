@@ -479,30 +479,21 @@ export default {
   duration: 1.08,
   draw,
   sounds: {
-    // A close furnace intake opens into a low, rough dragon throat and pressure
-    // roar. Coarse charcoal turbulence swells behind the initial ignition.
+    // Recorded air leads a real blowtorch ignition; the longer torch take
+    // carries the exhalation and naturally dies into its own fire texture.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.19, gain: 0.035, attack: 0.09, decay: 0.025, sustain: 0.68, release: 0.055, cutoff: 430, filterType: 'bandpass', Q: 0.7, playbackRate: 0.62, offset: 0.13 },
-      { kind: 'tone', delay: 0.115, duration: 0.86, gain: 0.059, attack: 0.055, decay: 0.19, sustain: 0.72, release: 0.35, frequency: 78, endFrequency: 48, type: 'sawtooth', cutoff: 205, Q: 0.6 },
-      { kind: 'noise', delay: 0.13, duration: 0.88, gain: 0.09, attack: 0.065, decay: 0.14, sustain: 0.76, release: 0.36, cutoff: 880, filterType: 'lowpass', Q: 0.7, playbackRate: 0.67, offset: 0.31 },
-      { kind: 'noise', delay: 0.22, duration: 0.68, gain: 0.052, attack: 0.085, decay: 0.12, sustain: 0.62, release: 0.29, cutoff: 1380, filterType: 'bandpass', Q: 0.8, playbackRate: 0.82, offset: 0.57 },
-      { kind: 'noise', delay: 0.41, duration: 0.36, gain: 0.027, attack: 0.06, decay: 0.07, sustain: 0.3, release: 0.2, cutoff: 1850, filterType: 'bandpass', Q: 0.65, playbackRate: 0.78, offset: 0.79 },
-      { kind: 'noise', delay: 0.67, duration: 0.3, gain: 0.021, attack: 0.055, decay: 0.045, sustain: 0.22, release: 0.18, cutoff: 1420, filterType: 'bandpass', Q: 0.6, playbackRate: 0.63, offset: 0.92 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.12, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.3, rate: 0.9, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.54, rate: 0.86, delay: 0.24 },
     ],
-    // Burn ticks and aura ignition share a small coal-bed thud: soft combustion
-    // under three irregular, muffled fractures, kept quiet for repeated hits.
+    // A real fireplace pop lands first, followed by a subdued ember bed.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.23, gain: 0.026, attack: 0.007, decay: 0.04, sustain: 0.25, release: 0.15, frequency: 116, endFrequency: 58, type: 'triangle', cutoff: 300, Q: 0.6 },
-      { kind: 'noise', delay: 0.008, duration: 0.15, gain: 0.031, attack: 0.003, decay: 0.035, sustain: 0.3, release: 0.1, cutoff: 640, filterType: 'lowpass', Q: 0.7, playbackRate: 0.61, offset: 0.24 },
-      { kind: 'noise', delay: 0.016, duration: 0.075, gain: 0.028, attack: 0.002, decay: 0.018, sustain: 0.12, release: 0.05, cutoff: 1950, filterType: 'bandpass', Q: 0.7, playbackRate: 0.9, offset: 0.43 },
-      { kind: 'noise', delay: 0.083, duration: 0.07, gain: 0.018, attack: 0.002, decay: 0.016, sustain: 0.1, release: 0.045, cutoff: 1480, filterType: 'bandpass', Q: 0.65, playbackRate: 0.73, offset: 0.65 },
-      { kind: 'noise', delay: 0.179, duration: 0.09, gain: 0.013, attack: 0.003, decay: 0.022, sustain: 0.09, release: 0.055, cutoff: 1140, filterType: 'bandpass', Q: 0.6, playbackRate: 0.58, offset: 0.88 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.24, rate: 0.89, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.11, rate: 0.94, delay: 0.09 },
     ],
-    // Mouth-flare/zone cues add a brief hot pressure cough beneath the cast.
+    // Repeated mouth/zone cues stay beneath the continuous breath recording.
     pulse: [
-      { kind: 'tone', delay: 0, duration: 0.12, gain: 0.016, attack: 0.009, decay: 0.025, sustain: 0.3, release: 0.075, frequency: 92, endFrequency: 62, type: 'triangle', cutoff: 240, Q: 0.6 },
-      { kind: 'noise', delay: 0.018, duration: 0.12, gain: 0.019, attack: 0.012, decay: 0.025, sustain: 0.32, release: 0.075, cutoff: 770, filterType: 'lowpass', Q: 0.65, playbackRate: 0.7, offset: 0.36 },
-      { kind: 'noise', delay: 0.091, duration: 0.085, gain: 0.012, attack: 0.003, decay: 0.02, sustain: 0.14, release: 0.055, cutoff: 1620, filterType: 'bandpass', Q: 0.65, playbackRate: 0.8, offset: 0.71 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.1, delay: 0 },
     ],
   },
 };

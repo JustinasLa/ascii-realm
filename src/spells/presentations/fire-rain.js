@@ -347,29 +347,22 @@ export default {
     else drawCast(put, progress, age, radius);
   },
   sounds: {
-    // A smouldering storm gathers overhead; two descending embers break through
-    // the low sky resonance and land at uneven intervals in the cloud's tail.
+    // Recorded blowtorch pressure gathers overhead before an uneven shower of
+    // real fireplace pops; the gaps widen as the last coals fall from the cloud.
     cast: [
-      { kind: 'tone', delay: 0, duration: 1.24, gain: 0.068, attack: 0.22, decay: 0.24, sustain: 0.6, release: 0.48, frequency: 47, endFrequency: 73, type: 'triangle', cutoff: 230, filterType: 'lowpass', Q: 0.7 },
-      { kind: 'noise', delay: 0.04, duration: 1.12, gain: 0.073, attack: 0.27, decay: 0.18, sustain: 0.55, release: 0.42, cutoff: 490, filterType: 'bandpass', Q: 0.8, playbackRate: 0.65 },
-      { kind: 'tone', delay: 0.4, duration: 0.27, gain: 0.039, attack: 0.018, decay: 0.075, sustain: 0.3, release: 0.15, frequency: 740, endFrequency: 116, type: 'sawtooth', cutoff: 940, filterType: 'lowpass', Q: 1.2 },
-      { kind: 'noise', delay: 0.6, duration: 0.16, gain: 0.051, attack: 0.003, decay: 0.035, sustain: 0.2, release: 0.11, cutoff: 1900, filterType: 'highpass', Q: 0.6, playbackRate: 0.8 },
-      { kind: 'tone', delay: 0.83, duration: 0.25, gain: 0.034, attack: 0.012, decay: 0.055, sustain: 0.25, release: 0.16, frequency: 570, endFrequency: 91, type: 'triangle', cutoff: 720, filterType: 'lowpass', Q: 1 },
-      { kind: 'noise', delay: 1.01, duration: 0.22, gain: 0.047, attack: 0.004, decay: 0.045, sustain: 0.18, release: 0.16, cutoff: 1350, filterType: 'highpass', Q: 0.7, playbackRate: 0.65 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/fire-roar.wav', gain: 0.5, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.21, rate: 1.08, delay: 0.38 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.17, rate: 0.93, delay: 0.71 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.13, rate: 1.16, delay: 1.19 },
     ],
-    // A compact coal strike, three uneven spatters, and a dying furnace rumble.
+    // A coal breaks on contact, leaving the soft sound of burning embers.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.24, gain: 0.061, attack: 0.004, decay: 0.055, sustain: 0.18, release: 0.17, frequency: 205, endFrequency: 51, type: 'triangle', cutoff: 410, filterType: 'lowpass', Q: 0.9 },
-      { kind: 'noise', delay: 0.006, duration: 0.15, gain: 0.067, attack: 0.002, decay: 0.028, sustain: 0.22, release: 0.11, cutoff: 1650, filterType: 'bandpass', Q: 0.75, playbackRate: 0.85 },
-      { kind: 'noise', delay: 0.09, duration: 0.18, gain: 0.041, attack: 0.003, decay: 0.035, sustain: 0.16, release: 0.13, cutoff: 2450, filterType: 'highpass', Q: 0.5, playbackRate: 0.7 },
-      { kind: 'noise', delay: 0.235, duration: 0.26, gain: 0.036, attack: 0.004, decay: 0.045, sustain: 0.22, release: 0.19, cutoff: 850, filterType: 'bandpass', Q: 0.9, playbackRate: 0.6 },
-      { kind: 'tone', delay: 0.035, duration: 0.58, gain: 0.039, attack: 0.035, decay: 0.11, sustain: 0.3, release: 0.36, frequency: 78, endFrequency: 41, type: 'sine', cutoff: 190, filterType: 'lowpass', Q: 0.7 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.3, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.16, rate: 1.1, delay: 0.075 },
     ],
-    // Anchor and projectile ticks can repeat rapidly: tiny dry coal contacts only.
+    // Frequent ward and projectile cues use only a subdued, short coal contact.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.048, gain: 0.012, attack: 0.002, decay: 0.009, sustain: 0.14, release: 0.032, cutoff: 1550, filterType: 'bandpass', Q: 0.8, playbackRate: 0.8 },
-      { kind: 'tone', delay: 0, duration: 0.068, gain: 0.01, attack: 0.003, decay: 0.014, sustain: 0.12, release: 0.045, frequency: 132, endFrequency: 63, type: 'triangle', cutoff: 260, filterType: 'lowpass', Q: 0.7 },
-      { kind: 'noise', delay: 0.026, duration: 0.055, gain: 0.007, attack: 0.002, decay: 0.01, sustain: 0.1, release: 0.038, cutoff: 2700, filterType: 'highpass', Q: 0.5, playbackRate: 0.65 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.1, rate: 1.2, delay: 0 },
     ],
   },
 };

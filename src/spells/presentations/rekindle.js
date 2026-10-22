@@ -127,28 +127,23 @@ export default {
     }
   },
   sounds: {
-    // A charcoal breath gathers under a strained low hum; two tiny ember
-    // fractures precede the chest's first restored, heavy beat.
+    // A real rush of air feeds a modest flame; the coal catches a moment
+    // later and settles into the soft, irregular texture of a fireplace.
     cast: [
-      { kind: 'noise', duration: 0.92, gain: 0.075, cutoff: 520, filterType: 'bandpass', Q: 0.65, playbackRate: 0.67, attack: 0.23, decay: 0.2, sustain: 0.48, release: 0.4 },
-      { kind: 'tone', type: 'triangle', frequency: 91, endFrequency: 113, duration: 0.86, gain: 0.045, cutoff: 290, filterType: 'lowpass', attack: 0.2, decay: 0.14, sustain: 0.55, release: 0.4 },
-      { kind: 'noise', delay: 0.16, duration: 0.085, gain: 0.035, cutoff: 1780, filterType: 'bandpass', Q: 1.3, attack: 0.004, decay: 0.016, sustain: 0.12, release: 0.055 },
-      { kind: 'noise', delay: 0.33, duration: 0.12, gain: 0.026, cutoff: 1220, filterType: 'bandpass', Q: 1.1, attack: 0.006, decay: 0.025, sustain: 0.18, release: 0.075 },
-      { kind: 'tone', type: 'sine', delay: 0.4, frequency: 83, endFrequency: 49, duration: 0.43, gain: 0.08, attack: 0.018, decay: 0.075, sustain: 0.27, release: 0.28 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.16, rate: 0.83, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.25, rate: 0.88, delay: 0.13 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.13, rate: 0.9, delay: 0.37 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.19, rate: 0.92, delay: 0.47 },
     ],
-    // Each heal answers with a subdued two-part heartbeat and a breath of
-    // ash. Short enough to clear before the next one-second healing tick.
+    // Healing stays intimate: one small coal opens under a quiet breath
+    // of ignition, both finished before the next one-second heal.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 92, endFrequency: 53, duration: 0.31, gain: 0.065, attack: 0.012, decay: 0.06, sustain: 0.25, release: 0.2 },
-      { kind: 'tone', type: 'triangle', delay: 0.15, frequency: 71, endFrequency: 47, duration: 0.3, gain: 0.038, cutoff: 190, filterType: 'lowpass', attack: 0.017, decay: 0.05, sustain: 0.23, release: 0.2 },
-      { kind: 'noise', delay: 0.025, duration: 0.49, gain: 0.04, cutoff: 480, filterType: 'lowpass', playbackRate: 0.7, attack: 0.045, decay: 0.1, sustain: 0.34, release: 0.29 },
-      { kind: 'noise', delay: 0.075, duration: 0.075, gain: 0.018, cutoff: 1430, filterType: 'bandpass', Q: 0.8, attack: 0.003, decay: 0.012, sustain: 0.1, release: 0.05 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.11, rate: 0.96, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.12, rate: 1.05, delay: 0.07 },
     ],
-    // Repeated residual embers: faint breathing and one muffled coal crack.
+    // Residual fire uses the recording's own soft crackle and natural decay.
     pulse: [
-      { kind: 'noise', duration: 0.32, gain: 0.018, cutoff: 390, filterType: 'lowpass', playbackRate: 0.65, attack: 0.065, decay: 0.055, sustain: 0.3, release: 0.17 },
-      { kind: 'tone', type: 'sine', delay: 0.035, frequency: 61, endFrequency: 52, duration: 0.28, gain: 0.012, attack: 0.045, decay: 0.045, sustain: 0.3, release: 0.16 },
-      { kind: 'noise', delay: 0.12, duration: 0.065, gain: 0.009, cutoff: 930, filterType: 'bandpass', Q: 0.8, attack: 0.003, decay: 0.01, sustain: 0.12, release: 0.045 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.1, rate: 1.15, delay: 0 },
     ],
   },
 };

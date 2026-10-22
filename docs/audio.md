@@ -24,6 +24,18 @@ the current levels after the preview and respects mute.
 
 ## Structure
 
+Spell presentations can layer real foley recordings with `kind: 'recording'`,
+a local `url`, `gain`, a subtle playback `rate`, and a `delay`. The spell audio
+cache decodes each clip once per audio context after user interaction. Main-game
+spell loading registers clips in advance; audition pages and the casting
+simulator wait for the selected recordings before casting. Loading voices are
+cancellable, failed downloads retry with backoff, and stale casts are discarded.
+Recordings use the spatial effects bus and existing owner/pause cleanup.
+
+Source credits, licenses, crop timings and hashes live beside each rune family's
+clips under `assets/audio/spells/`. Family-specific listening pages and processing
+notes are under `docs/audio-<family>.html` and `docs/audio-<family>.md`.
+
 - `src/audio/audio.js` connects animation events and environment signals to
   sounds, sets the listener at the camera and pauses sustained voices when
   playback stops. `controls.js` binds the persistent Audio panel, keyboard

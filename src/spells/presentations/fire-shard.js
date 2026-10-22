@@ -292,36 +292,21 @@ export default {
     return cast(effect, lit, v);
   },
   sounds: {
-    // Charcoal jaws snap: a chesty ignition, dry fracture and dull hot needle.
+    // A real air cut precedes the torch catching; the coal pop closes the jaws.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 126, endFrequency: 48, duration: 0.24, gain: 0.16,
-        attack: 0.004, decay: 0.07, sustain: 0.22, release: 0.15 },
-      { kind: 'noise', delay: 0.012, duration: 0.115, gain: 0.11, cutoff: 1750, filterType: 'bandpass', Q: 0.85, playbackRate: 0.76,
-        attack: 0.002, decay: 0.028, sustain: 0.16, release: 0.075 },
-      { kind: 'tone', type: 'triangle', frequency: 420, endFrequency: 165, delay: 0.025, duration: 0.21, gain: 0.055,
-        cutoff: 1050, filterType: 'lowpass', Q: 0.6, attack: 0.006, decay: 0.045, sustain: 0.18, release: 0.14 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.34, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ignition.wav', gain: 0.48, rate: 1.08, delay: 0.025 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.2, rate: 1.04, delay: 0.07 },
     ],
-    // Brittle coal breaks into falling splinters, then exhales its last heat.
+    // Dry wood fractures first, followed by smaller coal debris and dying fire.
     impact: [
-      { kind: 'noise', duration: 0.14, gain: 0.125, cutoff: 2100, filterType: 'bandpass', Q: 0.7, playbackRate: 0.84,
-        attack: 0.002, decay: 0.035, sustain: 0.12, release: 0.09 },
-      { kind: 'tone', type: 'triangle', frequency: 142, endFrequency: 43, duration: 0.29, gain: 0.115,
-        cutoff: 440, filterType: 'lowpass', Q: 0.5, attack: 0.004, decay: 0.065, sustain: 0.18, release: 0.2 },
-      { kind: 'noise', delay: 0.058, duration: 0.075, gain: 0.038, cutoff: 1550, filterType: 'bandpass', Q: 1.2, playbackRate: 0.67,
-        attack: 0.002, decay: 0.018, sustain: 0.12, release: 0.05 },
-      { kind: 'tone', type: 'triangle', frequency: 307, endFrequency: 119, delay: 0.091, duration: 0.16, gain: 0.026,
-        cutoff: 780, filterType: 'lowpass', Q: 0.6, attack: 0.003, decay: 0.032, sustain: 0.12, release: 0.115 },
-      { kind: 'noise', delay: 0.12, duration: 0.38, gain: 0.043, cutoff: 740, filterType: 'lowpass', Q: 0.55, playbackRate: 0.6,
-        attack: 0.022, decay: 0.075, sustain: 0.24, release: 0.26 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/wood-break.wav', gain: 0.5, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/coal-crack.wav', gain: 0.3, rate: 0.96, delay: 0.055 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/ember-bed.wav', gain: 0.14, rate: 1, delay: 0.11 },
     ],
-    // Flight ticks are throttled to 0.28 s: a quiet, short ember scrape.
+    // A quiet, short air cut follows each fast-moving shard trail cue.
     pulse: [
-      { kind: 'noise', duration: 0.095, gain: 0.025, cutoff: 1180, filterType: 'bandpass', Q: 0.65, playbackRate: 0.7,
-        attack: 0.005, decay: 0.02, sustain: 0.16, release: 0.065 },
-      { kind: 'tone', type: 'triangle', frequency: 173, endFrequency: 91, duration: 0.12, gain: 0.015,
-        cutoff: 460, filterType: 'lowpass', Q: 0.5, attack: 0.008, decay: 0.025, sustain: 0.17, release: 0.08 },
-      { kind: 'noise', delay: 0.025, duration: 0.14, gain: 0.012, cutoff: 620, filterType: 'lowpass', Q: 0.5, playbackRate: 0.6,
-        attack: 0.012, decay: 0.028, sustain: 0.18, release: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/oseni/air-swish.wav', gain: 0.1, rate: 1.12, delay: 0 },
     ],
   },
 };
