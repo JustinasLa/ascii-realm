@@ -137,30 +137,27 @@ test('all effect stages stay bounded, deterministic, atlas-compatible and fade o
   }
 });
 
-test('sound seals a low drone with three paired metallic beats and a finishing chime', () => {
+test('sound seals a furnace drone with iron resonance, ignition and quiet ward pulses', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const drone = cast.find(v => v.type === 'triangle' && v.duration > 0.8);
   assert.ok(drone && drone.frequency < 200 && drone.attack > 0.05);
-  const beats = cast.filter(v => v.duration < 0.2 && v.frequency > 600);
-  const times = [...new Set(beats.map(v => v.delay))];
-  assert.equal(times.length, 3);
-  assert.ok(Math.abs((times[1] - times[0]) - (times[2] - times[1])) < 1e-8);
-  for (const time of times) {
-    const pair = beats.filter(v => v.delay === time);
-    assert.equal(pair.length, 2, 'each metallic strike layers two inharmonic partials');
-    assert.ok(pair[1].frequency / pair[0].frequency > 1.5);
-  }
-  assert.ok(cast.some(v => v.delay > times[2] && v.frequency > 1200 && v.release > 0.3));
+  const iron = cast.filter(v => v.kind === 'tone' && v.frequency > 200);
+  assert.ok(iron.length >= 2, 'inharmonic iron partials mark the ritual seal');
+  assert.ok(iron[1].frequency / iron[0].frequency > 1.3);
+  assert.ok(iron.every(v => v.frequency < 500 && v.release > 0.3), 'metal resonance stays low and decays gradually');
+  assert.ok(cast.some(v => v.kind === 'noise' && v.attack > 0.1), 'furnace intake swells beneath the inscription');
+  assert.ok(cast.some(v => v.kind === 'noise' && v.delay > iron.at(-1).delay && v.attack < 0.02), 'coal ignition closes the seal');
   assert.ok(impact.some(v => v.kind === 'noise') && impact.some(v => v.frequency < 200));
   assert.notDeepEqual(cast, impact);
-  assert.ok(pulse.every(v => v.gain < 0.02 && v.duration < 0.2));
+  assert.ok(pulse.every(v => v.gain < 0.025 && v.duration <= 0.4));
+  assert.ok(pulse.reduce((sum, v) => sum + v.gain, 0) < 0.05, 'repeated ward cues remain quiet');
   for (const voices of [cast, impact, pulse]) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 6);
     for (const voice of voices) {
       assert.ok(voice.gain > 0 && voice.gain <= 0.25);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.attack + voice.release <= voice.duration);
+      assert.ok(voice.attack + voice.decay + voice.release <= voice.duration);
     }
   }
 });

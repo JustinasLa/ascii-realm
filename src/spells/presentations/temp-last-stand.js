@@ -450,24 +450,31 @@ export default {
   duration: 1.45,
   draw,
   sounds: {
+    // A cracked war horn and two laboured double heartbeats gather the embers.
+    // Close, low onsets tighten with effort; each beat falls back into the body.
     cast: [
-      { kind: 'tone', delay: 0, type: 'sawtooth', frequency: 98, endFrequency: 110, cutoff: 560, duration: 0.48, gain: 0.04, attack: 0.07, release: 0.16 },
-      { kind: 'tone', delay: 0.04, type: 'triangle', frequency: 147, endFrequency: 147, duration: 0.34, gain: 0.035, attack: 0.04, release: 0.13 },
-      { kind: 'tone', delay: 0.16, type: 'triangle', frequency: 196, endFrequency: 196, duration: 0.12, gain: 0.055, attack: 0.012, release: 0.06 },
-      { kind: 'tone', delay: 0.27, type: 'triangle', frequency: 247, endFrequency: 247, duration: 0.12, gain: 0.05, attack: 0.012, release: 0.06 },
-      { kind: 'tone', delay: 0.43, type: 'triangle', frequency: 294, endFrequency: 294, duration: 0.12, gain: 0.055, attack: 0.012, release: 0.06 },
-      { kind: 'tone', delay: 0.54, type: 'triangle', frequency: 392, endFrequency: 392, duration: 0.19, gain: 0.045, attack: 0.012, release: 0.11 },
-      { kind: 'noise', delay: 0.36, filterType: 'bandpass', cutoff: 1900, duration: 0.36, gain: 0.04, attack: 0.08, release: 0.17 },
+      { kind: 'tone', delay: 0, type: 'sawtooth', frequency: 43, endFrequency: 46, detune: -11, filterType: 'lowpass', cutoff: 245, Q: 1.2, duration: 1.05, gain: 0.055, attack: 0.16, decay: 0.22, sustain: 0.45, release: 0.38 },
+      { kind: 'tone', delay: 0.08, type: 'sine', frequency: 79, endFrequency: 42, duration: 0.19, gain: 0.075, attack: 0.009, decay: 0.065, sustain: 0.28, release: 0.1 },
+      { kind: 'tone', delay: 0.23, type: 'triangle', frequency: 83, endFrequency: 48, cutoff: 240, duration: 0.17, gain: 0.055, attack: 0.008, decay: 0.05, sustain: 0.22, release: 0.095 },
+      { kind: 'tone', delay: 0.55, type: 'sine', frequency: 87, endFrequency: 43, duration: 0.19, gain: 0.068, attack: 0.01, decay: 0.06, sustain: 0.25, release: 0.105 },
+      { kind: 'tone', delay: 0.7, type: 'triangle', frequency: 91, endFrequency: 46, cutoff: 260, duration: 0.18, gain: 0.049, attack: 0.008, decay: 0.05, sustain: 0.2, release: 0.11 },
+      { kind: 'noise', delay: 0.36, filterType: 'bandpass', cutoff: 480, Q: 0.85, playbackRate: 0.65, duration: 0.86, gain: 0.048, attack: 0.19, decay: 0.2, sustain: 0.42, release: 0.4 },
     ],
+    // The landing closes like ember-black armour: a heavy stamp, answering
+    // heartbeat, strained iron resonance, and furnace ash settling behind it.
     impact: [
-      { kind: 'tone', delay: 0, type: 'sine', frequency: 92, endFrequency: 42, duration: 0.25, gain: 0.1, attack: 0.004, release: 0.2 },
-      { kind: 'noise', delay: 0, filterType: 'lowpass', cutoff: 680, duration: 0.12, gain: 0.075, attack: 0.004, release: 0.1 },
-      { kind: 'tone', delay: 0.015, type: 'triangle', frequency: 392, endFrequency: 294, duration: 0.17, gain: 0.028, attack: 0.003, release: 0.14 },
-      { kind: 'tone', delay: 0.055, type: 'triangle', frequency: 588, endFrequency: 392, duration: 0.15, gain: 0.022, attack: 0.003, release: 0.12 },
-      { kind: 'noise', delay: 0.11, filterType: 'lowpass', cutoff: 1200, duration: 0.1, gain: 0.023, attack: 0.008, release: 0.08 },
+      { kind: 'tone', delay: 0, type: 'sine', frequency: 116, endFrequency: 35, duration: 0.45, gain: 0.11, attack: 0.006, decay: 0.09, sustain: 0.24, release: 0.3 },
+      { kind: 'noise', delay: 0, filterType: 'lowpass', cutoff: 590, Q: 0.8, playbackRate: 0.6, duration: 0.3, gain: 0.065, attack: 0.004, decay: 0.065, sustain: 0.16, release: 0.2 },
+      { kind: 'tone', delay: 0.18, type: 'triangle', frequency: 78, endFrequency: 39, cutoff: 240, duration: 0.25, gain: 0.045, attack: 0.008, decay: 0.055, sustain: 0.23, release: 0.17 },
+      { kind: 'tone', delay: 0.015, type: 'triangle', frequency: 173, endFrequency: 151, detune: -17, cutoff: 430, duration: 0.67, gain: 0.04, attack: 0.005, decay: 0.13, sustain: 0.19, release: 0.48 },
+      { kind: 'noise', delay: 0.12, filterType: 'bandpass', cutoff: 890, Q: 1.1, playbackRate: 0.72, duration: 0.54, gain: 0.022, attack: 0.035, decay: 0.11, sustain: 0.2, release: 0.36 },
     ],
+    // Small paired pressure knocks support successive shockwaves without
+    // repeating the full landing; the ember scrape dies between pulses.
     pulse: [
-      { kind: 'tone', delay: 0, type: 'triangle', frequency: 196, endFrequency: 147, duration: 0.1, gain: 0.015, attack: 0.012, release: 0.07 },
+      { kind: 'tone', delay: 0, type: 'sine', frequency: 72, endFrequency: 42, duration: 0.12, gain: 0.011, attack: 0.005, decay: 0.025, sustain: 0.2, release: 0.08 },
+      { kind: 'tone', delay: 0.08, type: 'triangle', frequency: 67, endFrequency: 41, cutoff: 190, duration: 0.11, gain: 0.008, attack: 0.004, decay: 0.025, sustain: 0.16, release: 0.075 },
+      { kind: 'noise', delay: 0.015, filterType: 'bandpass', cutoff: 430, Q: 0.9, playbackRate: 0.6, duration: 0.12, gain: 0.007, attack: 0.012, decay: 0.025, sustain: 0.18, release: 0.075 },
     ],
   },
 };

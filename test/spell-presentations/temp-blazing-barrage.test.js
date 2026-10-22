@@ -161,25 +161,28 @@ test('fireblast trail puffs and burning auras stay lean and on theme', () => {
   assert.ok(frame('aura', 0.05).some(p => p.char === '*'), 'ignition flares on the first frames');
 });
 
-test('sound uses six clipped fireball pops and a delayed emphatic low blast', () => {
-  const pops = presentation.sounds.cast.slice(0, 6);
-  assert.ok(pops.every(p => p.kind === 'tone' && p.duration < 0.1 && p.endFrequency < p.frequency));
+test('sound uses six cadenced combustion shots with alternating bass and scorched grit', () => {
+  const pops = presentation.sounds.cast;
+  assert.equal(pops.length, 6);
+  assert.ok(pops.every(p => p.duration <= 0.14), 'each shot clears before the next discharge');
+  assert.ok(pops.filter(p => p.kind === 'tone').every(p => p.frequency < 200 && p.endFrequency < 50),
+    'pitched combustion lands in restrained bass');
   for (let i = 1; i < pops.length; i++) {
     assert.ok(Math.abs(pops[i].delay - pops[i - 1].delay - 0.15) < 1e-8, 'shots follow the gameplay rhythm');
-    assert.notEqual(pops[i].type, pops[i - 1].type, 'alternating barrel timbres');
+    assert.notEqual(pops[i].kind, pops[i - 1].kind, 'alternating combustion and grit timbres');
   }
-  const blast = presentation.sounds.cast.slice(6);
+  const blast = presentation.sounds.impact;
   assert.ok(blast.some(v => v.kind === 'noise') && blast.some(v => v.endFrequency < 50));
-  assert.ok(blast.every(v => v.delay > pops.at(-1).delay && v.duration > pops[0].duration));
+  assert.ok(blast.some(v => v.duration > pops[0].duration), 'impact body outlasts the clipped volley');
   assert.ok(presentation.sounds.impact.some(v => v.kind === 'noise' && v.filterType === 'highpass'),
     'impact includes a short ember fizz after the attack');
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 6);
     for (const v of voices) {
       assert.ok(v.gain > 0 && v.gain <= 0.25);
       assert.ok(v.duration > 0 && v.duration <= 2.5);
       assert.ok(v.delay >= 0 && v.delay <= 2);
-      assert.ok(v.attack > 0 && v.release > 0 && v.attack + v.release <= v.duration);
+      assert.ok(v.attack > 0 && v.release > 0 && v.attack + v.decay + v.release <= v.duration);
     }
   }
 });

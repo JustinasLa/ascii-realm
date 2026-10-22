@@ -347,26 +347,29 @@ export default {
     else drawCast(put, progress, age, radius);
   },
   sounds: {
+    // A smouldering storm gathers overhead; two descending embers break through
+    // the low sky resonance and land at uneven intervals in the cloud's tail.
     cast: [
-      { kind: 'noise', delay: 0, duration: 0.34, gain: 0.035, attack: 0.13, release: 0.17, cutoff: 1500, filterType: 'bandpass' },
-      { kind: 'tone', delay: 0, duration: 0.34, gain: 0.026, attack: 0.12, release: 0.16, frequency: 310, endFrequency: 1480, type: 'triangle', cutoff: 2400 },
-      { kind: 'tone', delay: 0.24, duration: 0.23, gain: 0.034, attack: 0.025, release: 0.12, frequency: 1800, endFrequency: 530, type: 'sine' },
-      { kind: 'noise', delay: 0.42, duration: 0.13, gain: 0.043, attack: 0.006, release: 0.11, cutoff: 2300, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.55, duration: 0.25, gain: 0.032, attack: 0.025, release: 0.14, frequency: 1540, endFrequency: 420, type: 'sine' },
-      { kind: 'noise', delay: 0.75, duration: 0.14, gain: 0.04, attack: 0.006, release: 0.12, cutoff: 1800, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.89, duration: 0.23, gain: 0.031, attack: 0.025, release: 0.12, frequency: 2080, endFrequency: 640, type: 'sine' },
-      { kind: 'noise', delay: 1.07, duration: 0.17, gain: 0.04, attack: 0.006, release: 0.14, cutoff: 2600, filterType: 'highpass' },
+      { kind: 'tone', delay: 0, duration: 1.24, gain: 0.068, attack: 0.22, decay: 0.24, sustain: 0.6, release: 0.48, frequency: 47, endFrequency: 73, type: 'triangle', cutoff: 230, filterType: 'lowpass', Q: 0.7 },
+      { kind: 'noise', delay: 0.04, duration: 1.12, gain: 0.073, attack: 0.27, decay: 0.18, sustain: 0.55, release: 0.42, cutoff: 490, filterType: 'bandpass', Q: 0.8, playbackRate: 0.65 },
+      { kind: 'tone', delay: 0.4, duration: 0.27, gain: 0.039, attack: 0.018, decay: 0.075, sustain: 0.3, release: 0.15, frequency: 740, endFrequency: 116, type: 'sawtooth', cutoff: 940, filterType: 'lowpass', Q: 1.2 },
+      { kind: 'noise', delay: 0.6, duration: 0.16, gain: 0.051, attack: 0.003, decay: 0.035, sustain: 0.2, release: 0.11, cutoff: 1900, filterType: 'highpass', Q: 0.6, playbackRate: 0.8 },
+      { kind: 'tone', delay: 0.83, duration: 0.25, gain: 0.034, attack: 0.012, decay: 0.055, sustain: 0.25, release: 0.16, frequency: 570, endFrequency: 91, type: 'triangle', cutoff: 720, filterType: 'lowpass', Q: 1 },
+      { kind: 'noise', delay: 1.01, duration: 0.22, gain: 0.047, attack: 0.004, decay: 0.045, sustain: 0.18, release: 0.16, cutoff: 1350, filterType: 'highpass', Q: 0.7, playbackRate: 0.65 },
     ],
+    // A compact coal strike, three uneven spatters, and a dying furnace rumble.
     impact: [
-      { kind: 'tone', delay: 0, duration: 0.16, gain: 0.044, attack: 0.006, release: 0.12, frequency: 1050, endFrequency: 180, type: 'triangle' },
-      { kind: 'noise', delay: 0.07, duration: 0.24, gain: 0.072, attack: 0.008, release: 0.2, cutoff: 2100, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.18, duration: 0.15, gain: 0.033, attack: 0.006, release: 0.11, frequency: 1340, endFrequency: 240, type: 'sine' },
-      { kind: 'noise', delay: 0.25, duration: 0.22, gain: 0.054, attack: 0.008, release: 0.18, cutoff: 2800, filterType: 'highpass' },
-      { kind: 'tone', delay: 0.39, duration: 0.16, gain: 0.028, attack: 0.006, release: 0.12, frequency: 890, endFrequency: 150, type: 'sine' },
-      { kind: 'noise', delay: 0.46, duration: 0.28, gain: 0.044, attack: 0.008, release: 0.23, cutoff: 1600, filterType: 'highpass' },
+      { kind: 'tone', delay: 0, duration: 0.24, gain: 0.061, attack: 0.004, decay: 0.055, sustain: 0.18, release: 0.17, frequency: 205, endFrequency: 51, type: 'triangle', cutoff: 410, filterType: 'lowpass', Q: 0.9 },
+      { kind: 'noise', delay: 0.006, duration: 0.15, gain: 0.067, attack: 0.002, decay: 0.028, sustain: 0.22, release: 0.11, cutoff: 1650, filterType: 'bandpass', Q: 0.75, playbackRate: 0.85 },
+      { kind: 'noise', delay: 0.09, duration: 0.18, gain: 0.041, attack: 0.003, decay: 0.035, sustain: 0.16, release: 0.13, cutoff: 2450, filterType: 'highpass', Q: 0.5, playbackRate: 0.7 },
+      { kind: 'noise', delay: 0.235, duration: 0.26, gain: 0.036, attack: 0.004, decay: 0.045, sustain: 0.22, release: 0.19, cutoff: 850, filterType: 'bandpass', Q: 0.9, playbackRate: 0.6 },
+      { kind: 'tone', delay: 0.035, duration: 0.58, gain: 0.039, attack: 0.035, decay: 0.11, sustain: 0.3, release: 0.36, frequency: 78, endFrequency: 41, type: 'sine', cutoff: 190, filterType: 'lowpass', Q: 0.7 },
     ],
+    // Anchor and projectile ticks can repeat rapidly: tiny dry coal contacts only.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.075, gain: 0.022, attack: 0.004, release: 0.065, cutoff: 2400, filterType: 'highpass' },
+      { kind: 'noise', delay: 0, duration: 0.048, gain: 0.012, attack: 0.002, decay: 0.009, sustain: 0.14, release: 0.032, cutoff: 1550, filterType: 'bandpass', Q: 0.8, playbackRate: 0.8 },
+      { kind: 'tone', delay: 0, duration: 0.068, gain: 0.01, attack: 0.003, decay: 0.014, sustain: 0.12, release: 0.045, frequency: 132, endFrequency: 63, type: 'triangle', cutoff: 260, filterType: 'lowpass', Q: 0.7 },
+      { kind: 'noise', delay: 0.026, duration: 0.055, gain: 0.007, attack: 0.002, decay: 0.01, sustain: 0.1, release: 0.038, cutoff: 2700, filterType: 'highpass', Q: 0.5, playbackRate: 0.65 },
     ],
   },
 };

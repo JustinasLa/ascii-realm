@@ -127,18 +127,28 @@ export default {
     }
   },
   sounds: {
+    // A charcoal breath gathers under a strained low hum; two tiny ember
+    // fractures precede the chest's first restored, heavy beat.
     cast: [
-      { kind: 'noise', duration: 0.7, gain: 0.06, cutoff: 700, filterType: 'lowpass', attack: 0.3, release: 0.35 },
-      { kind: 'tone', type: 'sine', frequency: 196, endFrequency: 392, duration: 0.7, gain: 0.03, attack: 0.3, release: 0.3 },
-      { kind: 'noise', delay: 0.12, duration: 0.04, gain: 0.05, cutoff: 2600, filterType: 'bandpass', attack: 0.002, release: 0.03 },
-      { kind: 'noise', delay: 0.27, duration: 0.03, gain: 0.04, cutoff: 3200, filterType: 'bandpass', attack: 0.002, release: 0.025 },
-      { kind: 'tone', type: 'triangle', delay: 0.38, frequency: 523, endFrequency: 659, duration: 0.5, gain: 0.025, attack: 0.02, release: 0.45 },
+      { kind: 'noise', duration: 0.92, gain: 0.075, cutoff: 520, filterType: 'bandpass', Q: 0.65, playbackRate: 0.67, attack: 0.23, decay: 0.2, sustain: 0.48, release: 0.4 },
+      { kind: 'tone', type: 'triangle', frequency: 91, endFrequency: 113, duration: 0.86, gain: 0.045, cutoff: 290, filterType: 'lowpass', attack: 0.2, decay: 0.14, sustain: 0.55, release: 0.4 },
+      { kind: 'noise', delay: 0.16, duration: 0.085, gain: 0.035, cutoff: 1780, filterType: 'bandpass', Q: 1.3, attack: 0.004, decay: 0.016, sustain: 0.12, release: 0.055 },
+      { kind: 'noise', delay: 0.33, duration: 0.12, gain: 0.026, cutoff: 1220, filterType: 'bandpass', Q: 1.1, attack: 0.006, decay: 0.025, sustain: 0.18, release: 0.075 },
+      { kind: 'tone', type: 'sine', delay: 0.4, frequency: 83, endFrequency: 49, duration: 0.43, gain: 0.08, attack: 0.018, decay: 0.075, sustain: 0.27, release: 0.28 },
     ],
+    // Each heal answers with a subdued two-part heartbeat and a breath of
+    // ash. Short enough to clear before the next one-second healing tick.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 440, endFrequency: 554, duration: 0.45, gain: 0.025, attack: 0.01, release: 0.4 },
-      { kind: 'noise', duration: 0.35, gain: 0.04, cutoff: 900, filterType: 'lowpass', attack: 0.04, release: 0.3 },
-      { kind: 'noise', delay: 0.05, duration: 0.03, gain: 0.035, cutoff: 3000, filterType: 'bandpass', attack: 0.002, release: 0.025 },
+      { kind: 'tone', type: 'sine', frequency: 92, endFrequency: 53, duration: 0.31, gain: 0.065, attack: 0.012, decay: 0.06, sustain: 0.25, release: 0.2 },
+      { kind: 'tone', type: 'triangle', delay: 0.15, frequency: 71, endFrequency: 47, duration: 0.3, gain: 0.038, cutoff: 190, filterType: 'lowpass', attack: 0.017, decay: 0.05, sustain: 0.23, release: 0.2 },
+      { kind: 'noise', delay: 0.025, duration: 0.49, gain: 0.04, cutoff: 480, filterType: 'lowpass', playbackRate: 0.7, attack: 0.045, decay: 0.1, sustain: 0.34, release: 0.29 },
+      { kind: 'noise', delay: 0.075, duration: 0.075, gain: 0.018, cutoff: 1430, filterType: 'bandpass', Q: 0.8, attack: 0.003, decay: 0.012, sustain: 0.1, release: 0.05 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.2, gain: 0.02, cutoff: 800, filterType: 'lowpass', attack: 0.03, release: 0.15 }],
+    // Repeated residual embers: faint breathing and one muffled coal crack.
+    pulse: [
+      { kind: 'noise', duration: 0.32, gain: 0.018, cutoff: 390, filterType: 'lowpass', playbackRate: 0.65, attack: 0.065, decay: 0.055, sustain: 0.3, release: 0.17 },
+      { kind: 'tone', type: 'sine', delay: 0.035, frequency: 61, endFrequency: 52, duration: 0.28, gain: 0.012, attack: 0.045, decay: 0.045, sustain: 0.3, release: 0.16 },
+      { kind: 'noise', delay: 0.12, duration: 0.065, gain: 0.009, cutoff: 930, filterType: 'bandpass', Q: 0.8, attack: 0.003, decay: 0.01, sustain: 0.12, release: 0.045 },
+    ],
   },
 };

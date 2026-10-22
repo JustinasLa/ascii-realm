@@ -178,14 +178,14 @@ test('Fire Rain handles all presentation stages with finite, bounded, fading ASC
   assert.deepEqual(draw('zone', 0.3), draw('zone', 0.3), 'zone geometry is deterministic');
 });
 
-test('Fire Rain sounds rise into spaced falling whistles and sizzling drops', () => {
+test('Fire Rain sounds gather low storm pressure before falling pellets and coal landings', () => {
   const { cast, impact, pulse } = presentation.sounds;
   const rise = cast.find(voice => voice.kind === 'tone' && voice.endFrequency > voice.frequency);
-  assert.ok(rise && rise.delay === 0 && rise.attack > 0.08, 'airy opening sweep rises gradually');
+  assert.ok(rise && rise.delay === 0 && rise.attack > 0.08, 'storm pressure rises gradually');
   const whistles = cast.filter(voice => voice.kind === 'tone' && voice.endFrequency < voice.frequency);
-  assert.equal(whistles.length, 3);
-  assert.ok(whistles[1].delay - whistles[0].delay > 0.25 && whistles[2].delay - whistles[1].delay > 0.25,
-    'three separate falling drops have room between them');
+  assert.equal(whistles.length, 2);
+  assert.ok(whistles[1].delay - whistles[0].delay > 0.25,
+    'separate falling pellets have room between them');
   for (const whistle of whistles) {
     assert.ok(cast.some(voice => voice.kind === 'noise' && voice.delay > whistle.delay
       && voice.delay < whistle.delay + whistle.duration && voice.filterType === 'highpass'), 'each whistle lands with a sizzle');
@@ -194,13 +194,13 @@ test('Fire Rain sounds rise into spaced falling whistles and sizzling drops', ()
   assert.notDeepEqual(cast, impact);
   assert.ok(pulse.every(voice => voice.duration < 0.1 && voice.gain < 0.03), 'repeated ticks remain short and quiet');
   for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 3 && voices.length <= 6);
     for (const voice of voices) {
       assert.ok(['tone', 'noise'].includes(voice.kind));
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(voice.duration > 0 && voice.duration <= 2.5);
       assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.release <= voice.duration);
+      assert.ok(voice.attack > 0 && voice.release > 0 && voice.attack + voice.decay + voice.release <= voice.duration);
       if (voice.kind === 'tone') assert.ok(voice.frequency > 0 && voice.endFrequency > 0);
     }
   }

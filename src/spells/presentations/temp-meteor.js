@@ -470,23 +470,30 @@ export default {
     }
   },
   sounds: {
+    // Furnace intake opens the sigil; the delayed basalt growl follows the
+    // half-second release. Projectile motion itself emits no separate cue.
     cast: [
-      { kind: 'tone', type: 'sawtooth', delay: 0, duration: 0.82, frequency: 165, endFrequency: 46, gain: 0.055, attack: 0.1, release: 0.34, cutoff: 190, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0, duration: 0.72, gain: 0.065, attack: 0.2, release: 0.24, cutoff: 900, filterType: 'lowpass' },
-      { kind: 'tone', type: 'triangle', delay: 0.12, duration: 0.86, frequency: 86, endFrequency: 31, gain: 0.045, attack: 0.12, release: 0.42 },
+      { kind: 'noise', delay: 0, duration: 0.56, gain: 0.064, attack: 0.22, decay: 0.07, sustain: 0.7, release: 0.2, cutoff: 520, filterType: 'lowpass', Q: 0.65, playbackRate: 0.65 },
+      { kind: 'tone', type: 'sawtooth', delay: 0.08, duration: 0.82, frequency: 146, endFrequency: 43, gain: 0.046, attack: 0.16, decay: 0.12, sustain: 0.65, release: 0.4, cutoff: 185, filterType: 'lowpass', Q: 0.7 },
+      { kind: 'tone', type: 'triangle', delay: 0.48, duration: 0.58, frequency: 91, endFrequency: 32, gain: 0.054, attack: 0.06, decay: 0.09, sustain: 0.72, release: 0.28, cutoff: 250, filterType: 'lowpass', Q: 0.55 },
+      { kind: 'noise', delay: 0.5, duration: 0.53, gain: 0.047, attack: 0.12, decay: 0.07, sustain: 0.8, release: 0.18, cutoff: 720, filterType: 'bandpass', Q: 0.8, playbackRate: 0.7 },
     ],
+    // Two low detonation bodies carry the weight; three uneven charcoal
+    // contacts settle behind the blast instead of forming a rhythmic jingle.
     impact: [
-      { kind: 'tone', type: 'sine', delay: 0, duration: 1.08, frequency: 104, endFrequency: 29, gain: 0.13, attack: 0.004, release: 0.91 },
-      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.72, frequency: 62, endFrequency: 24, gain: 0.07, attack: 0.003, release: 0.65, cutoff: 170, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0, duration: 0.24, gain: 0.1, attack: 0.002, release: 0.2, cutoff: 850, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.13, duration: 0.1, gain: 0.048, attack: 0.002, release: 0.085, cutoff: 1850, filterType: 'bandpass' },
-      { kind: 'tone', type: 'square', delay: 0.24, duration: 0.055, frequency: 220, endFrequency: 96, gain: 0.032, attack: 0.002, release: 0.045, cutoff: 900, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.38, duration: 0.07, gain: 0.03, attack: 0.002, release: 0.06, cutoff: 1200, filterType: 'bandpass' },
-      { kind: 'noise', delay: 0.53, duration: 0.1, gain: 0.022, attack: 0.003, release: 0.09, cutoff: 700, filterType: 'lowpass' },
+      { kind: 'tone', type: 'sine', delay: 0, duration: 1.18, frequency: 108, endFrequency: 29, gain: 0.12, attack: 0.005, decay: 0.12, sustain: 0.48, release: 0.9, cutoff: 180, filterType: 'lowpass', Q: 0.6 },
+      { kind: 'tone', type: 'triangle', delay: 0, duration: 0.78, frequency: 67, endFrequency: 25, gain: 0.062, attack: 0.004, decay: 0.08, sustain: 0.38, release: 0.65, cutoff: 150, filterType: 'lowpass', Q: 0.55 },
+      { kind: 'noise', delay: 0, duration: 0.32, gain: 0.083, attack: 0.003, decay: 0.04, sustain: 0.32, release: 0.24, cutoff: 740, filterType: 'lowpass', Q: 0.7, playbackRate: 0.6 },
+      { kind: 'noise', delay: 0.17, duration: 0.09, gain: 0.036, attack: 0.003, decay: 0.012, sustain: 0.18, release: 0.065, cutoff: 1120, filterType: 'bandpass', Q: 0.85, playbackRate: 0.75 },
+      { kind: 'tone', type: 'triangle', delay: 0.36, duration: 0.085, frequency: 174, endFrequency: 71, gain: 0.026, attack: 0.003, decay: 0.012, sustain: 0.22, release: 0.06, cutoff: 430, filterType: 'lowpass', Q: 0.6 },
+      { kind: 'noise', delay: 0.63, duration: 0.1, gain: 0.021, attack: 0.004, decay: 0.015, sustain: 0.15, release: 0.075, cutoff: 490, filterType: 'lowpass', Q: 0.7, playbackRate: 0.55 },
     ],
+    // Ground bursts repeat during the burn field: quiet coal sighs and tiny
+    // stone ticks keep them underneath the initial detonation.
     pulse: [
-      { kind: 'noise', delay: 0, duration: 0.13, gain: 0.013, attack: 0.02, release: 0.1, cutoff: 550, filterType: 'lowpass' },
-      { kind: 'tone', type: 'triangle', delay: 0.025, duration: 0.1, frequency: 74, endFrequency: 42, gain: 0.012, attack: 0.015, release: 0.08 },
+      { kind: 'noise', delay: 0, duration: 0.16, gain: 0.012, attack: 0.022, decay: 0.025, sustain: 0.3, release: 0.1, cutoff: 410, filterType: 'lowpass', Q: 0.6, playbackRate: 0.6 },
+      { kind: 'tone', type: 'triangle', delay: 0.018, duration: 0.13, frequency: 81, endFrequency: 41, gain: 0.009, attack: 0.014, decay: 0.024, sustain: 0.3, release: 0.08, cutoff: 190, filterType: 'lowpass', Q: 0.6 },
+      { kind: 'noise', delay: 0.065, duration: 0.07, gain: 0.006, attack: 0.003, decay: 0.012, sustain: 0.18, release: 0.05, cutoff: 830, filterType: 'bandpass', Q: 0.7, playbackRate: 0.7 },
     ],
   },
 };
