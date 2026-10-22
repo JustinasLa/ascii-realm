@@ -355,22 +355,20 @@ export default {
     }
   },
   sounds: {
+    // Displaced water folds around the target, trapping a pocket of real air.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 116, endFrequency: 103, duration: 0.9, gain: 0.09, attack: 0.015, release: 0.75, cutoff: 540 },
-      { kind: 'tone', type: 'triangle', frequency: 273, endFrequency: 242, duration: 0.72, gain: 0.035, attack: 0.012, release: 0.65, cutoff: 600 },
-      { kind: 'tone', type: 'sine', delay: 0.2, frequency: 260, endFrequency: 410, duration: 0.14, gain: 0.045, attack: 0.015, release: 0.105 },
-      { kind: 'tone', type: 'sine', delay: 0.43, frequency: 350, endFrequency: 570, duration: 0.12, gain: 0.04, attack: 0.01, release: 0.09 },
-      { kind: 'tone', type: 'sine', delay: 0.61, frequency: 475, endFrequency: 760, duration: 0.1, gain: 0.035, attack: 0.01, release: 0.08 },
-      { kind: 'noise', delay: 0.16, duration: 0.65, gain: 0.025, attack: 0.12, release: 0.4, cutoff: 460, filterType: 'lowpass' },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.48, rate: 0.84, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.32, rate: 0.88, delay: 0.22 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.22, rate: 0.9, delay: 0.5 },
     ],
+    // A compact water blow closes the prison; trapped breath escapes after it.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 94, endFrequency: 43, duration: 0.52, gain: 0.095, attack: 0.06, release: 0.4 },
-      { kind: 'noise', duration: 0.33, gain: 0.065, attack: 0.025, release: 0.27, cutoff: 340, filterType: 'lowpass' },
-      { kind: 'tone', type: 'triangle', delay: 0.13, frequency: 186, endFrequency: 98, duration: 0.24, gain: 0.04, attack: 0.025, release: 0.19, cutoff: 360 },
-      { kind: 'tone', type: 'sine', delay: 0.26, frequency: 590, endFrequency: 860, duration: 0.1, gain: 0.025, attack: 0.01, release: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.43, rate: 0.8, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.28, rate: 0.82, delay: 0.18 },
     ],
+    // A single restrained pocket of air marks the repeated drowning ticks.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 225, endFrequency: 330, duration: 0.1, gain: 0.018, attack: 0.02, release: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.14, rate: 1.08, delay: 0 },
     ],
   },
 };

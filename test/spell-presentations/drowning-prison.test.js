@@ -6,6 +6,7 @@ import { paintPresentation } from '../../src/spells/presentation.js';
 import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { GameAudio } from '../../src/audio/audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 // The runtime stages as Drowning Prison actually raises them: the cast flash, the
 // flying capsule, the converging tide (r 3-4), the 4 s hold around the target
@@ -174,25 +175,25 @@ test('every stage is deterministic, moves, stays finite and within its plot budg
   }
 });
 
-test('the sound phrase combines a hollow gong, accelerating rising bubbles and a low pressure close', () => {
+test('the prison uses recorded enclosing water and restrained trapped-air ticks', () => {
   const { cast, impact, pulse } = profile.sounds;
-  const gong = cast.filter(voice => !voice.delay && voice.kind === 'tone');
-  assert.equal(gong.length, 2, 'two unequal partials make the submerged gong');
-  assert.ok(gong.every(voice => voice.duration > 0.6 && voice.release > 0.6));
-  const bubbles = cast.filter(voice => voice.kind === 'tone' && voice.delay > 0);
-  assert.ok(bubbles.length >= 3);
-  assert.ok(bubbles.every(voice => voice.endFrequency > voice.frequency));
-  assert.ok(bubbles[2].delay - bubbles[1].delay < bubbles[1].delay - bubbles[0].delay, 'bubble rhythm accelerates');
-  assert.ok(bubbles.every((voice, index) => index === 0 || voice.frequency > bubbles[index - 1].frequency));
-  assert.ok(impact.some(voice => voice.endFrequency < 60 && voice.attack >= 0.05), 'closing pressure is a rounded bass fall');
-  assert.ok(impact.some(voice => voice.kind === 'noise' && voice.cutoff < 500));
-  assert.ok(pulse.every(voice => voice.gain <= 0.025 && voice.duration <= 0.15), 'hold ticks stay quiet and brief');
+  assert.ok(cast.some(voice => voice.url.endsWith('/water-lift.wav')));
+  assert.ok(cast.some(voice => voice.url.endsWith('/wash.wav') && voice.delay > 0));
+  assert.ok(impact.some(voice => voice.url.endsWith('/water-strike.wav')));
+  assert.ok(impact.some(voice => voice.url.endsWith('/bubbles.wav') && voice.delay > 0));
+  assert.equal(pulse.length, 1, 'repeated ticks do not stack water impacts');
+  assert.ok(pulse.every(voice => voice.url.endsWith('/bubbles.wav') && voice.gain <= 0.16 && voice.rate >= 1));
+  const fields = ['delay', 'gain', 'kind', 'rate', 'url'];
   for (const voices of Object.values(profile.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
+    assert.ok(voices.length >= 1 && voices.length <= 3);
+    assert.ok(voices.reduce((sum, voice) => sum + voice.gain, 0) <= 1.2);
     for (const voice of voices) {
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
+      assert.equal(voice.kind, 'recording');
+      assert.deepEqual(Object.keys(voice).sort(), fields, 'only recorded-foley parameters are authored');
+      assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
+      assert.ok(voice.delay >= 0 && voice.delay <= 2);
       assert.ok(Object.values(voice).filter(value => typeof value === 'number').every(Number.isFinite));
     }
   }
@@ -219,8 +220,9 @@ test('a real rune cast renders its profile and emits spell cues while preserving
   assert.ok(events.every(event => event.presentation === profile && !['draw', 'slam'].includes(event.type)));
 });
 
-test('the authored layers run through spatial SFX without invalid audio parameters', () => {
+test('the recorded layers run through spatial SFX without invalid audio parameters', async () => {
   const fake = fakeRecordedAudio(), audio = new GameAudio({}, fake.engine), owner = {};
+  await prepareRecordedSpellTest(fake, profile);
   for (const stage of ['cast', 'impact', 'pulse']) {
     const handles = audio.play({ type: 'spell', stage, presentation: profile, owner, x: 4, y: 12 });
     assert.equal(handles.length, profile.sounds[stage].length);

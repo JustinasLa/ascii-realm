@@ -278,20 +278,19 @@ export default {
     else eddy(o, effect);
   },
   sounds: {
+    // Real creek displacement gathers into a quick, close water strike.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 1320, endFrequency: 410, duration: 0.1, gain: 0.08, attack: 0.001, release: 0.09 },
-      { kind: 'tone', type: 'sine', frequency: 230, endFrequency: 135, delay: 0.065, duration: 0.12, gain: 0.065, attack: 0.012, release: 0.09 },
-      { kind: 'tone', type: 'sine', frequency: 135, endFrequency: 205, delay: 0.155, duration: 0.15, gain: 0.045, attack: 0.025, release: 0.11 },
-      { kind: 'noise', delay: 0.035, duration: 0.12, gain: 0.027, cutoff: 1800, filterType: 'bandpass', attack: 0.02, release: 0.09 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.48, rate: 1.08, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.32, rate: 1.15, delay: 0.08 },
     ],
+    // A physical splash breaks the spear; loose droplets fall after contact.
     impact: [
-      { kind: 'noise', duration: 0.075, gain: 0.095, cutoff: 3600, filterType: 'highpass', attack: 0.001, release: 0.065 },
-      { kind: 'noise', delay: 0.04, duration: 0.26, gain: 0.065, cutoff: 1000, filterType: 'bandpass', attack: 0.015, release: 0.22 },
-      { kind: 'tone', type: 'sine', frequency: 540, endFrequency: 180, delay: 0.02, duration: 0.13, gain: 0.065, attack: 0.002, release: 0.12 },
-      { kind: 'tone', type: 'sine', frequency: 960, endFrequency: 420, delay: 0.14, duration: 0.08, gain: 0.025, attack: 0.001, release: 0.07 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.7, rate: 0.95, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.2, rate: 1.02, delay: 0.12 },
     ],
+    // Flight wakes keep the creek's small splashes quiet and natural.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 680, endFrequency: 300, duration: 0.055, gain: 0.014, attack: 0.001, release: 0.05 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.1, rate: 1.12, delay: 0 },
     ],
   },
 };

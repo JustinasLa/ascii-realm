@@ -3,9 +3,7 @@ import test from 'node:test';
 import presentation from '../../src/spells/presentations/tide-shard.js';
 import spell from '../../src/spells/definitions/tide-shard.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
-import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
-import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 
 // Radii and lives follow what the rune really spawns: the cast flash, the flying
 // shard, in-flight wake ticks, the wide hit splash and the damage impact.
@@ -167,34 +165,25 @@ test('the paint adapter keeps every stage under its glyph cap', () => {
   }
 });
 
-test('the sound recipe has a high plip, reversing low liquid wobble and crisp splash tail', () => {
+test('the sound recipe uses natural water foley with a quiet repeated wake', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  const tones = cast.filter(v => v.kind === 'tone');
-  assert.ok(tones.every(v => v.type === 'sine'), 'rounded liquid tones avoid metallic harmonics');
-  assert.ok(tones[0].frequency > 1000 && tones[0].endFrequency < tones[0].frequency);
-  assert.ok(tones[1].frequency < 300 && tones[1].endFrequency < tones[1].frequency);
-  assert.equal(tones[1].endFrequency, tones[2].frequency);
-  assert.ok(tones[2].endFrequency > tones[2].frequency && tones[2].delay > tones[1].delay, 'low wobble reverses direction after the plip');
-  const sharp = impact.find(v => v.kind === 'noise' && v.filterType === 'highpass');
-  const body = impact.find(v => v.kind === 'noise' && v.filterType === 'bandpass');
-  assert.ok(sharp.attack <= 0.002 && sharp.duration < body.duration && body.delay > 0, 'splash opens crisply before a liquid wash');
-  assert.ok(impact.some(v => v.kind === 'tone' && v.delay > 0.1), 'a final water bead follows the splash');
-  assert.ok(pulse.every(v => v.gain < 0.025 && v.duration < 0.1), 'repeating ticks remain quiet and short');
+  assert.match(cast[0].url, /water-lift\.wav$/, 'creek displacement leads the release');
+  assert.ok(cast.some(v => v.url.endsWith('/water-strike.wav') && v.delay > cast[0].delay));
+  assert.match(impact[0].url, /water-strike\.wav$/, 'contact begins with a physical splash');
+  assert.ok(impact.some(v => v.url.endsWith('/droplets.wav') && v.delay > 0));
+  assert.ok(pulse.every(v => v.url.endsWith('/droplets.wav') && v.gain <= 0.12), 'repeated wakes stay restrained');
   for (const recipe of [cast, impact, pulse]) {
-    assert.ok(recipe.length > 0 && recipe.length <= 8);
+    assert.ok(recipe.length >= 1 && recipe.length <= 3);
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
     for (const v of recipe) {
-      assert.ok(v.gain > 0 && v.gain <= 0.25 && v.duration > 0 && v.duration <= 2.5);
-      assert.ok((v.delay ?? 0) >= 0 && (v.delay ?? 0) <= 2);
+      assert.equal(v.kind, 'recording');
+      assert.match(v.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(v.gain >= 0.1 && v.gain <= 0.8);
+      assert.ok(v.rate >= 0.75 && v.rate <= 1.2, 'gentle playback rates retain natural water detail');
+      assert.ok(v.delay >= 0 && v.delay <= 2);
+      assert.deepEqual(Object.keys(v).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
     }
   }
-  const fake = fakeRecordedAudio();
-  for (const stage of ['cast', 'impact', 'pulse']) {
-    const handles = playSpellSound(fake.engine, { stage, presentation, x: 4, y: 7 });
-    assert.equal(handles.length, presentation.sounds[stage].length);
-    for (const handle of handles) handle.stop();
-  }
-  assert.ok(fake.routes.every(r => r.bus === 'sfx' && r.x === 4 && r.y === 7 && r.disposals === 1));
-  assert.deepEqual(fake.invalid, []);
 });
 
 test('real rune casts render the shard, wake and crown and emit typed liquid cues without sword sounds', () => {

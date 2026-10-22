@@ -278,21 +278,19 @@ export default {
     (stages[effect.stage] ?? cast)(state, lifted(effect, plot));
   },
   sounds: {
+    // Real boiling leads the gathering pool; a close water rush rolls out behind it.
     cast: [
-      { kind: 'noise', duration: 0.48, gain: 0.075, cutoff: 2300, filterType: 'highpass', attack: 0.075, release: 0.2 },
-      { kind: 'noise', delay: 0.025, duration: 0.5, gain: 0.065, cutoff: 260, filterType: 'bandpass', attack: 0.035, release: 0.2 },
-      { kind: 'tone', type: 'sine', delay: 0.07, duration: 0.11, gain: 0.045, frequency: 165, endFrequency: 69, attack: 0.006, release: 0.08 },
-      { kind: 'tone', type: 'sine', delay: 0.19, duration: 0.14, gain: 0.04, frequency: 210, endFrequency: 84, attack: 0.008, release: 0.1 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/boil.wav', gain: 0.6, rate: 0.92, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.36, rate: 0.9, delay: 0.16 },
     ],
+    // A wet slap and close bubbling preserve the irregular texture of scalding water.
     impact: [
-      { kind: 'noise', duration: 0.065, gain: 0.09, cutoff: 5200, filterType: 'highpass', attack: 0.002, release: 0.055 },
-      { kind: 'noise', delay: 0.018, duration: 0.36, gain: 0.08, cutoff: 3800, filterType: 'bandpass', attack: 0.012, release: 0.28 },
-      { kind: 'noise', delay: 0.04, duration: 0.25, gain: 0.05, cutoff: 390, filterType: 'bandpass', attack: 0.01, release: 0.18 },
-      { kind: 'tone', type: 'sine', delay: 0.04, duration: 0.1, gain: 0.045, frequency: 230, endFrequency: 76, attack: 0.005, release: 0.075 },
-      { kind: 'tone', type: 'sine', delay: 0.115, duration: 0.08, gain: 0.03, frequency: 175, endFrequency: 63, attack: 0.005, release: 0.06 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.38, rate: 0.93, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.34, rate: 1.04, delay: 0.08 },
     ],
+    // Quiet natural simmer under the repeated cone visuals.
     pulse: [
-      { kind: 'noise', duration: 0.075, gain: 0.018, cutoff: 2800, filterType: 'highpass', attack: 0.015, release: 0.055 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/boil.wav', gain: 0.1, rate: 1.1, delay: 0 },
     ],
   },
 };

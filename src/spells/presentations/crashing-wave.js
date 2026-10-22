@@ -284,18 +284,20 @@ export default {
     }
   },
   sounds: {
+    // Recorded water displacement gathers at the caster before the crest lifts.
     cast: [
-      { kind: 'noise', duration: 0.68, gain: 0.07, cutoff: 520, filterType: 'lowpass', attack: 0.3, release: 0.3 },
-      { kind: 'noise', delay: 0.12, duration: 0.56, gain: 0.055, cutoff: 950, filterType: 'bandpass', attack: 0.18, release: 0.3 },
-      { kind: 'tone', type: 'sine', frequency: 80, endFrequency: 48, duration: 0.66, gain: 0.032, attack: 0.2, release: 0.4 },
-      { kind: 'noise', delay: 0.35, duration: 0.38, gain: 0.04, cutoff: 2300, filterType: 'highpass', attack: 0.12, release: 0.22 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.55, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.25, rate: 0.94, delay: 0.18 },
     ],
+    // Keep the complete splash and its natural texture; a later wash carries
+    // the broken wave back out after the heavy crest lands.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 104, endFrequency: 34, duration: 0.42, gain: 0.12, attack: 0.006, release: 0.38 },
-      { kind: 'noise', duration: 0.32, gain: 0.08, cutoff: 340, filterType: 'lowpass', attack: 0.005, release: 0.28 },
-      { kind: 'noise', delay: 0.035, duration: 0.9, gain: 0.1, cutoff: 1400, filterType: 'bandpass', attack: 0.012, release: 0.7 },
-      { kind: 'noise', delay: 0.13, duration: 1.45, gain: 0.055, cutoff: 2900, filterType: 'highpass', attack: 0.16, release: 1.12 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker.wav', gain: 0.76, rate: 0.9, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.3, rate: 0.88, delay: 1.8 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.08, gain: 0.016, cutoff: 1200, filterType: 'bandpass', attack: 0.015, release: 0.06 }],
+    // Sparse real droplets make the repeated wake audible without another slam.
+    pulse: [
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.1, rate: 1.12, delay: 0 },
+    ],
   },
 };

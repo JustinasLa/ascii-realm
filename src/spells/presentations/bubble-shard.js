@@ -373,18 +373,20 @@ export default {
     (STAGES[effect.stage] ?? cast)(pen(effect, plot), effect);
   },
   sounds: {
+    // Close recorded bubbles swell into uneven droplets and displaced water.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 470, endFrequency: 155, delay: 0, duration: 0.14, gain: 0.075, attack: 0.008, release: 0.1 },
-      { kind: 'tone', type: 'sine', frequency: 730, endFrequency: 285, delay: 0.14, duration: 0.105, gain: 0.063, attack: 0.006, release: 0.08 },
-      { kind: 'tone', type: 'sine', frequency: 350, endFrequency: 115, delay: 0.38, duration: 0.17, gain: 0.07, attack: 0.01, release: 0.13 },
-      { kind: 'noise', delay: 0.025, duration: 0.07, gain: 0.014, cutoff: 1700, filterType: 'lowpass', attack: 0.008, release: 0.05 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.49, rate: 0.89, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.24, rate: 1.04, delay: 0.137 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.28, rate: 0.96, delay: 0.367 },
     ],
+    // A physical water strike bursts the shell, leaving little wet bubbles.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 820, endFrequency: 235, delay: 0, duration: 0.085, gain: 0.067, attack: 0.004, release: 0.065 },
-      { kind: 'tone', type: 'sine', frequency: 570, endFrequency: 190, delay: 0.065, duration: 0.11, gain: 0.057, attack: 0.006, release: 0.08 },
-      { kind: 'tone', type: 'sine', frequency: 960, endFrequency: 310, delay: 0.19, duration: 0.075, gain: 0.044, attack: 0.004, release: 0.055 },
-      { kind: 'noise', delay: 0.035, duration: 0.08, gain: 0.022, cutoff: 1400, filterType: 'bandpass', attack: 0.004, release: 0.06 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.63, rate: 0.96, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.23, rate: 1.03, delay: 0.173 },
     ],
-    pulse: [{ kind: 'tone', type: 'sine', frequency: 380, endFrequency: 220, duration: 0.045, gain: 0.012, attack: 0.003, release: 0.035 }],
+    // Flight sheds a restrained natural bubble texture beneath the impact.
+    pulse: [
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.1, rate: 1.12, delay: 0 },
+    ],
   },
 };

@@ -323,21 +323,19 @@ export default {
     core('@', shade(0.85 + 0.15 * flash), level * Math.max(0.8 * (1 - dis), flash));
   },
   sounds: {
+    // Real displaced water draws the seal; close bubbles mark its inscription.
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 122, endFrequency: 116, duration: 1.05, gain: 0.038, attack: 0.13, release: 0.32, cutoff: 360 },
-      { kind: 'tone', type: 'sine', frequency: 540, endFrequency: 360, delay: 0.06, duration: 0.23, gain: 0.075, attack: 0.004, release: 0.19 },
-      { kind: 'tone', type: 'sine', frequency: 675, endFrequency: 450, delay: 0.3, duration: 0.23, gain: 0.068, attack: 0.004, release: 0.19 },
-      { kind: 'tone', type: 'sine', frequency: 810, endFrequency: 540, delay: 0.54, duration: 0.27, gain: 0.062, attack: 0.004, release: 0.23 },
-      { kind: 'noise', delay: 0.08, duration: 0.76, gain: 0.018, attack: 0.12, release: 0.3, cutoff: 520, filterType: 'lowpass' },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.43, rate: 0.88, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.29, rate: 0.92, delay: 0.34 },
     ],
+    // A physical splash opens into a full breaker and falling water.
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 1260, endFrequency: 730, duration: 0.24, gain: 0.09, attack: 0.003, release: 0.2 },
-      { kind: 'tone', type: 'sine', frequency: 365, endFrequency: 182, delay: 0.04, duration: 0.42, gain: 0.052, attack: 0.015, release: 0.33 },
-      { kind: 'noise', delay: 0.015, duration: 0.21, gain: 0.027, attack: 0.008, release: 0.17, cutoff: 1100, filterType: 'bandpass' },
-      { kind: 'tone', type: 'sine', frequency: 1460, endFrequency: 980, delay: 0.15, duration: 0.16, gain: 0.028, attack: 0.002, release: 0.14 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.55, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/breaker.wav', gain: 0.38, rate: 0.94, delay: 0.08 },
     ],
+    // Repeated glyph contact carries only a quiet returning wash.
     pulse: [
-      { kind: 'tone', type: 'sine', frequency: 450, endFrequency: 360, duration: 0.12, gain: 0.016, attack: 0.004, release: 0.1 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.13, rate: 1.08, delay: 0 },
     ],
   },
 };

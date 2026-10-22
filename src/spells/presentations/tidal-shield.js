@@ -321,23 +321,19 @@ export default {
     else if (effect.stage === 'zone') pool(effect, put);
     else surf(effect, put);
   },
+  // Close water displacement rises into a broad returning wash. A bucket
+  // splash supplies the shove; falling creek droplets mark the quiet pulse.
   sounds: {
     cast: [
-      { kind: 'tone', type: 'sine', frequency: 160, endFrequency: 220, duration: 0.75, gain: 0.055, attack: 0.1, release: 0.24, cutoff: 1100 },
-      { kind: 'tone', type: 'sine', delay: 0.035, frequency: 237, endFrequency: 330, duration: 0.73, gain: 0.04, attack: 0.12, release: 0.26, cutoff: 1400 },
-      { kind: 'tone', type: 'triangle', delay: 0.07, frequency: 326, endFrequency: 440, duration: 0.68, gain: 0.025, attack: 0.1, release: 0.25, cutoff: 850 },
-      { kind: 'noise', delay: 0.12, duration: 0.16, gain: 0.045, attack: 0.045, release: 0.1, cutoff: 740, filterType: 'lowpass' },
-      { kind: 'noise', delay: 0.36, duration: 0.2, gain: 0.035, attack: 0.06, release: 0.12, cutoff: 970, filterType: 'lowpass' },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.62, rate: 0.85, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.46, rate: 0.9, delay: 0.3 },
     ],
     impact: [
-      { kind: 'tone', type: 'sine', frequency: 280, endFrequency: 125, duration: 0.32, gain: 0.08, attack: 0.004, release: 0.27 },
-      { kind: 'tone', type: 'triangle', delay: 0.022, frequency: 560, endFrequency: 260, duration: 0.23, gain: 0.027, attack: 0.006, release: 0.2, cutoff: 900 },
-      { kind: 'noise', delay: 0.018, duration: 0.16, gain: 0.05, attack: 0.015, release: 0.13, cutoff: 1250, filterType: 'bandpass' },
-      { kind: 'tone', type: 'sine', delay: 0.14, frequency: 190, endFrequency: 95, duration: 0.22, gain: 0.035, attack: 0.015, release: 0.18 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.67, rate: 0.82, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.23, rate: 0.95, delay: 0.2 },
     ],
     pulse: [
-      { kind: 'noise', duration: 0.12, gain: 0.018, attack: 0.025, release: 0.08, cutoff: 680, filterType: 'lowpass' },
-      { kind: 'tone', type: 'sine', delay: 0.025, frequency: 105, endFrequency: 80, duration: 0.13, gain: 0.018, attack: 0.025, release: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.12, rate: 0.9, delay: 0 },
     ],
   },
 };

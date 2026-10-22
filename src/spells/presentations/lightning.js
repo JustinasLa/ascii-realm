@@ -243,20 +243,18 @@ export default {
     }
   },
   sounds: {
+    // Physical rain gathers before the strike; its irregular drops carry the tension.
     cast: [
-      { kind: 'noise', duration: 0.5, gain: 0.05, cutoff: 3200, filterType: 'highpass', attack: 0.2, release: 0.2 },
-      { kind: 'tone', type: 'sawtooth', frequency: 70, endFrequency: 140, duration: 0.5, gain: 0.018, attack: 0.25, release: 0.2 },
-      { kind: 'noise', delay: 0.24, duration: 0.06, gain: 0.07, cutoff: 4200, filterType: 'bandpass', attack: 0.002, release: 0.05 },
-      { kind: 'noise', delay: 0.31, duration: 0.05, gain: 0.06, cutoff: 5200, filterType: 'bandpass', attack: 0.002, release: 0.04 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-rain.wav', gain: 0.29, rate: 1, delay: 0 },
     ],
+    // Preserve the recorded thunderclap and its complete rolling tail at natural pitch.
     impact: [
-      { kind: 'noise', duration: 0.18, gain: 0.22, cutoff: 1800, filterType: 'highpass', attack: 0.001, release: 0.16 },
-      { kind: 'tone', type: 'square', frequency: 1900, endFrequency: 140, duration: 0.14, gain: 0.03, attack: 0.001, release: 0.12 },
-      { kind: 'noise', delay: 0.01, duration: 0.5, gain: 0.12, cutoff: 900, filterType: 'bandpass', attack: 0.003, release: 0.45 },
-      { kind: 'tone', type: 'sine', frequency: 70, endFrequency: 32, duration: 1.4, gain: 0.1, attack: 0.01, release: 1.3 },
-      { kind: 'noise', delay: 0.06, duration: 1.8, gain: 0.07, cutoff: 260, filterType: 'lowpass', attack: 0.08, release: 1.5 },
-      { kind: 'noise', delay: 0.28, duration: 0.12, gain: 0.08, cutoff: 2400, filterType: 'highpass', attack: 0.002, release: 0.1 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/thunder-clap.wav', gain: 0.76, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-rain.wav', gain: 0.15, rate: 1, delay: 0.16 },
     ],
-    pulse: [{ kind: 'noise', duration: 0.12, gain: 0.02, cutoff: 3600, filterType: 'bandpass', attack: 0.01, release: 0.1 }],
+    // Quiet rain ticks accompany the ground charge and chained effects.
+    pulse: [
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/storm-rain.wav', gain: 0.12, rate: 1, delay: 0 },
+    ],
   },
 };

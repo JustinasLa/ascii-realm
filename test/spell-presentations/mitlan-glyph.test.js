@@ -4,9 +4,11 @@ import presentation from '../../src/spells/presentations/mitlan-glyph.js';
 import spell from '../../src/spells/definitions/mitlan-glyph.js';
 import { SpellEffects } from '../../src/spells/effects.js';
 import { paintPresentation } from '../../src/spells/presentation.js';
-import { playSpellSound } from '../../src/audio/spells.js';
 import { runeScene } from '../../test-support/spells.js';
+import { readFile } from 'node:fs/promises';
+import { playSpellSound } from '../../src/audio/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
+import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
 
 function draw(stage, progress = 0.35, overrides = {}) {
   const points = [];
@@ -146,38 +148,42 @@ test('all stages remain deterministic, finite and within budget, then fade clean
   }
 });
 
-test('sound phrase has three timed liquid glides over a submerged hum and a separate droplet seal', () => {
-  const cast = presentation.sounds.cast;
-  const hum = cast.find(v => v.kind === 'tone' && v.frequency < 200);
-  assert.ok(hum.duration > 0.8 && hum.attack > 0.1 && hum.cutoff < 500);
-  const notes = cast.filter(v => v.kind === 'tone' && v !== hum);
-  assert.equal(notes.length, 3);
-  assert.ok(notes.every(v => v.type === 'sine' && v.endFrequency < v.frequency && v.attack < 0.01));
-  assert.ok(notes[0].frequency < notes[1].frequency && notes[1].frequency < notes[2].frequency);
-  assert.ok(Math.abs((notes[1].delay - notes[0].delay) - (notes[2].delay - notes[1].delay)) < 1e-9);
-  assert.ok(presentation.sounds.impact.some(v => v.kind === 'tone' && v.frequency > 1000 && v.attack < 0.005));
-  assert.notDeepEqual(presentation.sounds.impact, cast);
-  assert.ok(presentation.sounds.pulse.every(v => v.gain < 0.025 && v.duration < 0.15));
-  for (const voices of Object.values(presentation.sounds)) {
-    assert.ok(voices.length > 0 && voices.length <= 8);
-    for (const voice of voices) {
-      assert.ok(voice.duration > 0 && voice.duration <= 2.5);
-      assert.ok(voice.gain > 0 && voice.gain <= 0.25);
-      assert.ok((voice.delay ?? 0) >= 0 && (voice.delay ?? 0) <= 2);
-      assert.ok(Object.values(voice).filter(v => typeof v === 'number').every(Number.isFinite));
+test('glyph sound uses recorded inscription, geyser and restrained wash layers', async () => {
+  const sounds = presentation.sounds;
+  assert.deepEqual(Object.keys(sounds), ['cast', 'impact', 'pulse']);
+  assert.ok(sounds.cast.some(v => v.url.endsWith('/water-lift.wav')));
+  assert.ok(sounds.cast.some(v => v.url.endsWith('/bubbles.wav') && v.delay > 0));
+  assert.ok(sounds.impact.some(v => v.url.endsWith('/breaker.wav')));
+  assert.ok(sounds.pulse.every(v => v.gain <= 0.15), 'recurring wash stays beneath the geyser');
+  for (const layers of Object.values(sounds)) {
+    assert.ok(layers.length >= 1 && layers.length <= 3);
+    assert.ok(layers.reduce((sum, layer) => sum + layer.gain, 0) <= 1.2);
+    for (const layer of layers) {
+      assert.equal(layer.kind, 'recording');
+      assert.deepEqual(Object.keys(layer).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);
+      assert.match(layer.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
+      assert.ok(layer.gain >= 0.1 && layer.gain <= 0.8);
+      assert.ok(layer.rate >= 0.75 && layer.rate <= 1.2);
+      assert.ok(layer.delay >= 0 && layer.delay <= 2);
+      const bytes = await readFile(new URL(`../../${layer.url.slice(1)}`, import.meta.url));
+      assert.equal(bytes.toString('ascii', 0, 4), 'RIFF');
+      assert.equal(bytes.toString('ascii', 8, 12), 'WAVE');
+      assert.ok(bytes.length > 1000, 'recording contains audio data');
     }
   }
 });
 
-test('authored liquid layers schedule their delays through the spatial effects bus', () => {
+test('recorded water layers schedule their delays through the spatial effects bus', async () => {
   const fake = fakeRecordedAudio();
-  for (const stage of ['cast', 'impact']) {
+  await prepareRecordedSpellTest(fake, presentation);
+  for (const stage of ['cast', 'impact', 'pulse']) {
     const before = fake.nodes.length;
     const handles = playSpellSound(fake.engine, { type: 'spell', stage, presentation, x: 3, y: 9 });
-    const sources = fake.nodes.slice(before).filter(n => n.kind === 'oscillator' || n.kind === 'source');
+    const sources = fake.nodes.slice(before).filter(n => n.kind === 'source');
     assert.equal(handles.length, presentation.sounds[stage].length);
     assert.deepEqual(sources.map(n => n.starts[0]),
-      presentation.sounds[stage].map(voice => fake.context.currentTime + (voice.delay ?? 0)));
+      presentation.sounds[stage].map(voice => fake.context.currentTime + voice.delay));
+    assert.ok(!fake.nodes.slice(before).some(n => n.kind === 'oscillator'));
     handles.forEach(handle => handle.stop());
   }
   assert.ok(fake.routes.every(route => route.bus === 'sfx' && route.x === 3 && route.y === 9 && route.disposals === 1));
