@@ -1,0 +1,31 @@
+// Authored for ASCII Realm in TF's rune graph format; not part of the TF snapshot.
+import presentation from '../presentations/rekindle.js';
+
+export default {
+  presentation,
+  "id": "rekindle",
+  "name": "Rekindle",
+  "element": "oseni",
+  "root": "rekindle",
+  "variants": [
+    {
+      "id": "rune",
+      "kind": "rune",
+      "params": {
+        "mana": 8.0,
+        "heal": 10.0,
+        "burn": 4.0
+      },
+      "root": "rekindle",
+      "trigger": "CAST"
+    }
+  ],
+  "supportive": true,
+  "nodes": {
+    "rekindle": {"steps":[{"op":"heal","args":{"a":"<modifier.heal>"},"target":{"op":"self","args":{}}},{"op":"aura","args":{"auraname":"Rekindle","d":"70","i":"20","ot":"Rekindle_TICK","delay":"20"},"target":{"op":"self","args":{}}}],"conditions":["hasaura{aura=Silenced} castinstead Silence_MSG"]},
+    "silence_msg": {"steps":[{"op":"randomskill","args":{"s":"Silence_MSG_1"},"target":{"op":"self","args":{}}}],"cooldown":1},
+    "silence_msg_1": {"steps":[{"op":"actionmessage","args":{"m":"<gradient:#15e5ff:#82e8f5> You are Silenced </gradient>"}}]},
+    "rekindle_tick": {"steps":[{"op":"heal","args":{"a":"<modifier.burn>"},"target":{"op":"self","args":{}}}]}
+  },
+  "source": {"authored": "ASCII Realm 2026-10-22"}
+};

@@ -26,6 +26,9 @@ half damage. The chain is MythicMobs' `chain` mechanic (`bounces`,
 `originradius`, which also admits anything that close to the skill's origin.
 Its `fakelightning` step reaches the host through `onLightning`, which the game
 answers with the storm's recorded thunder.
+Oseni's Rekindle is authored the same way: it heals the caster 10 at once, then
+a `Rekindle` aura heals 4 more each second for four seconds, starting a second
+after the cast (26 in all). It never touches allies or foes.
 
 The runtime preserves configured modifiers, conditions, targeting, repeats,
 delays, aura ticks, shields and status effects. Tick counts are converted to
