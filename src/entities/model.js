@@ -27,8 +27,8 @@ const SY = 6;
 const N = SX * SY;
 // How high the foot bone sits above the ground when the foot is flat.
 const FOOT_FLOOR = 0.1;
-// The region drawn around the feet, in cells, tall enough for a somersault
-// at the top of a second jump.
+// The region drawn around the airborne feet, in cells, with room for tricks.
+// It follows jump height so spell launches cannot leave the render target.
 const COLS = 36;
 const ROWS = 52;
 const FEET_ROW = 47;
@@ -440,6 +440,7 @@ export class ModelFigure {
   // Sets the pose for this frame from the player's state.
   update(dt, p) {
     this.posePending = false;
+    this.renderLift = p.air * COS * SCALE;
     const cb = p.combat;
     // The legs follow the ground actually covered this frame: as soon as the
     // body stops, so do they, rather than running on in place while a
@@ -860,10 +861,11 @@ export class ModelFigure {
   // starts the GPU now, so its work can overlap the rest of this frame.
   renderPose(x, y) {
     const cx0 = Math.floor(x) - (COLS >> 1);
-    const cy0 = Math.floor(y) - FEET_ROW;
+    const cy0 = Math.floor(y - (this.renderLift ?? 0)) - FEET_ROW;
     const widthM = (COLS * ASPECT) / SCALE;
     const heightM = ROWS / SCALE;
-    // Offset the frustum so the feet land exactly at their fractional cell.
+    // Keep projection anchored to the ground while the image window follows
+    // the airborne body; its cells still land at their exact world positions.
     const fx = (x - cx0) / COLS;
     const fy = (y - cy0) / ROWS;
     const cam = this.camera;
@@ -899,7 +901,7 @@ export class ModelFigure {
     if (!this.posePending || this.renderedX !== x || this.renderedY !== y) this.renderPose(x, y);
     this.posePending = false;
     const cx0 = Math.floor(x) - (COLS >> 1);
-    const cy0 = Math.floor(y) - FEET_ROW;
+    const cy0 = Math.floor(y - (this.renderLift ?? 0)) - FEET_ROW;
     const w = COLS * SX;
     const h = ROWS * SY;
     const gl = this.renderer.getContext();
