@@ -453,23 +453,17 @@ export default {
     }
   },
   sounds: {
-    // Displaced water rolls back into the throat, with real bubbles following
-    // behind the wash to give the whirlpool a churning, circular cadence.
+    // Three wind lobes turn around the centre before collapsing inward.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.36, rate: 0.86, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.46, rate: 0.8, delay: 0.18 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.24, rate: 0.88, delay: 0.58 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/vortex-turn.wav', gain: 0.31, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/vortex-collapse.wav', gain: 0.12, rate: 1, delay: 0.56 },
     ],
-    // A close splash collapses into returning water and trapped air.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.48, rate: 0.8, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.36, rate: 0.9, delay: 0.13 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.22, rate: 0.78, delay: 0.36 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/vortex-collapse.wav', gain: 0.3, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/vortex-turn.wav', gain: 0.13, rate: 1.15, delay: 0.17 },
     ],
-    // Gentle recurring churn leaves headroom for overlapping zone pulses.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.12, rate: 1.12, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/wash.wav', gain: 0.1, rate: 1.16, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/vortex-turn.wav', gain: 0.065, rate: 1.18, delay: 0 },
     ],
   },
 };

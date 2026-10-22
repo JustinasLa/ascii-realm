@@ -165,20 +165,20 @@ test('the paint adapter keeps every stage under its glyph cap', () => {
   }
 });
 
-test('the sound recipe uses natural water foley with a quiet repeated wake', () => {
+test('the sound recipe uses current movement and dry contact with a quiet repeated wake', () => {
   const { cast, impact, pulse } = presentation.sounds;
-  assert.match(cast[0].url, /water-lift\.wav$/, 'creek displacement leads the release');
-  assert.ok(cast.some(v => v.url.endsWith('/water-strike.wav') && v.delay > cast[0].delay));
-  assert.match(impact[0].url, /water-strike\.wav$/, 'contact begins with a physical splash');
-  assert.ok(impact.some(v => v.url.endsWith('/droplets.wav') && v.delay > 0));
-  assert.ok(pulse.every(v => v.url.endsWith('/droplets.wav') && v.gain <= 0.12), 'repeated wakes stay restrained');
+  assert.match(cast[0].url, /needle-cut\.wav$/, 'current gathering leads the release');
+  assert.ok(cast.some(v => v.url.endsWith('/shard-tick.wav') && v.delay > cast[0].delay));
+  assert.match(impact[0].url, /shard-tick\.wav$/, 'contact begins with a compact dry impulse');
+  assert.ok(impact.some(v => v.url.endsWith('/needle-cut.wav') && v.delay > 0));
+  assert.ok(pulse.every(v => v.url.endsWith('/needle-cut.wav') && v.gain <= 0.12), 'repeated wakes stay restrained');
   for (const recipe of [cast, impact, pulse]) {
     assert.ok(recipe.length >= 1 && recipe.length <= 3);
-    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    assert.ok(recipe.reduce((sum, v) => sum + v.gain, 0) <= 0.65);
     for (const v of recipe) {
       assert.equal(v.kind, 'recording');
       assert.match(v.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-      assert.ok(v.gain >= 0.1 && v.gain <= 0.8);
+      assert.ok(v.gain >= 0.04 && v.gain <= 0.35);
       assert.ok(v.rate >= 0.75 && v.rate <= 1.2, 'gentle playback rates retain natural water detail');
       assert.ok(v.delay >= 0 && v.delay <= 2);
       assert.deepEqual(Object.keys(v).sort(), ['delay', 'gain', 'kind', 'rate', 'url']);

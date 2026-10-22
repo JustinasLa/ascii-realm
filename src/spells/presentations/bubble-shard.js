@@ -373,20 +373,18 @@ export default {
     (STAGES[effect.stage] ?? cast)(pen(effect, plot), effect);
   },
   sounds: {
-    // Close recorded bubbles swell into uneven droplets and displaced water.
+    // A taut membrane flexes and releases in an uneven hollow double-pop.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.49, rate: 0.89, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.24, rate: 1.04, delay: 0.137 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.28, rate: 0.96, delay: 0.367 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/membrane-flex.wav', gain: 0.28, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.13, rate: 0.95, delay: 0.23 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.1, rate: 1.12, delay: 0.55 },
     ],
-    // A physical water strike bursts the shell, leaving little wet bubbles.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.63, rate: 0.96, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.23, rate: 1.03, delay: 0.173 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.32, rate: 1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/hollow-pop.wav', gain: 0.13, rate: 1.18, delay: 0.115 },
     ],
-    // Flight sheds a restrained natural bubble texture beneath the impact.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/bubbles.wav', gain: 0.1, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/membrane-flex.wav', gain: 0.065, rate: 1.12, delay: 0 },
     ],
   },
 };

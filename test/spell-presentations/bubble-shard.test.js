@@ -170,21 +170,21 @@ test('Bubble Shard uses natural water recordings with irregular bubbles and a ph
   for (const stage of ['cast', 'impact', 'pulse']) {
     const voices = presentation.sounds[stage];
     assert.ok(voices.length >= 1 && voices.length <= 3);
-    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 1.2);
+    assert.ok(voices.reduce((sum, v) => sum + v.gain, 0) <= 0.65);
     for (const voice of voices) {
       assert.deepEqual(Object.keys(voice).sort(), allowed, 'recordings preserve their natural detail');
       assert.equal(voice.kind, 'recording');
       assert.match(voice.url, /^\/assets\/audio\/spells\/mitlan\/[a-z-]+\.wav$/);
-      assert.ok(voice.gain >= 0.1 && voice.gain <= 0.8);
+      assert.ok(voice.gain >= 0.04 && voice.gain <= 0.35);
       assert.ok(voice.rate >= 0.75 && voice.rate <= 1.2);
       assert.ok(voice.delay >= 0 && voice.delay <= 2);
     }
   }
   const cast = presentation.sounds.cast;
-  assert.ok(cast.some(v => v.url.endsWith('/bubbles.wav')));
-  assert.ok(cast.some(v => v.url.endsWith('/droplets.wav')));
-  assert.notEqual(cast[1].delay - cast[0].delay, cast[2].delay - cast[1].delay, 'irregular wet rupture rhythm');
-  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/water-strike.wav') && v.delay === 0));
+  assert.ok(cast.some(v => v.url.endsWith('/membrane-flex.wav')));
+  assert.ok(cast.some(v => v.url.endsWith('/hollow-pop.wav')));
+  assert.notEqual(cast[1].delay - cast[0].delay, cast[2].delay - cast[1].delay, 'irregular pressure-release rhythm');
+  assert.ok(presentation.sounds.impact.some(v => v.url.endsWith('/hollow-pop.wav') && v.delay === 0));
   assert.ok(presentation.sounds.pulse.reduce((sum, v) => sum + v.gain, 0) <= 0.15, 'frequent flight cues stay restrained');
 });
 

@@ -278,19 +278,17 @@ export default {
     else eddy(o, effect);
   },
   sounds: {
-    // Real creek displacement gathers into a quick, close water strike.
+    // A narrow forward cut and a dry tick; no shared swelling bed.
     cast: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-lift.wav', gain: 0.48, rate: 1.08, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.32, rate: 1.15, delay: 0.08 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/needle-cut.wav', gain: 0.32, rate: 1.1, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shard-tick.wav', gain: 0.12, rate: 1.1, delay: 0.06 },
     ],
-    // A physical splash breaks the spear; loose droplets fall after contact.
     impact: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/water-strike.wav', gain: 0.7, rate: 0.95, delay: 0 },
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.2, rate: 1.02, delay: 0.12 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/shard-tick.wav', gain: 0.32, rate: 1.05, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/needle-cut.wav', gain: 0.1, rate: 1.15, delay: 0.055 },
     ],
-    // Flight wakes keep the creek's small splashes quiet and natural.
     pulse: [
-      { kind: 'recording', url: '/assets/audio/spells/mitlan/droplets.wav', gain: 0.1, rate: 1.12, delay: 0 },
+      { kind: 'recording', url: '/assets/audio/spells/mitlan/needle-cut.wav', gain: 0.065, rate: 1.2, delay: 0 },
     ],
   },
 };
