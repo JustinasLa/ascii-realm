@@ -21,7 +21,7 @@ import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
 import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
 import { RemotePlayers } from './multiplayer/remote-players.js';
-import { putCell } from './render/cells.js';
+import { putCell, putOutlinedCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Hud } from './ui/hud.js';
@@ -961,8 +961,8 @@ function frame(now) {
     for (const torch of carried) torches.draw(renderer, view, torch, mirror);
   } });
   drawables.push({ y: player.y, draw: () => {
-    if (model) model.draw(renderer, putCell);
-    else drawFigure(renderer, view, player, figure);
+    if (model) model.draw(renderer, putOutlinedCell);
+    else drawFigure(renderer, view, player, figure, putOutlinedCell);
     for (const torch of carried) torches.draw(renderer, view, torch);
   } });
   for (const figure of monsterCells) {
