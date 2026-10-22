@@ -974,7 +974,7 @@ function frame(now) {
   } });
   for (const figure of monsterCells) {
     reflections.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, mirror) });
-    drawables.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, putOutlinedCell) });
+    drawables.push({ y: figure.depth, draw: () => MonsterFigures.draw(renderer, figure, putOutlinedCell) });
   }
   // Friends are drawn as the shape-built outlaw in their own gear.
   for (const peer of peers) {

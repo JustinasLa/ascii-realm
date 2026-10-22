@@ -175,15 +175,17 @@ test('read-back pixels become cells: outline at the edges, glyphs inside, glowin
   fill(31, 8, [255, 90, 30]);
   fill(29, 10, [210, 205, 180], 0.5);
   const view = { x0: 0, y0: 0 };
-  const { cells, top } = f.cellsOf(0, s, view, 0);
+  const slot = { x: 0, cx0: Math.floor(s.x) - 32, cy0: Math.floor(s.y) - 38, cols: 64, rows: f.height / 6 };
+  const { cells, top } = f.cellsOf(slot, s, view, 0);
   assert.equal(cells.length, 3 * 4 + 2);
-  const at = (cx, cy) => cells.find((c) => c.sx === Math.floor(s.x) - 32 + cx && c.sy === Math.floor(s.y) - 38 + cy);
+  const at = (cx, cy) => cells.find((c) => c.sx === slot.cx0 + cx && c.sy === slot.cy0 + cy);
   assert.ok(at(31, 11).g !== at(29, 10).g, 'an edge is drawn differently from the solid bone');
   const eye = at(31, 8);
   assert.ok(eye.r > 200 && eye.gg < 140, 'the eye keeps its ember colour');
-  assert.equal(top, Math.floor(s.y) - 38 + 8);
+  assert.equal(top, slot.cy0 + 8);
+  assert.equal(f.cellsOf(slot, s, view, 0).bottom, slot.cy0 + 13);
   // A fresh cut flashes the bones.
-  const flashed = f.cellsOf(0, s, view, 1);
+  const flashed = f.cellsOf(slot, s, view, 1);
   assert.ok(flashed.cells[0].gg >= cells[0].gg);
 });
 
@@ -247,6 +249,38 @@ test('a troll towers over a skeleton, broad and small-headed, and falls over whe
   }
   assert.ok(rig.headHeight() < 0.7, `head at ${rig.headHeight()} m after falling`);
   assert.ok(Math.abs(rig.bones['DEF-spine003'].scale.x - 1.22) < 1e-6, 'its build holds after the fall');
+});
+
+test('the slot round a fallen troll holds its whole body and club, whichever way it falls', async () => {
+  const THREE = await import(modules.get('three'));
+  const view = { x0: -200, y0: -200, cols: 400, rows: 400 };
+  for (let i = 0; i < 8; i++) {
+    const f = figures();
+    const t = new Monster(0, 0, { kind: KINDS.troll, heading: (i * Math.PI) / 4 });
+    f.update(dt, [t]);
+    t.takeHit(1e6, t.x + Math.sin(t.heading), t.y + Math.cos(t.heading));
+    assert.equal(t.state, 'dead');
+    for (let time = 0; time < 2.5; time += dt) f.update(dt, [t]);
+    const rig = f.rigs.get(t);
+    const slot = f.slotOf(t, view);
+    // In world cells, the way the camera sees it.
+    const inside = (v, what) => {
+      const cx = t.x + (v.x * 13) / 0.6;
+      const cy = t.y - (v.y * Math.sqrt(0.75) - v.z * 0.5) * 13;
+      assert.ok(cx > slot.cx0 && cx < slot.cx0 + slot.cols && cy > slot.cy0 && cy < slot.cy0 + slot.rows,
+        `heading ${i}: ${what} at (${cx.toFixed(1)}, ${cy.toFixed(1)}) outside ${JSON.stringify(slot)}`);
+    };
+    const v = new THREE.Vector3();
+    rig.model.traverse((o) => {
+      if (!o.isSkinnedMesh) return;
+      const pos = o.geometry.attributes.position;
+      for (let k = 0; k < pos.count; k += 7) {
+        o.applyBoneTransform(k, v.fromBufferAttribute(pos, k)).applyMatrix4(o.matrixWorld);
+        inside(v, 'the skin');
+      }
+    });
+    inside(rig.club.localToWorld(new THREE.Vector3(0, 0.72, 0)), 'the club head');
+  }
 });
 
 test('a troll swings its club in both hands, high overhead, down to the ground and never through it', async () => {

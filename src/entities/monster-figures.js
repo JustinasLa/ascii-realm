@@ -23,12 +23,15 @@ import { getWeapon } from './weapons.js';
 const SX = 4;
 const SY = 6;
 const N = SX * SY;
-// Each slot, in cells: wide enough for a troll lying full length across the
-// screen, tall enough for its club raised overhead, and deep enough for one
-// fallen towards the camera.
+// Each slot is fitted round the figure's pose every frame, so a troll lying
+// full length with its club beside it is drawn whole. In cells: the room
+// set aside for a slot at first, the most one may take, and the space kept
+// round the joints for the flesh on them.
 const COLS = 64;
 const ROWS = 52;
-const FEET_ROW = 38;
+const MAX_COLS = 160;
+const MAX_ROWS = 96;
+const PAD = 2;
 // At most this many are drawn, nearest the player first.
 export const MAX_DRAWN = 4;
 const FOOT_FLOOR = 0.1;
@@ -631,6 +634,38 @@ class Rig {
     return contacts;
   }
 
+  // How far the pose reaches from the feet on screen, in metres: to the
+  // left and right, and up and down. Measured at the joints, padded for the
+  // flesh round them, and at the corners of anything rigid hung on them:
+  // bones, cloth, weapons.
+  reach() {
+    const box = { left: Infinity, right: -Infinity, up: -Infinity, down: Infinity };
+    const v = new THREE.Vector3();
+    const add = (pad) => {
+      const up = v.y * COS - v.z * TILT;
+      box.left = Math.min(box.left, v.x - pad);
+      box.right = Math.max(box.right, v.x + pad);
+      box.up = Math.max(box.up, up + pad);
+      box.down = Math.min(box.down, up - pad);
+    };
+    const flesh = 0.2 * this.look.scale;
+    this.model.updateMatrixWorld(true);
+    this.model.traverseVisible((o) => {
+      if (o.isBone) {
+        o.getWorldPosition(v);
+        add(flesh);
+      } else if (o.isMesh && !o.isSkinnedMesh) {
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        const { min, max } = o.geometry.boundingBox;
+        for (let c = 0; c < 8; c++) {
+          v.set(c & 1 ? max.x : min.x, c & 2 ? max.y : min.y, c & 4 ? max.z : min.z).applyMatrix4(o.matrixWorld);
+          add(0);
+        }
+      }
+    });
+    return box;
+  }
+
   // How high the head is above the ground, in metres.
   headHeight() {
     return this.head.getWorldPosition(new THREE.Vector3()).y;
@@ -702,6 +737,7 @@ export class MonsterFigures {
     this.width = COLS * SX * MAX_DRAWN;
     this.height = ROWS * SY;
     this.pixels = new Uint8Array(this.width * this.height * 4);
+    this.readWidth = this.width;
     if (renderer) this.renderer = renderer;
     else {
       const canvas = document.createElement('canvas');
@@ -750,73 +786,114 @@ export class MonsterFigures {
     for (const monster of monsters) this.rigOf(monster).update(dt, monster);
   }
 
-  // Renders the monsters nearest `near` that stand within the view, each in
-  // its own slot, reads the image back once and turns each into cells.
-  // Returns [{ monster, cells, base, top, contacts }].
+  // Renders the monsters nearest `near` that show within the view, each in
+  // its own slot fitted round its pose, reads the image back once and turns
+  // each into cells. Returns [{ monster, cells, base, top, depth, contacts }].
   rasterise(view, monsters, near) {
-    const inView = monsters.filter((s) => s.x > view.x0 - COLS / 2 && s.x < view.x0 + view.cols + COLS / 2
-      && s.y > view.y0 - (ROWS - FEET_ROW) && s.y < view.y0 + view.rows + FEET_ROW);
-    inView.sort((a, b) => Math.hypot(a.x - near.x, a.y - near.y) - Math.hypot(b.x - near.x, b.y - near.y));
+    const inView = [];
+    for (const s of monsters) {
+      const slot = this.slotOf(s, view);
+      if (slot) inView.push({ s, slot });
+    }
+    inView.sort((a, b) => Math.hypot(a.s.x - near.x, a.s.y - near.y) - Math.hypot(b.s.x - near.x, b.s.y - near.y));
     const drawn = inView.slice(0, MAX_DRAWN);
     this.drawn = [];
     if (!drawn.length) return this.drawn;
+    // Side by side along the bottom of the image, which grows to fit them.
+    let width = 0;
+    let height = 0;
+    for (const { slot } of drawn) {
+      slot.x = width;
+      width += slot.cols * SX;
+      height = Math.max(height, slot.rows * SY);
+    }
+    this.fit(width, height);
+    this.readWidth = width;
     const r = this.renderer;
     r.setScissorTest(false);
     r.setViewport(0, 0, this.width, this.height);
     r.clear();
     r.setScissorTest(true);
-    const slotW = COLS * SX;
-    drawn.forEach((s, i) => {
+    for (const { s, slot } of drawn) {
       for (const [other, rig] of this.rigs) rig.model.visible = other === s;
       r.clippingPlanes = this.rigs.get(s).waterDepth > 0.001 ? this.surface : this.ground;
-      this.frame(s.x, s.y);
-      r.setViewport(i * slotW, 0, slotW, this.height);
-      r.setScissor(i * slotW, 0, slotW, this.height);
+      this.frame(s.x, s.y, slot);
+      r.setViewport(slot.x, 0, slot.cols * SX, slot.rows * SY);
+      r.setScissor(slot.x, 0, slot.cols * SX, slot.rows * SY);
       r.render(this.scene, this.camera);
-    });
+    }
     r.setScissorTest(false);
     for (const rig of this.rigs.values()) rig.model.visible = true;
     const gl = r.getContext();
-    gl.readPixels(0, 0, this.width, this.height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
-    drawn.forEach((s, i) => {
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
+    for (const { s, slot } of drawn) {
       const rig = this.rigs.get(s);
       // Waterlines round the legs, in world cells.
       const contacts = rig.waterContacts().map((c) => ({ x: s.x + c.x * SCALE / ASPECT, y: s.y + c.z * SCALE * TILT }));
-      this.drawn.push({ monster: s, contacts, ...this.cellsOf(i, s, view, rig.flash) });
-    });
+      const figure = this.cellsOf(slot, s, view, rig.flash);
+      // Standing, a monster is in front of what is behind its feet. Fallen,
+      // or clawing out of the ground, it lies over the ground it covers, as
+      // far as the row nearest the camera, so that ground is not drawn over it.
+      const lying = s.state === 'dead' || s.state === 'rise';
+      const depth = lying && figure.bottom !== null ? Math.max(s.y, figure.bottom) : s.y;
+      this.drawn.push({ monster: s, contacts, depth, ...figure });
+    }
     return this.drawn;
   }
 
-  // Points the camera so the monster's feet land on their fractional cell.
-  frame(x, y) {
-    const cx0 = Math.floor(x) - (COLS >> 1);
-    const cy0 = Math.floor(y) - FEET_ROW;
-    const widthM = (COLS * ASPECT) / SCALE;
-    const heightM = ROWS / SCALE;
-    const fx = (x - cx0) / COLS;
-    const fy = (y - cy0) / ROWS;
+  // The cells a monster's pose covers, as far as they are in view: the
+  // first column and row and how many of each. Null if none are.
+  slotOf(s, view) {
+    if (s.x < view.x0 - MAX_COLS / 2 || s.x > view.x0 + view.cols + MAX_COLS / 2
+      || s.y < view.y0 - MAX_ROWS * 0.3 || s.y > view.y0 + view.rows + MAX_ROWS * 0.7) return null;
+    const reach = this.rigOf(s).reach();
+    const cols = SCALE / ASPECT;
+    let cx0 = Math.floor(s.x + reach.left * cols) - PAD;
+    let cx1 = Math.ceil(s.x + reach.right * cols) + PAD;
+    let cy0 = Math.floor(s.y - reach.up * SCALE) - PAD;
+    let cy1 = Math.ceil(s.y - reach.down * SCALE) + PAD;
+    cx0 = Math.max(cx0, view.x0 - 1, Math.floor(s.x) - MAX_COLS / 2);
+    cx1 = Math.min(cx1, view.x0 + view.cols + 1, Math.floor(s.x) + MAX_COLS / 2);
+    cy0 = Math.max(cy0, view.y0 - 1, Math.floor(s.y) - MAX_ROWS * 0.7);
+    cy1 = Math.min(cy1, view.y0 + view.rows + 1, Math.floor(s.y) + MAX_ROWS * 0.3);
+    if (cx1 <= cx0 || cy1 <= cy0) return null;
+    return { x: 0, cx0, cy0, cols: cx1 - cx0, rows: cy1 - cy0 };
+  }
+
+  // Grows the image, never shrinking it, to hold `width` by `height` pixels.
+  fit(width, height) {
+    if (width <= this.width && height <= this.height) return;
+    this.width = Math.max(this.width, width);
+    this.height = Math.max(this.height, height);
+    this.pixels = new Uint8Array(this.width * this.height * 4);
+    this.renderer.setSize(this.width, this.height, false);
+  }
+
+  // Points the camera at a slot's cells, the monster's feet on their
+  // fractional cell.
+  frame(x, y, slot) {
     const cam = this.camera;
-    cam.left = -fx * widthM;
-    cam.right = (1 - fx) * widthM;
-    cam.top = fy * heightM;
-    cam.bottom = -(1 - fy) * heightM;
+    cam.left = -((x - slot.cx0) * ASPECT) / SCALE;
+    cam.right = cam.left + (slot.cols * ASPECT) / SCALE;
+    cam.top = (y - slot.cy0) / SCALE;
+    cam.bottom = cam.top - slot.rows / SCALE;
     cam.updateProjectionMatrix();
   }
 
-  // Turns slot `slot` of the read-back image into cells, like the player's
+  // Turns a slot of the read-back image into cells, like the player's
   // figure: partly covered cells become a pale outline, solid ones a glyph
   // by brightness. Glowing eyes keep their colour, and a fresh cut flashes
   // the body white.
   cellsOf(slot, s, view, flash) {
-    const cx0 = Math.floor(s.x) - (COLS >> 1);
-    const cy0 = Math.floor(s.y) - FEET_ROW;
-    const w = this.width;
-    const h = this.height;
+    const { cx0, cy0 } = slot;
+    const w = this.readWidth;
+    const h = slot.rows * SY;
     const px = this.pixels;
     const cells = [];
     let top = Infinity;
-    for (let cy = 0; cy < ROWS; cy++) {
-      for (let cx = 0; cx < COLS; cx++) {
+    let bottom = -Infinity;
+    for (let cy = 0; cy < slot.rows; cy++) {
+      for (let cx = 0; cx < slot.cols; cx++) {
         let hits = 0;
         let r = 0;
         let g = 0;
@@ -826,7 +903,7 @@ export class MonsterFigures {
         for (let j = 0; j < SY; j++) {
           const row = h - 1 - (cy * SY + j);
           for (let i = 0; i < SX; i++) {
-            const o = (row * w + slot * COLS * SX + cx * SX + i) * 4;
+            const o = (row * w + slot.x + cx * SX + i) * 4;
             if (px[o + 3] < 128) continue;
             hits++;
             r += px[o];
@@ -838,6 +915,7 @@ export class MonsterFigures {
         }
         if (hits < 3) continue;
         top = Math.min(top, cy);
+        bottom = cy;
         r /= hits;
         g /= hits;
         b /= hits;
@@ -865,7 +943,8 @@ export class MonsterFigures {
           br: 4 + r * 0.04, bgG: 4 + g * 0.04, bb: 5 + b * 0.04 });
       }
     }
-    return { cells, top: top === Infinity ? null : cy0 + top, base: Math.floor(s.y) - view.y0 };
+    return { cells, top: top === Infinity ? null : cy0 + top, bottom: bottom === -Infinity ? null : cy0 + bottom,
+      base: Math.floor(s.y) - view.y0 };
   }
 
   // Draws one monster's cells through a writer (see cells.js).
