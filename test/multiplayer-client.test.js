@@ -73,6 +73,41 @@ test('connection failures and server errors keep the game in solo mode', (t) => 
   assert.equal(client.socket, null);
 });
 
+for (const callback of ['onJoin', 'onSnapshot', 'onChange']) {
+  for (const replace of [false, true]) {
+    test(`${callback} can ${replace ? 'replace' : 'cancel'} a connection while joining`, (t) => {
+      const client = setup(t, { getState: () => joined().self.state });
+      let handled = false;
+      client[callback] = (value) => {
+        if (handled || (callback === 'onSnapshot' && !value.length)
+          || (callback === 'onChange' && value.status !== 'online')) return;
+        handled = true;
+        if (replace) client.connect({ mode: 'join', code: 'DEF567' });
+        else client.leave(false);
+      };
+      client.connect({ mode: 'create' });
+      const first = Socket.instances[0];
+      first.open();
+      first.message(joined());
+      assert.equal(handled, true);
+      assert.equal(client.status, replace ? 'connecting' : 'offline');
+      assert.equal(client.room, null);
+      assert.equal(client.sendTimer, undefined);
+      assert.equal(first.sent.some((message) => message.type === 'state'), false);
+      if (replace) {
+        const second = Socket.instances[1];
+        assert.equal(client.socket, second);
+        second.open();
+        assert.equal(second.sent[0].code, 'DEF567');
+        second.message({ ...joined(), code: 'DEF567' });
+        assert.equal(client.status, 'online');
+        assert.equal(client.room.code, 'DEF567');
+        assert.equal(second.sent[1].type, 'state');
+      } else assert.equal(client.socket, null);
+    });
+  }
+}
+
 test('a brief disconnect rejoins the same code with its private resume token', async (t) => {
   const client = setup(t, { retryDelay: 5 });
   client.connect({ mode: 'create', name: 'Kael', seed: 7 });

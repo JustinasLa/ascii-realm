@@ -216,9 +216,8 @@ export class Fires {
 
   create(world, x, y, kind, fuel = null, source = 'torch') {
     const seed = Math.floor(hash2(x, y, world.seed + 910) * 0x7fffffff);
-    const base = hearth(seed);
     const fire = { id: this.nextId++, x, y, seed, kind,
-      hearth: kind === 'campfire' ? base : [], cells: [], source: kind === 'campfire' ? 'campfire' : source,
+      hearth: kind === 'campfire' ? hearth(seed) : [], cells: [], source: kind === 'campfire' ? 'campfire' : source,
       age: 0, intensity: START_INTENSITY, windStress: 0, gust: 0.42,
       flare: 0, leanX: 0, leanY: 0, smother: 0, nextContact: 0 };
     // Clear the hearth and the roots immediately in front, whose tall blades

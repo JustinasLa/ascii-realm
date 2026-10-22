@@ -468,7 +468,8 @@ export class Monster {
       if (prey.distance < r.near * 0.5 && this.kiteIn === 0) return this.kite(random, target);
       if (this.stateTime < r.draw) return 0;
       const lead = Math.min(r.lead, prey.distance / r.speed);
-      this.events.push({ type: 'shoot', x: this.x, y: this.y, damage: r.damage, speed: r.speed, strength: 1,
+      this.events.push({ type: 'shoot', x: this.x, y: this.y,
+        damage: Math.max(0, r.damage + (this.magicDamage ?? 0)), speed: r.speed, strength: 1,
         target: { x: target.x + this.preyVelocity.x * lead, y: target.y + this.preyVelocity.y * lead } });
       this.cooldown = r.cooldown;
       this.setState('chase');

@@ -493,7 +493,8 @@ class Rig {
       // Walking or running at the speed it covers the ground, the clips
       // played at the rate that keeps the feet from sliding. Wading slows
       // the body more than the legs, as for the player.
-      const speed = s.groundSpeed / (s.speedScale ?? 1);
+      const speedScale = s.speedScale ?? 1;
+      const speed = speedScale > 0 ? s.groundSpeed / speedScale : 0;
       const moving = Math.min(1, speed / (0.6 * this.look.scale));
       const run = Math.max(0, Math.min(1, (speed - k.walkSpeed) / 1.6));
       w.idle = 1 - moving;

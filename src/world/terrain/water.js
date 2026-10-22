@@ -82,7 +82,6 @@ const LEAF_COL = [118, 86, 52];
 const RING_COL = [150, 176, 216];
 
 // Kinds of static cell.
-const OPEN = 0;
 const BED = 1;
 const FLOAT = 2;
 

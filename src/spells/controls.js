@@ -27,7 +27,10 @@ const tag = (name, className, text) => {
 // one of its runes, which stays bound to R until another is chosen.
 export class SpellControls {
   constructor(casting, { surface, touchButton, canOpen = () => true, onBind = () => {}, onFocus = () => {},
-    restore = true, storage = globalThis.localStorage }) {
+    restore = true, storage }) {
+    if (storage === undefined) {
+      try { storage = globalThis.localStorage; } catch { storage = null; }
+    }
     Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage });
     this.menu = new RadialMenu();
     this.buildWheel();
@@ -216,18 +219,18 @@ export class SpellControls {
 
     // Labels go on the same grid as the rims, centred on a cell each.
     const text = new Map(), clear = new Set();
-    const write = (lines, row, col, sector) => {
+    const write = (lines, row, col) => {
       const top = Math.round(row - (lines.length - 1) / 2);
       lines.forEach((runs, n) => {
         const width = runs.reduce((sum, [t]) => sum + t.length, 0);
         let c = col - Math.floor(width / 2);
         for (let i = -1; i <= width; i++) clear.add((top + n) * cols + c + i);
-        for (const [t, color, bold] of runs) for (const ch of t) text.set((top + n) * cols + c++, { ch, color, bold, sector });
+        for (const [t, color, bold] of runs) for (const ch of t) text.set((top + n) * cols + c++, { ch, color, bold });
       });
     };
     const hub = this.hubLines(bound);
-    write(hub, (rows - 1) / 2, (cols - 1) / 2, -1);
-    entries.forEach((entry, i) => write(this.entryLines(entry, i, bound, this.spots[i].width), this.spots[i].row, this.spots[i].col, i));
+    write(hub, (rows - 1) / 2, (cols - 1) / 2);
+    entries.forEach((entry, i) => write(this.entryLines(entry, i, bound, this.spots[i].width), this.spots[i].row, this.spots[i].col));
     canvas.setAttribute('aria-label', hub.map(runs => runs.map(([t]) => t).join('')).join(', '));
 
     const isBound = i => menu.stage === 'groups' ? entries[i].items.some(s => s.id === bound) : entries[i].id === bound;

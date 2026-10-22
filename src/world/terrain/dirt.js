@@ -5,10 +5,10 @@
 
 import { fbm, valueNoise } from '../../core/noise.js';
 import { hash2 } from '../../core/rng.js';
-import { dg, glyph, over } from '../../render/glyphs.js';
+import { dg, over } from '../../render/glyphs.js';
 import { NIGHT } from '../../render/palette.js';
 import { ASPECT } from '../world.js';
-import { emit, surface } from './cell.js';
+import { surface } from './cell.js';
 import { clamp01, fam, headingIndex, lineCell, LX, LY, pick } from './surface.js';
 
 // The path noise in world.js: cells within PATH_HALF of the middle of the
@@ -19,20 +19,14 @@ const RUT_AT = 0.42;
 // Half width of a rut, in world units.
 const RUT_W = 0.65;
 
-const BLANK = glyph(' ');
-const SOIL = fam('terrain.soil.');
-const STREAK = fam('terrain.streak.');
 const PRINT = fam('terrain.print.');
 const HOOF = fam('terrain.hoof.');
-const MUD = fam('terrain.mud.');
 const CHIPS = fam('terrain.chips.');
 const PEBBLE = fam('pebble.');
 const GRAVEL = fam('gravel.');
-const SPECK = fam('speck.');
 const TUFT = ['tuft.0', 'tuft.1', 'tuft.2', 'tuft.3'].map(dg);
 const CLOVER = fam('clover.');
 const LEAF = fam('leaf.');
-const WAVELET = fam('wavelet.');
 const GLINT = dg('sparkle.2');
 
 // Earth under moonlight: a dusky brown ground with paler, warmer crumbs.
@@ -69,8 +63,6 @@ export function shade(out, o, chunk, i, wx, wy, seed) {
   // World units from the nearer rut's centre line, signed along the normal.
   const rutOff = (u - Math.sign(u || 1) * RUT_AT) * half;
   const rut = lanes ? clamp01(1 - Math.abs(rutOff) / RUT_W) : 0;
-  // Heading along the path.
-  const along = headingIndex(-ny, nx);
 
   // Ground: a lighter packed crown, darker grooves, and the verges fading
   // into the meadow's night.
@@ -88,7 +80,6 @@ export function shade(out, o, chunk, i, wx, wy, seed) {
   bb += (NIGHT[2] - bb) * verge * 0.7;
 
   const sk = (0.62 + rnd * 0.3) * (1 + crown * 0.12 - rut * 0.25) * (1 - verge * 0.3);
-  let g = pick(SOIL, r1);
   let cr = SOIL_C[0] * sk;
   let cg = SOIL_C[1] * sk;
   let cb = SOIL_C[2] * sk;
@@ -126,14 +117,12 @@ export function shade(out, o, chunk, i, wx, wy, seed) {
     br *= 0.75;
     bgG *= 0.8;
     bb *= 1.1;
-    g = r1 < 0.6 ? pick(WAVELET, r2) : pick(SPECK, r2);
     cr = 64;
     cg = 78;
     cb = 118;
     if (r2 > 0.8) layer(GLINT, [190, 205, 235], 0.75);
   } else if (mud) {
     // Dried mud split into plates; the cracks show the dark ground.
-    g = pick(MUD, r1);
     const m = 0.3 + rnd * 0.08;
     cr = SOIL_C[0] * m;
     cg = SOIL_C[1] * m;
@@ -145,8 +134,7 @@ export function shade(out, o, chunk, i, wx, wy, seed) {
   } else if (wallLine(rutOff, nx, ny)) {
     // A crisp wall of the groove (set by wallLine()).
   } else if (rut > 0.3) {
-    // Wheels have smoothed the groove into streaks along the way.
-    g = r1 < 0.75 ? STREAK[along] : pick(SPECK, r2);
+    // Wheel grooves are darker than the surrounding earth.
     cr *= 0.85;
     cg *= 0.85;
     cb *= 0.85;

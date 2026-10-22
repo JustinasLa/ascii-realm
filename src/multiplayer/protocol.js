@@ -40,7 +40,7 @@ const finite = (value, [min, max]) => typeof value === 'number' && Number.isFini
   ? Math.max(min, Math.min(max, value)) : null;
 
 export function cleanName(value) {
-  return String(value ?? '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 24) || 'Wanderer';
+  return (typeof value === 'string' ? value : '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 24) || 'Wanderer';
 }
 
 export function cleanCode(value) {

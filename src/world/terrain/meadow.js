@@ -11,7 +11,7 @@ import { dg, over } from '../../render/glyphs.js';
 import { NIGHT } from '../../render/palette.js';
 import { ASPECT } from '../world.js';
 import { emit } from './cell.js';
-import { clamp01, fam, pick, smooth } from './surface.js';
+import { fam, pick, smooth } from './surface.js';
 
 const LITTER = fam('terrain.litter.');
 const SOIL = fam('terrain.soil.');

@@ -19,7 +19,8 @@ import { createScene, scenarios } from '../bench/scene.js';
 // trunks became round, rooted and shadowed, then outlined like the trees
 // drawn in ordinary cells, and once more when the trunk's foot and roots
 // became one solid, modelled in 3D, and when trees and rocks were ringed by
-// an outline of nothing.
+// an outline of nothing. Meadow fine-boulder snapshots also preserve their
+// stone characters beneath blank ridge accents.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
@@ -36,9 +37,9 @@ const reference = [
     'a456c48aedf5ba56492ff48cebb35091ef5f5171caa5a08fe7bb9826a6af0611',
     '947fbdd4da537502a8d9f3558d91db617e4accbc988b5ff7e01d20c4b27b40e7'],
   ['c77bba0992b36ed1990a4947ffe3856a719691c3b29f5d1bb0eeb5fb4035140a',
-    'bb495155323f319ef89f42afe45c39f2e615197bef71c9e3cde453a2cc555f38',
-    '23e3b1eae340b9214acfded3bcca17c9c470c32cf6a5b14a358c2d6564bc03b8',
-    '9e95dd06439b226b0ba552c171205a11747ac8ead53713a1a3f0d4dcf4368bb0'],
+    'eda0221495764aa0f6e2c70cc1bcfec58a66207b91c7640da634a7431d925f8f',
+    'c6a73ead604d60f0870b9efce99f72e7aca30125cc6c9247c18696b55705da61',
+    'fa976eb8f8d40daf2a055568d2d23ed2d5e17031fa2084c9e8dce52502818acd'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.

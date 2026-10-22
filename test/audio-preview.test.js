@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { bindAudioControls } from '../src/audio/controls.js';
+import { AudioEngine } from '../src/audio/engine.js';
 import { GRASS_SAMPLE_URLS, prepareGrassFootsteps } from '../src/audio/grass-steps.js';
 
 class Element extends EventTarget {
@@ -41,9 +42,9 @@ function dom(t) {
     const unbind = bindAudioControls(engine, { currentSong: 'Field song', skip() {} },
       { preset: 'clear', intensity: 0.6, presets: [] }, onPause, root);
     cleanups.push(unbind);
-    return { preview, unbind };
+    return { preview, unbind, sliders, mute: elements.get('#audio-mute') };
   };
-  return { document, bind };
+  return { document, window, bind };
 }
 
 function fakeAudio() {
@@ -154,6 +155,42 @@ test('grass preview plays six recorded contacts at 420ms spacing and restores on
   assert.equal(sources(audio).length, 6);
   unbind();
   assertClean(audio);
+});
+
+test('volume changes and mute controls preserve preview ducking with the real engine', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ui = dom(t);
+  const audio = fakeAudio();
+  const engine = new AudioEngine({ contextFactory: () => audio.context, storage: null });
+  assert.equal(await engine.unlock(), true);
+  await prepareGrassFootsteps(engine, { loadBuffer: async url => recording(url) });
+  const { preview, sliders, mute } = ui.bind(engine);
+  preview.dispatchEvent(new Event('click'));
+  await settle();
+  const assertDucked = () => {
+    assert.equal(preview.disabled, true);
+    for (const bus of ['music', 'ambience']) assert.equal(engine.buses[bus].gain.value, 0);
+  };
+  assertDucked();
+  for (const [bus, value] of [['sfx', 50], ['music', 25], ['ambience', 40]]) {
+    const slider = sliders.find(slider => slider.dataset.volume === bus);
+    slider.value = value;
+    slider.dispatchEvent(new Event('input'));
+    assert.equal(engine.volumes[bus], value / 100);
+    assertDucked();
+  }
+  mute.dispatchEvent(new Event('click'));
+  assert.equal(engine.muted, true);
+  assertDucked();
+  ui.window.dispatchEvent(Object.assign(new Event('keydown'), { code: 'KeyM' }));
+  assert.equal(engine.muted, false);
+  assertDucked();
+  for (let step = 1; step < 6; step++) advance(t, audio, 420);
+  advance(t, audio, 550);
+  assert.equal(preview.disabled, false);
+  assert.equal(engine.buses.music.gain.value, 0.25);
+  assert.equal(engine.buses.ambience.gain.value, 0.4);
+  assert.equal(engine.buses.sfx.gain.value, 0.5);
 });
 
 test('unbind, hiding the document and context suspension stop preview voices and pending contacts', async t => {

@@ -43,6 +43,19 @@ test('solid scenery stops a projectile before a target behind it', () => {
   assert.equal(casting.projectiles.length, 0);
 });
 
+test('a stronger hit during invulnerability does not let identical follow-up hits through', () => {
+  const { casting, player, foe } = scene();
+  foe.health = foe.maxHealth = 100;
+  const spell = practiceSpells[0], ctx = casting.context(spell, spell.variants[0], player);
+  for (const [amount, remaining] of [[10, 90], [15, 85], [15, 85], [12, 85], [20, 80]]) {
+    casting.damage(foe, amount, ctx);
+    assert.equal(foe.health, remaining);
+  }
+  casting.update(0.6);
+  casting.damage(foe, 20, ctx);
+  assert.equal(foe.health, 60, 'a new damage window applies the full hit');
+});
+
 test('recasts are limited by mana, not time; mana and silence reject without consuming resources', () => {
   const { casting, player } = scene();
   assert.equal(casting.cast('practice-bolt').ok, true);
@@ -66,6 +79,21 @@ test('absorption takes damage before health and expires at its configured time',
   assert.equal(player.vitals.health, 98);
   casting.update(2); casting.update(1.1);
   assert.equal(casting.state().shield, 0);
+});
+
+test('a rejected weaker absorption potion preserves the stronger shield expiry', () => {
+  const { casting, player } = scene();
+  const spell = practiceSpells[1], ctx = casting.context(spell, spell.variants[0], player);
+  casting.potion(player, { type: 'ABSORPTION', level: '5', duration: '60' }, ctx);
+  player.takeDamage(5);
+  casting.potion(player, { type: 'ABSORPTION', level: '1', duration: '20' }, ctx);
+  assert.equal(casting.state().shield, 19);
+  casting.update(1.1);
+  assert.equal(player.takeDamage(10), 0, 'the weaker potion must not expire the stronger shield');
+  assert.equal(player.vitals.health, 100);
+  assert.equal(casting.state().shield, 9);
+  casting.update(2);
+  assert.equal(casting.state().shield, 0, 'the stronger potion still expires on schedule');
 });
 
 test('burn deals one pulse per second for its duration; reset cancels remaining pulses', () => {

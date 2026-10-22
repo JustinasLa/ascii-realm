@@ -16,7 +16,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     page.on('pageerror', e => errors.push(e.message));
     const client = await page.createCDPSession();
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
-    await page.goto(process.env.GAME_URL || 'http://localhost:8000/?debug', { waitUntil: 'networkidle0' });
+    const url = new URL(process.env.GAME_URL || 'http://localhost:8000/');
+    url.searchParams.set('debug', '');
+    await page.goto(url.href, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.game?.metrics.frames > 30);
     const results = { browser: await browser.version(), samples: [], checks: [] };
     results.gpu = await page.evaluate(() => {

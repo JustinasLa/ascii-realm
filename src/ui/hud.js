@@ -96,9 +96,7 @@ export class Hud {
     this.partyTab.hidden = true;
     this.frames.append(status, this.party, this.partyTab);
     this.status = status;
-    const framesNode = this.frames;
-
-    this.element.append(framesNode);
+    this.element.append(this.frames);
 
     const hotbarWrap = element('div', 'hud-hotbar-wrap');
     const hotbarHeading = element('div', 'hud-hotbar-heading');
@@ -230,7 +228,7 @@ export class Hud {
       this.foeFrames.delete(id);
     }
     if (!this.foes.length) return;
-    const project = this.projector(view);
+    const projection = this.projector(view);
     for (const foe of this.foes) {
       let frame = this.foeFrames.get(foe.id);
       if (!frame) {
@@ -250,7 +248,7 @@ export class Hud {
       attribute(frame.node, 'aria-label', `${String(foe.name || 'Enemy').slice(0, 24)} health`);
       attribute(frame.node, 'aria-valuemax', number(max));
       attribute(frame.node, 'aria-valuenow', number(current));
-      const at = project?.(foe.x, foe.y);
+      const at = projection?.project(foe.x, foe.y);
       hidden(frame.node, !at?.visible);
       if (!at?.visible) continue;
       style(frame.node, 'transform', `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px) translate(-50%, -100%)`);
@@ -270,11 +268,14 @@ export class Hud {
     const scaleY = canvas.height / this.canvas.height;
     const left = canvas.left - root.left;
     const top = canvas.top - root.top;
-    return (x, y) => {
-      const worldX = ((x - view.x0) * view.cellW - view.offX) * scaleX;
-      const worldY = ((y - view.y0) * view.cellH - view.offY) * scaleY;
-      return { x: left + worldX, y: top + worldY,
-        visible: worldX >= 0 && worldX <= canvas.width && worldY >= 0 && worldY <= canvas.height };
+    return {
+      bounds: { left, top, width: canvas.width, height: canvas.height },
+      project(x, y) {
+        const worldX = ((x - view.x0) * view.cellW - view.offX) * scaleX;
+        const worldY = ((y - view.y0) * view.cellH - view.offY) * scaleY;
+        return { x: left + worldX, y: top + worldY,
+          visible: worldX >= 0 && worldX <= canvas.width && worldY >= 0 && worldY <= canvas.height };
+      },
     };
   }
 
@@ -356,25 +357,18 @@ export class Hud {
       }
     }
     if (!this.damageNumbers.length) return;
-    // Camera offsets and cell dimensions are device pixels, while DOM positions
-    // are CSS pixels. Do not infer cell size from the grid's spare row/column.
-    if (!this.canvas || !view || !Number.isFinite(view.cellW) || view.cellW <= 0 || !Number.isFinite(view.cellH) || view.cellH <= 0 || !this.canvas.width || !this.canvas.height) {
+    const projection = this.projector(view);
+    if (!projection) {
       for (const damage of this.damageNumbers) hidden(damage.node, true);
       return;
     }
-    const canvas = this.canvas.getBoundingClientRect();
-    const root = this.root.getBoundingClientRect();
-    const scaleX = canvas.width / this.canvas.width;
-    const scaleY = canvas.height / this.canvas.height;
-    const left = canvas.left - root.left;
-    const top = canvas.top - root.top;
+    const canvas = projection.bounds;
+    const { left, top } = canvas;
     const size = `${canvas.width}/${canvas.height}`;
     for (const damage of this.damageNumbers) {
-      const worldX = ((damage.x - view.x0) * view.cellW - view.offX) * scaleX;
-      const worldY = ((damage.y - view.y0) * view.cellH - view.offY) * scaleY;
-      const visible = worldX >= 0 && worldX <= canvas.width && worldY >= 0 && worldY <= canvas.height;
-      hidden(damage.node, !visible);
-      if (!visible) continue;
+      const at = projection.project(damage.x, damage.y);
+      hidden(damage.node, !at.visible);
+      if (!at.visible) continue;
       // Keep complete numerals on-screen even when the hit is at an edge.
       if (damage.size !== size) {
         damage.width = damage.node.offsetWidth || 40;
@@ -382,8 +376,8 @@ export class Hud {
         damage.size = size;
       }
       const { width, height } = damage;
-      const x = clamp(left + worldX, left + width / 2 + 8, left + canvas.width - width / 2 - 8);
-      const y = clamp(top + worldY - 20 - damage.age * 34, top + height + 8, top + canvas.height - 8);
+      const x = clamp(at.x, left + width / 2 + 8, left + canvas.width - width / 2 - 8);
+      const y = clamp(at.y - 20 - damage.age * 34, top + height + 8, top + canvas.height - 8);
       style(damage.node, 'transform', `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`);
       style(damage.node, 'opacity', String(Math.min(1, (DAMAGE_LIFETIME - damage.age) / 0.3)));
     }

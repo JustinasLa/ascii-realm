@@ -6,6 +6,11 @@ import { runeScene } from '../../test-support/spells.js';
 import { fakeRecordedAudio } from '../../test-support/recorded-audio.js';
 import { playSpellSound } from '../../src/audio/spells.js';
 import { prepareRecordedSpellTest } from '../../test-support/spell-audio.js';
+import { Spellcasting } from '../../src/spells/casting.js';
+import { readSpellCast } from '../../src/spells/protocol.js';
+import { playerState } from '../../src/multiplayer/protocol.js';
+import { Player } from '../../src/entities/player.js';
+import { toCells } from '../../src/entities/monsters.js';
 
 const STAGES = ['cast', 'impact', 'pulse', 'aura', 'zone', 'projectile'];
 const BUDGET = { cast: 200, impact: 200, pulse: 90, aura: 160, zone: 160, projectile: 110 };
@@ -175,6 +180,45 @@ test('real rune cast renders its profile and emits typed transfer cues while pre
   assert.equal(scene.cast().stopped, true, 'recasting ends the channel instead of starting another');
   assert.equal(scene.aura(scene.player, 'Mana_Transfer_Active'), false);
   assert.equal(events.length, eventCount, 'ending the channel replays no cast cue');
+});
+
+test('a recast relays channel cancellation to the recipient without charging mana again', () => {
+  const sender = new Player(0, 0), recipient = new Player(...toCells(0, 1));
+  sender.spellId = 'a'; recipient.spellId = 'b';
+  const peer = player => ({ ...playerState(player), spellPlayer: true, spellId: player.spellId,
+    maxHealth: player.vitals.maxHealth });
+  const remoteSender = peer(sender), remoteRecipient = peer(recipient);
+  const options = { world: { isWalkable: () => true }, spells: [spell] };
+  const local = new Spellcasting({ ...options, player: sender, peers: () => [remoteRecipient] });
+  const remote = new Spellcasting({ ...options, player: recipient, peers: () => [remoteSender] });
+  remote.state(recipient).mana = 20;
+  const packets = [];
+  let echoes = 0;
+  remote.onCast = () => echoes++;
+  local.onCast = packet => {
+    const message = readSpellCast(packet, [spell.id]);
+    assert.ok(message);
+    packets.push(message);
+    assert.equal(message.targetId, recipient.spellId);
+    assert.equal(remote.cast(message.id, { ...message, caster: remoteSender, target: recipient, remote: true }).ok, true);
+  };
+  assert.equal(local.cast(spell.id, { target: remoteRecipient }).ok, true);
+  local.update(0.1); remote.update(0.1);
+  assert.equal(remote.hasAura(remoteSender, 'Mana_Transfer_Active'), true);
+  assert.equal(recipient.magicRooted, true);
+  assert.ok(remote.state(recipient).mana > 22, 'the initial channel transfers mana');
+  const localMana = local.mana, remoteMana = remote.state(remoteSender).mana;
+  const receivedMana = remote.state(recipient).mana;
+  remote.state(recipient).manaDelay = Infinity;
+  assert.equal(local.cast(spell.id, { target: remoteRecipient }).stopped, true);
+  assert.equal(packets.length, 2, 'start and stop both cross the relay');
+  assert.equal(echoes, 0, 'remote casts never echo packets');
+  assert.equal(local.mana, localMana);
+  assert.equal(remote.state(remoteSender).mana, remoteMana);
+  assert.equal(remote.hasAura(remoteSender, 'Mana_Transfer_Active'), false);
+  remote.update(1.1);
+  assert.equal(recipient.magicRooted, false, 'the last short channel lock expires without being refreshed');
+  assert.equal(remote.state(recipient).mana, receivedMana, 'the stopped channel sends no more pulses');
 });
 
 test('all authored cues play real recordings through spatial SFX without invalid audio values', async () => {

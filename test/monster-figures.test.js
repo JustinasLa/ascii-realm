@@ -44,6 +44,31 @@ const SKELETON = KINDS.skeleton;
 const open = { isWalkable: () => true, typeAt: () => GRASS };
 const dt = 1 / 60;
 
+test('a frozen monster keeps a finite pose and resumes walking after thawing', () => {
+  const f = figures();
+  const s = new Monster(0, 0, { risen: true });
+  s.magicSpeed = 0;
+  s.update(dt, open, null);
+  assert.equal(s.speedScale, 0);
+  f.update(dt, [s]);
+  const rig = f.rigs.get(s);
+  const finitePose = () => {
+    assert.ok(Object.values(rig.weights).every(Number.isFinite));
+    rig.model.traverse(object => assert.ok(object.matrixWorld.elements.every(Number.isFinite)));
+  };
+  finitePose();
+  s.magicSpeed = 1;
+  s.setState('chase');
+  const [x, y] = toCells(10, 0);
+  for (let time = 0; time < 0.5; time += dt) {
+    s.update(dt, open, { x, y });
+    f.update(dt, [s]);
+    finitePose();
+  }
+  assert.ok(s.groundSpeed > 0);
+  assert.ok(rig.weights.walk + rig.weights.run > 0);
+});
+
 test('the skeleton is bones on the armature, not the mannequin skin', () => {
   const f = figures();
   const s = new Monster(0, 0, { risen: true });

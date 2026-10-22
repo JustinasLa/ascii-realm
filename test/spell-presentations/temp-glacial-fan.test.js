@@ -218,13 +218,17 @@ test('a real Glacial Fan cast renders this profile and emits typed cast/impact c
   assert.equal(scene.casting.state(scene.player).mana, mana - 8);
   assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects repeat casts');
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
+  scene.advance(0.05); // The cast fan starts transparent and opens into view.
   const castEffect = scene.casting.effects.list.find(e => e.stage === 'cast');
   assert.equal(castEffect.presentation, profile);
   const actual = [], expected = [];
   scene.casting.effects.paint((...p) => actual.push(p));
-  paintPresentation(profile, castEffect, (...p) => expected.push(p));
+  paintPresentation(profile, castEffect, (...p) => {
+    if (p[4] > 0) expected.push(p);
+  });
+  assert.ok(expected.length > 0, 'the cast fan has visible authored geometry');
   assert.deepEqual(actual.slice(-expected.length), expected, 'the runtime paints authored fan geometry after the source summon cue');
-  scene.advance(0.1);
+  scene.advance(0.05);
   assert.ok(scene.casting.projectiles.length > 0);
   const inFlight = [];
   scene.casting.effects.paint((...p) => inFlight.push(p), scene.casting.projectiles);

@@ -205,7 +205,10 @@ test('real Frozen Tomb cast renders its profile and routes typed cues while pres
   scene.casting.effects.paint((...point) => initial.push(point), scene.casting.projectiles);
   assert.ok(initial.some(point => point[2] === '#'), 'runtime paints the flying crystal core');
   const expected = [];
-  paintPresentation(presentation, scene.casting.effects.list.find(effect => effect.stage === 'cast'), (...point) => expected.push(point));
+  paintPresentation(presentation, scene.casting.effects.list.find(effect => effect.stage === 'cast'), (...point) => {
+    if (point[4] > 0) expected.push(point);
+  });
+  assert.ok(expected.length > 0, 'the cast profile has visible geometry');
   assert.deepEqual(initial.slice(0, expected.length), expected, 'effects renderer consumes authored geometry');
   scene.advance(0.7);
   assert.equal(scene.foe.magicSpeed, 0);

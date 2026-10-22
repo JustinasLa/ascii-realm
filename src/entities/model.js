@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from '../../vendor/three/loaders/GLTFLoader.js';
+import { clone as cloneSkinned } from '../../vendor/three/utils/SkeletonUtils.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT } from '../world/world.js';
 import { JUMPS as CAPTURES } from './jumps.js';
@@ -172,12 +173,11 @@ function setWorldQuaternion(b, world) {
   b.updateMatrixWorld(true);
 }
 
-// Two-bone IK: bends the knee and swings the thigh so the foot lands on
-// `target`, keeping the leg in its current plane.
-function reachFor(leg, target) {
-  const A = leg.thigh.getWorldPosition(new THREE.Vector3());
-  const B = leg.shin.getWorldPosition(new THREE.Vector3());
-  const C = leg.foot.getWorldPosition(new THREE.Vector3());
+// Two-bone IK: bends and swings a limb to reach `target` in its current plane.
+function reachFor(upper, lower, end, target) {
+  const A = upper.getWorldPosition(new THREE.Vector3());
+  const B = lower.getWorldPosition(new THREE.Vector3());
+  const C = end.getWorldPosition(new THREE.Vector3());
   const a = A.distanceTo(B);
   const b = B.distanceTo(C);
   const d = Math.min(A.distanceTo(target), a + b - 1e-4);
@@ -189,11 +189,11 @@ function reachFor(leg, target) {
     const now = Math.acos(Math.max(-1, Math.min(1, BA.dot(BC))));
     const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
     const turn = new THREE.Quaternion().setFromAxisAngle(axis, want - now);
-    setWorldQuaternion(leg.shin, turn.multiply(leg.shin.getWorldQuaternion(new THREE.Quaternion())));
+    setWorldQuaternion(lower, turn.multiply(lower.getWorldQuaternion(new THREE.Quaternion())));
   }
-  const C2 = leg.foot.getWorldPosition(new THREE.Vector3());
+  const C2 = end.getWorldPosition(new THREE.Vector3());
   const swing = new THREE.Quaternion().setFromUnitVectors(C2.sub(A).normalize(), target.clone().sub(A).normalize());
-  setWorldQuaternion(leg.thigh, swing.multiply(leg.thigh.getWorldQuaternion(new THREE.Quaternion())));
+  setWorldQuaternion(upper, swing.multiply(upper.getWorldQuaternion(new THREE.Quaternion())));
 }
 
 // Picks the outline glyph for a partly covered cell from the direction the
@@ -210,29 +210,6 @@ export function outline(mx, my, cover) {
   else if ((a > -67.5 && a <= -22.5) || (a > 112.5 && a <= 157.5)) g = EDGE.fall;
   else g = EDGE.rise;
   return { g, rim: Math.max(0, nx * -0.6 + ny * -0.8) };
-}
-
-// Bend the free arm so its hand reaches the torch-carrying position.
-function holdTorch(arm, target) {
-  const A = arm.upper.getWorldPosition(new THREE.Vector3());
-  const B = arm.fore.getWorldPosition(new THREE.Vector3());
-  const C = arm.hand.getWorldPosition(new THREE.Vector3());
-  const a = A.distanceTo(B);
-  const b = B.distanceTo(C);
-  const d = Math.min(A.distanceTo(target), a + b - 1e-4);
-  const BA = A.clone().sub(B).normalize();
-  const BC = C.clone().sub(B).normalize();
-  const axis = new THREE.Vector3().crossVectors(BA, BC);
-  if (axis.lengthSq() > 1e-10) {
-    axis.normalize();
-    const now = Math.acos(Math.max(-1, Math.min(1, BA.dot(BC))));
-    const want = Math.acos(Math.max(-1, Math.min(1, (a * a + b * b - d * d) / (2 * a * b))));
-    const turn = new THREE.Quaternion().setFromAxisAngle(axis, want - now);
-    setWorldQuaternion(arm.fore, turn.multiply(arm.fore.getWorldQuaternion(new THREE.Quaternion())));
-  }
-  const C2 = arm.hand.getWorldPosition(new THREE.Vector3());
-  const swing = new THREE.Quaternion().setFromUnitVectors(C2.sub(A).normalize(), target.clone().sub(A).normalize());
-  setWorldQuaternion(arm.upper, swing.multiply(arm.upper.getWorldQuaternion(new THREE.Quaternion())));
 }
 
 // Each animation library is fetched once and shared, e.g. with the skeletons.
@@ -270,10 +247,12 @@ export class ModelFigure {
     rim.position.set(2, 3, -5);
     this.scene.add(moon, rim, new THREE.HemisphereLight(0x8090b0, 0x202418, 1.6));
 
-    this.model = gltf.scene;
+    this.model = cloneSkinned(gltf.scene);
     this.model.traverse((o) => {
       if (!o.isMesh) return;
       o.frustumCulled = false;
+      // Gear paints vertex colours, so its geometry belongs to this figure too.
+      o.geometry = o.geometry.clone();
       // Dark, undyed cloth and leather; the mannequin's joint rings a shade
       // darker still.
       const joint = o.material?.name === 'M_Joints';
@@ -312,7 +291,7 @@ export class ModelFigure {
     // The captured jumps are put onto the skeleton while it still stands in
     // its rest pose, with the hands held as in the library's jump.
     const clips = Object.fromEntries(Object.entries(CLIPS).map(([key, name]) => [key,
-      gltf.animations.find((c) => c.name === name)]));
+      gltf.animations.find((c) => c.name === name).clone()]));
     clips.attackB = clips.attack.clone();
     const captured = [];
     for (const [key, data] of Object.entries(CAPTURES)) {
@@ -591,7 +570,8 @@ export class ModelFigure {
       // Held ahead of the chest, which faces round from the legs.
       const chest = new THREE.Quaternion().setFromAxisAngle(UP, this.model.rotation.y - this.legYaw);
       const offset = new THREE.Vector3(0.18, -0.22, 0.28).applyQuaternion(chest);
-      holdTorch(this.torchArm, shoulder.add(offset));
+      const arm = this.torchArm;
+      reachFor(arm.upper, arm.fore, arm.hand, shoulder.add(offset));
       this.torchLight.position.copy(this.torchArm.hand.getWorldPosition(new THREE.Vector3()));
       this.torchLight.position.y += 0.55;
     }
@@ -822,7 +802,7 @@ export class ModelFigure {
     this.model.position.y += shift;
     this.model.updateMatrixWorld(true);
     this.legs.forEach((l, i) => {
-      if (planted[i]) reachFor(l, planted[i]);
+      if (planted[i]) reachFor(l.thigh, l.shin, l.foot, planted[i]);
     });
   }
 

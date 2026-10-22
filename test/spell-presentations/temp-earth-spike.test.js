@@ -178,10 +178,11 @@ test('real Earth Spike cast renders its profile, emits typed cues and preserves 
   assert.equal(scene.cast().ok, true);
   assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects a second cast');
   assert.equal(events.filter(e => e.type === 'spell' && e.stage === 'cast').length, 1);
+  scene.advance(0.05); // The travelling mound fades in after launch.
   const points = [];
   scene.casting.effects.paint((...p) => points.push(p), scene.casting.projectiles);
   assert.ok(points.some(p => p[2] === '_') && points.some(p => p[2] === '^'), 'runtime paints the burrowing mound and its stone tip');
-  scene.advance(0.8);
+  scene.advance(0.75);
   assert.ok(scene.foe.health <= 88 && scene.foe.magicLift > 0, 'TF damage and lifting fissure remain intact');
   assert.ok(events.some(e => e.type === 'spell' && e.stage === 'impact'));
   assert.ok(events.some(e => e.type === 'spell' && e.stage === 'pulse'));

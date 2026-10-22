@@ -274,12 +274,17 @@ export class Scenery {
     });
     // All definitions have passed validation before any potentially expensive
     // rasterization, and every prop is baked before changing the live world.
-    const props = definitions.map((definition) => ({ ...createProp(definition.kind, definition.x, definition.y, definition), ...definition }));
+    const props = definitions.map((definition) => this._restoreProp(definition));
     return { scene: { version: 1, seed: data.seed, terrain, props: definitions, removed }, props };
   }
 
+  _restoreProp(definition) {
+    // Fine-bake recipes are keyed by the factory object's identity.
+    return Object.assign(createProp(definition.kind, definition.x, definition.y, definition), definition);
+  }
+
   _apply(scene, preparedProps) {
-    const props = preparedProps ?? scene.props.map((definition) => ({ ...createProp(definition.kind, definition.x, definition.y, definition), ...definition }));
+    const props = preparedProps ?? scene.props.map((definition) => this._restoreProp(definition));
     this.world.clearScenery();
     for (const { x, y, type } of scene.terrain) this.world.setTerrain(x, y, type);
     for (const prop of props) this.world.addProp(prop);
