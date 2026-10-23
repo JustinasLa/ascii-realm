@@ -261,7 +261,7 @@ export class Scenery {
     const definitions = data.props.map((entry) => {
       if (!entry || typeof entry !== 'object') throw new Error('Invalid prop entry.');
       // Scenes saved before per-item variation retain their original shapes.
-      const { id, kind, x, y, scale, seed, variant = 0, rotation = 0 } = entry;
+      const { id, kind, x, y, scale, seed, variant = 0, rotation = propDefinition(kind)?.defaultRotation ?? 0 } = entry;
       if (typeof id !== 'string' || !/^s:[1-9]\d*$/.test(id) || !Number.isSafeInteger(Number(id.slice(2))) || Number(id.slice(2)) > MAX_PROP_ID) throw new Error('Invalid placed prop identifier.');
       if (propIds.has(id)) throw new Error('Duplicate prop identifier.');
       propIds.add(id);
