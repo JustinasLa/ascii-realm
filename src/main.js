@@ -36,6 +36,7 @@ import { Fog } from './world/fog.js';
 import { SpellFogStirs } from './world/fog-spells.js';
 import { MAX_WALKERS } from './world/fog-wake.js';
 import { Footprints } from './world/footprints.js';
+import { Mushrooms } from './world/mushrooms.js';
 import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
@@ -153,8 +154,9 @@ inventory.equip(0);
 inventory.assignHotbar(0, 'shortSword');
 inventory.events.length = 0;
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
-// The land holds only grass, trees, rocks and lakes: no wild plants to pick.
+// Harvestable tufts and berry bushes stay disabled.
 const harvesting = new Harvesting(world, null, { wild: false });
+const mushrooms = new Mushrooms(world);
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 const fireflies = new Fireflies();
@@ -200,7 +202,7 @@ const fog = new Fog();
 const fogSpells = new SpellFogStirs();
 const debug = { player, camera, world, grass, splashes, weather, fog, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
-  harvesting,
+  harvesting, mushrooms,
   audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
 if (params.has('debug')) window.game = debug;
 
@@ -724,6 +726,7 @@ function frame(now) {
   const torchKey = wasTapped('KeyT');
   const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
+  const interact = wasTapped('KeyE');
   const cast = wasTapped('KeyR') || rightClicked;
   rightClicked = false;
   if (!builder.enabled && !debug.freeze) {
@@ -734,6 +737,7 @@ function frame(now) {
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
+    if (interact && !isGameplayBlocked() && !player.magicStunned) mushrooms.interact(player);
     if (cast && !isGameplayBlocked() && !player.magicStunned) {
       syncSpellPeers();
       const aim = aimPoint({ projectileRange: 40 }, 1);
@@ -777,6 +781,7 @@ function frame(now) {
     }
   }
   if (!paused) grass.update(world, player, time);
+  if (!paused) mushrooms.update(playerDt, player, fromX, fromY);
   remotePlayers.update(dt, now);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
@@ -900,6 +905,7 @@ function frame(now) {
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
     view.x0 + view.cols + marginX, view.y0 + view.rows + tall, wide);
   const mirror = reflector(time, view);
+  const visibleMushrooms = mushrooms.prepare(view, wide);
   const visibleFires = fires.prepare(view, time);
   const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
   ambience.update(dt, time, world, view, { lights: lightsOf(visibleFires, visibleTorches), wind: weather.wind });
@@ -964,6 +970,13 @@ function frame(now) {
     reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
     drawables.push({ y: node.y, draw: () => drawResource(renderer, view, node, time) });
   }
+  for (const node of visibleMushrooms) {
+    reflections.push({ y: node.y, draw: () => mushrooms.draw(renderer, view, node, mirror) });
+    drawables.push({ y: node.y, draw: () => mushrooms.draw(renderer, view, node) });
+  }
+  for (const spore of [...mushrooms.ambient, ...mushrooms.spores]) {
+    drawables.push({ y: spore.y, draw: () => mushrooms.drawSpore(renderer, view, spore) });
+  }
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
@@ -997,6 +1010,7 @@ function frame(now) {
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
+  mushrooms.drawGlow(renderer, view, visibleMushrooms);
   splashes.drawContacts(renderer, view, time, contacts);
   fires.light(renderer, view, time, visibleFires);
   torches.light(renderer, view, time, visibleTorches);
@@ -1038,6 +1052,9 @@ function frame(now) {
       note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
         (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
   hud.setFoes(woundedFoes(monsterCells));
+  const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
+  hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
+    ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
   spellControls.update();

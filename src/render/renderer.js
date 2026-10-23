@@ -88,6 +88,8 @@ uniform sampler2D uPushed;
 uniform vec4 uPushedArea;
 uniform sampler2D uFine;
 uniform sampler2D uFineBg;
+uniform sampler2D uMotion;
+uniform bool uMotionActive;
 out vec4 outColor;
 
 const float NOISE = ${NOISE_SIZE.toFixed(1)};
@@ -206,6 +208,37 @@ void main() {
   vec3 ground = mix(${vec3(NIGHT)}, bg.rgb, ${BG_KEEP.toFixed(3)});
   vec3 color = mix(ground, fg.rgb, coverage(g, local));
 
+  // Soft sprites can move their letters between grid slots. Only cells in
+  // their small neighbourhood pay for these samples; later terrain/figure
+  // writes remove the mark so a drifting letter cannot bleed through them.
+  if (uMotionActive) {
+    vec4 motion = texelFetch(uMotion, ci, 0);
+    int tag = int(round(motion.b * 255.0)) | (int(round(motion.a * 255.0)) << 8);
+    if ((tag & 32768) != 0) {
+      bool floating = (tag & 1) != 0;
+      int depth = (tag & 32767) >> 1;
+      if (floating) color = ground;
+      ivec2 size = textureSize(uMotion, 0);
+      for (int y = -1; y <= 1; y++) {
+        for (int x = -1; x <= 1; x++) {
+          ivec2 neighbour = ci + ivec2(x, y);
+          if (any(lessThan(neighbour, ivec2(0))) || any(greaterThanEqual(neighbour, size))) continue;
+          vec4 m = texelFetch(uMotion, neighbour, 0);
+          int t = int(round(m.b * 255.0)) | (int(round(m.a * 255.0)) << 8);
+          int d = (t & 32767) >> 1;
+          if ((t & 1) == 0 || d < depth || (!floating && d == depth)) continue;
+          vec2 offset = (round(m.rg * 255.0) - 128.0) / 254.0;
+          vec2 at = local - vec2(x, y) - offset;
+          if (any(lessThan(at, vec2(0.0))) || any(greaterThan(at, vec2(1.0)))) continue;
+          vec4 ink = texelFetch(uFg, neighbour, 0);
+          vec4 back = texelFetch(uBg, neighbour, 0);
+          float letter = round(ink.a * 255.0) + mod(round(back.a * 255.0), 16.0) * 256.0;
+          color = mix(color, ink.rgb, coverage(letter, at));
+        }
+      }
+    }
+  }
+
   // A tree or rock drawn in small cells over this spot.
   vec2 finePos = p / uCell * ${FINE.toFixed(1)};
   vec2 fineCell = floor(finePos);
@@ -322,7 +355,7 @@ export class AsciiRenderer {
     this.u = {};
     for (const name of ['uFg', 'uBg', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
       'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uPushed', 'uPushedArea',
-      'uFine', 'uFineBg']) {
+      'uFine', 'uFineBg', 'uMotion', 'uMotionActive']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
 
@@ -371,6 +404,7 @@ export class AsciiRenderer {
     this.bgTex = dataTexture(gl);
     this.fineTex = dataTexture(gl);
     this.fineBgTex = dataTexture(gl);
+    this.motionTex = dataTexture(gl);
 
     gl.uniform1i(this.u.uFg, 0);
     gl.uniform1i(this.u.uBg, 1);
@@ -379,6 +413,7 @@ export class AsciiRenderer {
     gl.uniform1i(this.u.uPushed, 5);
     gl.uniform1i(this.u.uFine, 6);
     gl.uniform1i(this.u.uFineBg, 7);
+    gl.uniform1i(this.u.uMotion, 3);
     gl.uniform2f(this.u.uAtlasCols, atlas.cols, atlas.rows);
     gl.uniform2f(this.u.uAtlasCell, atlas.cellW, atlas.cellH);
     gl.uniform1f(this.u.uAtlasPad, atlas.pad);
@@ -416,7 +451,7 @@ export class AsciiRenderer {
     if (cols === this.cols && rows === this.rows) return;
     this.allocate(cols, rows);
 
-    for (const tex of [this.fgTex, this.bgTex]) {
+    for (const tex of [this.fgTex, this.bgTex, this.motionTex]) {
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -438,6 +473,9 @@ export class AsciiRenderer {
     // Legacy CPU shading helpers still write this buffer; layers now
     // resolve into fg, so it does not need a GPU texture.
     this.ov = new Uint8ClampedArray(cols * rows * 4);
+    this.motion = new Uint8Array(cols * rows * 4);
+    this.motionPass = 0;
+    this.motionUsed = false;
     // Terrain type under each cell, so later passes know where water is.
     this.mask = new Uint8Array(cols * rows);
     this.fineCols = cols * FINE;
@@ -481,16 +519,50 @@ export class AsciiRenderer {
     this.fg[i + 3] = glyphIndex & 255;
     this.bg[i + 3] = glyphIndex >> 8;
     this.ov[i + 3] = 0;
+    if (this.motionUsed) {
+      this.motion[i] = this.motion[i + 1] = 0;
+      this.motion[i + 2] = (this.motionPass * 2) & 255;
+      this.motion[i + 3] = (this.motionPass * 2) >> 8;
+    }
     if (this.fineMark?.[cell]) this.overFine(cell, FINE_UNDER);
   }
 
   // Empties the fine grid. The ground is drawn over every cell each frame,
   // but nothing redraws the small cells, so they are emptied with it.
   clearFine() {
+    if (this.motionUsed) this.motion.fill(0);
+    this.motionPass = 0;
+    this.motionUsed = false;
     if (!this.fineUsed) return;
     this.fineBg.fill(0);
     this.fineMark.fill(0);
     this.fineUsed = false;
+  }
+
+  // One painter-ordered soft sprite. The pass number is small (one per
+  // mushroom), unlike a counter for every terrain and grass cell.
+  beginFloating() {
+    this.motionUsed = true;
+    this.motionPass = Math.min(16383, this.motionPass + 1);
+  }
+
+  putFloating(x, y, g, red, green, blue) {
+    const sx = Math.round(x), sy = Math.round(y);
+    if (sx < 0 || sy < 0 || sx >= this.cols || sy >= this.rows) return;
+    this.put(sx, sy, g, red, green, blue);
+    const at = (sy * this.cols + sx) * 4;
+    const tag = 32768 | (this.motionPass * 2 + 1);
+    this.motion[at] = Math.round((x - sx) * 254) + 128;
+    this.motion[at + 1] = Math.round((y - sy) * 254) + 128;
+    this.motion[at + 2] = tag & 255;
+    this.motion[at + 3] = tag >> 8;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = sx + dx, ny = sy + dy;
+        if (nx < 0 || ny < 0 || nx >= this.cols || ny >= this.rows) continue;
+        this.motion[(ny * this.cols + nx) * 4 + 3] |= 128;
+      }
+    }
   }
 
   // Something drawn into a cell holding part of a sprite: it stands in
@@ -619,6 +691,11 @@ export class AsciiRenderer {
     this.fg[i + 3] = glyphIndex & 255;
     this.bg[i + 3] = (glyphIndex & GLYPH_MASK) >> 8;
     this.ov[i + 3] = 0;
+    if (this.motionUsed) {
+      this.motion[i] = this.motion[i + 1] = 0;
+      this.motion[i + 2] = (this.motionPass * 2) & 255;
+      this.motion[i + 3] = (this.motionPass * 2) >> 8;
+    }
   }
 
   // Whether a second glyph is layered over the cell's base glyph.
@@ -659,6 +736,12 @@ export class AsciiRenderer {
     gl.bindTexture(gl.TEXTURE_2D, this.fineBgTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.fineCols, this.fineRows, gl.RGBA, gl.UNSIGNED_BYTE,
       this.fineBg);
+    gl.uniform1i(this.u.uMotionActive, this.motionUsed ? 1 : 0);
+    if (this.motionUsed) {
+      gl.activeTexture(gl.TEXTURE3);
+      gl.bindTexture(gl.TEXTURE_2D, this.motionTex);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, this.cols, this.rows, gl.RGBA, gl.UNSIGNED_BYTE, this.motion);
+    }
     gl.activeTexture(gl.TEXTURE4);
     gl.bindTexture(gl.TEXTURE_2D, this.noiseTex);
     gl.activeTexture(gl.TEXTURE2);

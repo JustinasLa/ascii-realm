@@ -76,6 +76,10 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Inventory, ITEMS, Hud: inert(),
     InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
     GroundItems: inert(), Harvesting: inert(), Collection: inert(), drawItem: noop, drawResource: noop,
+    Mushrooms: class extends inert() {
+      constructor() { super(); this.spores = []; this.ambient = []; }
+      nearby() { return null; }
+    },
     Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
     Spellcasting: class extends inert() { constructor() { super(); this.effects = { draw: noop }; } },
     SpellControls: class extends inert() { populate() { populatedSpellControls++; } },

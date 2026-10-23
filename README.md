@@ -11,6 +11,7 @@ world is generated as you walk, and up to eight friends can share it.
 
 ## Features
 
+- **Glowcap mushrooms** — pale caps and teal stems growing in clusters. Walking nearby makes them wobble fluidly and release spores that float upward. Press `E` (or tap Spores) for a larger rising burst.
 - **Infinite seeded world** — lakes, shorelines, meadows, dirt paths and rocky outcrops generate in chunks as you walk; `?seed=42` picks another world.
 - **Living meadows and forests** — wind-swept grass that keeps your footprints, and eight tree species with seasonal palettes, falling leaves and fallen logs.
 - **Water and reflections** — wade knee-deep through any lake while the outlaw, trees and stars reflect and break apart on the swell.

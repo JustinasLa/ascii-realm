@@ -244,7 +244,7 @@ function asciify(ctx, at, canvas, fontPx, fontFamily) {
         }
       }
     }
-    const result = { ch, strength: Math.min(1, Math.max(0.35, peak * 1.15)) };
+    const result = { ch, strength: entry.strength ?? Math.min(1, Math.max(0.35, peak * 1.15)) };
     chosen.set(entry.name, result);
     return result;
   };
@@ -262,6 +262,7 @@ function asciify(ctx, at, canvas, fontPx, fontFamily) {
     if (!ch) return;
     const v = Math.round(strength * 255);
     ctx.fillStyle = `rgb(${v},${v},${v})`;
+    ctx.font = `${packed[k].bold ? 'bold ' : ''}${fontPx}px ${fontFamily}`;
     ctx.fillText(ch, ox + INNER_W / 2, oy + INNER_H / 2);
   });
   ctx.restore();

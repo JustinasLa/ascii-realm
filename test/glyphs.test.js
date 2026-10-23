@@ -30,7 +30,7 @@ test('every drawn glyph is clipped to its own padded atlas cell and detail glyph
   const ctx = new Proxy({
     measureText: () => ({ width: 60 }),
     rect: (...args) => clips.push(args),
-    fillText: (ch, x, y) => text.push({ ch, x, y }),
+    fillText: (ch, x, y) => text.push({ ch, x, y, font: ctx.font, color: ctx.fillStyle }),
     getImageData: () => ({ data: new Uint8ClampedArray(canvas.width * canvas.height * 4) }),
   }, { get: (target, name) => target[name] ?? (() => {}) });
   canvas.getContext = () => ctx;
@@ -61,6 +61,11 @@ test('every drawn glyph is clipped to its own padded atlas cell and detail glyph
   }
   assert.equal(atlas.ascii.get('pebble.0'), 'o');
   assert.equal(atlas.ascii.get('props.cut.s.0.0'), '(');
+  const capGlyph = dg('mushrooms.ascii.81');
+  const capLetter = text.find(({ x, y }) => Math.floor(y / atlas.cellH) * atlas.cols + Math.floor(x / atlas.cellW) === capGlyph);
+  assert.equal(atlas.ascii.get('mushrooms.ascii.81'), 'Q');
+  assert.match(capLetter.font, /^bold /, 'the reference cap lettering keeps its heavy font weight');
+  assert.equal(capLetter.color, 'rgb(255,255,255)', 'explicit mushroom lettering retains its full coverage');
   assert.equal(atlas.ascii.get('flora.stem.1.4'), '/', 'flower stems also use ordinary ASCII');
   assert.equal(atlas.ascii.get('flora.stem.4.1'), '\\');
 });
