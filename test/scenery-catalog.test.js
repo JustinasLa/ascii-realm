@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Scenery } from '../src/editor/scenery.js';
 import { PROP_CATALOG, PROP_KINDS, propDefinition } from '../src/world/prop-catalog.js';
-import { createProp, drawProp } from '../src/world/props.js';
+import { blocks, createProp, drawProp } from '../src/world/props.js';
+import { PILLAR_DEFINITIONS } from '../src/world/architecture-pillars.js';
 import { reflector } from '../src/world/reflection.js';
 import { GRASS, WATER, World } from '../src/world/world.js';
 import { withLayers } from './helpers/renderer.js';
@@ -12,6 +13,7 @@ const expectedKinds = [
   'crate', 'barrel', 'fence', 'tent', 'campfire', 'signpost',
   'stone-gate', 'stone-tower', 'column-short', 'column-broken', 'column-tall',
   'wall-low', 'wall-broken', 'rubble-small', 'rubble-large',
+  ...PILLAR_DEFINITIONS.map(p => p.kind),
 ];
 const decorativeKinds = new Set(['flowers', 'mushrooms', 'reeds']);
 
@@ -52,7 +54,7 @@ test('every catalog prop survives placement, erase history, and JSON save/load',
 
       const prop = scene.place(kind, x, y, { scale: 1.5, seed: 27 });
       const original = structuredClone(prop);
-      const anchorWalkable = !solid || kind === 'stone-gate';
+      const anchorWalkable = prop.collisionPolygons ? !blocks(prop, x, y) : !solid || kind === 'stone-gate';
       assert.equal(prop.solid, solid);
       assert.equal(world.isWalkable(x, y), anchorWalkable);
       assert.ok(world.propsIn(x, y, x, y).some(({ id }) => id === prop.id), 'placed prop is visible to world queries');

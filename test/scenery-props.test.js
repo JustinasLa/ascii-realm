@@ -40,6 +40,11 @@ test('scaling changes silhouettes and collision footprints without duplicate cel
             20 + (rect.minY + rect.maxY) / 2), prop.solid);
         }
         if (kind === 'stone-gate') assert.equal(blocks(prop, 10, 20), false, 'arch center stays open');
+      } else if (prop.collisionPolygons) {
+        for (const polygon of prop.collisionPolygons) {
+          const [dx, dy] = polygon.reduce(([x, y], p) => [x + p[0] / polygon.length, y + p[1] / polygon.length], [0, 0]);
+          assert.equal(blocks(prop, 10 + dx, 20 + dy), prop.solid);
+        }
       } else {
         assert.equal(blocks(prop, 10, 20), prop.solid);
         assert.equal(blocks(prop, 10 + prop.footW * 0.9, 20), prop.solid);

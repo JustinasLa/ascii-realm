@@ -1,3 +1,5 @@
+import { PILLAR_DEFINITIONS } from './pillar-catalog.js';
+
 // The palette, scene validation and prop factory share these definitions so
 // every available prop can also be previewed, saved and restored.
 export const PROP_CATALOG = Object.freeze([
@@ -25,6 +27,7 @@ export const PROP_CATALOG = Object.freeze([
   { kind: 'wall-broken', label: 'Broken wall', symbol: '%', group: 'Architecture', solid: true },
   { kind: 'rubble-small', label: 'Small rubble', symbol: '.', group: 'Architecture', solid: true },
   { kind: 'rubble-large', label: 'Large rubble', symbol: ':', group: 'Architecture', solid: true },
+  ...PILLAR_DEFINITIONS,
 ].map(Object.freeze));
 
 export const PROP_KINDS = new Set(PROP_CATALOG.map(({ kind }) => kind));

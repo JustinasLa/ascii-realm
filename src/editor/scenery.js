@@ -1,7 +1,7 @@
 import { randomSeed } from '../core/rng.js';
 import { createProp } from '../world/props.js';
 import { isArchitectureKind } from '../world/architecture-props.js';
-import { PROP_KINDS } from '../world/prop-catalog.js';
+import { PROP_KINDS, propDefinition } from '../world/prop-catalog.js';
 import { ASPECT, STONE, WATER } from '../world/world.js';
 import { isSpawnRuinId } from '../world/spawn-ruins.js';
 
@@ -157,7 +157,7 @@ export class Scenery {
     });
   }
 
-  place(kind, x, y, { scale = 1, seed, variant = 1, rotation = 0 } = {}) {
+  place(kind, x, y, { scale = 1, seed, variant = 1, rotation = propDefinition(kind)?.defaultRotation ?? 0 } = {}) {
     if (seed === undefined) seed = this.nextPropSeed();
     checkProp(kind, x, y, scale, seed, variant, rotation);
     if (this.world.addedProps.size >= PROP_LIMIT) throw new Error(`Scenery supports up to ${PROP_LIMIT} placed props.`);
@@ -226,7 +226,7 @@ export class Scenery {
       return { x, y, type };
     }).sort((a, b) => a.y - b.y || a.x - b.x);
     const props = [...this.world.addedProps.values()].map(({ id, kind, x, y, scale, seed, variant = 0, rotation = 0 }) =>
-      ({ id, kind, x, y, scale, seed, variant, ...(rotation ? { rotation } : {}) }))
+      ({ id, kind, x, y, scale, seed, variant, ...(rotation || propDefinition(kind)?.defaultRotation ? { rotation } : {}) }))
       .sort((a, b) => Number(a.id.slice(2)) - Number(b.id.slice(2)));
     return { version: 1, seed: this.world.seed, terrain, props, removed: [...this.world.removedProps].sort() };
   }
@@ -266,7 +266,7 @@ export class Scenery {
       if (propIds.has(id)) throw new Error('Duplicate prop identifier.');
       propIds.add(id);
       checkProp(kind, x, y, scale, seed, variant, rotation);
-      return { id, kind, x, y, scale, seed, variant, ...(rotation ? { rotation } : {}) };
+      return { id, kind, x, y, scale, seed, variant, ...(rotation || propDefinition(kind)?.defaultRotation ? { rotation } : {}) };
     });
     const removedIds = new Set();
     const removed = data.removed.map((id) => {

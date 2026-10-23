@@ -22,7 +22,7 @@ function outwardFace(mesh, points, direction, material, smooth = null) {
 
 // A turned rim with two broad, shallow missing bites. They deform the actual
 // silhouette and expose oblique fracture faces, instead of adding dark marks.
-function wornTurn(mesh, cx, cz, profile, rand, material, wear = 0.16, segments = 64) {
+export function wornTurn(mesh, cx, cz, profile, rand, material, wear = 0.16, segments = 64) {
   const phase = rand() * TAU;
   const scars = [
     { a: phase, width: 0.23 + rand() * 0.15, depth: wear * (0.7 + rand() * 0.3) },
@@ -61,7 +61,7 @@ function wornTurn(mesh, cx, cz, profile, rand, material, wear = 0.16, segments =
 // Clipped rectangular masonry, with a lower arris, vertical broken faces, and
 // a sloping bevel around its lid. Four independently cut corners keep blocks
 // architectural, while the irregular lid prevents identical box silhouettes.
-function masonryFragment(mesh, cx, cz, width, depth, bottom, height, angle, rand, material) {
+export function masonryFragment(mesh, cx, cz, width, depth, bottom, height, angle, rand, material) {
   const x = width / 2, z = depth / 2;
   const cuts = Array.from({ length: 4 }, () => Math.min(width, depth) * (0.09 + rand() * 0.15));
   const outline = [[-x + cuts[0], -z], [x - cuts[1], -z], [x, -z + cuts[1]],
@@ -90,7 +90,7 @@ function masonryFragment(mesh, cx, cz, width, depth, bottom, height, angle, rand
     { ...material, cap: true });
 }
 
-function fracturedDrum(mesh, cx, cz, radius, bottom, height, rand, tone) {
+export function fracturedDrum(mesh, cx, cz, radius, bottom, height, rand, tone, shear = 0) {
   const segments = 64;
   // One tilted break and a missing front/right shoulder, rather than a crown
   // of random spikes. The lower torn lip exposes a broad inclined stone face.
@@ -98,7 +98,7 @@ function fracturedDrum(mesh, cx, cz, radius, bottom, height, rand, tone) {
   const shoulders = [-0.25, 0.12, -0.42, 0.16, -0.1, -0.52, 0.08, -0.16];
   const fracture = (a) => {
     const t = a / TAU * shoulders.length, k = Math.floor(t), f = t - k;
-    return 0.95 * Math.cos(a + phase) + lerp(shoulders[k % 8], shoulders[(k + 1) % 8], f);
+    return (0.95 + shear) * Math.cos(a + phase) + lerp(shoulders[k % 8], shoulders[(k + 1) % 8], f);
   };
   const bite = (a) => {
     const d = Math.abs(Math.atan2(Math.sin(a + 0.55), Math.cos(a + 0.55)));
@@ -233,7 +233,7 @@ export function makeColumnGeometry(kind, rand, seed) {
 
 // A fallen shaft section retains its cylindrical cross-section and chipped
 // oblique end, so rubble reads as collapsed architecture rather than boulders.
-function fallenDrum(mesh, sx, cz, radius, length, angle, bottom, rand, tone) {
+export function fallenDrum(mesh, sx, cz, radius, length, angle, bottom, rand, tone) {
   const cx = sx - 0.55 * cz, segments = 40;
   const axis = [Math.cos(angle), 0, Math.sin(angle)];
   const across = [-Math.sin(angle), 0, Math.cos(angle)];
