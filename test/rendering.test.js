@@ -20,26 +20,27 @@ import { createScene, scenarios } from '../bench/scene.js';
 // drawn in ordinary cells, and once more when the trunk's foot and roots
 // became one solid, modelled in 3D, and when trees and rocks were ringed by
 // an outline of nothing. Meadow fine-boulder snapshots also preserve their
-// stone characters beneath blank ridge accents.
+// stone characters beneath blank ridge accents. Lunar snapshots now include
+// the real north-up lunar near side from NASA LROC and continuous water ripples.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
-  ['f1b6ad4187ea57ff5c49f23bfe30f25ab7c15616270114899bd1244a78124d8d',
-    '0b2281c8bdded2d8be27edb0a515cc13f906bc6ed276c814d326190e0d19d7c7',
-    '7ff7d11c4a6f43c8137b15e3b64060cfd69a309a28b4275cd48994b9a08cebc5',
-    '40e2e25ed15b4c2bc8492648d219594e1c2949372f965e85953f57f9e94ff574'],
-  ['5e54c48f2a966a143127a22348711e20a67be2436c0a0974196fc5a9f762968d',
-    'adef3dd61d38e1c49ff82ad01161e0668ef0eb223a390e8d551f44265e8fb7e2',
+  ['2d34e5cc6a5220a370476775079a8f553ea50c14f65f3a45ab274600f92fab2d',
+    '599d496a1ea58c30b90f10d31b77f6cdc95b6fb4b253a6aeeed8124c757d4a3e',
+    'a1060edf4271a91027cf85b5ada49bc1ca7c9549affead4814f77d5a5031da0f',
+    '0512f375fca07e2385f4e8306aaebe24ff81c18b5c83ce66b38ce2a16dde25d7'],
+  ['15796d8c69c8c96bcdcb53feee15ac7d4cf083260693c651f4659523ab430fa7',
+    '8be91b8cbf5f4daa2b108148c52d75ca5016a84852ffa11a9cd76f3a9789bded',
     'b4e71eaf4eb14af8361bd36ce5d2c7422a8e47a2fb4d667818b285d03dd3e449',
-    '33dcfb247c51d4b81952dc7b2f0797088485f74128fa0f70a8343a509e14411c'],
-  ['2b0e86d77d8aecacf67dd17b1c78e25cf4858d3e454fa8a07cae5ee24b7361a5',
-    '5c058034fd275183790614d4aab134febee7cf1e9bbcd080c11c5dc74bd4faf5',
-    'a456c48aedf5ba56492ff48cebb35091ef5f5171caa5a08fe7bb9826a6af0611',
-    '947fbdd4da537502a8d9f3558d91db617e4accbc988b5ff7e01d20c4b27b40e7'],
-  ['c77bba0992b36ed1990a4947ffe3856a719691c3b29f5d1bb0eeb5fb4035140a',
-    'eda0221495764aa0f6e2c70cc1bcfec58a66207b91c7640da634a7431d925f8f',
-    'c6a73ead604d60f0870b9efce99f72e7aca30125cc6c9247c18696b55705da61',
-    'fa976eb8f8d40daf2a055568d2d23ed2d5e17031fa2084c9e8dce52502818acd'],
+    'd6d4ae917067f38cb0899046aad165cea47baa5e25c845cbd3d86041713a5776'],
+  ['ed160d9edddd86795fa84b9f2f28a7401379718b3123401e3551ea129ab4d01e',
+    '0c80d07348afa392ed20f8794bcfae12060297a896363ba580240b20b7481ad6',
+    'cfecddabb13bf67e477e40650417b0c40d4daddb5ea5308dcb2cd22b548de990',
+    'c86f14006ec20cbba16e261e563c8859f3cc3dfdfb3d8380b41ba698e99161e1'],
+  ['234103e016982ad25cc0aaf67bdb0ffe3f5e736a8a1e5f7542dbfdbb2c302683',
+    'ad1f5e5812d170036b061ed50e8f9b8e41f1c8955298ad3e33700c4920e171df',
+    '85597c4586bb5b3f83f98083c0d3cdacfb40203a5c5b725bcd361a070d61dd03',
+    'e2af9f72d608451910dae7b6ca28f207e7ae0240ed4f4104956ba095fa8fdb0a'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.

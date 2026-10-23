@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Moon reflection · ASCII Realm</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0a0914; color: #dce2e9; font: 12px Consolas, monospace; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  nav { position: fixed; top: 20px; left: 20px; right: 20px; display: flex; justify-content: space-between; gap: 20px; }
+  a { color: #dce2e9; }
+  footer { position: fixed; bottom: 16px; right: 20px; color: #8e96a3; font-size: 10px; }
+</style>
+<canvas aria-label="Animated moon reflection using the game's live ASCII renderer"></canvas>
+<nav><span>MOON REFLECTION · LIVE RENDERER</span><a href="/">Play ASCII Realm →</a></nav>
+<footer>Lunar north up · Imagery: <a href="https://svs.gsfc.nasa.gov/4720/">NASA SVS / LROC / LOLA</a></footer>
+<script type="module">
+  import { AsciiRenderer } from '../src/render/renderer.js';
+  import { buildAtlas, glyph } from '../src/render/glyphs.js';
+  import { drawSkyReflection } from '../src/world/sky.js';
+  import { hash2 } from '../src/core/rng.js';
+  import { WATER } from '../src/world/world.js';
+  const r = new AsciiRenderer(document.querySelector('canvas'), buildAtlas('Consolas, monospace'));
+  const view = { x0: 0, y0: 0, offX: 0, offY: 0 };
+  function resize() { r.resize(innerWidth, innerHeight, devicePixelRatio || 1, 4.8, 8); }
+  addEventListener('resize', resize);
+  resize();
+  function frame(ms) {
+    const t = ms / 1000;
+    r.clear(6, 6, 19);
+    r.mask.fill(WATER);
+    for (let y = 0; y < r.rows; y++) for (let x = 0; x < r.cols; x++) {
+      const h = hash2(x, y, 35);
+      if (h < 0.94 || Math.sin(y * 0.26 + x * 0.04 - t * 0.4) < 0.65) continue;
+      r.putAt(y * r.cols + x, glyph(h > 0.98 ? '~' : '-'), 25, 31, 49);
+    }
+    drawSkyReflection(r, view, t);
+    r.draw();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+</script>
+</html>
