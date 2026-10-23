@@ -5,6 +5,7 @@ import { GLYPH_COUNT, GLYPH_MASK, LAYER } from '../src/render/glyphs.js';
 import { makeArchitectureProp } from '../src/world/architecture-props.js';
 import { bakeSurface } from '../src/world/prop-art.js';
 import { PROP_CATALOG } from '../src/world/prop-catalog.js';
+import { PILLAR_DEFINITIONS } from '../src/world/architecture-pillars.js';
 import { ASPECT } from '../src/world/world.js';
 
 const kinds = ['stone-gate', 'stone-tower', 'column-short', 'column-broken', 'column-tall',
@@ -21,8 +22,9 @@ function recipe(kind, seed = 42) {
   return { prop, ...surface };
 }
 
-test('architecture palette exposes all nine recipes and unknown kinds consume nothing', () => {
-  assert.deepEqual(PROP_CATALOG.filter(({ group }) => group === 'Architecture').map(({ kind }) => kind), kinds);
+test('architecture palette exposes legacy recipes and new pillars, and unknown kinds consume nothing', () => {
+  assert.deepEqual(PROP_CATALOG.filter(({ group }) => group === 'Architecture').map(({ kind }) => kind),
+    [...kinds, ...PILLAR_DEFINITIONS.map(p => p.kind)]);
   for (const kind of kinds) assert.ok(PROP_CATALOG.find((p) => p.kind === kind).solid);
   const unused = () => assert.fail('unknown kinds must not consume randomness or bake');
   for (const kind of ['tree', '', 'constructor', '__proto__']) {

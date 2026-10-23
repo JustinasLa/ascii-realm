@@ -8,7 +8,6 @@ const normal = (a, b, c) => {
   const u = b.map((v, i) => v - a[i]), v = c.map((n, i) => n - a[i]);
   return unit([u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]]);
 };
-const VIEW = [0.55, 0.45, -1];
 
 export class ArchitectureMesh {
   triangles = [];
@@ -139,12 +138,14 @@ export class ArchitectureMesh {
     return this;
   }
 
-  compile(binSize = 3) {
+  compile(binSize = 3, groundSkew = 0.55) {
+    const view = [groundSkew, 0.45, -1];
+    const projection = ([x, h, z]) => [x + groundSkew * z, -h - 0.45 * z];
     const bins = new Map();
     const bounds = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
     for (const t of this.triangles) {
-      if (dot(t.normal, VIEW) <= 1e-8) continue;
-      const p = t.points.map(project);
+      if (dot(t.normal, view) <= 1e-8) continue;
+      const p = t.points.map(projection);
       const [a, b, c] = p;
       const determinant = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
       if (Math.abs(determinant) < 1e-9) continue;
@@ -179,7 +180,7 @@ export class ArchitectureMesh {
       if (!nearest) return null;
       const n = nearest.normals ? unit([0, 1, 2].map((axis) =>
         weights.reduce((sum, weight, i) => sum + weight * nearest.normals[i][axis], 0))) : nearest.normal;
-      return { point: [px - 0.55 * bestZ, -py - 0.45 * bestZ, bestZ], normal: n, material: nearest.material };
+      return { point: [px - groundSkew * bestZ, -py - 0.45 * bestZ, bestZ], normal: n, material: nearest.material };
     };
     return { bounds, sample };
   }

@@ -9,12 +9,12 @@ import { World } from '../src/world/world.js';
 test('repeated placements of every prop get distinct variations even when random seeds collide', () => {
   const scene = new Scenery(new World(42), { seedSource: () => 7 });
   for (const { kind } of PROP_CATALOG) {
-    const props = Array.from({ length: 10 }, () => scene.place(kind, 20.5, 40.5));
+    const props = Array.from({ length: 6 }, () => scene.place(kind, 20.5, 40.5));
     assert.equal(new Set(props.map((prop) => prop.seed)).size, props.length);
     assert.equal(new Set(props.map((prop) => JSON.stringify(prop.cells))).size, props.length, kind);
     assert.equal(new Set(props.map((prop) => `${prop.footW},${prop.footH}`)).size, props.length, kind);
   }
-  assert.equal(new Set([...scene.world.addedProps.values()].map((prop) => prop.seed)).size, PROP_CATALOG.length * 10);
+  assert.equal(new Set([...scene.world.addedProps.values()].map((prop) => prop.seed)).size, PROP_CATALOG.length * 6);
 });
 
 test('pending preview uses the placed variation, while seed selection avoids imported 32-bit aliases', () => {

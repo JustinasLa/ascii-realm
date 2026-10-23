@@ -428,7 +428,7 @@ export function createProp(kind, x, y, options = {}) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) {
     throw new TypeError('Scenery prop options must be an object');
   }
-  const { scale = 1, seed = 1, variant = 1, rotation = 0 } = options;
+  const { scale = 1, seed = 1, variant = 1, rotation = definition.defaultRotation ?? 0 } = options;
   if (typeof scale !== 'number' || !Number.isFinite(scale) || scale < 0.25 || scale > 3) {
     throw new RangeError('Scenery prop scale must be a number between 0.25 and 3');
   }

@@ -1,12 +1,12 @@
 import { hash2, mulberry32 } from '../core/rng.js';
 import { createProp } from './props.js';
 import { rotateArchitectureGround } from './architecture-props.js';
-import { ASPECT, DIRT, GRASS, STONE } from './world.js';
+import { ASPECT, GRASS, STONE } from './world.js';
 
 // These slots belong to the generated landmark, including after an editor
 // deletes or moves one. Keep them independent of chunk order and prop seeds.
 export function isSpawnRuinId(id) {
-  return typeof id === 'string' && /^r:spawn:[0-9]$/.test(id);
+  return typeof id === 'string' && /^r:spawn:(?:[0-9]|10)$/.test(id);
 }
 
 function footprint(prop) {
@@ -64,9 +64,11 @@ export function createSpawnRuins(seed, spawn) {
     prop.x = x + dx;
     prop.y = gateY + dy;
   }
-  add('column-tall', -84, -4);
-  add('column-broken', 90, -9);
-  add('column-short', 108, -72);
+  // Match the centred footing and projection of the new foreground pillar.
+  // Keep the original anchors and slots so saved removals still apply.
+  add('column-circular-chipped', -84, -4);
+  add('column-square-snapped', 90, -9, 1, 1, 45);
+  add('column-circular-collapsed', 108, -72);
   add('rubble-large', -126, -34, 1.5);
   add('rubble-large', 130, -36, 1.5);
 
@@ -79,6 +81,9 @@ export function createSpawnRuins(seed, spawn) {
     outer.x = x + dx;
     outer.y = gateY + dy;
   }
+
+  // Append a new slot so existing saved removals keep their identities.
+  add('column-square', 0, 28, 1, 0, 45);
 
   // Approach the arch along its rotated tunnel, with an open forecourt
   // between spawn and the wall rather than a tight cluster around the player.
@@ -112,8 +117,6 @@ export function createSpawnRuins(seed, spawn) {
       const t = Math.max(0, Math.min(1, (qx * dx + qy * dy) / (dx * dx + dy * dy)));
       if (Math.hypot(qx - t * dx, qy - t * dy) <= 3.6 + edge) return STONE;
     }
-    if (feet.some(f => px >= f.minX - 1.5 && px <= f.maxX + 1.5
-      && py >= f.minY - 1 && py <= f.maxY + 1)) return DIRT;
     return GRASS;
   };
 

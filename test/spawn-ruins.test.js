@@ -8,9 +8,9 @@ import { blocks, createProp } from '../src/world/props.js';
 import * as architecture from '../src/world/architecture-props.js';
 
 const seeds = [1, 42, 221];
-const ids = Array.from({ length: 10 }, (_, i) => `r:spawn:${i}`);
+const ids = Array.from({ length: 11 }, (_, i) => `r:spawn:${i}`);
 const isRuin = prop => prop.id?.startsWith('r:spawn:');
-const sorted = props => [...props].sort((a, b) => a.id.localeCompare(b.id));
+const sorted = props => [...props].sort((a, b) => Number(a.id.split(':').at(-1)) - Number(b.id.split(':').at(-1)));
 
 function ruins(world) {
   assert.ok(world.spawnRuins, 'World(seed, { spawnRuins: true }) must create the starting landmark');
@@ -137,7 +137,8 @@ for (const seed of seeds) {
     const gate = props.find(prop => prop.kind === 'stone-gate');
     assert.deepEqual([gate.x, gate.y], [world.spawn.x, world.spawn.y - 30]);
     assert.deepEqual(props.map(prop => prop.kind), ['stone-gate', 'wall-broken', 'wall-broken',
-      'column-tall', 'column-broken', 'column-short', 'rubble-large', 'rubble-large', 'wall-low', 'wall-low'],
+      'column-circular-chipped', 'column-square-snapped', 'column-circular-collapsed',
+      'rubble-large', 'rubble-large', 'wall-low', 'wall-low', 'column-square'],
       'new outer walls append slots without changing the original eight identities');
     assert.equal(props.filter(prop => prop.kind.startsWith('wall-')).length, 4);
     for (const [id, dx, dy] of [[3, -84, -4], [4, 90, -9], [5, 108, -72], [6, -126, -34], [7, 130, -36]]) {
@@ -145,6 +146,9 @@ for (const seed of seeds) {
         'pillars and rubble keep their spacious original positions');
     }
     assert.equal(gate.rotation, 17);
+    assert.equal(props[10].rotation, 45);
+    assert.equal(props[4].rotation, 45, 'the square ruined pillar shares the foreground pillar stance');
+    assert.deepEqual([props[10].x, props[10].y], [world.spawn.x, world.spawn.y + 28]);
     const piers = localFootprints(gate);
     const [minX, frontY] = piers[0][0], [maxX] = piers[1][1];
     const a = at(gate, minX, frontY), b = at(gate, maxX, frontY);
@@ -276,7 +280,7 @@ for (const seed of seeds) {
     const props = ruins(world);
     const pillars = props.filter(p => p.kind.startsWith('column-'));
     const masonry = props.filter(p => p.kind === 'stone-gate' || p.kind.startsWith('wall-'));
-    assert.equal(pillars.length, 3);
+    assert.equal(pillars.length, 4);
     for (const [i, pillar] of pillars.entries()) {
       for (const other of pillars.slice(i + 1)) {
         const dx = Math.abs(pillar.x - other.x), dy = pillar.y - other.y;
@@ -299,7 +303,7 @@ for (const seed of seeds) {
     const scene = new Scenery(world);
     const baseline = structuredClone(ruins(world));
     const gate = baseline.find(prop => prop.kind === 'stone-gate');
-    const erased = [gate.id, 'r:spawn:8', 'r:spawn:9'];
+    const erased = [gate.id, 'r:spawn:8', 'r:spawn:9', 'r:spawn:10'];
     for (const id of erased) {
       const prop = baseline.find(prop => prop.id === id);
       assert.equal(scene.erase(prop.x, prop.y, 0), 1);
@@ -314,7 +318,7 @@ for (const seed of seeds) {
     const ground = world.originalTypeAt(x, y);
     scene.paint(x, y, 0, WATER);
     const saved = JSON.parse(JSON.stringify(scene.serialize()));
-    assert.deepEqual(saved.removed, erased);
+    assert.deepEqual(saved.removed, [...erased].sort());
     assert.equal(saved.props.length, 0, 'generated defaults are not copied into scene additions');
     const restoredWorld = new World(seed, { spawnRuins: true });
     const restored = new Scenery(restoredWorld);
@@ -338,7 +342,7 @@ for (const seed of seeds) {
     assert.equal(restored.redo(), true);
     assert.deepEqual(ruins(restoredWorld), baseline);
     const clean = restored.serialize();
-    for (const id of ['r:spawn:10', 'r:spawn:-1', 'r:spawn:08', 'r:spawn:9:0', 'r:spawn:9x']) {
+    for (const id of ['r:spawn:11', 'r:spawn:-1', 'r:spawn:08', 'r:spawn:9:0', 'r:spawn:9x']) {
       assert.throws(() => restored.load({ ...clean, removed: [id] }), /Invalid removed prop identifier/,
         `out-of-range or malformed generated slot ${id} is rejected`);
       assert.deepEqual(restored.serialize(), clean, 'invalid removals leave the scene unchanged');
