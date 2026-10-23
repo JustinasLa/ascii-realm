@@ -1,9 +1,10 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
-import { dg, family } from '../render/glyphs.js';
+import { family } from '../render/glyphs.js';
 import { MOON, STARLIGHT } from '../render/palette.js';
 import { FLOATING, SHEEN } from './terrain/water.js';
 import { WATER } from './world.js';
+import { drawMoon } from './moon.js';
 
 // The sky is never drawn directly (the camera looks down at the ground), but
 // it shows up mirrored in every lake. Things in the sky are infinitely far
@@ -14,10 +15,6 @@ import { WATER } from './world.js';
 // the wavelets catch its light. Stars vary in size, colour and twinkle.
 // Floating lily pads cover the sky beneath them.
 
-// Bars by thickness, at the top or the bottom of a cell, and half bars that
-// end at the moon's left or right limb.
-const BAR = Array.from({ length: 4 }, (_, k) => [dg(`water.bar.${k}.0`), dg(`water.bar.${k}.1`)]);
-const BAR_END = family('water.barend.');
 const HAZE = family('water.haze.');
 const GLITTER = family('water.glitter.');
 export const STAR_GLYPHS = family('water.star.');
@@ -33,12 +30,6 @@ const HALO = 2;
 const COLUMN_UP = 3.4;
 const COLUMN_DOWN = 2.6;
 const COLUMN_HALF = 0.55;
-
-// Craters on the face, in moon radii from its middle, and their size.
-const CRATERS = [
-  [-0.38, -0.32, 0.2], [0.34, 0.22, 0.14], [0.05, -0.6, 0.1], [-0.52, 0.34, 0.12],
-  [0.58, -0.22, 0.09], [0.2, 0.62, 0.1], [-0.08, 0.08, 0.08], [0.42, -0.55, 0.07],
-];
 
 // Stars are scattered on a fixed grid of screen pixels for the same reason.
 const STAR_GRID = 26;
@@ -107,7 +98,11 @@ export function drawSkyReflection(r, view, t) {
       if (mask[m] !== WATER || FLOATING[r.glyphAt(m)]) continue;
       const px = (sx + wobble + 0.5) * cellW - view.offX;
       const dx = (px - moonX) / moonR;
-      if (nearMoon && dx > -HALO && dx < HALO && sky(r, m, dx, dy, px, py, sliceRow, t)) continue;
+      // The lunar face uses a finer, continuous ripple rather than the
+      // rounded full-cell wobble used for scattered stars and glitter.
+      const moonPx = (sx + 0.5) * cellW - view.offX;
+      const moonDx = (moonPx - moonX) / moonR;
+      if (nearMoon && moonDx > -HALO && moonDx < HALO && sky(r, m, moonDx, dy, moonPx, py, sliceRow, t)) continue;
       if (inColumn && dx > -columnHalf && dx < columnHalf) glitter(r, m, dx, dy, sx + x0, wy, glitterTick, t);
 
       // A cell can straddle star-grid squares. Check every square it touches
@@ -145,6 +140,8 @@ function sky(r, m, dx, dy, x, y, sliceRow, t) {
   const d2 = dx * dx + dy * dy;
   if (d2 > HALO * HALO) return false;
   const o = m * 4;
+  const margin = r.cellH / (MOON_R * r.dpr);
+  if (d2 < (1 + margin) ** 2 && drawMoon(r, m, dx, dy, x, y, MOON_R, t)) return true;
   if (d2 > 1) {
     // The halo: a soft glow in the water, broken into hazy bands.
     const d = Math.sqrt(d2);
@@ -161,46 +158,7 @@ function sky(r, m, dx, dy, x, y, sliceRow, t) {
     return false;
   }
 
-  // Darker seas, a bright limb toward the light (upper left), and craters
-  // shadowed on their upper-left inner wall with the far wall lit.
-  const limb = Math.sqrt(1 - d2);
-  const maria = valueNoise(dx * 2.6 + 10, dy * 2.6 + 10, 77);
-  let b = 0.6 + 0.35 * limb + (-dx - dy) * 0.1 - Math.max(0, maria - 0.5) * 0.8;
-  for (const [cx, cy, size] of CRATERS) {
-    const u = (dx - cx) / size;
-    const v = (dy - cy) / size;
-    const q = u * u + v * v;
-    if (q < 1) b += (u + v) * 0.22 * (1 - q) - 0.06;
-  }
-  b = Math.max(0.25, Math.min(0.95, b));
-
-  // The swell slices the image into two slivers per cell, each its own
-  // thickness; where a sliver falls into a trough the water shows through.
-  const step = r.cellW / (MOON_R * r.dpr);
-  const leftEdge = (dx - step) * (dx - step) + dy * dy > 1;
-  const rightEdge = (dx + step) * (dx + step) + dy * dy > 1;
-  const sx = x / r.dpr;
-  let drawn = false;
-  for (let half = 0; half < 2; half++) {
-    const sy = (y + (half - 0.5) * r.cellH * 0.5) / r.dpr;
-    const sliver = valueNoise(sx * 0.03 + t * 0.4, sy * 0.21, 92) * 0.55 + sliceRow * 0.45 + limb * 0.15;
-    if (sliver < 0.32) continue;
-    const k = Math.min(1, b * (0.7 + sliver * 0.45));
-    let g;
-    if (leftEdge !== rightEdge) g = BAR_END[(leftEdge ? 2 : 0) + half];
-    else g = BAR[Math.min(3, Math.floor((sliver - 0.32) * 4 + b * 2.2))][half];
-    const cr = MOON[0] * k;
-    const cg = MOON[1] * k * 0.99;
-    const cb = MOON[2] * k * 0.97;
-    if (drawn) r.layerAt(m, g, cr, cg, cb);
-    else r.putAt(m, g, cr, cg, cb);
-    drawn = true;
-  }
-  // A faint lift of the water between the slivers.
-  r.bg[o] += 18 * b;
-  r.bg[o + 1] += 20 * b;
-  r.bg[o + 2] += 30 * b;
-  return true;
+  return false;
 }
 
 // The glitter path: the column of water between the moon and the viewer
