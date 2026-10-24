@@ -38,3 +38,40 @@ test('unavailable browser storage still permits rune selection and binding', t =
   new Controls(casting, { storage: null });
   assert.equal(reads, 1, 'explicit storage avoids the browser getter');
 });
+
+// The wheel text names the CAST button on phones and the R key elsewhere.
+test('the rune wheel names CAST on phones and R elsewhere', () => {
+  const spells = [{ id: 'fire-shard', name: 'Fire Shard', element: 'oseni' }];
+  const casting = { available: spells, selected: 'fire-shard', spells: new Map(spells.map(s => [s.id, s])),
+    variant: () => ({}), modifiers: () => ({ mana: 12 }), hasAura: () => false };
+  let phone = false;
+  const controls = new Controls(casting, { storage: null, phone: () => phone });
+  controls.colors = { ink: 'ink', muted: 'muted', quiet: 'quiet' };
+  const text = lines => lines.map(runs => runs.map(([t]) => t).join(''));
+  controls.menu.open();
+  assert.ok(text(controls.hubLines('fire-shard')).includes('Bound to [R]'));
+  phone = true;
+  assert.ok(text(controls.hubLines('fire-shard')).includes('Tap CAST to cast'));
+  assert.ok(text(controls.hubLines('')).includes('Choose a school'));
+
+  controls.menu.enter(controls.menu.groups[0]);
+  controls.waiting = [false];
+  assert.ok(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)).includes('12 mana [CAST]'));
+  phone = false;
+  assert.ok(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)).includes('12 mana [R]'));
+});
+
+test('a phone flip redraws the open wheel even when nothing else changed', () => {
+  const casting = { available: [{ id: 'fire-shard', element: 'oseni' }], selected: 'fire-shard' };
+  let phone = false, renders = 0;
+  const controls = new Controls(casting, { storage: null, phone: () => phone });
+  controls.render = () => { renders++; };
+  controls.menu.open();
+  controls.spots = [];
+  controls.paint();
+  controls.paint();
+  assert.equal(renders, 1);
+  phone = true;
+  controls.paint();
+  assert.equal(renders, 2);
+});

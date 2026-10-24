@@ -171,3 +171,16 @@ test('the phone menu blocks gameplay while open and its Inventory row opens the 
   assert.equal(game.player.combat.charge, 0, 'opening the menu cancels a charge');
   game.phoneMenu.setOpen(false);
 });
+
+test('binding a rune names CAST on phones and R elsewhere', async () => {
+  const { game, setPhone } = await loadGame(undefined, { phone: true });
+  const toasts = [];
+  game.hud.notify = (message, kind) => toasts.push([message, kind]);
+  const { onBind, phone } = game.spellControls.options;
+  assert.equal(phone(), true);
+  onBind({ name: 'Fire Shard' });
+  setPhone(false);
+  assert.equal(phone(), false);
+  onBind({ name: 'Fire Shard' });
+  assert.deepEqual(toasts, [['Fire Shard ready: tap CAST', 'spell'], ['Fire Shard bound to R', 'spell']]);
+});

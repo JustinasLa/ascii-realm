@@ -869,6 +869,21 @@ test('on phones an empty equipment slot names the Equip button instead of a key'
   assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
 });
 
+test('flipping phone mode rewrites the empty-slot hint with the same slot selected', (t) => {
+  let phone = false;
+  const { screen, press, slotButton } = mount(t, { phone: () => phone });
+  press('KeyI');
+  slotButton('offHand').click();
+  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
+
+  phone = true;
+  screen.update();
+  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then tap Equip.');
+  phone = false;
+  screen.update();
+  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
+});
+
 test('the character name can change', (t) => {
   const { screen } = mount(t, { name: 'Mira' });
   assert.equal(screen.nameNode.textContent, 'Mira');

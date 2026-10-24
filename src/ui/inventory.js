@@ -499,7 +499,7 @@ export class InventoryScreen {
     const vitals = this.player.vitals;
     const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
       this.inventory.hotbar, this.inventory.capacity, this.selection,
-      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina]);
+      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone()]);
     if (signature === this._signature) return;
     this._signature = signature;
     this.portrait.update(this.player);

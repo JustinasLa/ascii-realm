@@ -515,11 +515,13 @@ hud.attachMana(casting);
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
 window.addEventListener('pagehide', () => casting.clearPresentation());
 // Holding the middle mouse button opens the rune wheel; the chosen rune is
-// bound to R. ?spell=ID binds one up front instead of the last one chosen.
+// bound to R, or to the CAST button on phones. ?spell=ID binds one up front
+// instead of the last one chosen.
 const spellControls = new SpellControls(casting, { surface: canvas, touchButton: document.getElementById('touch-runes'),
   canOpen: () => !builder.enabled && !debug.freeze && !isGameplayBlocked(),
-  onBind: spell => hud.notify(`${spell.name} bound to R`, 'spell'),
-  onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell') });
+  onBind: spell => hud.notify(device.phone ? `${spell.name} ready: tap CAST` : `${spell.name} bound to R`, 'spell'),
+  onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell'), phone: () => device.phone });
+debug.spellControls = spellControls;
 loadSpells().then(spells => {
   void prepareSpellSounds(sound.engine, spells);
   casting.spells = new Map(spells.map(s => [s.id, s]));

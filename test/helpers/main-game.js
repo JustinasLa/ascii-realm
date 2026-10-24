@@ -94,7 +94,10 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     },
     Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
     Spellcasting: class extends inert() { constructor() { super(); this.effects = { draw: noop }; } },
-    SpellControls: class extends inert() { populate() { populatedSpellControls++; } },
+    SpellControls: class extends inert() {
+      constructor(casting, options) { super(); this.options = options; }
+      populate() { populatedSpellControls++; }
+    },
     loadSpells: async () => [{ id: 'test-rune', name: 'Test rune' }],
     prepareSpellSounds: (_engine, spells) => { preparedSpellCount = spells.length; },
     moveAxis: () => move,
