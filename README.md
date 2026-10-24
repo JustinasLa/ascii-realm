@@ -67,11 +67,32 @@ npm test
 
 The suite covers gameplay, movement and combat, input, inventory, rendering
 equivalence, memory bounds and frame budgets, the lobby server and protocol,
-and every rune's behaviour and presentation. CI runs it on every push to
-`main` and every pull request. No coverage threshold is enforced. The tests
-do not run a real browser or GPU; `npm run bench` and the optional
-`npm run test:browser` check (needs Puppeteer) are described in the
+and every rune's behaviour and presentation. The tests do not run a real
+browser or GPU; `npm run bench` and the optional `npm run test:browser` check
+(needs Puppeteer) are described in the
 [performance notes](docs/performance.md).
+
+### Coverage
+
+CI runs the suite on every push to `main` and every pull request through
+`npm run test:coverage`, which adds Node's built-in coverage to the same run:
+
+```sh
+npm run test:coverage
+```
+
+The script fails, with a non-zero exit, when total coverage across all files
+drops below its floors: 93% of lines, 94% of branches and 66% of functions.
+The floors live in the `test:coverage` script in `package.json`. They only
+ever go up: when coverage rises, raise them to the new totals rounded down to
+a whole percent, and never lower them to make a change pass.
+
+Every file a pull request adds or changes reaches 100% line coverage, even
+though the floors only check the totals. To check a file, find it in the
+coverage report printed after the test results. Files are listed under their
+folders, with `line %`, `branch %` and `funcs %` columns and the line numbers
+no test runs under `uncovered lines`; the `all files` row holds the totals the
+floors check.
 
 ## License
 

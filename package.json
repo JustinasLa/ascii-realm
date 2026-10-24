@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node server/index.js",
     "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-lines=93 --test-coverage-branches=94 --test-coverage-functions=66",
     "bench": "node bench/run.mjs",
     "bench:low-end": "node bench/low-end.cjs",
     "test:browser": "node bench/browser.cjs"

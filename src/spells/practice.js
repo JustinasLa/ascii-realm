@@ -1,5 +1,5 @@
 // Small, deliberately unnamed mechanics for exercising the simulation before
-// individual TF rune definitions are installed.
+// individual rune definitions are installed.
 const step = (op, args = {}, target) => ({ op, args, ...(target ? { target: { op: target, args: {} } } : {}) });
 const make = (id, name, steps, nodes = {}) => ({ id, name, element: 'seithr', root: id,
   variants: [{ id: 'practice', kind: 'rune', params: { mana: 4, cooldown: 1 } }],

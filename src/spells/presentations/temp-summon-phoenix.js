@@ -24,7 +24,7 @@ const easeOutBack = t => { const u = clamp01(t) - 1; return 1 + 2.4 * u * u * u 
 const hash = (i, k = 0) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
 // In-game a metre spans ~26 columns and 6.5 rows.
 const COLS = 26, ROWS = 6.5;
-// TF: the phoenix drifts at 1 m/s for 25 ticks, then VELOCITY SET 12.
+// Rune: the phoenix drifts at 1 m/s for 25 ticks, then VELOCITY SET 12.
 const DIVE_AT = 1.25;
 
 // The adapter rotates local metres by heading; glyph shapes and "up" must

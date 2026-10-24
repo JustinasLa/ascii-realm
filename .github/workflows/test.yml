@@ -28,8 +28,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
-      - name: Run tests
-        run: mkdir -p test-results && npm test -- --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/node.xml
+      - name: Run tests with coverage floors
+        run: mkdir -p test-results && npm run test:coverage -- --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results/node.xml
       - name: Upload test report
         if: ${{ !cancelled() && hashFiles('test-results/node.xml') != '' }}
         uses: actions/upload-artifact@v7

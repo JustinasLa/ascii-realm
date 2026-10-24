@@ -7,6 +7,10 @@ import { createGameServer } from '../server/index.js';
 import { Player } from '../src/entities/player.js';
 import { MAX_PLAYERS, playerState, PROTOCOL_VERSION } from '../src/multiplayer/protocol.js';
 
+// Creating a lobby builds its world on the server, which takes several seconds
+// on CI's shared runner while coverage is recording.
+const MESSAGE_TIMEOUT_MS = 15000;
+
 async function setup(t, options = {}) {
   const game = createGameServer(options);
   const { port } = await game.listen(0, '127.0.0.1');
@@ -41,7 +45,7 @@ async function peer(port) {
         const waiter = { type, match, resolve, timer: setTimeout(() => {
           waiters.splice(waiters.indexOf(waiter), 1);
           reject(new Error(`Timed out waiting for ${type}`));
-        }, 3000) };
+        }, MESSAGE_TIMEOUT_MS) };
         waiters.push(waiter);
       });
     },

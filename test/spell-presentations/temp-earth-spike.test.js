@@ -183,7 +183,7 @@ test('real Earth Spike cast renders its profile, emits typed cues and preserves 
   scene.casting.effects.paint((...p) => points.push(p), scene.casting.projectiles);
   assert.ok(points.some(p => p[2] === '_') && points.some(p => p[2] === '^'), 'runtime paints the burrowing mound and its stone tip');
   scene.advance(0.75);
-  assert.ok(scene.foe.health <= 88 && scene.foe.magicLift > 0, 'TF damage and lifting fissure remain intact');
+  assert.ok(scene.foe.health <= 88 && scene.foe.magicLift > 0, 'rune damage and lifting fissure remain intact');
   assert.ok(events.some(e => e.type === 'spell' && e.stage === 'impact'));
   assert.ok(events.some(e => e.type === 'spell' && e.stage === 'pulse'));
   assert.ok(events.every(e => e.type === 'spell' && e.presentation === presentation));
