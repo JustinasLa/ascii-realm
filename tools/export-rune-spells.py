@@ -2,6 +2,7 @@
 
 Usage: python tools/export-rune-spells.py SNAPSHOT OUTPUT
 Requires PyYAML for this offline authoring tool only. No server access or writes.
+Tests: python3 -m unittest discover -s tools/tests
 Minecraft display models and sound assets are replaced by ASCII effects; the
 gameplay graph, targeting, formulas and timing remain individually reviewable.
 The snapshot's own skill namespace is replaced by neutral rune_ names, and only
@@ -18,9 +19,16 @@ import yaml
 
 
 def namespace(snapshot):
-    """The folder under MythicMobs/skills that holds the class skills, if there is exactly one."""
-    found = {path.parent.parent.name.lower() for path in (snapshot / "MythicMobs/skills").rglob("Classes/*.yml")}
-    return found.pop() if len(found) == 1 else None
+    """The folder under MythicMobs/skills that holds the class skills.
+
+    Exporting without renaming would keep the snapshot's own identifiers, so
+    anything but exactly one candidate stops the export until --namespace is given.
+    """
+    found = sorted({path.parent.parent.name.lower() for path in (snapshot / "MythicMobs/skills").rglob("Classes/*.yml")})
+    if len(found) != 1:
+        detail = "none found" if not found else f"found {len(found)}: {', '.join(found)}"
+        raise ValueError(f"Cannot detect the skill namespace ({detail}); pass --namespace")
+    return found[0]
 
 
 def neutral(text, prefix):
@@ -204,5 +212,8 @@ if __name__ == "__main__":
     parser.add_argument("--include-classes", action="store_true")
     parser.add_argument("--namespace", help="skill namespace to rename to rune_ (default: detected from the snapshot)")
     args = parser.parse_args()
-    ids = export(args.snapshot, args.output, args.include_classes, args.namespace)
+    try:
+        ids = export(args.snapshot, args.output, args.include_classes, args.namespace)
+    except ValueError as error:
+        parser.error(str(error))
     print(json.dumps(ids))
