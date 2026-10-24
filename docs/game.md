@@ -43,6 +43,12 @@ short version see the [README](../README.md).
 - **Infinite seeded world.** Lakes, shoreline, meadows, dirt paths and rocky
   outcrops from layered noise, generated in 64×64 chunks as you walk. Add
   `?seed=42` to the URL for a different world.
+- **Rivers.** Streams rise on high ground and run downhill until they reach
+  a lake or settle in a small pond, from a couple of rows wide at the spring
+  to about a dozen further down. Each has a deep middle, shallows, a sandy
+  bank and a damp valley floor, and the odd stone stands out of its wider
+  reaches. Rivers never cross the starting ruins or the ground around them.
+  Grass on the bank facing you stays low so it does not hide the water.
 - **Living grass.** Two- and three-row path verges blend into fuller meadows
   and lakeshore reeds, with blades up to five cells high.
   Fine blades, leafy tufts, curved grass, seed heads and dry gold patches give
