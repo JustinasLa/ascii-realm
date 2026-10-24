@@ -216,10 +216,13 @@ short version see the [README](../README.md).
   not every moment; two cuts bring it down. One at a time; `?elves=N` sets how
   many.
   Wounded monsters show a segmented health bar over their heads.
-- **Phone controls and performance.** A touch stick for walking/running, separate
-  jump, sword and cast buttons, and zoom controls in portrait or landscape. They
-  appear only when touch is the primary input, so touchscreen laptops and narrow
-  desktop windows keep the keyboard and mouse layout. Rendering
+- **Phone controls and performance.** A touch stick for walking/running and
+  separate jump, sword and cast buttons in portrait or landscape. They appear only
+  when touch is the primary input, so touchscreen laptops and narrow desktop
+  windows keep the keyboard and mouse layout. Phones (touch with no hover and a
+  short side of 600px or less) show nothing else but a slim health and mana strip
+  and a corner menu holding Inventory, Multiplayer and Audio; pinch the scene to
+  zoom. Tablets keep the full layout with the − / + zoom buttons. Rendering
   targets 60 fps, caps backing resolution, and lowers that resolution under
   sustained load without changing your zoom. Zoom stops at the furthest scale
   that still draws grass blades, swaying trees and reflections; a very wide

@@ -8,6 +8,7 @@ import { isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { FrameClock, FrameQuality, renderSize } from '../../src/render/budget.js';
 import { ASPECT, GRASS, WATER } from '../../src/world/world.js';
+import { watchPhone } from '../../src/core/phone.js';
 
 const noop = () => {};
 
@@ -22,7 +23,7 @@ const inert = () => class {
   }
 };
 
-export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug' } = {}) {
+export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -30,10 +31,16 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const startupErrors = [];
   let preparedSpellCount = 0;
   let populatedSpellControls = 0;
+  const attributes = new Map([['aria-label', 'Game scene. Press B to build scenery.']]);
   const canvas = Object.assign(new EventTarget(), { classList: { add: noop, remove: noop, toggle: noop },
     focus: noop,
+    getAttribute: name => attributes.get(name) ?? null,
+    setAttribute: (name, value) => attributes.set(name, String(value)),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) });
-  const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
+  // The phone media query: flip `phoneQuery.matches` and dispatch `change`.
+  const phoneQuery = Object.assign(new EventTarget(), { matches: phone });
+  const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600,
+    matchMedia: () => phoneQuery });
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
   let now = 0;
@@ -61,8 +68,13 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     sessionStorage: { setItem: noop },
     document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop,
       createElement: () => ({ classList: { add: noop, remove: noop }, hidden: false, textContent: '' }) },
-    matchMedia: () => ({ matches: false }), innerWidth: 800, innerHeight: 600,
+    matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop }), innerWidth: 800, innerHeight: 600,
     cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: noop,
+    watchPhone, installPinchZoom: noop,
+    PhoneMenu: class {
+      constructor(options) { Object.assign(this, options); this.open = false; }
+      setOpen(open) { this.open = open; this.onToggle(open); }
+    },
     Grass: inert(),
     MAX_TREE_HALF_WIDTH: 40, MAX_TREE_HEIGHT: 160, MAX_LEAF_DRIFT: 8,
     propInView: () => true, drawLeaves: noop,
@@ -131,8 +143,9 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
     SceneryBuilder: class {
-      constructor(options) { this.enabled = false; Object.assign(this, options); }
+      constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
       setEnabled(value) { this.enabled = value; this.onModeChange(); }
+      forceExit() { this.enabled = false; this.onModeChange(); }
       updateCamera() {}
       drawPreview() {}
     },
@@ -159,6 +172,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   assert.equal(window.game.casting.spells.get('test-rune').name, 'Test rune');
   return {
     game: window.game,
+    canvas,
+    setPhone(matches) {
+      phoneQuery.matches = matches;
+      phoneQuery.dispatchEvent(Object.assign(new Event('change'), { matches }));
+    },
     navigatedTo: () => navigatedTo,
     pointer(type, button = 0, pointerType = 'mouse') {
       (type === 'pointerdown' ? canvas : window).dispatchEvent(Object.assign(new Event(type), { button, pointerType }));

@@ -15,6 +15,7 @@ class Element extends EventTarget {
   }
   setAttribute() {}
   append() {}
+  replaceChildren(...nodes) { this.textContent = nodes.map(node => node.textContent ?? node).join(''); }
 }
 
 function dom(t) {

@@ -5,6 +5,8 @@ import { GameAudio } from './audio/audio.js';
 import { prepareSpellSounds } from './audio/spells.js';
 import { bindAudioControls } from './audio/controls.js';
 import { installTouchControls } from './core/touch.js';
+import { watchPhone } from './core/phone.js';
+import { installPinchZoom } from './core/pinch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters } from './entities/monsters.js';
@@ -26,6 +28,7 @@ import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
+import { PhoneMenu } from './ui/phone-menu.js';
 import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
 import { Ambience, lightsOf } from './world/ambience-fx.js';
@@ -78,7 +81,11 @@ try {
   status.hidden = false;
   throw error;
 }
+// A performance flag for the render budget, deliberately broader than the
+// phone layout check below.
 const mobile = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
+// Phones get the stripped-down layout (style.css) and no scenery builder.
+const device = watchPhone(window, (phone) => onPhoneChange(phone));
 const quality = new FrameQuality();
 
 const baseChunks = mobile ? 64 : 128;
@@ -106,6 +113,7 @@ function zoomBy(factor) {
   zoomTarget = Math.max(MIN_CELL, Math.min(MAX_CELL, zoomTarget * factor));
 }
 installTouchControls(zoomBy);
+installPinchZoom(canvas, zoomBy);
 
 function updateZoom(dt) {
   if (cellH === zoomTarget) return;
@@ -208,6 +216,25 @@ if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
 
+// On phones the corner menu opens the panel dock as a full-screen sheet.
+// It is built before the inventory so its keys are handled first.
+const phoneMenu = new PhoneMenu({
+  button: document.getElementById('phone-menu'),
+  dock: document.getElementById('panel-dock'),
+  closeButton: document.getElementById('phone-menu-close'),
+  inventoryButton: document.getElementById('phone-menu-inventory'),
+  outside: ['touch-controls', 'hud-root', 'screen'].map((id) => document.getElementById(id)),
+  canvas,
+  phone: device,
+  onToggle: (open) => {
+    setGameplayBlocked(open || inventoryScreen.isOpen);
+    cancelActions();
+  },
+  onInventory: () => inventoryScreen.setOpen(true),
+});
+debug.phoneMenu = phoneMenu;
+debug.device = device;
+
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
   player, inventory, name,
@@ -222,6 +249,7 @@ const inventoryScreen = new InventoryScreen({
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
+  phone: () => device.phone,
 });
 debug.hud = hud;
 debug.inventoryScreen = inventoryScreen;
@@ -424,6 +452,7 @@ window.addEventListener('focusin', (event) => {
 let hitStop = 0;
 
 const builder = new SceneryBuilder({ world, player, camera, renderer,
+  allowed: () => !device.phone,
   onModeChange: () => {
     cancelActions();
     hitStop = 0;
@@ -440,7 +469,20 @@ const builder = new SceneryBuilder({ world, player, camera, renderer,
   },
 });
 debug.builder = builder;
-if (params.has('builder')) builder.setEnabled(true);
+if (params.has('builder') && !device.phone) builder.setEnabled(true);
+
+const SCENE_LABEL = canvas.getAttribute('aria-label');
+// A device can become a phone or stop being one while playing, for example
+// when a mouse is plugged in; the layout follows in CSS at once.
+function onPhoneChange(phone) {
+  if (phone && builder.enabled) {
+    builder.forceExit();
+    builder.panel.open = false;
+  }
+  if (!phone && phoneMenu.open) phoneMenu.setOpen(false);
+  canvas.setAttribute('aria-label', phone ? 'Game scene.' : SCENE_LABEL);
+}
+onPhoneChange(device.phone);
 
 // Skeletons rise from the ground around the player, goblins come running,
 // now and then a troll lumbers in and an elf takes aim from afar, all to

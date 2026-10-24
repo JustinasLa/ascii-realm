@@ -38,7 +38,18 @@
 On a phone, drag the left pad to walk and push it to the outer edge to run.
 Use **JUMP**, **STRIKE**, **DRAW**, **SPORES** and **CAST** with your other thumb; repeated
 strikes chain a combo, and spells cast on touch follow your facing. Hold
-**RUNES**, slide to a school and lift, then tap a rune to bind it to **CAST**. The upper
-**− / +** buttons zoom. Controls support multiple fingers and reset when a touch
-is cancelled or the page is backgrounded. They appear only when touch is the
-primary input; touchscreen laptops keep the keyboard and mouse layout.
+**RUNES**, slide to a school and lift, then tap a rune to bind it to **CAST**.
+Pinch the scene with two fingers to zoom. Controls support multiple fingers and
+reset when a touch is cancelled or the page is backgrounded.
+
+Phones show only the stick, the action buttons, a slim HP/MP strip on the top
+edge and a small **=** menu button in the top-right corner. The menu opens a
+full-screen sheet with **Inventory**, **Multiplayer** and **Audio**; **Close**
+returns to a clean screen. A phone here means touch as the primary input with no
+hover and a short side of 600px or less.
+
+Tablets keep the full layout: the panels, the quick slots and the upper
+**− / +** zoom buttons, which work alongside pinch. Touch controls appear only
+when touch is the primary input, so touchscreen laptops and narrow desktop
+windows keep the keyboard and mouse layout. The scenery builder needs a desktop
+or tablet.

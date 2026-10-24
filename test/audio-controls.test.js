@@ -22,6 +22,7 @@ test('audio controls respect activation, browser shortcuts and listener cleanup'
   const elements = new Map(ids.map(id => {
     const element = new EventTarget();
     element.setAttribute = () => {};
+    element.replaceChildren = (...nodes) => { element.children = nodes; };
     return [`#${id}`, element];
   }));
   const weatherSelect = elements.get('#audio-weather');
