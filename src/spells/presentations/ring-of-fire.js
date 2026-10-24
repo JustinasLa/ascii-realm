@@ -22,7 +22,7 @@ const RUN = 6;
 // Cooling fire: ash red, ember, flame orange, gold, straw, white heat.
 const HEAT = [[64, 8, 4], [150, 26, 8], [226, 70, 16], [255, 128, 28],
   [255, 184, 64], [255, 228, 150], [255, 250, 232]];
-const CHAR = [64, 22, 8], ASH = [26, 14, 10];
+const CHAR = [110, 50, 20], ASH = [58, 44, 36];
 const BAND = ['+', 'o', '%', '&', '@'];
 const SPARK = ['*', "'", '.', '.'];
 const SCORCH = ['.', ',', ':', ';', '~'];
@@ -134,12 +134,12 @@ function ring(plot, glow, effect, R, age, seed) {
       plot(p.x, p.z, hash(i, seed + 6) < 0.5 ? '.' : ',', heat(lingering ? 0.72 : 0.3 + 0.2 * clump), (lingering ? 0.75 : 0.5) * flick);
       continue;
     }
-    const h = 0.6 + 0.36 * clump + 0.05 * flick * (1 - gutter);
-    plot(p.x, p.z, BAND[clamp(Math.floor((h - 0.6) / 0.08), 0, 4)], heat(h), fade * (0.85 + 0.15 * clump) * flick);
+    const h = 0.64 + 0.32 * clump + 0.04 * flick * (1 - gutter);
+    plot(p.x, p.z, BAND[clamp(Math.floor((h - 0.64) / 0.07), 0, 4)], heat(h), fade * (0.85 + 0.15 * clump) * flick);
     // The band burns a row thicker where it is hot, an ember-red skin outside.
     if (clump > 0.4 && thick < 64) {
       const out = 1 + 0.55 / (R * ROWS);
-      plot(p.x * out, p.z * out, clump > 0.7 ? 'o' : '+', heat(h - 0.22), fade * (0.45 + 0.4 * clump) * flick);
+      plot(p.x * out, p.z * out, clump > 0.7 ? 'o' : '+', heat(h - 0.28), fade * (0.45 + 0.4 * clump) * flick);
       thick++;
     }
   }
@@ -245,7 +245,7 @@ function scorch(plot, glow, effect, R, age, seed) {
     const u = (i + 0.5) / count;
     if (ringNoise(u, 7, -0.35 * RING_LIFE, RING_LIFE * 0.5, seed + 3) < 0.2 || hash(i, seed + 50) > dim * 1.1 - 0.05) continue;
     const p = bandPoint(u, R, RING_LIFE, seed, still), k = hash(i, seed + 51);
-    plot(p.x, p.z, SCORCH[Math.floor(k * 5)], mix(CHAR, ASH, k), 0.7 * dim);
+    plot(p.x, p.z, SCORCH[Math.floor(k * 5)], mix(CHAR, ASH, k), dim);
   }
   for (let i = 0; i < 12; i++) {
     const end = 0.2 + 1.3 * hash(i, seed + 52);
