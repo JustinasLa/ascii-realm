@@ -75,7 +75,9 @@ export class SpellControls {
 
   update() {
     if (this.menu.isOpen && !this.canOpen()) this.close();
+    // paint() redraws only when its key, phone state included, has changed.
     if (this.menu.isOpen && this.menu.stage === 'items') this.tickWheel();
+    else this.paint();
   }
 
   // --- The wheel ---------------------------------------------------------

@@ -63,16 +63,27 @@ test('the rune wheel names CAST on phones and R elsewhere', () => {
 });
 
 test('a phone flip redraws the open wheel even when nothing else changed', () => {
-  const casting = { available: [{ id: 'fire-shard', element: 'oseni' }], selected: 'fire-shard' };
+  const casting = { available: [{ id: 'fire-shard', element: 'oseni' }], selected: 'fire-shard',
+    state: () => ({ mana: 50 }), variant: () => ({}), modifiers: () => ({ mana: 12 }) };
   let phone = false, renders = 0;
   const controls = new Controls(casting, { storage: null, phone: () => phone });
   controls.render = () => { renders++; };
   controls.menu.open();
   controls.spots = [];
-  controls.paint();
-  controls.paint();
+  controls.update();
+  controls.update();
+  assert.equal(controls.menu.stage, 'groups');
   assert.equal(renders, 1);
   phone = true;
-  controls.paint();
+  controls.update();
   assert.equal(renders, 2);
+
+  controls.menu.enter(controls.menu.groups[0]);
+  controls.update();
+  controls.update();
+  assert.equal(controls.menu.stage, 'items');
+  assert.equal(renders, 3);
+  phone = false;
+  controls.update();
+  assert.equal(renders, 4);
 });
