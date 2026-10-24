@@ -24,14 +24,15 @@ const tag = (name, className, text) => {
 };
 
 // Holding the middle mouse button (or RUNES on touch) opens the rune wheel: a school first, then
-// one of its runes, which stays bound to R until another is chosen.
+// one of its runes, which stays bound to R until another is chosen. Phones cast it with the
+// CAST button, so the wheel names that instead.
 export class SpellControls {
   constructor(casting, { surface, touchButton, canOpen = () => true, onBind = () => {}, onFocus = () => {},
-    restore = true, storage }) {
+    restore = true, storage, phone = () => false }) {
     if (storage === undefined) {
       try { storage = globalThis.localStorage; } catch { storage = null; }
     }
-    Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage });
+    Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage, phone });
     this.menu = new RadialMenu();
     this.buildWheel();
     this.listen(touchButton);
@@ -74,7 +75,9 @@ export class SpellControls {
 
   update() {
     if (this.menu.isOpen && !this.canOpen()) this.close();
+    // paint() redraws only when its key, phone state included, has changed.
     if (this.menu.isOpen && this.menu.stage === 'items') this.tickWheel();
+    else this.paint();
   }
 
   // --- The wheel ---------------------------------------------------------
@@ -165,13 +168,14 @@ export class SpellControls {
     this.paint();
   }
 
-  // Hover, the bound rune and the hub follow the pointer; the art is redrawn
-  // only when one of them changes.
+  // Hover, the bound rune and the hub follow the pointer, and the cast hint
+  // follows the phone check; the art is redrawn only when one of them changes.
   paint() {
     const menu = this.menu;
     if (!menu.isOpen || !this.spots) return;
     const bound = this.casting.selected;
-    const key = JSON.stringify([menu.stage, menu.group?.id, menu.entries.length, menu.hover, bound, this.waiting, this.scale]);
+    const key = JSON.stringify([menu.stage, menu.group?.id, menu.entries.length, menu.hover, bound, this.waiting, this.scale,
+      this.phone()]);
     if (this.artKey === key) return;
     this.artKey = key;
     this.render(bound);
@@ -184,7 +188,8 @@ export class SpellControls {
     if (menu.stage === 'groups') {
       const spell = this.casting.spells.get(bound);
       if (hovered) return [[[hovered.sigil, hovered.color, true]], ...name(hovered.name, ink), [[`${hovered.kind} runes`, muted]]];
-      return [...name('Runes', ink), [[spell ? 'Bound to [R]' : 'Choose a school', muted]],
+      const hint = this.phone() ? 'Tap CAST to cast' : 'Bound to [R]';
+      return [...name('Runes', ink), [[spell ? hint : 'Choose a school', muted]],
         ...(spell ? wrap(spell.name, HUB_WIDTH).map(line => [[line, quiet]]) : [])];
     }
     const color = menu.group.color;
@@ -202,9 +207,11 @@ export class SpellControls {
     }
     const isBound = entry.id === bound, waiting = this.waiting[i];
     const color = hover ? tint : waiting ? quiet : isBound ? tint : muted;
+    // Phones tag the bound rune on a line of its own: [CAST] would crowd the narrow sectors.
+    const tag = key => [['[', quiet], [key, ink], [']', quiet]], phone = isBound && this.phone();
     return [...wrap(entry.name, width).map(line => [[line, color, true]]),
-      [[this.stats(entry)[0], hover ? muted : quiet], ...(isBound ? [[' [', quiet], ['R', ink], [']', quiet]] : [])],
-      ...(waiting ? [[['low mana', quiet]]] : [])];
+      [[this.stats(entry)[0], hover ? muted : quiet], ...(isBound && !phone ? [[' ', quiet], ...tag('R')] : [])],
+      ...(phone ? [tag('CAST')] : []), ...(waiting ? [[['low mana', quiet]]] : [])];
   }
 
   render(bound) {

@@ -14,8 +14,10 @@ const MAX_FILE_BYTES = 8 * 1024 * 1024;
 // The panel owns editor interaction; the world still owns shading, reflections
 // and collisions, so the same scenery can immediately be tested in play mode.
 export class SceneryBuilder {
-  constructor({ world, player, camera, renderer, onModeChange = () => {}, onReset = () => {} }) {
-    Object.assign(this, { world, player, camera, renderer, onModeChange, onReset });
+  constructor({ world, player, camera, renderer, onModeChange = () => {}, onReset = () => {}, allowed }) {
+    // Phones can't build; `allowed` is asked before anything enters building
+    // mode or changes the scene. Left undefined, building is allowed.
+    Object.assign(this, { world, player, camera, renderer, onModeChange, onReset, allowed });
     this.canvas = renderer.canvas;
     this.scene = new Scenery(world);
     this.enabled = false;
@@ -148,8 +150,13 @@ export class SceneryBuilder {
     }
   }
 
+  mayBuild() {
+    return this.allowed?.() !== false;
+  }
+
   setEnabled(enabled) {
     if (enabled === this.enabled) return true;
+    if (enabled && !this.mayBuild()) return false;
     this.finishStroke();
     if (!enabled) {
       const position = findPlayPosition(this.world, this.player, this.camera);
@@ -165,13 +172,7 @@ export class SceneryBuilder {
       this.camera.x = this.player.x;
       this.camera.y = this.player.y - 11;
     }
-    clearInput();
-    this.enabled = enabled;
-    this.modeButton.setAttribute('aria-pressed', String(enabled));
-    this.modeButton.textContent = enabled ? 'Return to play (B)' : 'Start building';
-    this.banner.hidden = !enabled;
-    this.cursor.hidden = true;
-    this.canvas.style.touchAction = enabled ? 'none' : '';
+    this.applyMode(enabled);
     if (enabled) {
       this.panel.open = true;
       this.camera.quake = 0;
@@ -182,10 +183,31 @@ export class SceneryBuilder {
     return true;
   }
 
+  applyMode(enabled) {
+    clearInput();
+    this.enabled = enabled;
+    this.modeButton.setAttribute('aria-pressed', String(enabled));
+    this.modeButton.textContent = enabled ? 'Return to play (B)' : 'Start building';
+    this.banner.hidden = !enabled;
+    this.cursor.hidden = true;
+    this.canvas.style.touchAction = enabled ? 'none' : '';
+  }
+
+  // Leaves building mode even when there is no safe ground to return to, for
+  // a device that has just become a phone and can't reach the builder's
+  // recovery controls. The player stays where they stand; the scene is kept.
+  forceExit() {
+    if (!this.enabled || this.setEnabled(false)) return;
+    this.finishStroke();
+    this.applyMode(false);
+    this.onModeChange(false);
+  }
+
   keydown(event) {
     const editingField = event.target.closest?.('input:not([type="range"]), textarea, select, [contenteditable="true"]');
     if (editingField || event.altKey) return;
     if (event.code === 'KeyB' && !event.ctrlKey && !event.metaKey && !event.repeat) {
+      if (!this.enabled && !this.mayBuild()) return;
       event.preventDefault();
       if (this.setEnabled(!this.enabled) && !this.enabled) {
         this.panel.open = false;
@@ -208,8 +230,9 @@ export class SceneryBuilder {
   }
 
   edit(action, message) {
+    if (!this.mayBuild()) return;
     this.finishStroke();
-    this.setEnabled(true);
+    if (!this.setEnabled(true)) return;
     try {
       action();
       this.refresh(message);
@@ -233,6 +256,7 @@ export class SceneryBuilder {
 
   pointerDown(event) {
     if (!this.enabled || event.button !== 0 || event.isPrimary === false || this.stroke) return;
+    if (!this.mayBuild()) return;
     event.preventDefault();
     this.canvas.focus({ preventScroll: true });
     this.pointer = { clientX: event.clientX, clientY: event.clientY };
@@ -367,6 +391,7 @@ export class SceneryBuilder {
   }
 
   load() {
+    if (!this.mayBuild()) return;
     try {
       const saved = localStorage.getItem(this.storageKey);
       if (!saved) throw new Error(`No local scene saved for seed ${this.world.seed}.`);
@@ -377,6 +402,7 @@ export class SceneryBuilder {
   }
 
   importScene(data, message = 'Imported scene.') {
+    if (!this.mayBuild()) return;
     this.finishStroke();
     this.scene.load(data);
     this.nextSeed = this.scene.nextPropSeed();

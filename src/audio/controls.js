@@ -42,12 +42,15 @@ export function bindAudioControls(engine, music, weather, onPause = () => {}, ro
     previewButton.textContent = 'Preview grass footsteps';
   };
   const sliders = [...root.querySelectorAll('input[data-volume]')];
+  // Phones hide the shortcut hint; it stays in the label for everyone else.
+  const keyHint = (text) => Object.assign(document.createElement('span'), { className: 'key-hint', textContent: text });
   const refresh = () => {
-    mute.textContent = engine.muted ? 'Unmute (M)' : 'Mute (M)';
+    mute.replaceChildren(engine.muted ? 'Unmute' : 'Mute', keyHint(' (M)'));
     mute.setAttribute('aria-pressed', String(engine.muted));
+    const phone = document.documentElement?.classList.contains('is-phone');
     status.textContent = engine.context?.state === 'running'
       ? (engine.muted ? 'Sound muted' : 'Sound enabled')
-      : 'Press a key or click to enable sound';
+      : phone ? 'Tap to enable sound' : 'Press a key or click to enable sound';
   };
   const unlock = () => { void engine.unlock().then(refresh); };
   // Touch and pen gestures gain user activation on release, unlike the mouse.
