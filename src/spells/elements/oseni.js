@@ -8,4 +8,5 @@ export const oseni = [
   "fire-rain",
   "temp-blazing-barrage",
   "rekindle",
+  "ring-of-fire",
 ];

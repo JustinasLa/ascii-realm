@@ -33,6 +33,17 @@ answers with the storm's recorded thunder.
 Oseni's Rekindle is authored the same way: it heals the caster 10 at once, then
 a `Rekindle` aura heals 4 more each second for four seconds, starting a second
 after the cast (26 in all). It never touches allies or foes.
+Oseni's Ring of Fire is authored the same way: a 3 m ring of flame follows the
+caster for six seconds. Every half second, twelve times in all, each foe inside
+it or within 0.75 m of its edge takes 3 damage and is set burning for three
+seconds; burning deals 1 damage a second once the foe is out of the flames.
+The 0.75 m margin is a skeleton's body, so a skeleton touching the flames
+burns and a smaller foe can be caught just outside them. The caster and other
+players are never hurt. The rune recharges for twenty seconds after each cast;
+casting it sooner only says that it is still recharging. If the caster falls,
+the ring goes out at once, though foes already burning burn out. When it ends
+it leaves a scorch mark on the ground that fades within five seconds. It never
+sets the grass or trees alight.
 
 Mitlan's Mana Spring is a free toggle: cast once to gain 2 mana each second,
 starting one second after activation, in addition to normal mana regeneration.

@@ -583,6 +583,22 @@ export class AsciiRenderer {
     if (!flag) this.fineMark[cell] = 0;
   }
 
+  // Whether the cell shows a sprite's small letters (a tree, a rock), as
+  // opposed to nothing, an outline of nothing or an actor's solid backing.
+  hasFineGlyph(cell) {
+    if (!this.fineMark?.[cell]) return false;
+    const cx = cell % this.cols;
+    const cy = (cell - cx) / this.cols;
+    for (let j = 0; j < FINE; j++) {
+      let at = ((cy * FINE + j) * this.fineCols + cx * FINE) * 4;
+      for (let i = 0; i < FINE; i++, at += 4) {
+        const flags = this.fineBg[at + 3];
+        if (flags >= FINE_SET && (this.fine[at + 3] | ((flags & 15) << 8))) return true;
+      }
+    }
+    return false;
+  }
+
   // Lighting passes reach a sprite's small cells too. Adds a colour to the
   // small cells of a cell, and a share of it to their backdrop.
   lightFine(cell, cr, cg, cb, ground = 0.2) {

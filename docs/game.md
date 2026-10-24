@@ -3,14 +3,15 @@
 Everything ASCII Realm draws, animates and plays, system by system. For the
 short version see the [README](../README.md).
 
-- **Rune casting.** 42 rune spells across four elements: 9 Oseni (fire), 12
-  Seithr (ice), 12 Cerrith (life) and 9 Mitlan (water and storm), from Fire
-  Shard, Meteor and Rekindle to Frozen Tomb, Vine Wave, Maelstrom and
+- **Rune casting.** 44 rune spells across four elements: 10 Oseni (fire), 12
+  Seithr (ice), 12 Cerrith (life) and 10 Mitlan (water and storm), from Fire
+  Shard, Meteor, Rekindle and Ring of Fire to Frozen Tomb, Vine Wave, Maelstrom and
   Lightning. Hold the middle mouse button to open the rune wheel, point at a
   school and then at one of its runes, and let go: that rune stays bound to
   `R` until another is chosen, even across reloads. Aim with the cursor and
   press `R` or right click. Runes have no cooldown: any rune can be cast again
-  at once while there is mana for it. The wheel shows each rune's mana cost and damage or
+  at once while there is mana for it, except Ring of Fire, which recharges for
+  twenty seconds. The wheel shows each rune's mana cost and damage or
   healing, and binding a rune names it in a notice. Mana shows as the MP bar
   in the status frame.
   On touch screens, hold RUNES to open the wheel and tap CAST. Mana
