@@ -21,5 +21,5 @@ Water sounds and thunder are CC0 recordings; their sources and conversion
 notes are in [assets/audio/water](../assets/audio/water/LICENSE.txt) and
 [assets/audio/lightning](../assets/audio/lightning/LICENSE.txt).
 
-Rune spell definitions are derived from a read-only TFMCMain01 snapshot; see
+Rune spell definitions are generated from a read-only rune configuration snapshot; see
 [rune casting](spellcasting.md) for what was used and how.

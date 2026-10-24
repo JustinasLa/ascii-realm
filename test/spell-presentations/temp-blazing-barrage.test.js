@@ -84,7 +84,7 @@ test('cast kindles six fire circles on the 3-tick cadence, each spitting a fireb
   assert.ok(litCircles(gathered) < 2, 'circles collapse before the blast');
   assert.ok(gathered.some(p => p.char === '@' && Math.hypot(p.x, p.z - 0.3) < 0.05), 'knot at the blast origin');
 
-  // The fireblast is a continuous crescent spanning TF's ±48° projectile fan that rolls forward.
+  // The fireblast is a continuous crescent spanning the rune's ±48° projectile fan that rolls forward.
   const reach = points => Math.max(...points.filter(p => !isSmoke(p)).map(p => Math.hypot(p.x, p.z - 0.3)));
   const early = castAt(1.32), late = castAt(1.5);
   assert.ok(reach(late) > reach(early) + 0.4, 'the blast front races outwards');

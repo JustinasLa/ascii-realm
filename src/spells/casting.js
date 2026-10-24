@@ -12,8 +12,10 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const health = entity => entity.vitals?.health ?? entity.health ?? 0;
 const maxHealth = entity => entity.vitals?.maxHealth ?? entity.maxHealth ?? 100;
 const MAX_TASKS = 4096;
+// Summons named vfx_* are pure visuals: they show a pulse instead of spawning.
+const VFX_SUMMON = 'vfx_';
 
-// A bounded simulation of the gameplay mechanics in TF's configured skills.
+// A bounded simulation of the gameplay mechanics in the configured rune skills.
 // Tick counts in the source are converted to seconds here; distances are metres.
 export class Spellcasting {
   constructor({ player, world, monsters, spells = [], peers = () => [], notify = () => {}, onCast = () => {}, onSound = () => {},
@@ -346,7 +348,7 @@ export class Spellcasting {
         case 'stun': s.potions.set('stun', { until: this.time + duration, level: 100 }); break;
         case 'ignite': s.potions.set('fire', { until: this.time + n('ticks', 40) / 20, next: this.time + 1, level: 0, ctx }); break;
         case 'command': {
-          // The only commands imported from TF are resource-mana give/take.
+          // The only supported spell commands are resource-mana give/take.
           const match = String(a.c).match(/resource-mana (give|take) <(caster|target)\.name> (.+)$/i);
           if (!match) throw new Error('Unsupported spell resource command');
           const state = this.state(lower(match[2]) === 'caster' ? ctx.caster : target);
@@ -540,7 +542,7 @@ export class Spellcasting {
 
   summon(a, ctx, target) {
     const name = lower(a.type);
-    if (name.startsWith('tfmc_vfx') || !ctx.spell.summons?.[name]) {
+    if (name.startsWith(VFX_SUMMON) || !ctx.spell.summons?.[name]) {
       this.present(ctx, target, 'pulse', { shape: name.includes('ward') ? 'ward' : 'burst', radius: 2 });
       return;
     }

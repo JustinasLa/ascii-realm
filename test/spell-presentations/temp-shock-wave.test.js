@@ -206,7 +206,7 @@ test('real rune cast renders authored cues and travelling anvil without sword so
   scene.casting.effects.paint((...point) => actual.push(point), scene.casting.projectiles);
   assert.ok(expected.length > 0 && expected.every(point => actual.some(other => JSON.stringify(other) === JSON.stringify(point))), 'live projectile renderer uses the authored profile');
   scene.advance(2.5);
-  assert.equal(scene.foe.health, 80, 'original TF damage remains 20');
+  assert.equal(scene.foe.health, 80, 'original rune damage remains 20');
   assert.ok(events.some(event => event.type === 'spell' && event.stage === 'impact'));
   assert.ok(events.every(event => event.type === 'spell' && event.presentation === presentation));
   assert.ok(events.every(event => !['draw', 'slam'].includes(event.type)));

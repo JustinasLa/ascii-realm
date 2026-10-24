@@ -1,0 +1,14 @@
+name: Pull request size
+description: Label a pull request by size
+inputs:
+  token:
+    description: Token that can edit pull request labels
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        PR_SIZE_ACTION_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+      run: node "$PR_SIZE_ACTION_PATH/pr-size.mjs"

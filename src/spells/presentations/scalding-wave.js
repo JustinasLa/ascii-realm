@@ -7,7 +7,7 @@ const deep = [24, 112, 146], water = [52, 184, 182], crest = [139, 245, 224];
 const foam = [226, 255, 248], heat = [255, 218, 125], scald = [255, 158, 82];
 const steam = [236, 250, 238], white = [255, 255, 246];
 
-const REACH = 4, HALF = Math.PI / 3; // the TF cone: livingincone a=120 r=4
+const REACH = 4, HALF = Math.PI / 3; // the rune's cone: livingincone a=120 r=4
 const STEAM = '.:;~';
 
 const clamp01 = t => Math.max(0, Math.min(1, t));
@@ -217,7 +217,7 @@ function aura(effect, lift) {
   }
 }
 
-// Not used by the TF rune, but kept coherent: a boiling, steaming pool.
+// Not used by the rune, but kept coherent: a boiling, steaming pool.
 function zone(effect, lift) {
   const p = effect.progress, age = effect.age, r = Math.max(0.7, Math.min(4, effect.radius));
   const env = smooth(p / 0.1) * (1 - smooth(window01(p, 0.7, 1)));
@@ -241,7 +241,7 @@ function zone(effect, lift) {
   }
 }
 
-// Not used by the TF rune: a compact travelling crest trailing a steaming wake.
+// Not used by the rune: a compact travelling crest trailing a steaming wake.
 function projectile(effect, lift) {
   const p = effect.progress, age = effect.age;
   const env = smooth(p / 0.05) * (1 - smooth(window01(p, 0.8, 1)));

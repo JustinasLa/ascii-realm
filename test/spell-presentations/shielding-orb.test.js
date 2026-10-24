@@ -23,13 +23,13 @@ const CASES = [
 const extent = points => Math.max(...points.map(p => Math.hypot(p[0], p[1])));
 const lit = points => points.filter(p => p[4] > 0.05);
 
-test('Shielding Orb opts into its own profile and retains its TF ward parameters', () => {
+test('Shielding Orb opts into its own profile and retains its rune ward parameters', () => {
   assert.equal(spell.presentation, profile);
   assert.equal(profile.id, spell.id);
   assert.equal(spell.root, 'shielding_orb');
   assert.equal(spell.supportive, true);
   assert.deepEqual(spell.variants[0].params, { cooldown: 10, mana: 4, shield_power: 13, shield_duration: 6 });
-  assert.equal(spell.source.sha256, 'c9f405f18142629574b33481eadbd1e219bd9e0ed27d41487977509c68af4129');
+  assert.equal(spell.checksum, 'c9f405f18142629574b33481eadbd1e219bd9e0ed27d41487977509c68af4129');
 });
 
 test('all ward stages remain bounded, deterministic, ASCII, within budget and fade to darkness', () => {
@@ -188,5 +188,5 @@ test('real rune cast renders the authored projectile and ally ward with typed sp
   for (const handle of handles) handle.stop();
   assert.ok(fake.routes.every(r => r.disposals === 1));
   scene.advance(6.5);
-  assert.equal(scene.casting.state(scene.ally).shield, 0, 'ward still expires after the TF duration');
+  assert.equal(scene.casting.state(scene.ally).shield, 0, 'ward still expires after the rune duration');
 });

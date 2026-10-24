@@ -16,7 +16,7 @@ test('Fire Shard emits its authored cast/impact cues, never sword cues, and reje
   assert.equal(scene.castWithoutMana().ok, false);
   assert.equal(events.filter(e => e.stage === 'cast').length, 1);
   scene.advance(0.3);
-  assert.equal(scene.foe.health, 88, 'presentation preserves TF damage');
+  assert.equal(scene.foe.health, 88, 'presentation preserves rune damage');
   assert.ok(events.some(e => e.type === 'spell' && e.stage === 'impact'));
   assert.ok(events.every(e => !['draw', 'slam'].includes(e.type)));
   assert.ok(events.every(e => e.presentation === fireShard.presentation));

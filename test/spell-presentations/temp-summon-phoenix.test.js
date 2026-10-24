@@ -5,7 +5,7 @@ import spell from '../../src/spells/definitions/temp-summon-phoenix.js';
 import { runeScene } from '../../test-support/spells.js';
 
 const STAGES = ['cast', 'impact', 'pulse', 'aura', 'zone', 'projectile'];
-// Lives the game actually uses: the cast flash, TF's 10 s projectile (md 200),
+// Lives the game actually uses: the cast flash, the rune's 10 s projectile (md 200),
 // the 0.25 s burn visual, the 1.5 s aura refresh and the 3 s burning totem.
 const LIFE = { cast: profile.duration, impact: profile.duration, pulse: 0.25, aura: 1.5, zone: 3, projectile: 10 };
 const BUDGET = { cast: 160, impact: 245, pulse: 90, aura: 60, zone: 40, projectile: 110 };
@@ -16,7 +16,7 @@ function points(stage, progress = 0.4, { age = progress * LIFE[stage], heading =
     (x, z, char, color, brightness) => result.push({ x, z, char, color, brightness }));
   return result;
 }
-// The projectile clock is its travel age; TF slows it for 1.25 s, then dives.
+// The projectile clock is its travel age; the rune slows it for 1.25 s, then dives.
 const flight = (age, heading = 0) => points('projectile', age / LIFE.projectile, { age, heading });
 const lit = list => list.filter(p => p.brightness > 0.05);
 const extentX = list => Math.max(...lit(list).map(p => Math.abs(p.x)));
@@ -27,7 +27,7 @@ test('Fire Phoenix opts into its bird presentation without changing rune costs o
   assert.equal(profile.id, spell.id);
   assert.equal(spell.name, 'Fire Phoneix');
   assert.deepEqual(spell.variants[0].params, { cooldown: 15, mana: 6, damage: 15, duration: 3 });
-  assert.equal(spell.source.sha256, 'ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7');
+  assert.equal(spell.checksum, 'ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7');
 });
 
 test('a real Phoenix cast lights the pyre, flies the bird, burns its path and bursts on impact', () => {

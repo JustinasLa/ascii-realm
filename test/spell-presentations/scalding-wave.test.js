@@ -25,7 +25,7 @@ const distance = p => Math.hypot(p[0], p[1]);
 const lip = points => lit(points).filter(p => '^~,.'.includes(p[2]) && p[3][1] > 240);
 const foot = points => lit(points).filter(p => p[2] === '=');
 
-test('Scalding Wave gathers a boiling pool, then rolls a crest across the TF cone', () => {
+test('Scalding Wave gathers a boiling pool, then rolls a crest across the rune cone', () => {
   assert.equal(spell.presentation, presentation);
   const windup = lit(draw('cast', 0.07));
   assert.ok(windup.length >= 15, 'wind-up pool is drawn');
@@ -35,7 +35,7 @@ test('Scalding Wave gathers a boiling pool, then rolls a crest across the TF con
   const reach = progress => Math.max(...foot(draw('cast', progress)).map(distance));
   assert.ok(reach(0.3) < reach(0.5) && reach(0.5) < reach(0.75), 'the roller surges outwards');
   assert.ok(reach(0.5) - reach(0.3) > reach(0.75) - reach(0.5), 'and eases out as it spends itself');
-  assert.ok(reach(0.75) > 3.3 && reach(0.75) < 4.4, 'it reaches the four-metre TF cone');
+  assert.ok(reach(0.75) > 3.3 && reach(0.75) < 4.4, 'it reaches the four-metre rune cone');
 
   const peak = draw('cast', 0.5);
   const angles = foot(peak).map(p => Math.atan2(p[0], p[1]));
@@ -150,7 +150,7 @@ test('Scalding Wave uses a continuous air release without a percussion layer', a
   }
 });
 
-test('real Scalding Wave cast uses authored profile and typed cues while retaining TF burn', () => {
+test('real Scalding Wave cast uses authored profile and typed cues while retaining rune burn', () => {
   const scene = runeScene(spell), events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
