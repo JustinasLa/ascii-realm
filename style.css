@@ -243,8 +243,17 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   #move-stick { width: 36px; height: 36px; border: 1px solid var(--frame); background: #c3ccc624; pointer-events: none; }
   #move-pad.running { background: #202824eb; }
   .move-label { position: absolute; bottom: 7px; color: var(--muted); font-size: 9px; pointer-events: none; }
-  .actions { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: 50px 50px; gap: 4px; }
-  #touch-controls .strike { grid-column: span 2; min-height: 52px; }
+  /* The thumb cluster: a large STRIKE in the corner, JUMP to its left, CAST
+     above it and the contextual INTERACT on the diagonal between them. */
+  .actions { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); width: 144px; height: 144px; pointer-events: none; }
+  .actions > button { position: absolute; width: 52px; height: 52px; }
+  #touch-controls .actions > .strike { right: 0; bottom: 0; width: 76px; height: 76px; font-size: 12px; font-weight: 700; }
+  .actions > .jump { right: 92px; bottom: 12px; }
+  .actions > .cast { right: 12px; bottom: 92px; }
+  .actions > .interact { right: 92px; bottom: 92px; }
+  /* Held CAST: a dashed inner frame says the rune wheel is coming. */
+  #touch-controls .cast.holding { outline: 1px dashed var(--solid); outline-offset: -6px; }
+  #touch-controls [hidden] { display: none !important; }
   .zoom-controls { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: flex; gap: 4px; }
   #touch-controls .zoom-controls button { font-size: 18px; }
   #panel-dock { top: calc(max(12px, env(safe-area-inset-top)) + 52px); max-height: calc(100dvh - 208px); }
@@ -322,8 +331,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 @media (max-height: 540px) and (min-width: 681px) {
   .hud-hotbar-wrap { bottom: 10px; }
   #move-pad { width: 88px; height: 88px; }
-  .actions { grid-template-columns: 44px 44px; }
-  #touch-controls .strike { min-height: 44px; }
   #panel-dock { max-height: calc(100dvh - 174px); }
   .hud-prompt { bottom: 112px; }
   #fire-status { bottom: 146px; }
@@ -342,8 +349,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   #panel-dock { top: 12px; max-height: calc(100dvh - 172px); }
   .zoom-controls { top: auto; bottom: 112px; }
   #move-pad { width: 88px; height: 88px; }
-  .actions { grid-template-columns: 44px 44px; }
-  #touch-controls .strike { min-height: 44px; }
   .hud-prompt { bottom: 164px; }
   #fire-status { bottom: 198px; }
 }

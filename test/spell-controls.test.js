@@ -39,18 +39,18 @@ test('unavailable browser storage still permits rune selection and binding', t =
   assert.equal(reads, 1, 'explicit storage avoids the browser getter');
 });
 
-// The wheel text names the CAST button on phones and the R key elsewhere.
-test('the rune wheel names CAST on phones and R elsewhere', () => {
+// The wheel text names the CAST button on touch screens and the R key elsewhere.
+test('the rune wheel names CAST on touch screens and R elsewhere', () => {
   const spells = [{ id: 'fire-shard', name: 'Fire Shard', element: 'oseni' }];
   const casting = { available: spells, selected: 'fire-shard', spells: new Map(spells.map(s => [s.id, s])),
     variant: () => ({}), modifiers: () => ({ mana: 12 }), hasAura: () => false };
-  let phone = false;
-  const controls = new Controls(casting, { storage: null, phone: () => phone });
+  let key = 'R';
+  const controls = new Controls(casting, { storage: null, castKey: () => key });
   controls.colors = { ink: 'ink', muted: 'muted', quiet: 'quiet' };
   const text = lines => lines.map(runs => runs.map(([t]) => t).join(''));
   controls.menu.open();
   assert.ok(text(controls.hubLines('fire-shard')).includes('Bound to [R]'));
-  phone = true;
+  key = 'CAST';
   assert.ok(text(controls.hubLines('fire-shard')).includes('Tap CAST to cast'));
   assert.ok(text(controls.hubLines('')).includes('Choose a school'));
 
@@ -58,15 +58,15 @@ test('the rune wheel names CAST on phones and R elsewhere', () => {
   controls.waiting = [false];
   assert.deepEqual(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)), ['Fire Shard', '12 mana', '[CAST]']);
   assert.deepEqual(text(controls.entryLines(spells[0], 0, '', 16)), ['Fire Shard', '12 mana']);
-  phone = false;
+  key = 'R';
   assert.deepEqual(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)), ['Fire Shard', '12 mana [R]']);
 });
 
-test('a phone flip redraws the open wheel even when nothing else changed', () => {
+test('a change of cast button redraws the open wheel even when nothing else changed', () => {
   const casting = { available: [{ id: 'fire-shard', element: 'oseni' }], selected: 'fire-shard',
     state: () => ({ mana: 50 }), variant: () => ({}), modifiers: () => ({ mana: 12 }) };
-  let phone = false, renders = 0;
-  const controls = new Controls(casting, { storage: null, phone: () => phone });
+  let key = 'R', renders = 0;
+  const controls = new Controls(casting, { storage: null, castKey: () => key });
   controls.render = () => { renders++; };
   controls.menu.open();
   controls.spots = [];
@@ -74,7 +74,7 @@ test('a phone flip redraws the open wheel even when nothing else changed', () =>
   controls.update();
   assert.equal(controls.menu.stage, 'groups');
   assert.equal(renders, 1);
-  phone = true;
+  key = 'CAST';
   controls.update();
   assert.equal(renders, 2);
 
@@ -83,7 +83,7 @@ test('a phone flip redraws the open wheel even when nothing else changed', () =>
   controls.update();
   assert.equal(controls.menu.stage, 'items');
   assert.equal(renders, 3);
-  phone = false;
+  key = 'R';
   controls.update();
   assert.equal(renders, 4);
 });

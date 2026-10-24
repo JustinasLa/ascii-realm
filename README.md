@@ -11,7 +11,7 @@ world is generated as you walk, and up to eight friends can share it.
 
 ## Features
 
-- **Glowcap mushrooms** — pale caps and teal stems growing in clusters. Walking nearby makes them wobble fluidly and release spores that float upward. Press `E` (or tap Spores) for a larger rising burst.
+- **Glowcap mushrooms** — pale caps and teal stems growing in clusters. Walking nearby makes them wobble fluidly and release spores that float upward. Press `E` (or tap SPORES, which appears nearby on touch screens) for a larger rising burst.
 - **Infinite seeded world** — lakes, shorelines, meadows, dirt paths and rocky outcrops generate in chunks as you walk; `?seed=42` picks another world.
 - **Living meadows and forests** — wind-swept grass that keeps your footprints, and eight tree species with seasonal palettes, falling leaves and fallen logs.
 - **Water and reflections** — wade knee-deep through any lake while the outlaw, trees and stars reflect and break apart on the swell.
@@ -25,7 +25,7 @@ world is generated as you walk, and up to eight friends can share it.
 - **Sound and music** — recorded footsteps and water, weather and wildlife ambience, and 42 original songs chosen by season and weather.
 - **Multiplayer lobbies** — share a six-character code to explore the same world together and see each other's movement, swings and rune casts.
 - **Scenery builder** — paint terrain and place props, with undo, local saves and JSON export.
-- **Phones too** — a decluttered touch layout with a stick, attack buttons and pinch zoom, and rendering that scales itself to hold 60 fps.
+- **Phones too** — a decluttered touch layout with a stick, a thumb attack cluster with aim assist, and pinch zoom, and rendering that scales itself to hold 60 fps.
 
 ## Your first night
 
