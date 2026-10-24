@@ -12,6 +12,11 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const browser = await puppeteer.launch({ headless: true });
   try {
     const page = await browser.newPage();
+    // Vibrations are recorded rather than felt.
+    await page.evaluateOnNewDocument(() => {
+      window.vibrations = [];
+      Object.defineProperty(navigator, 'vibrate', { configurable: true, value: ms => { window.vibrations.push(ms); return true; } });
+    });
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
     const client = await page.createCDPSession();
@@ -42,6 +47,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
           strip: document.querySelector('.hud-status').getBoundingClientRect().toJSON(),
           overflow: document.documentElement.scrollWidth > innerWidth,
           controls: controls.map(e => ({ name: e.getAttribute('aria-label'), ...e.getBoundingClientRect().toJSON() })),
+          interact: document.getElementById('touch-interact').hidden,
           canvas: [game.renderer.canvas.width, game.renderer.canvas.height], cells: game.renderer.cols * game.renderer.rows,
           glError: game.renderer.gl.getError() };
       });
@@ -51,15 +57,25 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
       assert.ok(layout.menu);
       assert.ok(layout.strip.height <= (width > height ? 22 : 34), `strip ${layout.strip.height}px`);
       const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-      // The stick, the action grid and the menu button; buttons inside the grid touch each other.
-      const groups = [layout.controls.filter(c => c.name === 'Menu'), layout.controls.filter(c => c.name?.startsWith('Drag')),
-        layout.controls.filter(c => c.name !== 'Menu' && !c.name?.startsWith('Drag'))];
+      // The gap between two rectangles, edge to edge.
+      const gap = (a, b) => Math.hypot(Math.max(0, a.left - b.right, b.left - a.right), Math.max(0, a.top - b.bottom, b.top - a.bottom));
+      const named = n => layout.controls.find(c => c.name === n);
+      const cluster = ['Strike', 'Jump', 'Cast the bound rune. Hold to choose a rune.'].map(named);
+      assert.ok(cluster.every(Boolean), 'STRIKE, JUMP and CAST are shown');
+      assert.ok(cluster[0].width >= 72 && cluster[0].height >= 72, `STRIKE ${cluster[0].width}px`);
       for (const c of layout.controls) {
         assert.ok(c.width >= 44 && c.height >= 44, c.name);
         assert.ok(c.left >= 0 && c.top >= 0 && c.right <= width && c.bottom <= height, c.name);
         assert.ok(!overlap(c, layout.strip), `${c.name} covers the vitals`);
-        for (const group of groups) if (!group.includes(c)) for (const other of group) assert.ok(!overlap(c, other), `${c.name} / ${other.name}`);
+        for (const other of layout.controls) if (other !== c) assert.ok(!overlap(c, other), `${c.name} / ${other.name}`);
       }
+      for (const c of cluster) {
+        assert.ok(c.width >= 48 && c.height >= 48, c.name);
+        assert.ok(c.left >= width / 2, `${c.name} sits in the right half`);
+        for (const other of cluster) if (other !== c) assert.ok(gap(c, other) >= 16, `${c.name} / ${other.name} ${gap(c, other)}px apart`);
+      }
+      assert.ok(layout.controls.find(c => c.name?.startsWith('Drag')).right <= width / 2, 'the stick sits in the left half');
+      assert.equal(layout.interact, true, 'INTERACT is hidden with nothing in reach');
       results.checks.push({ layout });
       if (width === 844) await page.screenshot({ path: join(output, 'landscape.png') });
     }
@@ -94,9 +110,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     const centers = await page.evaluate(() => {
       const center = e => { const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; };
       return { pad: center(document.getElementById('move-pad')), jump: center(document.querySelector('[data-key="Space"]')),
-        strike: center(document.querySelector('[data-key="KeyJ"]')) };
+        strike: center(document.querySelector('[data-key="TouchStrike"]')), cast: center(document.getElementById('touch-cast')) };
     });
-    const touch = (id,p) => ({ id, x:p.x, y:p.y, radiusX:5, radiusY:5, force:1 });
+    const touch = (id,p) => ({ id, x:Math.round(p.x), y:Math.round(p.y), radiusX:5, radiusY:5, force:1 });
     const before = await page.evaluate(() => ({ x:game.player.x, y:game.player.y }));
     await client.send('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[touch(1,centers.pad)] });
     const held = touch(1,{x:centers.pad.x+35,y:centers.pad.y-20});
@@ -115,6 +131,40 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     assert.ok(actions.combat);
     assert.equal(actions.held,2);
     assert.notEqual(actions.move.x,0);
+    // Still walking: lift JUMP and STRIKE, then tap CAST. Touch events name
+    // only the finger that changes. The lift is sent without waiting for the
+    // press to be handled, so a slow renderer can't turn the tap into a hold.
+    await client.send('Input.dispatchTouchEvent', { type:'touchEnd', touchPoints:[touch(2,centers.jump),touch(3,centers.strike)] });
+    const manaBefore = await page.evaluate(() => game.casting.mana);
+    const tapDown = client.send('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[touch(4,centers.cast)] });
+    await wait(80);
+    await Promise.all([tapDown, client.send('Input.dispatchTouchEvent', { type:'touchEnd', touchPoints:[touch(4,centers.cast)] })]);
+    await wait(300);
+    const cast = await page.evaluate(async () => {
+      const {input} = await import('./src/core/input.js');
+      return { mana: game.casting.mana, move: input.moveAxis(),
+        wheel: !document.getElementById('spell-wheel').hidden };
+    });
+    assert.ok(cast.mana < manaBefore, `the tap cast (mana ${manaBefore} -> ${cast.mana})`);
+    assert.notEqual(cast.move.x, 0);
+    assert.equal(cast.wheel, false);
+    // Holding CAST opens the wheel on that finger while the stick keeps steering.
+    await client.send('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[touch(5,centers.cast)] });
+    await wait(400);
+    await page.waitForFunction(() => !document.getElementById('spell-wheel').hidden, { timeout: 5000 });
+    const wheel = await page.evaluate(async () => {
+      const {input} = await import('./src/core/input.js');
+      return { open: !document.getElementById('spell-wheel').hidden, move: input.moveAxis(), mana: game.casting.mana };
+    });
+    assert.equal(wheel.open, true);
+    assert.notEqual(wheel.move.x, 0);
+    await page.screenshot({ path: join(output, 'cast-hold-wheel.png') });
+    await client.send('Input.dispatchTouchEvent', { type:'touchEnd', touchPoints:[touch(5,centers.cast)] });
+    await wait(300);
+    const lifted = await page.evaluate(() => ({ open: !document.getElementById('spell-wheel').hidden, mana: game.casting.mana }));
+    assert.equal(lifted.open, false, 'lifting in the hub puts the wheel away');
+    assert.ok(lifted.mana >= wheel.mana, 'a hold never casts');
+    results.checks.push({ cast, wheel, lifted });
     await client.send('Input.dispatchTouchEvent', { type:'touchCancel', touchPoints:[] });
     const cancelled = await page.evaluate(async () => {
       const {input} = await import('./src/core/input.js');
@@ -122,6 +172,64 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     });
     assert.deepEqual(cancelled,{move:{x:0,y:0},pointers:0,pressed:0});
     results.checks.push({ multiTouch: { moved, actions, cancelled } });
+    // Aim assist: a skeleton 1.5 m away, 20 degrees off the facing, is turned
+    // to; one 45 degrees off is not.
+    for (const [angle, turns] of [[20, true], [45, false]]) {
+      await wait(1200);
+      const placed = await page.evaluate(async angle => {
+        const { Monster, toCells } = await import('./src/entities/monsters.js');
+        const p = game.player, bearing = p.heading + angle * Math.PI / 180;
+        const [dx, dy] = toCells(Math.sin(bearing) * 1.5, Math.cos(bearing) * 1.5);
+        game.monsters.list.length = 0;
+        const foe = new Monster(p.x + dx, p.y + dy, { risen: true });
+        foe.update = () => {};
+        game.monsters.list.push(foe);
+        window.foe = foe;
+        window.vibrations.length = 0;
+        return { heading: p.heading, bearing, health: foe.health };
+      }, angle);
+      await client.send('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[touch(6,centers.strike)] });
+      await wait(60);
+      await client.send('Input.dispatchTouchEvent', { type:'touchEnd', touchPoints:[] });
+      await wait(700);
+      const after = await page.evaluate(() => ({ heading: game.player.heading, health: window.foe.health, vibrations: [...window.vibrations] }));
+      const off = d => Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) * 180 / Math.PI;
+      if (turns) {
+        assert.ok(off(after.heading - placed.bearing) < 3, `turned ${off(after.heading - placed.bearing)} degrees short`);
+        if (after.health < placed.health) assert.deepEqual(after.vibrations.slice(0, 1), [12], 'a landed cut buzzes');
+      } else assert.ok(off(after.heading - placed.heading) < 3, 'a foe outside the cone is ignored');
+      results.checks.push({ assist: { angle, placed, after } });
+    }
+    await page.evaluate(() => { game.monsters.list.length = 0; window.vibrations.length = 0; game.player.takeDamage(5); });
+    await wait(100);
+    assert.deepEqual(await page.evaluate(() => window.vibrations), [30], 'a wound buzzes');
+    // The contextual button: idle, it touches the page not at all.
+    const writes = await page.evaluate(() => new Promise(resolve => {
+      let count = 0;
+      const observer = new MutationObserver(list => { count += list.length; });
+      observer.observe(document.getElementById('touch-interact'), { attributes: true, childList: true, characterData: true, subtree: true });
+      setTimeout(() => { observer.disconnect(); resolve(count); }, 2000);
+    }));
+    assert.equal(writes, 0);
+    // By a campfire it offers DOUSE, and its tap puts that fire out.
+    const lit = await page.evaluate(() => {
+      const p = game.player;
+      for (const [dx, dy] of [[0, 6], [8, 0], [-8, 0], [0, -6], [0, 9]]) if (game.fires.add(game.world, p.x + dx, p.y + dy)) break;
+      return game.fires.list.length;
+    });
+    assert.ok(lit > 0);
+    await wait(200);
+    const douse = await page.evaluate(() => { const b = document.getElementById('touch-interact'); const r = b.getBoundingClientRect();
+      return { hidden: b.hidden, text: b.textContent, x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+    assert.equal(douse.hidden, false);
+    assert.equal(douse.text, 'DOUSE');
+    await page.screenshot({ path: join(output, 'interact-douse.png') });
+    await client.send('Input.dispatchTouchEvent', { type:'touchStart', touchPoints:[touch(7,douse)] });
+    await wait(60);
+    await client.send('Input.dispatchTouchEvent', { type:'touchEnd', touchPoints:[] });
+    await wait(150);
+    assert.equal(await page.evaluate(() => game.fires.list.length), lit - 1);
+    results.checks.push({ interact: { writes, douse } });
     // Phones pinch the scene instead of using the zoom buttons.
     const cellBefore = await page.evaluate(()=>game.renderer.cellH/game.renderer.dpr);
     const mid = { x: 195, y: 360 };

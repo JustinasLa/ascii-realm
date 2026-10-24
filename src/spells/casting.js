@@ -19,8 +19,8 @@ const VFX_SUMMON = 'vfx_';
 // Tick counts in the source are converted to seconds here; distances are metres.
 export class Spellcasting {
   constructor({ player, world, monsters, spells = [], peers = () => [], notify = () => {}, onCast = () => {}, onSound = () => {},
-    onLightning = () => {} }) {
-    Object.assign(this, { player, world, monsters, peers, notify, onCast, onSound, onLightning });
+    onLightning = () => {}, onDamage = () => {} }) {
+    Object.assign(this, { player, world, monsters, peers, notify, onCast, onSound, onLightning, onDamage });
     this.spells = new Map(spells.map(s => [s.id, s]));
     this.states = new Map();
     this.tasks = [];
@@ -438,13 +438,20 @@ export class Spellcasting {
     if (!TRUE(options.pi)) { targetState.invulnerableUntil = this.time + 0.5; targetState.lastHitDamage = hitDamage; }
     this.state(ctx.caster).lastCombat = this.time;
     this.state(target).lastCombat = this.time;
+    let landed = false;
     if (target.takeHit) {
       const wasAlive = target.alive;
       if (target.takeHit(amount, ctx.caster.x, ctx.caster.y)) {
+        landed = true;
         if (wasAlive && !target.alive) { this.monsters.kills++; this.trigger('KILL_ENTITY', ctx.caster, target); }
         this.monsters.collect(target);
       }
-    } else if (target.takeDamage) target.takeDamage(amount, ctx.caster);
+    } else if (target.takeDamage) {
+      target.takeDamage(amount, ctx.caster);
+      landed = true;
+    }
+    // Told of every blow that landed, for example to buzz the caster's phone.
+    if (landed) this.onDamage(target, amount, ctx);
     this.present(ctx, target, 'impact', { radius: 1 });
     if (!hasPresentation(ctx.spell)) this.onSound({ type: 'slam', strength: 0.25, x: target.x, y: target.y });
   }

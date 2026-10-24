@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Combat } from '../src/entities/combat.js';
+import { Combat, SHEATHE_AFTER } from '../src/entities/combat.js';
 
 // Runs the combat state for `seconds` in small steps.
 function run(cb, seconds, ctx = {}) {
@@ -116,4 +116,21 @@ test('a backhand cuts straight away, and a plunge holds its cut until landing', 
   assert.equal(cb.swingStage.u, 0);
   run(cb, 0.1, {});
   assert.equal(cb.swingStage.part, 'recover');
+});
+
+test('the sword is put away after a quiet spell standing, but not while moving', () => {
+  const cb = new Combat();
+  cb.attack();
+  run(cb, 1.2);
+  assert.ok(cb.inHand);
+  run(cb, SHEATHE_AFTER + 0.1, { moving: true });
+  assert.ok(cb.inHand, 'walking keeps the sword out');
+  assert.notEqual(cb.move, 'sheathe');
+  // Standing still after that long, it goes away at once.
+  cb.update(1 / 60, {});
+  assert.equal(cb.move, 'sheathe');
+  run(cb, 1.5);
+  assert.equal(cb.inHand, false);
+  cb.attack();
+  assert.equal(cb.move, 'draw', 'the next strike draws it again');
 });
