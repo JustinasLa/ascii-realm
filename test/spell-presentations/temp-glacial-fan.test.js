@@ -234,7 +234,7 @@ test('a real Glacial Fan cast renders this profile and emits typed cast/impact c
   scene.casting.effects.paint((...p) => inFlight.push(p), scene.casting.projectiles);
   assert.ok(inFlight.some(p => p[2] === ':'), 'real shots render the authored frost trail');
   scene.advance(1.25);
-  assert.ok(scene.monsters.events.some(e => e.type === 'hurt' && e.amount === 16), 'TF damage is preserved');
+  assert.ok(scene.monsters.events.some(e => e.type === 'hurt' && e.amount === 16), 'rune damage is preserved');
   assert.ok(events.some(e => e.type === 'spell' && e.stage === 'impact'));
   assert.ok(events.every(e => e.type === 'spell' && e.presentation === profile && e.spellId === spell.id));
   assert.ok(events.every(e => !['draw', 'slam'].includes(e.type)));

@@ -159,7 +159,7 @@ test('Restoration grows a sanctuary from recorded roots, slow water and restrain
   assert.deepEqual(fake.invalid, []);
 });
 
-test('real Restoration cast renders its profile, emits typed cues, and preserves the TF cleanse', () => {
+test('real Restoration cast renders its profile, emits typed cues, and preserves the rune cleanse', () => {
   const scene = runeScene(spell, { range: 15, allyInPath: true }), events = [];
   scene.casting.onSound = event => events.push(event);
   const ctx = scene.casting.context(spell, spell.variants[0], scene.player);
@@ -172,7 +172,7 @@ test('real Restoration cast renders its profile, emits typed cues, and preserves
   assert.equal(scene.castWithoutMana().ok, false);
   assert.equal(events.length, count, 'mana rejection emits no extra cue');
   assert.equal(scene.casting.mana, 92, 'original 8 mana cost');
-  scene.advance(0.075); // The TF totem begins after its authored one-tick delay.
+  scene.advance(0.075); // The rune's totem begins after its authored one-tick delay.
   assert.equal(scene.casting.zones.length, 1);
   scene.advance(0.6);
   const rendered = [];

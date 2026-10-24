@@ -11,13 +11,17 @@ projectiles require another player to intercept them. Close support spells also
 check the target's distance before consuming mana. The simulation arena provides
 an ally so these spells can be exercised alone.
 
-Definitions are derived from a read-only TFMCMain01 snapshot dated 2026-10-16:
-MMOItems rune parameters, MythicLib handler bindings and the corresponding
-MythicMobs gameplay graph. Source file names and a SHA-256 digest accompany each
-definition. No credentials, live player data or Minecraft assets are included.
-`tools/export-tf-spells.py` regenerates definitions from an existing local snapshot
-(offline authoring only; requires PyYAML). Mitlan's Lightning is authored for
-this game in the same graph format: a 0.6 s charge ring at the aimed point, then
+Definitions are generated from a read-only rune configuration snapshot dated
+2026-10-16: MMOItems rune parameters, MythicLib handler bindings and the
+corresponding MythicMobs gameplay graph. Each definition keeps a SHA-256
+`checksum` of the configuration it was built from. No credentials, live player
+data or Minecraft assets are included. `tools/export-rune-spells.py` regenerates
+definitions from an existing local snapshot (offline authoring only; requires
+PyYAML); it renames the snapshot's skill namespace to neutral `rune_` names
+(`--namespace` overrides the detected one) and turns `VFX` summons into ASCII
+visuals. Hand-authored definitions name visual-only summons `vfx_*`.
+Mitlan's Lightning is authored for this game in the same graph format: a 0.6 s
+charge ring at the aimed point, then
 one bolt on the foe nearest its centre (or the bare ground when the ring is
 empty) for full damage and a short stun. Lightning then chains, nearest first,
 to every other foe inside the ring or within 3 m of the last one struck, for
@@ -42,7 +46,7 @@ delays, aura ticks, shields and status effects. Tick counts are converted to
 seconds, and metres to the game's existing world coordinates. Motion uses the
 game's collision/physics rules. Minecraft display models, particle clouds and
 sound files are represented by bounded ASCII lights, rings, trails and existing
-game audio. The game grants access to installed rune definitions directly; TF's
+game audio. The game grants access to installed rune definitions directly; rune
 equipment, resonance, progression and class systems are outside this change.
 
 The standalone arena and the real game instantiate the same `Spellcasting` class.

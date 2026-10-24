@@ -13,11 +13,11 @@ function frame(stage, progress = 0.25, extra = {}) {
   return points;
 }
 
-test('Flight of the Gladiator opts into its presentation without changing its TF resource costs', () => {
+test('Flight of the Gladiator opts into its presentation without changing its rune resource costs', () => {
   assert.equal(spell.presentation, presentation);
   assert.equal(presentation.id, spell.id);
   assert.deepEqual(spell.variants[0].params, { cooldown: 20, mana: 8, damage: 20 });
-  assert.equal(spell.source.sha256, 'ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7');
+  assert.equal(spell.checksum, 'ec0ccba909eda1abd6b943f87d4d185cf742744933ad399198df367b999656c7');
 });
 
 test('a real rune cast renders the crest and sends its own cast and landing sound cues', () => {

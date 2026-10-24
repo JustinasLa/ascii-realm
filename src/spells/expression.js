@@ -1,4 +1,4 @@
-// Arithmetic used by TF's skill modifiers. Never evaluate server text as JavaScript.
+// Arithmetic used by rune skill modifiers. Never evaluate server text as JavaScript.
 export function arithmetic(source, resolve = () => 0) {
   if (typeof source === 'number') return Number.isFinite(source) ? source : 0;
   const text = String(source ?? 0).replace(/["']/g, '')

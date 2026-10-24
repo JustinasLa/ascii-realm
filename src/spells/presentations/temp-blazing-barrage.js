@@ -1,4 +1,4 @@
-// Blazing Barrage: six fire circles kindle in a fan above the caster on TF's
+// Blazing Barrage: six fire circles kindle in a fan above the caster on the rune's
 // 3-tick cadence, each one spits a fireball down into flight, then the circles
 // collapse into a single ±48° fireblast. Rounds are comet-tailed fireballs and
 // hits bloom into a churning, rising fireball. Pure and clock-driven: no timers,
@@ -7,7 +7,7 @@ const DURATION = 1.65;
 const TAU = Math.PI * 2;
 // One local metre spans 26 columns across and 6.5 rows down the screen.
 const COLS = 26, ROWS = 6.5;
-// TF schedule: circle i appears every 3 ticks, fires 4 ticks later; fireblast at 1.25s.
+// Rune schedule: circle i appears every 3 ticks, fires 4 ticks later; fireblast at 1.25s.
 const SHOT_SPACING = 0.15, SHOT_DELAY = 0.2, GATHER_AT = 1.0, BLAST_AT = 1.25;
 const LAUNCH_Z = 0.4, BLAST_Z = 0.3, FAN = 48 * Math.PI / 180;
 
@@ -44,7 +44,7 @@ const RING = [
   [4, 0, ')'], [3, 1, "'"], [2, 1, '-'], [1, 1, '~'], [0, 1, '='], [-1, 1, '~'], [-2, 1, '-'], [-3, 1, '`'],
 ];
 // Circle centres in screen metres (x right, y up) in firing order: the inner pair,
-// the outer pair, then the raised pair, mirroring TF's side offsets and heights.
+// the outer pair, then the raised pair, mirroring the rune's side offsets and heights.
 const BARRELS = [[-0.4, 0.62], [0.4, 0.62], [-1.12, 0.5], [1.12, 0.5], [-0.76, 1.12], [0.76, 1.12]];
 
 // The pen converts between local ground metres (x right, z forward) and screen
@@ -270,7 +270,7 @@ function aura(pen) {
   }
 }
 
-// A ring of fire with smouldering coals inside (not used by TF, kept on-theme).
+// A ring of fire with smouldering coals inside (not used by the rune, kept on-theme).
 function zone(pen) {
   const { age, p } = pen;
   const size = clamp(pen.radius, 0.6, 2.4) * 0.9;

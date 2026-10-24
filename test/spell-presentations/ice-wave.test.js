@@ -37,7 +37,7 @@ test('Ice Wave opts into its own presentation while retaining its rune cost and 
   assert.equal(spell.presentation, presentation);
   assert.equal(presentation.id, spell.id);
   assert.deepEqual(spell.variants[0].params, { cooldown: 15, mana: 6, duration: 10, damage: 8 });
-  assert.equal(spell.source.sha256, 'dd420157d6e6bbbfa6a8aa60a51f3e625b8a4885f4070cfc3fb59b94b1130599');
+  assert.equal(spell.checksum, 'dd420157d6e6bbbfa6a8aa60a51f3e625b8a4885f4070cfc3fb59b94b1130599');
 });
 
 test('a real rune cast renders the authored effects and emits typed spatial cast/impact cues', async () => {

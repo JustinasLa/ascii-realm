@@ -196,7 +196,7 @@ test('real Frozen Tomb cast renders its profile and routes typed cues while pres
   const events = [];
   scene.casting.onSound = event => events.push(event);
   assert.equal(scene.cast().ok, true);
-  assert.equal(scene.casting.mana, 90, 'TF mana cost');
+  assert.equal(scene.casting.mana, 90, 'rune mana cost');
   assert.equal(scene.castWithoutMana().ok, false, 'an empty mana pool rejects repeat casts');
   assert.equal(events.filter(event => event.stage === 'cast').length, 1);
   const projectile = scene.casting.projectiles[0];

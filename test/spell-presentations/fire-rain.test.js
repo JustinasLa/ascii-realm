@@ -36,7 +36,7 @@ test('a real Fire Rain cast paints its cloud, rain and ground strikes and emits 
   assert.ok(storm.some(point => point[2] === '%' || point[2] === '#'), 'runtime paints the burning cloud');
   assert.ok(storm.some(point => point[2] === '@'), 'runtime paints white-hot falling drops');
   scene.advance(0.7);
-  assert.equal(scene.foe.health, 88, 'first falling shot keeps its TF damage and launch delay');
+  assert.equal(scene.foe.health, 88, 'first falling shot keeps its rune damage and launch delay');
   const landing = [];
   scene.casting.effects.paint((...point) => landing.push(point), scene.casting.projectiles);
   assert.ok(landing.length > 0, 'runtime paints the landing');

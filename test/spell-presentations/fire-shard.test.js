@@ -124,7 +124,7 @@ test('tick visuals scorch a cooling trail and hit visuals ring outward', () => {
   assert.notDeepEqual(ring(0.3), capture('impact', 0.3), 'hit rings differ from the fracture burst');
 });
 
-test('a real Fire Shard cast paints the profile through every stage and keeps TF damage', () => {
+test('a real Fire Shard cast paints the profile through every stage and keeps rune damage', () => {
   const scene = runeScene(spell);
   assert.equal(scene.cast().ok, true);
   const launch = [];
@@ -137,5 +137,5 @@ test('a real Fire Shard cast paints the profile through every stage and keeps TF
   const hit = [];
   scene.casting.effects.paint((...point) => hit.push(point), scene.casting.projectiles);
   assert.ok(hit.length > 40 && hit.length <= 4096);
-  assert.equal(scene.foe.health, 88, 'presentation preserves the 12 TF damage');
+  assert.equal(scene.foe.health, 88, 'presentation preserves the 12 rune damage');
 });

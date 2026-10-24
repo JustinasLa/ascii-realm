@@ -18,7 +18,7 @@ export function scene(spells = practiceSpells, { wall = false, metres = 6 } = {}
   return { casting, player, monsters, foe, ally, world };
 }
 
-test('modifier arithmetic handles nested TF formulas without executing code', () => {
+test('modifier arithmetic handles nested rune formulas without executing code', () => {
   assert.equal(arithmetic('max(1, min(400, <modifier.duration> * 20))', () => 6), 120);
   assert.equal(arithmetic('(<modifier.shield_power> + 3) / 4 - 1', () => 13), 3);
   assert.equal(arithmetic('globalThis.process.exit()'), 0);
@@ -153,4 +153,77 @@ test('deferred area effects keep the projectile position where the effect was cr
   const { casting, foe } = scene([spell], { metres: 4 });
   casting.cast(spell.id, { heading: 0 }); casting.update(2); casting.update(0.5);
   assert.ok(foe.health < foe.maxHealth);
+});
+
+test('vfx_ summons only pulse, while a defined summon spawns a short-lived helper', () => {
+  const summoner = { id: 'summoner', name: 'Summoner', element: 'oseni', root: 'summon_root',
+    variants: [{ id: 'rune', kind: 'rune', params: {}, root: 'summon_root', trigger: 'CAST' }],
+    nodes: { summon_root: { steps: [{ op: 'summon', args: { type: 'VFX_Ward' } }, { op: 'summon', args: { type: 'Helper' } }] } },
+    summons: { vfx_ward: [{ event: 'onspawn', op: 'heal', args: { amount: '5' } }], helper: [] } };
+  const { casting } = scene([summoner]);
+  assert.equal(casting.cast('summoner').ok, true);
+  assert.equal(casting.summons.length, 1, 'only the defined, non-vfx summon spawns');
+  assert.ok(casting.effects.list.some(e => e.stage === 'pulse' && e.shape === 'ward'), 'the vfx_ summon shows a ward pulse');
+});
+
+const graph = (id, steps, { trigger = 'CAST', ...extra } = {}) => ({ id, name: id, element: 'oseni', root: 'root',
+  variants: [{ id: 'rune', kind: 'rune', params: {}, root: 'root', trigger }], nodes: { root: { steps } }, ...extra });
+const mark = (name, value = '1') => ({ op: 'setvariable', args: { var: `caster.${name}`, value }, target: { op: 'self', args: {} } });
+
+test('class abilities scale their parameters with level inside their bounds', () => {
+  const { casting } = scene();
+  casting.level = 3;
+  const params = { mana: 4, damage: { base: 4, 'per-level': 2, max: 7 }, duration: { 'per-level': -1, min: 0 }, radius: {} };
+  assert.deepEqual(casting.modifiers({ params }), { mana: 4, damage: 7, duration: 0, radius: 0 });
+});
+
+test('skill expressions resolve x and treat unknown placeholders as zero', () => {
+  const { casting, player } = scene();
+  const ctx = casting.context(practiceSpells[0], practiceSpells[0].variants[0], player);
+  assert.equal(casting.resolve('x', { ...ctx, x: 4 }), 4);
+  assert.equal(casting.resolve('x', ctx), 0);
+  assert.equal(casting.resolve('unknown.placeholder', ctx), 0);
+});
+
+test('wait steps hold later steps until the caster lands, or briefly otherwise', () => {
+  const spell = graph('waiter', [{ op: 'wait', args: { cond: 'onground' } }, mark('landed'), { op: 'wait', args: {} }, mark('paused')]);
+  const { casting, player } = scene([spell]);
+  assert.equal(casting.cast('waiter').ok, true);
+  casting.update(0.4);
+  assert.equal(casting.variable(player, 'landed'), undefined);
+  casting.update(0.2);
+  assert.equal(casting.variable(player, 'landed'), 1, 'a grounded caster waits half a second');
+  assert.equal(casting.variable(player, 'paused'), undefined);
+  casting.update(0.2);
+  assert.equal(casting.variable(player, 'paused'), 1, 'other waits last a fifth of a second');
+});
+
+test('a summoned helper runs its spawn step at once and its timer steps on schedule', () => {
+  const spell = graph('caller', [{ op: 'summon', args: { type: 'Helper' } }], { summons: { helper: [
+    { event: 'onspawn', ...mark('spawned') },
+    { event: 'ontimer:20', op: 'variableadd', args: { var: 'caster.pulses', amount: '1' } },
+    { event: 'ontimer', op: 'variableadd', args: { var: 'caster.beats', amount: '1' } },
+    { event: 'ondeath', ...mark('died') },
+  ] } });
+  const { casting } = scene([spell]);
+  assert.equal(casting.cast('caller').ok, true);
+  const [helper] = casting.summons;
+  assert.equal(casting.variable(helper, 'spawned'), 1);
+  casting.update(1.5); casting.update(1);
+  assert.equal(casting.variable(helper, 'pulses'), 2, 'one pulse per 20-tick interval');
+  assert.equal(casting.variable(helper, 'beats'), 2, 'timers without an interval run every second');
+  assert.equal(casting.variable(helper, 'died'), undefined, 'other events wait for their trigger');
+});
+
+test('triggered abilities cast passively with the triggering damage amount', () => {
+  const struck = graph('riposte', [mark('struck', '<skill.var.damage-amount>')], { trigger: 'ATTACK' });
+  const hurt = graph('backlash', [mark('hurt', '<skill.var.damage-amount>')], { trigger: 'DAMAGED_BY_ENTITY' });
+  const { casting, player, foe } = scene([struck, hurt, graph('plain', [mark('plain')])]);
+  assert.equal(casting.cast('riposte').ok, false, 'a triggered ability cannot be cast by hand');
+  casting.trigger('ATTACK', player, foe, 7);
+  assert.equal(casting.variable(player, 'struck'), 7);
+  assert.equal(casting.variable(player, 'hurt'), undefined);
+  casting.trigger('DAMAGED', player, foe, 3);
+  assert.equal(casting.variable(player, 'hurt'), 3);
+  assert.equal(casting.variable(player, 'plain'), undefined, 'cast abilities never trigger');
 });

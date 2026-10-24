@@ -20,7 +20,7 @@ const easeIn = t => clamp01(t) ** 2;
 const hash = (i, k = 0) => { const s = Math.sin(i * 127.1 + k * 311.7) * 43758.5453; return s - Math.floor(s); };
 // In-game a metre spans 26 columns and 6.5 rows (cells are ~2:1 tall).
 const COLS = 26, ROWS = 6.5;
-// TF range 40 m at 40 m/s: a miss fizzles out over the last fifth of its flight.
+// Rune range 40 m at 40 m/s: a miss fizzles out over the last fifth of its flight.
 const RANGE_TIME = 1;
 
 // The adapter rotates local metres by heading; glyph shapes must follow the

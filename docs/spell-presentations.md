@@ -40,5 +40,5 @@ the standalone casting arena; the arena exposes mute and effects volume and
 unlocks audio from its Cast/R gesture.
 
 Reset, death, hiding, and pause discard presentation effects and stop scheduled
-spell voices. Presentation changes never alter TF damage, targeting, cost,
+spell voices. Presentation changes never alter rune damage, targeting, cost,
 status duration, or projectile collision.
