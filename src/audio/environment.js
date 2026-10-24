@@ -47,6 +47,7 @@ export class EnvironmentSampler {
   constructor(world) {
     this.world = world;
     this.waterSource = null;
+    this.riverSource = null;
     this.sampleX = Infinity;
     this.sampleY = Infinity;
     this.elapsed = WATER_SAMPLE_INTERVAL;
@@ -94,12 +95,27 @@ export class EnvironmentSampler {
     this.elapsed = 0;
   }
 
-  /** Water is { x, y, strength } or null; all signal levels lie in [0, 1]. */
+  // The nearest river within earshot, measured from its water's edge to
+  // the listener. Rivers can be narrower than the lake grid's spacing, so
+  // this asks the river network for the exact distance to the nearest
+  // stretch of each river instead of sampling cells.
+  sampleRiver(x, y) {
+    const nearest = this.world.rivers?.near(x, y, WATER_RADIUS)[0] ?? null;
+    this.riverSource = nearest
+      ? { x: nearest.x, y: nearest.y, distance: nearest.dist, speed: nearest.speed }
+      : null;
+  }
+
+  /**
+   * Water is { x, y, strength } or null, and river { x, y, strength, speed }
+   * or null; all signal levels lie in [0, 1].
+   */
   update(dt, x, y, time) {
     this.elapsed += Number.isFinite(dt) ? Math.max(0, dt) : 0;
     const movement = Math.hypot((x - this.sampleX) * ASPECT, y - this.sampleY);
     if (this.elapsed >= WATER_SAMPLE_INTERVAL || movement >= WATER_RESAMPLE_DISTANCE) {
       this.sampleWater(x, y);
+      this.sampleRiver(x, y);
     }
     let water = null;
     if (this.waterSource) {
@@ -109,6 +125,11 @@ export class EnvironmentSampler {
         water = { x: sourceX, y: sourceY, strength: 1 - distance / WATER_RADIUS };
       }
     }
-    return { gust: grassGust(this.world, x, y, time), night: nightAmount(time), water };
+    let river = null;
+    if (this.riverSource) {
+      const { x: sourceX, y: sourceY, distance, speed } = this.riverSource;
+      if (distance < WATER_RADIUS) river = { x: sourceX, y: sourceY, strength: 1 - distance / WATER_RADIUS, speed };
+    }
+    return { gust: grassGust(this.world, x, y, time), night: nightAmount(time), water, river };
   }
 }
