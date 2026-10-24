@@ -81,7 +81,7 @@ npm run test:coverage
 ```
 
 The script fails, with a non-zero exit, when total coverage across all files
-drops below its floors: 93% of lines, 94% of branches and 66% of functions.
+drops below its floors: 95% of lines, 94% of branches and 68% of functions.
 The floors live in the `test:coverage` script in `package.json`. They only
 ever go up: when coverage rises, raise them to the new totals rounded down to
 a whole percent, and never lower them to make a change pass.
