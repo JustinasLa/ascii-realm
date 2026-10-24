@@ -7,7 +7,7 @@ import { FLORA } from './flora.js';
 import { PROPS } from './props.js';
 import { TERRAIN } from './terrain.js';
 import { TREES } from './trees.js';
-import { WATER } from './water.js';
+import { RIVER, WATER } from './water.js';
 import { MUSHROOMS } from './mushrooms.js';
 
-export const PACKS = [CORE, TERRAIN, WATER, FLORA, TREES, PROPS, EFFECTS, MUSHROOMS];
+export const PACKS = [CORE, TERRAIN, WATER, FLORA, TREES, PROPS, EFFECTS, MUSHROOMS, RIVER];

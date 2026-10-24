@@ -18,6 +18,10 @@ const TONES = {
   needles: [".'", ',;', '^*', '*x', '#%'],
 };
 
+// River foam streaks by their direction on screen (along the rows, rising
+// to the right, down the screen, falling to the right), light to heavy.
+const STREAKS = [['-', '~', '='], ['/', '/', '/'], ["'", '!', '|'], ['\\', '\\', '\\']];
+
 // Outline edges by the side the object lies on: east, then clockwise.
 const EDGES = ['(', '/', '_', '\\', ')', '/', '-', '\\'];
 
@@ -66,6 +70,12 @@ export const ASCII_RULES = [
   [/^water\.pad/, 'o'],
   [/^water\.bloom/, '*'],
   [/^water\.(star|glitter)/, '*+'],
+  // The river's current: foam streaks lie along the flow, heavier toward
+  // the head of each streak.
+  [/^water\.streak\.(\d)\.(\d)$/, (m) => STREAKS[Number(m[1])][Number(m[2])]],
+  [/^water\.riffle\.(\d)$/, (m) => '~^,~'[Number(m[1])]],
+  [/^water\.eddy\.(\d)$/, (m) => 'c()'[Number(m[1])]],
+  [/^water\.vee\.(\d)$/, (m) => '-/|\\'[Number(m[1])]],
 
   [/^props\.(stone|bark|barkh|birch|grainv|grainh|canvas|leaves|needles)\.(\d)\./,
     (m) => TONES[m[1]][Math.min(4, Number(m[2]))]],

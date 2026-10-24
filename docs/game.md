@@ -81,6 +81,15 @@ short version see the [README](../README.md).
   rises from your ankles to at most your knees, slows your stride, and hides
   the submerged boots. Each footfall throws up droplets and spreading rings;
   jumps, landings and sword impacts make larger splashes.
+  Rivers run: pale foam streaks travel downstream at the water's own speed,
+  faster in the narrows and slower on bends and by the banks, with riffles
+  over fast shallows, froth heaped on the outer bank of a bend, and a V-shaped
+  wake and a slowly turning eddy behind each midstream stone. Leaves float
+  down with the current, splash rings and spray are carried along, and lakes
+  stay calm. Standing or wading in a river, you and any monster are gently
+  carried downstream, about a quarter of a walking pace in the middle of an
+  ordinary reach, more in the deep narrows; you can always wade upstream, and
+  a jump lifts you clear of the push.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
@@ -151,7 +160,7 @@ short version see the [README](../README.md).
   with a splash.
 - **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
   surfaces and movement effects,
-  slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
+  slowly breathing wind and grass rustle, quiet lakes, babbling rivers, distant birds and bugs,
   wildlife calls and rare firefly noise glints,
   with 42 original, mysterious RPG songs in 21 day/night pairs, using drifting
   choir, bowed tones, low drones, distant bells and a synthesized room reverb.
