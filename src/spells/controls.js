@@ -205,9 +205,11 @@ export class SpellControls {
     }
     const isBound = entry.id === bound, waiting = this.waiting[i];
     const color = hover ? tint : waiting ? quiet : isBound ? tint : muted;
+    // Phones tag the bound rune on a line of its own: [CAST] would crowd the narrow sectors.
+    const tag = key => [['[', quiet], [key, ink], [']', quiet]], phone = isBound && this.phone();
     return [...wrap(entry.name, width).map(line => [[line, color, true]]),
-      [[this.stats(entry)[0], hover ? muted : quiet], ...(isBound ? [[' [', quiet], [this.phone() ? 'CAST' : 'R', ink], [']', quiet]] : [])],
-      ...(waiting ? [[['low mana', quiet]]] : [])];
+      [[this.stats(entry)[0], hover ? muted : quiet], ...(isBound && !phone ? [[' ', quiet], ...tag('R')] : [])],
+      ...(phone ? [tag('CAST')] : []), ...(waiting ? [[['low mana', quiet]]] : [])];
   }
 
   render(bound) {

@@ -56,9 +56,10 @@ test('the rune wheel names CAST on phones and R elsewhere', () => {
 
   controls.menu.enter(controls.menu.groups[0]);
   controls.waiting = [false];
-  assert.ok(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)).includes('12 mana [CAST]'));
+  assert.deepEqual(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)), ['Fire Shard', '12 mana', '[CAST]']);
+  assert.deepEqual(text(controls.entryLines(spells[0], 0, '', 16)), ['Fire Shard', '12 mana']);
   phone = false;
-  assert.ok(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)).includes('12 mana [R]'));
+  assert.deepEqual(text(controls.entryLines(spells[0], 0, 'fire-shard', 16)), ['Fire Shard', '12 mana [R]']);
 });
 
 test('a phone flip redraws the open wheel even when nothing else changed', () => {
