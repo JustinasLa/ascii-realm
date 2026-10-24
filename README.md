@@ -26,7 +26,7 @@ world is generated as you walk, and up to eight friends can share it.
 - **Sound and music** — recorded footsteps and water, weather and wildlife ambience, and 42 original songs chosen by season and weather.
 - **Multiplayer lobbies** — share a six-character code to explore the same world together and see each other's movement, swings and rune casts.
 - **Scenery builder** — paint terrain and place props, with undo, local saves and JSON export.
-- **Phones too** — a touch stick with jump, strike, draw and cast buttons, and rendering that scales itself to hold 60 fps.
+- **Phones too** — a decluttered touch layout with a stick, attack buttons and pinch zoom, and rendering that scales itself to hold 60 fps.
 
 ## Your first night
 
@@ -82,7 +82,7 @@ npm run test:coverage
 ```
 
 The script fails, with a non-zero exit, when total coverage across all files
-drops below its floors: 93% of lines, 94% of branches and 66% of functions.
+drops below its floors: 95% of lines, 94% of branches and 68% of functions.
 The floors live in the `test:coverage` script in `package.json`. They only
 ever go up: when coverage rises, raise them to the new totals rounded down to
 a whole percent, and never lower them to make a change pass.

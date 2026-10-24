@@ -22,6 +22,7 @@ test('audio controls respect activation, browser shortcuts and listener cleanup'
   const elements = new Map(ids.map(id => {
     const element = new EventTarget();
     element.setAttribute = () => {};
+    element.replaceChildren = (...nodes) => { element.children = nodes; };
     return [`#${id}`, element];
   }));
   const weatherSelect = elements.get('#audio-weather');
@@ -122,4 +123,109 @@ test('audio controls respect activation, browser shortcuts and listener cleanup'
   send('keydown', { code: 'KeyW', repeat: false });
   assert.equal(unlocks, beforeUnbind, 'all activation listeners are removed');
   await Promise.resolve();
+});
+
+test('weather, season, visibility and phone hints update the audio panel', async (t) => {
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  const window = globalThis.window = new EventTarget();
+  const classes = new Set();
+  const document = globalThis.document = Object.assign(new EventTarget(), {
+    hidden: false,
+    documentElement: { classList: { contains: name => classes.has(name) } },
+    createElement: () => ({}),
+  });
+  let unbind;
+  t.after(() => {
+    unbind?.();
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+  });
+  const ids = ['audio-mute', 'audio-status', 'audio-skip', 'audio-song', 'audio-season', 'audio-climate',
+    'audio-weather', 'weather-intensity', 'weather-description', 'grass-preview'];
+  const elements = new Map(ids.map(id => {
+    const element = Object.assign(new EventTarget(), { textContent: '', value: '', options: [] });
+    element.setAttribute = () => {};
+    element.append = option => element.options.push(option);
+    element.replaceChildren = (...nodes) => {
+      element.textContent = nodes.map(node => node.textContent ?? node).join('');
+      element.hint = nodes.at(-1).className;
+    };
+    return [`#${id}`, element];
+  }));
+  const get = id => elements.get(`#${id}`);
+  get('weather-intensity').nextElementSibling = {};
+  const root = { querySelector: selector => elements.get(selector), querySelectorAll: () => [] };
+  let suspended = 0;
+  let paused = 0;
+  const engine = {
+    muted: false,
+    context: null,
+    unlock: async () => false,
+    suspend: async () => { suspended++; },
+    toggleMute() { this.muted = !this.muted; },
+  };
+  const climateCalls = [];
+  const music = {
+    currentSong: 'Spring song', climateLabel: 'Spring · clear', seasonPreference: 'auto',
+    seasonOptions: [{ id: 'auto', label: 'Automatic' }, { id: 'winter', label: 'Winter' }],
+    setSeason(id) { this.seasonPreference = id; this.currentSong = `${id} song`; },
+    update(state) { climateCalls.push(state); this.climateLabel = `${state.weather} ${state.weatherIntensity}`; },
+    skip() {},
+  };
+  const weather = {
+    preset: 'clear', intensity: 0.6,
+    presets: [{ id: 'rain', label: 'Rain', description: 'Steady rain.' }],
+    setPreset(id) { this.preset = id; },
+    setIntensity(value) { this.intensity = value; },
+  };
+  const bind = () => bindAudioControls(engine, music, weather, () => { paused++; }, root);
+  unbind = bind();
+  assert.equal(get('audio-mute').textContent, 'Mute (M)');
+  assert.equal(get('audio-mute').hint, 'key-hint', 'phones hide the shortcut through this span');
+  assert.equal(get('audio-status').textContent, 'Press a key or click to enable sound');
+  assert.deepEqual(get('audio-season').options.map(option => option.textContent), ['Automatic', 'Winter']);
+  assert.equal(get('audio-climate').textContent, 'Spring · clear');
+  assert.equal(get('weather-description').textContent, 'The meadow’s wind, water and wildlife.');
+
+  get('audio-season').value = 'winter';
+  get('audio-season').dispatchEvent(new Event('change'));
+  assert.equal(get('audio-song').textContent, 'winter song');
+
+  get('audio-weather').value = 'rain';
+  get('audio-weather').dispatchEvent(new Event('change'));
+  assert.equal(get('weather-description').textContent, 'Steady rain.');
+  get('weather-intensity').value = '30';
+  get('weather-intensity').dispatchEvent(new Event('input'));
+  assert.equal(weather.intensity, 0.3);
+  assert.equal(get('weather-intensity').nextElementSibling.value, '30%');
+  assert.deepEqual(climateCalls.map(call => [call.weather, call.weatherIntensity]), [['rain', 0.6], ['rain', 0.3]]);
+  assert.equal(get('audio-climate').textContent, 'rain 0.3');
+
+  // Footsteps can't load when sound stays locked.
+  get('grass-preview').dispatchEvent(new Event('click'));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(get('audio-status').textContent, 'Footstep audio could not load');
+  assert.equal(get('grass-preview').disabled, false);
+
+  document.hidden = true;
+  document.dispatchEvent(new Event('visibilitychange'));
+  await Promise.resolve();
+  assert.equal(paused, 1);
+  assert.equal(suspended, 1);
+  document.hidden = false;
+  let unlocks = 0;
+  engine.unlock = async () => { unlocks++; return true; };
+  document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(unlocks, 0, 'a context that was never unlocked waits for a gesture');
+  engine.context = { state: 'suspended' };
+  document.dispatchEvent(new Event('visibilitychange'));
+  assert.equal(unlocks, 1, 'an unlocked context resumes');
+
+  unbind();
+  classes.add('is-phone');
+  unbind = bind();
+  assert.equal(get('audio-status').textContent, 'Tap to enable sound');
 });

@@ -5,10 +5,7 @@ import { EnvironmentSampler } from '../src/audio/environment.js';
 import { KINDS, Monster } from '../src/entities/monsters.js';
 import { Player } from '../src/entities/player.js';
 import { family } from '../src/render/glyphs.js';
-import {
-  BASE_SPEED, carryTarget, CURRENT_CARRY, currentAt, easeCarry, immersion, MIN_CARRY, screenOrientation, toCells,
-  toGround,
-} from '../src/world/rivers.js';
+import { currentAt, immersion, screenOrientation, toCells, toGround } from '../src/world/rivers.js';
 import { Splashes } from '../src/world/splashes.js';
 import { animated, bedStone, FLOATING, shade } from '../src/world/terrain/water.js';
 import { ASPECT, CHUNK_SIZE, MAX_WATER_DEPTH, WATER, WATER_LEVEL, World } from '../src/world/world.js';
@@ -51,26 +48,6 @@ const shown = (out, i) => layerOf(out, i) || glyphOf(out, i);
 
 const STREAKS = [0, 1, 2, 3].map(o => new Set(family(`water.streak.${o}.`)));
 const isStreak = (g) => STREAKS.some(s => s.has(g));
-
-test('immersion and carry follow the depth of the feet and the pace of the water', () => {
-  assert.equal(immersion(MAX_WATER_DEPTH), 1);
-  assert.equal(immersion(0.2), 0.5);
-  assert.equal(immersion(0.3, 0.5), 0, 'a jump lifts the feet clear');
-  assert.ok(Math.abs(immersion(0.3, -1) - 0.75) < 1e-12);
-  const flow = { x: 1, y: 0, speed: BASE_SPEED };
-  assert.deepEqual(carryTarget(flow, 1), { x: CURRENT_CARRY, y: 0 });
-  assert.deepEqual(carryTarget({ x: 0, y: 1, speed: 0.05 }, 1), { x: 0, y: MIN_CARRY }, 'even slow water drifts a body');
-  assert.deepEqual(carryTarget({ x: 1, y: 0, speed: 0.01 }, 1), { x: 0, y: 0 });
-  assert.deepEqual(carryTarget(flow, 0), { x: 0, y: 0 });
-  // About a quarter of a walk, never more than half of one.
-  assert.ok(CURRENT_CARRY / 1.35 > 0.2 && CURRENT_CARRY / 1.35 < 0.3);
-  assert.ok(carryTarget({ x: 1, y: 0, speed: 1 }, 1).x < 1.35 / 2);
-  const carry = { x: 0.2, y: 0 };
-  assert.equal(easeCarry(carry, { x: 0, y: 0 }, 1, true).x, 0.2, 'held through a hop');
-  easeCarry(carry, { x: 0, y: 0 }, 5);
-  assert.deepEqual(carry, { x: 0, y: 0 });
-  assert.deepEqual(currentAt({}, 0, 0, 1), { x: 0, y: 0 }, 'a world without rivers carries nothing');
-});
 
 test('an idle player in a river drifts downstream, and an idle player on a lake does not', () => {
   const world = new World(1);

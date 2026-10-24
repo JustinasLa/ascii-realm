@@ -127,3 +127,60 @@ test('stunned players cannot cast or start drawing a ranged attack', async () =>
   assert.equal(game.projectiles.list.length, 0);
   assert.equal(game.player.ranged.held, 0);
 });
+
+test('a phone never opens the scenery builder, even with ?builder', async () => {
+  const { game, canvas } = await loadGame(undefined, { href: 'http://localhost/?debug&builder', phone: true });
+  assert.equal(game.device.phone, true);
+  assert.equal(game.builder.enabled, false);
+  assert.equal(game.builder.allowed(), false);
+  assert.equal(canvas.getAttribute('aria-label'), 'Game scene.');
+});
+
+test('a desktop still opens the builder with ?builder', async () => {
+  const { game, canvas } = await loadGame(undefined, { href: 'http://localhost/?debug&builder' });
+  assert.equal(game.device.phone, false);
+  assert.equal(game.builder.enabled, true);
+  assert.equal(game.builder.allowed(), true);
+  assert.equal(canvas.getAttribute('aria-label'), 'Game scene. Press B to build scenery.');
+});
+
+test('becoming a phone leaves the builder; leaving phone mode closes the menu', async () => {
+  const { game, canvas, setPhone, keydown } = await loadGame(undefined, { href: 'http://localhost/?debug&builder' });
+  game.builder.panel.open = true;
+  setPhone(true);
+  assert.equal(game.builder.enabled, false);
+  assert.equal(game.builder.panel.open, false);
+  assert.equal(canvas.getAttribute('aria-label'), 'Game scene.');
+  game.phoneMenu.setOpen(true);
+  assert.equal(game.phoneMenu.open, true);
+  assert.ok(keydown('w').defaultPrevented === false);
+  setPhone(false);
+  assert.equal(game.phoneMenu.open, false);
+  assert.equal(canvas.getAttribute('aria-label'), 'Game scene. Press B to build scenery.');
+});
+
+test('the phone menu blocks gameplay while open and its Inventory row opens the inventory', async () => {
+  const { game } = await loadGame(undefined, { phone: true });
+  let opened = false;
+  game.inventoryScreen.isOpen = false;
+  game.inventoryScreen.setOpen = (open) => { opened = open; };
+  game.player.combat.charge = 1;
+  game.phoneMenu.setOpen(true);
+  game.phoneMenu.onInventory();
+  assert.equal(opened, true);
+  assert.equal(game.player.combat.charge, 0, 'opening the menu cancels a charge');
+  game.phoneMenu.setOpen(false);
+});
+
+test('binding a rune names CAST on phones and R elsewhere', async () => {
+  const { game, setPhone } = await loadGame(undefined, { phone: true });
+  const toasts = [];
+  game.hud.notify = (message, kind) => toasts.push([message, kind]);
+  const { onBind, phone } = game.spellControls.options;
+  assert.equal(phone(), true);
+  onBind({ name: 'Fire Shard' });
+  setPhone(false);
+  assert.equal(phone(), false);
+  onBind({ name: 'Fire Shard' });
+  assert.deepEqual(toasts, [['Fire Shard ready: tap CAST', 'spell'], ['Fire Shard bound to R', 'spell']]);
+});

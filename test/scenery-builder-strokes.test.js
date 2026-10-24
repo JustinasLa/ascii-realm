@@ -91,3 +91,86 @@ test('a long eraser movement removes props between pointer events and undo resto
   assert.equal(scene.redo(), true);
   assert.deepEqual(scene.serialize(), erased);
 });
+
+// Enough of the panel for mode changes, on a builder built from the prototype.
+function modeFixture(allowed) {
+  const builder = fixture('stone');
+  const node = () => ({ hidden: false, textContent: '', attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; } });
+  Object.assign(builder, {
+    allowed, enabled: false, player: { x: 0.5, y: 0.5 }, panel: { open: false },
+    modeButton: node(), banner: node(), cursor: node(), modes: [], resets: 0,
+    onModeChange(enabled) { this.modes.push(enabled); },
+    onReset() { this.resets++; },
+  });
+  builder.canvas.style = {};
+  return builder;
+}
+
+test('a phone can never enter building mode or change the scene', (t) => {
+  const builder = modeFixture(() => false);
+  const { scene } = builder;
+  const before = JSON.stringify(scene.serialize());
+  assert.equal(builder.setEnabled(true), false);
+  const press = { code: 'KeyB', target: {}, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+  builder.keydown(press);
+  assert.equal(press.defaultPrevented, false, 'B is left alone');
+  builder.edit(() => scene.paint(0.5, 0.5, 4, STONE), 'Painted.');
+  builder.addRuins();
+  builder.importScene({ version: 1, terrain: [[0, 0, STONE]], props: [] });
+  const previousStorage = globalThis.localStorage;
+  let reads = 0;
+  globalThis.localStorage = { getItem: () => { reads++; return JSON.stringify(scene.serialize()); } };
+  t.after(() => {
+    if (previousStorage === undefined) delete globalThis.localStorage;
+    else globalThis.localStorage = previousStorage;
+  });
+  builder.load();
+  assert.equal(reads, 0, 'the local scene is not even read');
+  builder.enabled = true;
+  builder.pointerDown(pointer(builder, 0.5, 0.5));
+  assert.equal(builder.stroke, null, 'no stroke starts');
+  builder.enabled = false;
+  assert.equal(JSON.stringify(scene.serialize()), before);
+  assert.equal(builder.enabled, false);
+  assert.deepEqual(builder.modes, []);
+  assert.equal(builder.resets, 0);
+});
+
+test('a builder without an allowed check still builds', () => {
+  const builder = modeFixture(undefined);
+  assert.equal(builder.setEnabled(true), true);
+  assert.equal(builder.enabled, true);
+  assert.equal(builder.panel.open, true);
+  assert.equal(builder.modeButton.attributes['aria-pressed'], 'true');
+  assert.equal(builder.canvas.style.touchAction, 'none');
+});
+
+test('forceExit leaves building mode even with no safe ground', () => {
+  const builder = modeFixture(() => true);
+  builder.setEnabled(true);
+  builder.world = Object.assign(Object.create(builder.world), { isWalkable: () => false });
+  builder.player = { x: 0.5, y: 0.5 };
+  const before = JSON.stringify(builder.scene.serialize());
+  assert.equal(builder.setEnabled(false), false, 'the normal exit refuses');
+  assert.equal(builder.enabled, true);
+  builder.forceExit();
+  assert.equal(builder.enabled, false);
+  assert.equal(builder.banner.hidden, true);
+  assert.equal(builder.cursor.hidden, true);
+  assert.equal(builder.canvas.style.touchAction, '');
+  assert.equal(builder.modeButton.textContent, 'Start building');
+  assert.deepEqual(builder.modes, [true, false]);
+  assert.deepEqual(builder.player, { x: 0.5, y: 0.5 }, 'the player stays where they stand');
+  assert.equal(JSON.stringify(builder.scene.serialize()), before);
+  builder.forceExit();
+  assert.deepEqual(builder.modes, [true, false], 'leaving twice does nothing');
+});
+
+test('forceExit uses the normal exit when there is safe ground', () => {
+  const builder = modeFixture(() => true);
+  builder.setEnabled(true);
+  builder.forceExit();
+  assert.equal(builder.enabled, false);
+  assert.deepEqual(builder.modes, [true, false]);
+});

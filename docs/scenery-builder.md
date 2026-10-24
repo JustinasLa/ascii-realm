@@ -1,5 +1,7 @@
 # Scenery builder
 
+The builder needs a desktop or tablet; it is unavailable on phones.
+
 Press `B` to enter build mode and open the testing panel; press it again to return
 to play. You can also open the panel by clicking its summary, then choose
 **Start building**. Paint grass, dirt, shore, water or stone with terrain brushes,

@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import { fbm } from '../src/core/noise.js';
 import { createSpawnRuins } from '../src/world/spawn-ruins.js';
 import {
-  BASE_SPEED, cellElevation, crossSpeed, groundHalfWidth, KEEP_OUT, readFlow, REGION, RiverNetwork,
-  screenOrientation, toCells, toGround, UPHILL_TOL, walk,
+  BASE_SPEED, carryTarget, cellElevation, crossSpeed, CURRENT_CARRY, currentAt, easeCarry, groundHalfWidth, immersion,
+  KEEP_OUT, MIN_CARRY, readFlow, REGION, RiverNetwork, screenOrientation, toCells, toGround, UPHILL_TOL, walk,
 } from '../src/world/rivers.js';
 import { ASPECT, CHUNK_SIZE, GRASS, LAND_LIFT, MAX_WATER_DEPTH, SHORE, WATER, WATER_LEVEL, World } from '../src/world/world.js';
 
@@ -385,4 +385,38 @@ test('carving a river chunk stays cheap', () => {
   for (let k = 0; k < 5; k++) world.generate(0, 1);
   const lake5 = performance.now() - lake;
   assert.ok(river5 < Math.max(4 * lake5, 60), `river ${river5.toFixed(1)} ms vs lake ${lake5.toFixed(1)} ms`);
+});
+
+test('immersion and carry follow the depth of the feet and the pace of the water', () => {
+  assert.equal(immersion(MAX_WATER_DEPTH), 1);
+  assert.equal(immersion(0.2), 0.5);
+  assert.equal(immersion(0.3, 0.5), 0, 'a jump lifts the feet clear');
+  assert.ok(Math.abs(immersion(0.3, -1) - 0.75) < 1e-12);
+  const flow = { x: 1, y: 0, speed: BASE_SPEED };
+  assert.deepEqual(carryTarget(flow, 1), { x: CURRENT_CARRY, y: 0 });
+  assert.deepEqual(carryTarget({ x: 0, y: 1, speed: 0.05 }, 1), { x: 0, y: MIN_CARRY }, 'even slow water drifts a body');
+  assert.deepEqual(carryTarget({ x: 1, y: 0, speed: 0.01 }, 1), { x: 0, y: 0 });
+  assert.deepEqual(carryTarget(flow, 0), { x: 0, y: 0 });
+  // About a quarter of a walk, never more than half of one.
+  assert.ok(CURRENT_CARRY / 1.35 > 0.2 && CURRENT_CARRY / 1.35 < 0.3);
+  assert.ok(carryTarget({ x: 1, y: 0, speed: 1 }, 1).x < 1.35 / 2);
+  const carry = { x: 0.2, y: 0 };
+  assert.equal(easeCarry(carry, { x: 0, y: 0 }, 1, true).x, 0.2, 'held through a hop');
+  easeCarry(carry, { x: 0, y: 0 }, 5);
+  assert.deepEqual(carry, { x: 0, y: 0 });
+  assert.deepEqual(currentAt({}, 0, 0, 1), { x: 0, y: 0 }, 'a world without rivers carries nothing');
+});
+
+test('the current on a body is averaged over the water under its feet and both sides', () => {
+  const world = new World(1);
+  const { river, i } = widest(world);
+  const { x, y } = cellOf(river, i);
+  const flow = world.flowAt(x, y);
+  const carry = currentAt(world, x, y, 1, 1.2);
+  const l = Math.hypot(carry.x, carry.y);
+  assert.ok(l > MIN_CARRY && (carry.x * flow.x + carry.y * flow.y) / l > 0.99, 'downstream');
+  assert.ok(l <= Math.hypot(carryTarget({ ...flow, speed: 1 }, 1).x, carryTarget({ ...flow, speed: 1 }, 1).y), 'never more than the fastest water gives');
+  // Feet out of the water feel nothing; neither does dry land.
+  assert.deepEqual(currentAt(world, x, y, 0, 1.2), { x: 0, y: 0 });
+  assert.deepEqual(currentAt(world, world.spawn.x, world.spawn.y, 1, 1.2), { x: 0, y: 0 });
 });
