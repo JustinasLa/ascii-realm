@@ -3,7 +3,9 @@
 Deer and rabbits live on the land round the player. They graze, stroll and
 watch, and they run from the player, friends, monsters and wolves, and from
 loud noises. They can be hunted for hide, meat and bone. Wolf packs roam the
-woods and forest edges, hunting the deer, the rabbits and the player.
+woods and forest edges, hunting the deer, the rabbits and the player. Flocks
+of wood pigeons feed in the meadows and lift off as you come near, and fish
+swim in the lakes and dart away from you.
 
 ## Where they live
 
@@ -96,7 +98,8 @@ twice as far away look toward it.
 | A sprinting footstep | 10 m |
 
 An animal never hears farther than its own range (30 m for deer, 18 m for
-rabbits).
+rabbits, 30 m for birds and 12 m for fish, as water dulls sound). Birds take
+off from an arrow or spear landing within 6 m.
 
 ## Hunting
 
@@ -265,6 +268,70 @@ animals, wolves never step onto land that isn't loaded.
 
 Wolves and monsters ignore each other.
 
+## Birds
+
+Flocks of 3 to 6 wood pigeons feed on the ground. Each region may hold a
+flock as well as a herd, rolled from the seed on its own: 35 % in a meadow,
+25 % at the forest edge, 8 % in woodland and none on water. Flocks appear and
+are let go by the same rules as herds (12 to 48 m off and out of view, on
+loaded, open, dry ground off the shore; let go beyond 64 m, then a 30 s
+rest), at most 2 flocks and 8 birds at once.
+
+- **Feeding.** Birds never walk. They stand, bobbing their heads and looking
+  about. Every 8 to 20 s one bird of the flock (never two at once) flutters
+  0.6 to 3.5 m to a free spot near the others, rising off its feet on the
+  takeoff and coming down on the landing.
+- **Watching.** A threat moving within 9 m (4.5 m if it stands still) makes
+  a bird face it for a few seconds.
+- **Lift-off.** The player, a friend, a monster or a wolf within 6 m (10 m
+  if running), a loud noise, or a shaft landing within 6 m puts the whole
+  flock up: one bird rises, and the rest follow within a quarter of a
+  second. Each plays its takeoff, leaves the ground part way through it and
+  climbs at 2.4 m/s away from the threat.
+- **Flight.** The flock picks open, dry ground 25 to 45 m off, within 60
+  degrees of straight away, with room for every bird at least 0.5 m from the
+  next, and flies there at about 8 m/s and 4 to 7 m up, each bird keeping its
+  own place, apart from, along with and toward its neighbours. Birds flap
+  while climbing or slow and glide at cruise, their bodies pitching with the
+  climb. Near the spot they come down, each to its own place, usually within
+  2 m (further along a narrow bank or round props), touching down as their
+  landing animation does, and feed again. For 20 s after landing the flock's senses are halved. With no
+  open ground in reach it flies on and away, and is let go once far off; it
+  is back at home after the rest.
+- A flying bird is drawn over trees and grass, mirrored in the lakes it
+  crosses; its shadow fades out by 2 m up.
+
+## Fish
+
+Schools of 3 to 5 fish live in still lake water. A region rolls a school
+(70 %) only if at least 3 of its 9 samples are lake rather than river, and
+the school's home is the nearest spot to a seeded point that is open lake
+water: at least 0.15 m deep, at least 0.6 m from anything else, with no
+river line within a cell and no current. The search waits until every
+chunk it reads is loaded, its search box plus the 0.6 m ring round each
+spot in it, so a school's home is the same whatever order chunks load in.
+Schools appear and are let go like herds, at most 2
+schools and 8 fish at once.
+
+- **Schooling.** The leader swims 1 to 5 m at a time to a spot it can reach
+  in a straight line over open water, then pauses for 1 to 4 s; the others
+  follow behind and beside it. Fish swim 0.08 to 0.3 m down, never within
+  0.05 m of the bed, and never leave open lake water: a fish turned toward
+  the shore or a river slides along the edge or stops.
+- **Darting.** The player or a friend within 4 m (7 m if running, 6 m if
+  wading), a shaft landing within 4 m, or a loud noise within 12 m sends the
+  whole school darting apart, each fish on its own line away at 2.6 to
+  3.6 m/s for up to 0.7 s. A shallow-swimming fish breaks the surface in a
+  small ring three times in ten. They glide to a stop, hold still for 3 to
+  6 s, then school again; the leader doesn't wander off for 6 s.
+- Fish are drawn under the water: a soft smudge of marks with no outline,
+  their colour sunk toward the water's the deeper they swim, shown only on
+  plain water. The swell's marks, glints, lily pads, foam, rings,
+  reflections and everything else on the surface stay over them.
+
+Birds and fish can't be hunted or caught yet: arrows pass through them,
+they are never a target, and they drop nothing.
+
 ## Looks
 
 Deer, stags, rabbits and wolves are rigged models that play their own
@@ -279,8 +346,14 @@ animal's pace, so the hooves and paws stay planted. Each animal casts a long
 shadow, pushes the ground fog aside, shows in the water's reflections, and
 breaks the surface where its legs wade. At most 6 animals are drawn (4 on
 phones): first wolves within 25 m that are stalking, ringing, chasing or
-biting, then animals in flight, then the nearest. The models and their licences are
-listed in [credits](credits.md).
+biting, then animals in flight, then the nearest. The wood pigeon plays its
+own standing idle, takeoff, flapping, gliding and landing; the fish plays
+its swim, faster as it speeds up and fastest in a dart. Birds and fish have
+their own cap of 8 drawn (4 on phones), so they never take an animal's
+place: birds taking off or flying within 20 m first, then darting fish,
+then the nearest. They are drawn in the same pass as the animals, and only
+those drawn (or, on a desktop, just off screen) are posed each frame. The
+models and their licences are listed in [credits](credits.md).
 
 ## URL parameters
 
@@ -289,7 +362,9 @@ listed in [credits](credits.md).
 | `?deer=N` | at most N deer at once (0 to 8, default 8) |
 | `?rabbits=N` | at most N rabbits at once (0 to 8, default 6) |
 | `?wolves=N` | at most N wolves at once (0 to 8, default 4; one pack at most 4) |
-| `?animals=0` | no wildlife at all |
+| `?birds=N` | at most N birds at once (0 to 8, default 8) |
+| `?fish=N` | at most N fish at once (0 to 8, default 8) |
+| `?animals=0` | no wildlife at all, birds and fish included |
 
 With `?debug`, `game.animals` lists the animals (`list`) and herds
 (`herds`). `game.animals.spawn('deer' | 'rabbit' | 'wolf', { x, y, count, variant })`
@@ -298,6 +373,11 @@ goes. `game.animals.calm()` settles every animal. `game.animals.hurt(i, damage)`
 deals a blow (lethal by default) to the animal at index `i`, and
 `game.huntDrops.all()` lists the stacks lying about.
 `game.animals.disengage()` calls every pack off.
+`game.birds.spawn({ x, y, count, airborne })` places a flock (feeding on the
+open ground there, or already in the air), and `game.fish.spawn({ x, y, count })`
+a school on the open water nearest the point within 6 m; both use the game's
+own world and keep their group however far the player goes. `game.birds.calm()` and `game.fish.calm()` settle them, and
+`game.birds.list` and `game.fish.list` list them.
 
 ## Multiplayer
 

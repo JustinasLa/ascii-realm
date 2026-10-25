@@ -13,7 +13,9 @@ from Quaternius' [Universal Animation Library](https://quaternius.com/packs/univ
 
 The deer, stag and wolf are from Quaternius' [Ultimate Animated Animals](https://quaternius.com/packs/ultimateanimatedanimals.html)
 pack (CC0), and the rabbit is Čestmír Dammer's [Rabbit](https://opengameart.org/node/51722)
-(CC0); see their [provenance and conversion notes](../assets/animals/LICENSE.txt).
+(CC0). The wood pigeon is Paul Spooner's [Animated Bird, Pigeon](https://peripheralarbor.com/bird.blend)
+(public domain, by [his dedication](https://ip.tryop.com)), and the fish is Quaternius'
+[Fish](https://poly.pizza/m/XWl86YFtpF) (CC0); see their [provenance and conversion notes](../assets/animals/LICENSE.txt).
 
 Grass footsteps use six excerpts from gabytoledosci's recorded
 [Walking on grass.wav](https://freesound.org/people/gabytoledosci/sounds/398266/),

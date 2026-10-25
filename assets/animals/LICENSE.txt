@@ -1,9 +1,11 @@
 Animal models
 =============
 
-All four models are dedicated to the public domain under CC0 1.0 Universal
-(https://creativecommons.org/publicdomain/zero/1.0/). No attribution is
-required; the authors are credited here with thanks.
+All the models here are in the public domain: the deer, stag, wolf, rabbit
+and fish are dedicated to it under CC0 1.0 Universal
+(https://creativecommons.org/publicdomain/zero/1.0/), and the pigeon by its
+author's own public-domain dedication (below). No attribution is required;
+the authors are credited here with thanks.
 
 deer.glb, stag.glb
   "Deer" and "Stag" from the Ultimate Animated Animals pack by Quaternius
@@ -36,3 +38,34 @@ rabbit.glb
   separate fur-shell mesh, its one-frame clip and the "Dying.001" clip were
   left out; the "Armature|" prefix was stripped from the clip names (Basic,
   Guard, Guarding, Jump, Running, Sitting.000, Sitting.001, Dying.000, Dead).
+
+pigeon.glb
+  "Animated Bird, Pigeon" by Paul Spooner (dudecon), public domain. The
+  author released all his work, past and future, to the public domain on
+  2014-08-05 (https://ip.tryop.com: "I [...] hereby release the entirety of
+  my intellectual property to the public domain. All ideas which I have
+  produced in the past, or will produce in the future, I hereby make
+  available for the free and unrestricted use by all people for all
+  time."); his site says the release "includes all the stuff on this
+  website" (https://peripheralarbor.com, update of 2014-08-10), and his own
+  description of this model reads "Actual license is 'Public Domain' see
+  details here https://ip.tryop.com/".
+  Source: the Blender file on the author's site, downloaded on 2026-10-25:
+    https://peripheralarbor.com/bird.blend
+    (459,693 bytes, SHA-256
+    b44c94cbd1b3dff3a87da63a7f253b7fbc6b80cf3d898292ed56c22930fc4716)
+  Changes: exported to glTF with Blender 3.6: only the "rig" armature and
+  the "Bird" mesh were kept; the "Pigeon Proportions" action was laid under
+  each clip, and "Standing Idle", "Takeoff", "Flapping", "Gliding" and
+  "Landing" were baked with visual keying to the deform bones (76 joints),
+  the space in "Standing Idle" made an underscore; the texture packed in the
+  .blend ("Bird Texture.jpg", 512x512) was scaled to 256x256 JPEG.
+  Geometry and animation are otherwise as the author made them.
+
+fish.glb
+  "Fish" by Quaternius, CC0, as stated on its Poly Pizza page when
+  downloaded on 2026-10-25:
+    https://poly.pizza/m/XWl86YFtpF
+    (70,268 bytes, SHA-256
+    bfea34878b92eb05d9b2c584c3a9e97abe2b402141b9c7b4b3f1ecb55a29df02)
+  Used as published, with its one clip "Armature|Swim".
