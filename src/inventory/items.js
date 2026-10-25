@@ -327,6 +327,20 @@ const definitions = [
     stackLimit: 20,
   },
   {
+    // A coin stack lying on the ground; its count is its value in cents.
+    id: 'denars',
+    name: 'Denars',
+    shortName: 'Coin',
+    glyph: '*',
+    groundGlyph: '*',
+    colour: [179, 145, 34],
+    tags: ['currency'],
+    description: 'Coin of the realm. It goes straight to your pouch.',
+    stats: { type: 'Currency' },
+    weight: 0,
+    stackLimit: 1000000,
+  },
+  {
     id: 'oakLog',
     name: 'Log',
     shortName: 'Log',

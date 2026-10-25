@@ -31,6 +31,7 @@ import { SCALE, TILT } from './entities/rig.js';
 import { Collection } from './inventory/collection.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
+import { Wallet } from './inventory/wallet.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
 import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
@@ -57,7 +58,7 @@ import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
 import { drawItem, drawResource } from './world/item-draw.js';
-import { layLoot, LootCredit, rollLoot } from './world/loot.js';
+import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from './world/loot.js';
 import { mulberry32 } from './core/rng.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
 import { Projectiles } from './world/projectiles.js';
@@ -203,6 +204,10 @@ inventory.add('shortSword');
 inventory.equip(0);
 inventory.assignHotbar(0, 'shortSword');
 inventory.events.length = 0;
+// The pouch: money carried, in cents, kept on this device between visits.
+let walletStorage = null;
+try { walletStorage = localStorage; } catch {}
+const wallet = new Wallet({ storage: walletStorage });
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
 // Harvestable tufts and berry bushes stay disabled.
 const harvesting = new Harvesting(world, null, { wild: false });
@@ -341,7 +346,7 @@ debug.native = { gate, wakeLock, pacer, get clock() { return clock; }, get fulls
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
-  player, inventory, name,
+  player, inventory, name, wallet,
   onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
   onInventory: () => inventoryScreen.toggle(),
 });
@@ -356,6 +361,7 @@ const inventoryScreen = new InventoryScreen({
   phone: () => device.phone,
 });
 debug.hud = hud;
+debug.wallet = wallet;
 debug.inventoryScreen = inventoryScreen;
 
 // Friends in a lobby share the world's seed and see one another walk about.
@@ -647,7 +653,7 @@ const hearWild = (e) => {
 };
 // What hunted animals leave lying, and the collection that picks it up.
 const huntDrops = new HuntDrops();
-const huntCollection = new Collection(world, inventory, huntDrops.items);
+const huntCollection = new Collection(world, inventory, huntDrops.items, null, wallet);
 debug.huntDrops = huntDrops;
 debug.collection ??= huntCollection;
 // Monster loot lies in the same drop store as the hunt's, so one collection
@@ -658,6 +664,12 @@ const lootRandom = mulberry32((seed * 104729) ^ 0x1007);
 const dropLoot = (monster, items = rollLoot(monster.kind.id, lootRandom)) => layLoot(huntDrops, world,
   { x: monster.x, y: monster.y, killer: { x: player.x, y: player.y }, items }, (a, b) => huntCollection.pathClear(a, b));
 debug.loot = { credit: lootCredit, roll: (kind) => rollLoot(kind, lootRandom), drop: dropLoot };
+// Felling a tree now and then turns up a few coins beside the stump.
+function payGather(tree) {
+  const items = rollPay('tree', logsOf(tree), lootRandom);
+  if (items.length) layLoot(huntDrops, world, { x: tree.x, y: tree.y, killer: { x: player.x, y: player.y }, items },
+    (a, b) => huntCollection.pathClear(a, b));
+}
 // Rows a lying stack is drawn ahead of its own, over the grass in front.
 const HUNT_DROP_LIFT = 3;
 // Rows a bird on the ground is drawn ahead of its own.
@@ -1040,9 +1052,10 @@ function frame(now) {
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
-    if (interact && !isGameplayBlocked() && !player.magicStunned) mushrooms.interact(player);
-    if (touchInteract && !isGameplayBlocked() && !player.magicStunned) {
-      const done = performInteraction(interactables());
+    // E and TAKE do the same nearest thing, a ground item before a glowcap;
+    // only TAKE puts out a fire, which the keyboard leaves to C.
+    if ((interact || touchInteract) && !isGameplayBlocked() && !player.magicStunned) {
+      const done = performInteraction(interactables(), { douse: touchInteract });
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
       // What the drop store's collection takes is told once, with its sound,
       // as its pickup events are spent below.
@@ -1114,7 +1127,10 @@ function frame(now) {
     }
     // Each cut can fell a tree a blow at a time or mow tall grass.
     if (e.type === 'strike' && !paused) {
-      for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
+      for (const result of harvesting.react(e, player)) {
+        if (result.message) hud.notify(result.message, 'pickup');
+        if (result.status === 'harvested' && result.node?.kind === 'tree') payGather(result.node);
+      }
       const damage = Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0));
       const hit = monsters.strike(e, player, damage);
       for (const m of hit) lootCredit.observe(m, true);
@@ -1196,7 +1212,8 @@ function frame(now) {
   huntCollection.update(paused ? 0 : dt, player, { blocked: paused || isGameplayBlocked() || respawned });
   for (const ev of huntCollection.events) {
     sound.play({ ...ev, type: 'pickup' });
-    hud.notify(`Picked up ${ITEMS[ev.id].name}${ev.count > 1 ? ` x${ev.count}` : ''}.`, 'pickup');
+    if (ev.type === 'coin') hud.earned(ev.cents);
+    else hud.notify(`Picked up ${ITEMS[ev.id].name}${ev.count > 1 ? ` x${ev.count}` : ''}.`, 'pickup');
   }
   huntCollection.events.length = 0;
   huntDrops.expire(huntCollection.currentTime);

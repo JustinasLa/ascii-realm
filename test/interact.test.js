@@ -64,6 +64,10 @@ test('pressing does what the button offers, checked again at the press', () => {
   const empty = firesWith(null);
   assert.equal(performInteraction({ player: player(), mushrooms: mushroomsWith(null), fires: empty, world }), null);
   assert.equal(empty.toggled, 0, 'a late tap never builds a campfire');
+  // E never puts out a fire: that is C's.
+  assert.equal(interaction({ player: player(), mushrooms: mushroomsWith(null), fires }, { douse: false }), null);
+  assert.equal(performInteraction({ player: player(), mushrooms: mushroomsWith(null), fires, world }, { douse: false }), null);
+  assert.equal(fires.toggled, 1);
 });
 
 // Counts every write the button makes to the page.

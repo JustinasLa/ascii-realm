@@ -1,24 +1,61 @@
-import { HuntDrops, MAX_STACKS, PICKUP_DELAY } from '../entities/hunt-drops.js';
+import { HuntDrops, PICKUP_DELAY } from '../entities/hunt-drops.js';
 import { ITEMS } from '../inventory/items.js';
+import { DENARS } from '../inventory/wallet.js';
 import { ASPECT } from './world.js';
 import { SCALE, TILT } from '../entities/rig.js';
 
 // What a slain monster leaves: a small table per kind, rolled once when it
 // dies, laid beside the body where the player can walk to it.
 
-// The chance a goblin, elf or troll leaves its tier's iron. Provisional:
-// it may yet come down to 8 % (the tier's own 40 % share applied as well).
+// The chance a goblin, elf or troll leaves something from its tier.
+// Provisional: it may yet come down to 8 % (the tier's own 40 % share
+// applied as well).
 export const TIER_CHANCE = 0.2;
 
-// Tier tables: each gives its one item when it rolls.
+// Tier tables. A tier gives one of its items, by weight: four in five times
+// iron, otherwise coin (a count of cents). Provisional, as TIER_CHANCE is.
+const tier = (ingots, cents) => Object.freeze([
+  Object.freeze({ id: 'ironIngot', count: ingots, weight: 0.4 }),
+  Object.freeze({ id: DENARS, count: cents, weight: 0.1 }),
+]);
 export const TIERS = Object.freeze({
-  easy: Object.freeze({ id: 'ironIngot', count: 1 }),
-  medium: Object.freeze({ id: 'ironIngot', count: 2 }),
-  hard: Object.freeze({ id: 'ironIngot', count: 4 }),
+  easy: tier(1, 100),
+  medium: tier(2, 200),
+  hard: tier(4, 400),
 });
 
+// One entry of a tier, picked by weight with one roll.
+function pick(entries, roll) {
+  const total = entries.reduce((sum, e) => sum + e.weight, 0);
+  let left = roll * total;
+  return entries.find((e) => (left -= e.weight) < 0) ?? entries.at(-1);
+}
+
+// What gathering now and then turns up in coin: per block, the chance and
+// the range in cents.
+export const GATHER_PAY = Object.freeze({
+  tree: Object.freeze({ chance: 0.05, cents: Object.freeze([50, 100]) }),
+});
+
+// As many lengths of timber as felling gives.
+export const logsOf = (tree) => (tree.growth === 'sapling' ? 1 : 3);
+
+// The coin `blocks` blocks of `source` turn up: one stack per block that
+// pays, [{ id, count }] with the count in cents.
+export function rollPay(source, blocks, random = Math.random) {
+  const pay = Object.hasOwn(GATHER_PAY, source) ? GATHER_PAY[source] : null;
+  const out = [];
+  for (let i = 0; pay && i < blocks; i++) {
+    if (!(random() < pay.chance)) continue;
+    const [min, max] = pay.cents;
+    out.push({ id: DENARS, count: Math.round(min + random() * (max - min)) });
+  }
+  return out;
+}
+
 // Each entry rolls on its own, once per kill: chance, then a count in
-// [min, max]. A `table` entry rolls its chance, then gives that tier's item.
+// [min, max]. A `table` entry rolls its chance, then gives one of that
+// tier's items.
 export const LOOT = Object.freeze({
   skeleton: Object.freeze([
     { id: 'bone', chance: 1, count: [1, 2] },
@@ -42,7 +79,7 @@ export function rollLoot(kindId, random = Math.random, tables = LOOT) {
     if (!(random() < entry.chance)) continue;
     let id = entry.id;
     let count;
-    if (entry.table) ({ id, count } = TIERS[entry.table]);
+    if (entry.table) ({ id, count } = pick(TIERS[entry.table], random()));
     else count = entry.count[0] + Math.floor(random() * (entry.count[1] - entry.count[0] + 1));
     if (!Object.hasOwn(ITEMS, id)) continue;
     out.set(id, (out.get(id) ?? 0) + count);
@@ -159,6 +196,6 @@ export function layLoot(store, world, { x, y, killer, items }, path) {
     store.laid.set(item, store.items.time);
     laid.push(item);
   });
-  while (store.laid.size > MAX_STACKS) store.forget(store.laid.keys().next().value);
+  store.trim();
   return laid;
 }

@@ -1,4 +1,5 @@
 import { ITEMS } from '../inventory/items.js';
+import { denars } from '../inventory/wallet.js';
 import { itemArt } from './item-art.js';
 import { lootLabels } from './loot-labels.js';
 
@@ -6,6 +7,8 @@ const MAX_TOASTS = 5;
 const TOAST_LIFETIME = 4;
 const MAX_DAMAGE = 16;
 const DAMAGE_LIFETIME = 1.1;
+// Seconds the pouch line shows a gain in brighter gold.
+const PURSE_GAIN = 1.2;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -57,9 +60,11 @@ function makeVital(label, kind, short) {
 
 /** Persistent ASCII controls and short-lived feedback from real game events. */
 export class Hud {
-  constructor({ player, inventory, name, onSelect, onInventory }) {
+  constructor({ player, inventory, name, onSelect, onInventory, wallet = null }) {
     this.player = player;
     this.inventory = inventory;
+    this.wallet = wallet;
+    this.purseGain = 0;
     this.onSelect = typeof onSelect === 'function' ? onSelect : () => {};
     this.onInventory = typeof onInventory === 'function' ? onInventory : () => {};
     this.toasts = [];
@@ -94,7 +99,12 @@ export class Hud {
     this.mana.node.hidden = true;
     this.manaSource = null;
     this.load = element('div', 'hud-frame-note');
-    status.append(this.health.node, this.mana.node, this.load);
+    // The coin in the pouch, e.g. "Pouch 12.40d".
+    this.purse = element('div', 'hud-purse');
+    this.purseValue = element('span', 'hud-purse-value');
+    this.purse.append(element('span', 'hud-purse-label', 'Pouch '), this.purseValue, element('span', 'hud-purse-unit', 'd'));
+    this.purse.hidden = !wallet;
+    status.append(this.health.node, this.mana.node, this.load, this.purse);
     this.party = element('div', 'hud-party');
     this.partyTab = element('div', 'hud-party-tab', 'party');
     this.partyTab.hidden = true;
@@ -216,6 +226,7 @@ export class Hud {
     if (this.manaSource) this.updateVital(this.mana, this.manaSource.mana, this.manaSource.maxMana);
     const weight = Number.isFinite(this.inventory.weight) ? this.inventory.weight : 0;
     text(this.load, `Bag ${number(weight)}/${number(this.inventory.capacity ?? 0)} kg`);
+    this.updatePurse(elapsed);
     this.updateHotbar();
 
     for (let index = this.toasts.length - 1; index >= 0; index--) {
@@ -232,6 +243,24 @@ export class Hud {
     this.updateFoes(view);
     this.updateLoot(view);
     this.updateTarget();
+  }
+
+  updatePurse(elapsed) {
+    if (!this.wallet) return;
+    const value = denars(this.wallet.cents);
+    text(this.purseValue, value);
+    attribute(this.purse, 'aria-label', `Pouch ${value} denars`);
+    this.purseGain = Math.max(0, this.purseGain - elapsed);
+    this.purse.classList.toggle('gain', this.purseGain > 0);
+  }
+
+  // Tells of coin gone into the pouch: a `+0.73d` notice and a brief
+  // brighter pouch line.
+  earned(cents) {
+    if (this.destroyed || !Number.isSafeInteger(cents) || cents <= 0) return;
+    this.notify(`+${denars(cents)}d`, 'coin');
+    this.purseGain = PURSE_GAIN;
+    this.updatePurse(0);
   }
 
   // The target frame's creature: { name, health, maxHealth, note, slain },
@@ -458,6 +487,7 @@ export class Hud {
   showEvent(event) {
     if (!event) return;
     if (event.type === 'damage') this.damage(event.amount, event.x, event.y);
+    if (event.type === 'coin') this.earned(event.cents);
     if (event.type === 'pickup') {
       const count = Number.isFinite(event.count) ? Math.max(0, Math.floor(event.count)) : 1;
       if (!count) return;
