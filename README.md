@@ -15,9 +15,11 @@ world is generated as you walk, and up to eight friends can share it.
 - **Infinite seeded world** — lakes, shorelines, meadows, dirt paths and rocky outcrops generate in chunks as you walk; `?seed=42` picks another world.
 - **Living meadows and forests** — wind-swept grass that keeps your footprints, and eight tree species with seasonal palettes, falling leaves and fallen logs.
 - **Water and reflections** — wade knee-deep through any lake while the outlaw, trees and stars reflect and break apart on the swell.
+- **Rivers** — seeded streams wind downhill into the lakes, their foam streaks racing downstream and their current carrying anyone who wades in, and now and then a log or other flotsam drifting by.
 - **A motion-captured outlaw** — real walk, run, jump and trick animations, an idle that looks around, breath in the cold, and footprints in dirt and sand.
 - **Sword play** — click to cut towards the cursor: draw, guard, a three-hit combo, a running lunge, a plunge from the air and a charged spin; cuts fell trees and mow tall grass.
-- **Rune casting** — 40 rune spells across fire, ice, life and water, picked from a hold-to-open rune wheel (middle mouse) and cast at the cursor with `R` or a right click, each with its own ASCII animation and recorded foley, paid for with slowly refilling mana.
+- **Rune casting** — 44 rune spells across fire, ice, life and water, picked from a hold-to-open rune wheel (middle mouse) and cast at the cursor with `R` or a right click, each with its own ASCII animation and recorded foley, paid for with slowly refilling mana.
+- **Wildlife** — deer herds and rabbits that graze, watch and flee: deer bolt together, rabbits scatter.
 - **Monsters** — skeletons that climb from the ground, goblins that stab and flee, trolls with a ground-shaking club and elves that lead their arrows.
 - **Fire** — carry and throw a lit torch that sets dry ground alight, and build contained campfires that grow and react to wind and footsteps.
 - **Weather and seasons** — 17 weather presets with rain, snow, hail, fog and lightning that lights the ground and can start fires.

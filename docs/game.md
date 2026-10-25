@@ -3,14 +3,15 @@
 Everything ASCII Realm draws, animates and plays, system by system. For the
 short version see the [README](../README.md).
 
-- **Rune casting.** 42 rune spells across four elements: 9 Oseni (fire), 12
-  Seithr (ice), 12 Cerrith (life) and 9 Mitlan (water and storm), from Fire
-  Shard, Meteor and Rekindle to Frozen Tomb, Vine Wave, Maelstrom and
+- **Rune casting.** 44 rune spells across four elements: 10 Oseni (fire), 12
+  Seithr (ice), 12 Cerrith (life) and 10 Mitlan (water and storm), from Fire
+  Shard, Meteor, Rekindle and Ring of Fire to Frozen Tomb, Vine Wave, Maelstrom and
   Lightning. Hold the middle mouse button to open the rune wheel, point at a
   school and then at one of its runes, and let go: that rune stays bound to
   `R` until another is chosen, even across reloads. Aim with the cursor and
   press `R` or right click. Runes have no cooldown: any rune can be cast again
-  at once while there is mana for it. The wheel shows each rune's mana cost and damage or
+  at once while there is mana for it, except Ring of Fire, which recharges for
+  twenty seconds. The wheel shows each rune's mana cost and damage or
   healing, and binding a rune names it in a notice. Mana shows as the MP bar
   in the status frame.
   On touch screens, hold CAST to open the wheel and tap CAST to cast. Mana
@@ -81,6 +82,31 @@ short version see the [README](../README.md).
   rises from your ankles to at most your knees, slows your stride, and hides
   the submerged boots. Each footfall throws up droplets and spreading rings;
   jumps, landings and sword impacts make larger splashes.
+  Rivers run: pale foam streaks travel downstream at the water's own speed,
+  faster in the narrows and slower on bends and by the banks, with riffles
+  over fast shallows, froth heaped on the outer bank of a bend, and a V-shaped
+  wake and a slowly turning eddy behind each midstream stone. Leaves float
+  down with the current, splash rings and spray are carried along, and lakes
+  stay calm. Standing or wading in a river, you and any monster are gently
+  carried downstream, about a quarter of a walking pace in the middle of an
+  ordinary reach, more in the deep narrows; you can always wade upstream, and
+  a jump lifts you clear of the push.
+  Now and then, roughly every 20 to 60 seconds while you are near running
+  water (twice as often during and for three minutes after a heavy storm),
+  something comes down the river: a fallen log, a leafy branch (bare in
+  winter), a mat of leaves (twigs and straw in winter), a clump of reeds with
+  cattail heads, or rarely a broken crate board or barrel stave. It appears
+  upstream, off the screen where it can, and drifts at the water's own pace,
+  turning to lie along the current and swinging wide on bends. It bobs slowly,
+  bumps and slides along the banks and midstream stones with a small ring of
+  ripples, sometimes snags for a few seconds on the outer bank of a bend or
+  on a stone until the water swings it free, and throws foam and a V-shaped
+  wake when the water runs past it. Carried into a lake it slows, soaks up
+  and sinks. Only a few pieces are afloat at once (four, six after a storm),
+  and nothing too long for a reach comes down it, so the narrowest brooks
+  carry only leaves and reeds, or nothing. Debris is drawn in small letters
+  with its reflection, hurts nobody, and is never saved: each player sees
+  their own.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
@@ -152,7 +178,7 @@ short version see the [README](../README.md).
   with a splash.
 - **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
   surfaces and movement effects,
-  slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
+  slowly breathing wind and grass rustle, quiet lakes, babbling rivers, distant birds and bugs,
   wildlife calls and rare firefly noise glints,
   with 42 original, mysterious RPG songs in 21 day/night pairs, using drifting
   choir, bowed tones, low drones, distant bells and a synthesized room reverb.

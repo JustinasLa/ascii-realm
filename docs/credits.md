@@ -11,6 +11,10 @@ from Quaternius' [Universal Animation Library](https://quaternius.com/packs/univ
 (CC0), rendered with [three.js](https://threejs.org/) (MIT, vendored in
 `vendor/three`).
 
+The deer and stag are from Quaternius' [Ultimate Animated Animals](https://quaternius.com/packs/ultimateanimatedanimals.html)
+pack (CC0), and the rabbit is Čestmír Dammer's [Rabbit](https://opengameart.org/node/51722)
+(CC0); see their [provenance and conversion notes](../assets/animals/LICENSE.txt).
+
 Grass footsteps use six excerpts from gabytoledosci's recorded
 [Walking on grass.wav](https://freesound.org/people/gabytoledosci/sounds/398266/),
 released under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/).

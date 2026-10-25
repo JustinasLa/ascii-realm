@@ -13,6 +13,7 @@ Oseni uses short air gestures, muted contacts and rounded resonance. There are n
 | Fire Rain | Overhead swell with separated, muted falling contacts |
 | Blazing Barrage | Three short discharges on the existing firing beats |
 | Rekindle | Soft inward cloth movement, with gentle restoration pulses |
+| Ring of Fire | Low sweeping draw that closes round the caster, soft muted contacts as foes catch |
 
 ## Bank and mix
 

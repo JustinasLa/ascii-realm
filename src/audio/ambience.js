@@ -22,6 +22,7 @@ export class Ambience {
     this.wind = null;
     this.leaves = null;
     this.water = null;
+    this.river = null;
     this.notes = [];
     this.nextCricket = 0;
     this.nextShimmer = 0;
@@ -35,7 +36,7 @@ export class Ambience {
     this.disposed = false;
   }
 
-  update({ time = 0, gust = 0, night = 0, water = null, fireflies = [],
+  update({ time = 0, gust = 0, night = 0, water = null, river = null, fireflies = [],
     season = 'spring', weather = 'clear', weatherIntensity = 0.6 } = {}) {
     const context = this.engine.context;
     if (this.disposed || context?.state !== 'running') return;
@@ -69,6 +70,12 @@ export class Ambience {
       this.waterVariant = nextSoundVariant(this.engine, 'ambience:water');
       this.water = loopNoise(this.engine, varySound(this.waterVariant,
         { bus: 'ambience', cutoff: 650, gain: 0, Q: 0.45 }));
+    }
+    if (!this.river && river) {
+      // A brighter, burbling bed for running water, alongside the lapping.
+      this.riverVariant = nextSoundVariant(this.engine, 'ambience:river');
+      this.river = loopNoise(this.engine, varySound(this.riverVariant,
+        { bus: 'ambience', cutoff: 700, filterType: 'bandpass', gain: 0, Q: 0.9 }));
     }
     for (let index = this.notes.length - 1; index >= 0; index--) {
       if (this.notes[index].end <= now) {
@@ -104,6 +111,22 @@ export class Ambience {
       }
       setParam(this.water.gain.gain, gain, now, 0.65);
       setParam(this.water.pan?.pan, pan, now, 0.15);
+    }
+
+    if (this.river) {
+      let gain = 0;
+      let pan = 0;
+      if (river && Number.isFinite(river.x) && Number.isFinite(river.y)) {
+        const spatial = this.engine.spatial(river.x, river.y);
+        // Three quick, unrelated wobbles make the steady rush babble.
+        const babble = 1 - 0.35 * (0.5 + (Math.sin(clock * 2.3 * Math.PI * 2) + Math.sin(clock * 3.7 * Math.PI * 2 + 1.3)
+          + Math.sin(clock * 5.9 * Math.PI * 2 + 2.1)) / 6);
+        gain = 0.05 * clamp01(river.strength) * spatial.gain * Math.min(1, clamp01(river.speed) / 0.4)
+          * babble * climate.water * this.riverVariant.level;
+        pan = spatial.pan;
+      }
+      setParam(this.river.gain.gain, gain, now, 0.05);
+      setParam(this.river.pan?.pan, pan, now, 0.15);
     }
 
     this._wildlife(now, daylight, darkness, water, wind, climate);
@@ -344,9 +367,11 @@ export class Ambience {
     this.wind?.stop();
     this.leaves?.stop();
     this.water?.stop();
+    this.river?.stop();
     this.wind = null;
     this.leaves = null;
     this.water = null;
+    this.river = null;
     for (const note of this.notes) note.handle.stop();
     this.notes.length = 0;
   }

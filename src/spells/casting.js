@@ -14,6 +14,14 @@ const maxHealth = entity => entity.vitals?.maxHealth ?? entity.maxHealth ?? 100;
 const MAX_TASKS = 4096;
 // Summons named vfx_* are pure visuals: they show a pulse instead of spawning.
 const VFX_SUMMON = 'vfx_';
+// A stable number for one cast, so every effect it shows (a ring and the
+// scorch it leaves) flickers alike even after the caster has moved on.
+const castSeed = (ctx, point, stage) => {
+  let h = 7;
+  for (const c of `${ctx.caster?.spellId ?? ctx.caster?.id ?? 'self'}:${ctx.castAt ?? 0}`) h = (h * 31 + c.charCodeAt(0)) % 9973;
+  // Hits on several foes at once each get their own flames.
+  return (h + (stage === 'impact' ? Math.abs(point.x * 0.37 + point.y * 1.13) : 0)) % 97;
+};
 
 // A bounded simulation of the gameplay mechanics in the configured rune skills.
 // Tick counts in the source are converted to seconds here; distances are metres.
@@ -72,7 +80,7 @@ export class Spellcasting {
   context(spell, variant, caster, options = {}) {
     return { spell, variant, caster, target: options.target ?? null, origin: { x: caster.x, y: caster.y },
       heading: options.heading ?? caster.heading ?? 0, aim: options.aim ?? null, modifiers: this.modifiers(variant),
-      vars: new Map(), depth: 0, generation: this.generation, ...options };
+      vars: new Map(), depth: 0, generation: this.generation, castAt: this.time, ...options };
   }
 
   number(value, ctx, fallback = 0) {
@@ -146,9 +154,10 @@ export class Spellcasting {
 
   present(ctx, point, stage, options = {}) {
     const presentation = hasPresentation(ctx.spell) ? ctx.spell.presentation : null;
+    if (this.effects.paused || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return;
     this.effects.add(point, { element: ctx.spell.element, presentation, stage, heading: ctx.heading,
-      owner: ctx.caster, ...options });
-    if (!presentation || this.effects.paused || !Number.isFinite(point?.x) || !Number.isFinite(point?.y)) return;
+      owner: ctx.caster, seed: castSeed(ctx, point, stage), ...options });
+    if (!presentation) return;
     const soundStage = stage === 'cast' ? 'cast' : stage === 'impact' || stage === 'aura' ? 'impact' : 'pulse';
     const key = `${ctx.spell.id}:${soundStage}`;
     if (soundStage !== 'cast' && (this.presentationCues.get(key) ?? -Infinity) > this.time) return;
@@ -452,7 +461,8 @@ export class Spellcasting {
     }
     // Told of every blow that landed, for example to buzz the caster's phone.
     if (landed) this.onDamage(target, amount, ctx);
-    this.present(ctx, target, 'impact', { radius: 1 });
+    // A burn's flames stay with the foe while it moves.
+    this.present(ctx, target, 'impact', options.burn === true ? { radius: 1, shape: 'burn', follow: target, life: 1 } : { radius: 1 });
     if (!hasPresentation(ctx.spell)) this.onSound({ type: 'slam', strength: 0.25, x: target.x, y: target.y });
   }
 
@@ -622,7 +632,7 @@ export class Spellcasting {
           if (name === 'regeneration') entity.heal?.(1);
           else {
             const damage = name === 'poison' ? Math.min(1, Math.max(0, health(entity) - 1)) : 1;
-            this.damage(entity, damage, entry.ctx);
+            this.damage(entity, damage, entry.ctx, name === 'fire' ? { burn: true } : {});
           }
         }
       }

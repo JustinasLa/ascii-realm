@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../../src/entities/player.js';
+import { Animals } from '../../src/entities/animals.js';
 import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
 import { isBow, isThrown } from '../../src/entities/loadout.js';
@@ -119,6 +120,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       return sentinel;
     } };
   }
+  // The animals' figures: `ready` is resolved with a stand-in once they
+  // should appear.
+  let figuresLoaded;
+  const figuresReady = new Promise(resolve => { figuresLoaded = resolve; });
+  const animalFigures = {
+    load: () => figuresReady,
+    draw: noop,
+    drawShadow: noop,
+  };
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
   const context = {
     console: { ...console, error: (...args) => startupErrors.push(args) }, URL, URLSearchParams, window,
@@ -193,6 +203,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       react() {} update() {} precipitate() {}
       drawSurface() {} drawContacts() {} drawSpray() {}
     },
+    // Records how the frame drives the river debris.
+    Debris: class {
+      constructor(options) { this.options = options; this.calls = []; this.pieces = []; }
+      update(dt) { this.calls.push(['update', dt]); }
+      visible() { return this.pieces; }
+      draw(r, view, piece) { this.calls.push(['draw', piece]); }
+      reflect(r, view, piece) { this.calls.push(['reflect', piece]); }
+      drawSurface() { this.calls.push(['surface']); }
+    },
     WATER,
     AsciiRenderer: class {
       resize(width, height, pixelRatio, cellW, cellH) { cellHeight = cellH; }
@@ -206,6 +225,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
+    Animals, AnimalFigures: animalFigures,
     SceneryBuilder: class {
       constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
       setEnabled(value) { this.enabled = value; this.onModeChange(); }
@@ -282,6 +302,12 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       document.dispatchEvent(new Event('visibilitychange'));
     },
     navigatedTo: () => navigatedTo,
+    // Hands the game a stand-in for the animals' figures.
+    loadAnimalFigures: async (figures) => {
+      figuresLoaded(figures);
+      await Promise.resolve();
+      await Promise.resolve();
+    },
     touch,
     vibrations,
     pointer(type, button = 0, pointerType = 'mouse') {

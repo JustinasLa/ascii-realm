@@ -6,6 +6,8 @@ Technical and player documentation for [ASCII Realm](../README.md).
 
 - [The game in detail](game.md) — the world, the outlaw, combat, fire,
   weather, monsters, runes, audio and multiplayer, system by system.
+- [Wildlife](wildlife.md) — where deer and rabbits live, how they graze
+  and flee, and what they hear.
 - [Controls](controls.md) — keyboard, mouse, inventory and touch.
 - [Scenery builder](scenery-builder.md) — painting terrain, placing props,
   undo, saving and sharing scenes.

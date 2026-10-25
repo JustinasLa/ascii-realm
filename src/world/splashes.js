@@ -1,6 +1,7 @@
 import { family } from '../render/glyphs.js';
 import { TILT } from '../entities/rig.js';
 import { FLOATING } from './terrain/water.js';
+import { toCells } from './rivers.js';
 import { ASPECT, WATER } from './world.js';
 
 // Pieces of a ring by the heading out from its middle, and spray from a
@@ -27,6 +28,7 @@ export class Splashes {
   constructor() {
     this.rings = [];
     this.drops = [];
+    this.world = null;
   }
 
   ring(x, y, strength, delay = 0, small = false) {
@@ -38,6 +40,7 @@ export class Splashes {
   }
 
   react(world, event) {
+    this.world = world;
     const impact = IMPACTS[event.type];
     if (!impact || world.typeAt(event.x, event.y) !== WATER) return false;
     const weight = Math.max(0, Math.min(1.5, event.strength ?? 0.5));
@@ -67,6 +70,7 @@ export class Splashes {
   // Small weather impacts use the same water-clipped rings as footsteps.
   // Snow melts quietly; rain and ice throw up a brief crown of droplets.
   precipitate(world, x, y, strength, kind = 'rain', random = Math.random) {
+    this.world = world;
     if (!(strength > 0) || world.typeAt(x, y) !== WATER) return false;
     const weight = Math.min(1, strength);
     this.ring(x, y, 0.25 + weight * 0.7, 0, true);
@@ -91,11 +95,17 @@ export class Splashes {
     return true;
   }
 
-  update(dt) {
-    for (const ring of this.rings) ring.age += dt;
+  // Rings and spray ride a river's current downstream, in the world they
+  // last splashed in.
+  update(dt, world = this.world) {
+    for (const ring of this.rings) {
+      ring.age += dt;
+      if (world) this.ride(world, ring, dt);
+    }
     this.rings = this.rings.filter((p) => p.age < p.life);
     const drag = Math.exp(-2.8 * dt);
     for (const p of this.drops) {
+      if (world) this.ride(world, p, dt);
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.h += p.vh * dt;
@@ -110,6 +120,14 @@ export class Splashes {
       }
     }
     this.drops = this.drops.filter((p) => p.age < p.life);
+  }
+
+  ride(world, p, dt) {
+    const flow = world.flowAt?.(p.x, p.y, this.flow ??= {});
+    if (!(flow?.speed > 0)) return;
+    const { cols, rows } = toCells(flow.x * flow.speed * dt, flow.y * flow.speed * dt);
+    p.x += cols;
+    p.y += rows;
   }
 
   drawRing(r, view, x, y, radius, light, time) {

@@ -16,6 +16,8 @@ import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './e
 import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters } from './entities/monsters.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
+import { Animals } from './entities/animals.js';
+import { AnimalFigures } from './entities/animal-figures.js';
 import { isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
 import { Spellcasting } from './spells/casting.js';
@@ -57,6 +59,7 @@ import { bakeFine, fineBakesPending, fineOf, startFineWorkers } from './world/fi
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { Splashes } from './world/splashes.js';
+import { Debris } from './world/debris.js';
 import { Torches } from './world/torch.js';
 import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
@@ -222,6 +225,8 @@ const dust = new Dust();
 const footprints = new Footprints();
 const grass = new Grass();
 const splashes = new Splashes();
+// Driftwood and flotsam on the rivers: local and never saved.
+const debris = new Debris({ season: world.season, world });
 const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
 const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
@@ -231,7 +236,11 @@ if (ruinPreview) {
   sound.weather.preset = 'fog';
   sound.weather.intensity = 0.6;
 }
-sound.weather.onLightning = event => weather.strike(world, camera.view(renderer), event);
+sound.weather.onLightning = event => {
+  const bolt = weather.strike(world, camera.view(renderer), event);
+  if (bolt) animals.hear({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+  return bolt;
+};
 let summonLightning = false;
 const lightningButton = document.getElementById('lightning-test');
 const requestLightning = () => { summonLightning = true; };
@@ -257,7 +266,7 @@ window.addEventListener('pageshow', (event) => {
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const fog = new Fog();
 const fogSpells = new SpellFogStirs();
-const debug = { player, camera, world, grass, splashes, weather, fog, fires, torches, renderer, quality, inventory,
+const debug = { player, camera, world, grass, splashes, debris, weather, fog, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
@@ -605,6 +614,12 @@ const countOf = (name, fallback) => {
 const monsters = new Monsters({ seed,
   counts: { skeleton: countOf('skeletons', 2), goblin: countOf('goblins', 1), troll: countOf('trolls', 1),
     elf: countOf('elves', 1) } });
+// Deer herds and rabbits live on the land round the player. ?deer=N and
+// ?rabbits=N cap how many of each may be about; ?animals=0 leaves the land
+// without them.
+const animals = new Animals({ seed, counts: { deer: countOf('deer', 8), rabbit: countOf('rabbits', 6) },
+  enabled: params.get('animals') !== '0' });
+debug.animals = animals;
 // Short vibrations on touch screens when a blow lands and when hurt.
 const haptics = createHaptics({ nav: navigator, enabled: () => coarse.matches && !document.hidden });
 debug.haptics = haptics;
@@ -620,9 +635,16 @@ const syncSpellPeers = () => {
   for (const id of spellPeers.keys()) if (!multiplayer.players.some(m => m.id === id)) spellPeers.delete(id);
 };
 const casting = new Spellcasting({ player, world, monsters, peers: () => [...spellPeers.values()],
-  notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e),
+  notify: message => hud.notify(message), onCast: e => multiplayer.sendCast(e),
+  onSound: e => {
+    sound.play(e);
+    animals.hear(e);
+  },
   // Rune lightning (e.g. Mitlan's Lightning) answers with the storm's own thunder.
-  onLightning: ({ x, y, strength }) => sound.play({ type: 'lightning', x, y, strength }),
+  onLightning: ({ x, y, strength }) => {
+    sound.play({ type: 'lightning', x, y, strength });
+    animals.hear({ type: 'lightning', x, y, strength });
+  },
   onDamage: (target, amount, ctx) => { if (ctx?.caster === player && target !== player && amount > 0) haptics.hit(); } });
 debug.casting = casting;
 hud.attachMana(casting);
@@ -668,6 +690,14 @@ ModelFigure.library('assets/ual1.glb').then((gltf) => {
   monsterFigures = new MonsterFigures(gltf);
   debug.monsterFigures = monsterFigures;
 }).catch((e) => console.error('Could not set up the monsters', e));
+// The animals' own models; they live unseen until these arrive.
+let animalFigures = null;
+if (animals.enabled) {
+  AnimalFigures.load({ phone: () => device.phone }).then((f) => {
+    animalFigures = f;
+    debug.animalFigures = f;
+  }).catch((e) => console.error('Could not set up the animals', e));
+}
 ModelFigure.load('assets/ual1.glb')
   .then((m) => {
     model = m;
@@ -692,6 +722,8 @@ function fogWalkers(view, missiles) {
   const near = (m) => Math.hypot((m.x - player.x) * ASPECT, m.y - player.y);
   const foes = monsters.living.sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
   for (const m of foes) walkers.push({ id: m, x: m.x, y: m.y, size: figureScale(m.kind.id) });
+  const wild = [...animals.list].sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
+  for (const a of wild) walkers.push({ id: a, x: a.x, y: a.y, size: a.kind.height / 1.8 });
   return walkers;
 }
 
@@ -708,6 +740,7 @@ function drawName(top, color = [212, 218, 228]) {
 // What the monsters do: their blows on the player, the player's on them,
 // and their coming and falling. Each kind has its own voice.
 function monsterEvent(e) {
+  animals.hear(e);
   // An arrow can outlive the archer who loosed it.
   const kind = e.monster?.kind;
   const voice = kind?.sounds[e.type];
@@ -1001,6 +1034,7 @@ function frame(now) {
       }
     }
     if (!debug.freeze) fires.react(world, e, player);
+    animals.hear(e);
     sound.play(e);
     splashes.react(world, e);
     if (e.type === 'step') {
@@ -1071,11 +1105,15 @@ function frame(now) {
 
   const view = camera.view(renderer);
   weather.update(dt, time, world, view, sound.weather);
+  if (!paused) debris.update(dt, world, view, player, weather, splashes);
   const spellFog = fogSpells.collect(casting);
   fog.update(dt, weather, fogWalkers(view, spellFog.walkers), spellFog, view);
   if (wasTapped('KeyL') || summonLightning) {
     const bolt = weather.summon(world, view, player);
-    if (bolt) sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+    if (bolt) {
+      sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+      animals.hear({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+    }
     summonLightning = false;
   }
   const blownOut = debug.freeze ? [] : fires.update(dt, time, world, weather.wind);
@@ -1102,6 +1140,12 @@ function frame(now) {
     drawShadow(renderer, view, peer.player.x, peer.player.y, peer.player.air);
     peer.figure = dressFigure(peer.player);
   }
+  // Wildlife shies from the player, friends and monsters alike.
+  if (!paused) {
+    animals.update(playerDt, world, { player, peers, monsters: monsters.living, view });
+    animalFigures?.update(playerDt, animals.list);
+  }
+  animals.events.length = 0;
 
   // Props up to a screen above the view can still be reflected into it, and
   // the tallest trees reach into it from far below.
@@ -1122,6 +1166,8 @@ function frame(now) {
   for (const { monster } of monsterCells) {
     if (monster.alive) drawShadow(renderer, view, monster.x, monster.y, 0);
   }
+  const animalCells = animalFigures ? animalFigures.rasterise(view, animals.list, player) : [];
+  for (const figure of animalCells) AnimalFigures.drawShadow(renderer, view, figure);
 
   // Match the reveal region to this pose, including a jump or sword swing.
   let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
@@ -1185,6 +1231,10 @@ function frame(now) {
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
+  for (const piece of debris.visible(view)) {
+    reflections.push({ y: piece.y, draw: () => debris.reflect(renderer, view, piece, mirror) });
+    drawables.push({ y: piece.y, draw: () => debris.draw(renderer, view, piece) });
+  }
   const carried = visibleTorches.filter((torch) => torch.carried);
   reflections.push({ y: player.y, draw: () => {
     if (model) model.draw(renderer, mirror);
@@ -1200,6 +1250,10 @@ function frame(now) {
     reflections.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, mirror) });
     drawables.push({ y: figure.depth, draw: () => MonsterFigures.draw(renderer, figure, putOutlinedCell) });
   }
+  for (const figure of animalCells) {
+    reflections.push({ y: figure.animal.y, draw: () => AnimalFigures.draw(renderer, figure, mirror) });
+    drawables.push({ y: figure.depth, draw: () => AnimalFigures.draw(renderer, figure, putOutlinedCell) });
+  }
   // Friends are drawn as the shape-built outlaw in their own gear.
   for (const peer of peers) {
     reflections.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure, mirror) });
@@ -1211,7 +1265,9 @@ function frame(now) {
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
   for (const figure of monsterCells) contacts.push(...figure.contacts);
+  for (const figure of animalCells) contacts.push(...figure.contacts);
   splashes.drawSurface(renderer, view, time);
+  debris.drawSurface(renderer, view, time);
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
