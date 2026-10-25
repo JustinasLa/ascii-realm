@@ -16,6 +16,7 @@ import { ASPECT, GRASS, WATER } from '../../src/world/world.js';
 import { PHONE_QUERY, watchPhone } from '../../src/core/phone.js';
 import { FRAME_BIAS, LANDSCAPE_QUERY, phoneDefaultCell, watchLayout, ZoomSlots } from '../../src/core/layout.js';
 import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assist.js';
+import { pickStruck, TargetTracker, targetId } from '../../src/core/target.js';
 import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
 
@@ -140,7 +141,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     navigator,
     cancelAnimationFrame: noop, FrameClock, FramePacer, FrameQuality, renderSize,
     blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock, PlayGate, installTouchControls: () => touch,
-    assistTarget, castAssist, strikeAssist, createHaptics, interaction, performInteraction,
+    assistTarget, castAssist, strikeAssist, pickStruck, TargetTracker, targetId, createHaptics, interaction, performInteraction,
     watchPhone, installPinchZoom: (_surface, zoomBy) => { pinch = zoomBy; },
     FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots,
     PhoneMenu: class {

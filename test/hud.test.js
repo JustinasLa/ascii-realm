@@ -235,3 +235,90 @@ test('damage and enemy bars share viewport visibility while damage stays inside 
   assert.equal(damage.hidden, true);
   assert.equal(foe.hidden, true);
 });
+
+test('the target frame shows the struck creature by name and health, and hides without one', (t) => {
+  const { document, hud } = mount(t);
+  const frame = byClass(document.body, 'hud-target')[0];
+  assert.equal(frame.hidden, true, 'hidden until something is struck');
+  assert.equal(frame.getAttribute('aria-label'), 'Target');
+  const name = byClass(frame, 'hud-target-name')[0];
+  const note = byClass(frame, 'hud-target-note')[0];
+  const value = byClass(frame, 'hud-vital-value')[0];
+  hud.setTarget({ id: 'monster:3', name: 'Goblin', health: 22.4, maxHealth: 35, note: '', slain: false });
+  hud.update(0, view);
+  assert.equal(frame.hidden, false);
+  assert.equal(name.textContent, 'Goblin');
+  assert.equal(note.textContent, '');
+  const health = meter(frame, 'hud-target-health');
+  assert.equal(health.current, 22.4);
+  assert.equal(value.textContent, '23/35');
+  assert.equal(byClass(frame, 'hud-vital-filled')[0].style.width, '64.0%');
+  assert.equal(health.element.getAttribute('aria-valuetext'), 'Goblin, 22.4 of 35');
+  // Its last sliver never reads 0 until it falls.
+  hud.setTarget({ name: 'Troll', health: 0.4, maxHealth: 150, note: 'enraged', slain: false });
+  hud.update(0, view);
+  assert.equal(value.textContent, '1/150');
+  assert.equal(note.textContent, 'enraged');
+  hud.setTarget({ name: 'Troll', health: 0, maxHealth: 150, note: 'slain', slain: true });
+  hud.update(0, view);
+  assert.equal(value.textContent, '0/150');
+  assert.equal(frame.classList.contains('slain'), true);
+  assert.equal(health.element.getAttribute('aria-valuetext'), 'Troll, slain, 0 of 150');
+  hud.setTarget({ name: 'A creature with a very long name indeed', health: 5, maxHealth: 5 });
+  hud.update(0, view);
+  assert.equal(name.textContent, 'A creature with a very l');
+  assert.equal(note.textContent, '');
+  assert.equal(frame.classList.contains('slain'), false);
+  hud.setTarget({ health: 5, maxHealth: 5 });
+  hud.update(0, view);
+  assert.equal(name.textContent, 'Foe');
+  hud.setTarget(null);
+  hud.update(0, view);
+  assert.equal(frame.hidden, true);
+});
+
+test('the target\'s overhead bar is outlined', (t) => {
+  const { document, hud } = mount(t);
+  hud.setFoes([{ id: 1, name: 'Goblin', health: 10, maxHealth: 20, x: 140, y: 210, target: true },
+    { id: 2, name: 'Elf', health: 10, maxHealth: 20, x: 150, y: 210 }]);
+  hud.update(0, view);
+  const [first, second] = byClass(document.body, 'hud-foe');
+  assert.equal(first.classList.contains('target'), true);
+  assert.equal(second.classList.contains('target'), false);
+});
+
+test('the prompt, extra frame notes, name and party frames show what they are given', (t) => {
+  const { document, hud } = mount(t);
+  const prompt = byClass(document.body, 'hud-prompt')[0];
+  hud.setPrompt('[E] Disturb glowcap');
+  assert.equal(prompt.hidden, false);
+  assert.equal(prompt.textContent, '[E] Disturb glowcap');
+  hud.setPrompt('');
+  assert.equal(prompt.hidden, true);
+
+  hud.attachNote(null);
+  const note = document.createElement('div');
+  note.className = 'carry';
+  hud.attachNote(note);
+  assert.equal(note.classList.contains('hud-frame-note'), true);
+  assert.equal(note.parentNode ?? note.parentElement, byClass(document.body, 'hud-status')[0]);
+
+  hud.setName('');
+  assert.equal(byClass(document.body, 'hud-name')[0].textContent, 'Wanderer');
+  hud.setName('Robin');
+  assert.equal(byClass(document.body, 'hud-name')[0].textContent, 'Robin');
+
+  const tab = byClass(document.body, 'hud-party-tab')[0];
+  hud.setParty([{ id: 'a', name: 'Marian', health: 40, maxHealth: 100, note: '12m' }, { id: 'b', health: 10, maxHealth: 100 }]);
+  let members = byClass(document.body, 'hud-member');
+  assert.equal(members.length, 2);
+  assert.equal(tab.hidden, false);
+  assert.equal(byClass(members[0], 'hud-name')[0].textContent, 'Marian · 12m');
+  assert.equal(byClass(members[1], 'hud-name')[0].textContent, 'Wanderer');
+  hud.setParty([{ id: 'a', name: 'Marian', health: 30, maxHealth: 100 }, { id: 'b', health: 10, maxHealth: 100 }]);
+  assert.equal(byClass(document.body, 'hud-member')[0], members[0], 'the same frames are reused');
+  hud.setParty('nobody');
+  members = byClass(document.body, 'hud-member');
+  assert.equal(members.length, 0);
+  assert.equal(tab.hidden, true);
+});
