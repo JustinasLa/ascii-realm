@@ -583,10 +583,14 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
         await wait(16);
       }
       await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      // Emulated long presses raise no context menu, so each press raises one
+      // where the finger rests, as a phone would; the page must refuse all.
       await page.evaluate(() => { window.menus = 0; document.addEventListener('contextmenu', e => { if (!e.defaultPrevented) window.menus++; }); });
       for (const at of [{ x: 196, y: 420 }, centers.strike, strip]) {
         await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(1, at)] });
         await wait(700);
+        await page.evaluate(({ x, y }) => document.elementFromPoint(x, y).dispatchEvent(new MouseEvent('contextmenu',
+          { bubbles: true, cancelable: true, clientX: x, clientY: y })), at);
         await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
       }
       await wait(300);
@@ -595,6 +599,7 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
         touchAction: getComputedStyle(document.body).touchAction, overscroll: getComputedStyle(document.body).overscrollBehaviorY }));
       assert.deepEqual([gestures.scale, gestures.scrollY, gestures.reloads, gestures.selection, gestures.touchAction, gestures.overscroll],
         [1, 0, 1, '', 'none', 'none']);
+      assert.equal(gestures.menus, 0, 'a long press opens no context menu');
       assert.ok(gestures.cell > cellBefore, 'the pinch over the strip zoomed the scene');
       // The menu sheet still scrolls, and offers Full screen.
       await page.tap('#phone-menu');
