@@ -162,6 +162,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       react() {} update() {} precipitate() {}
       drawSurface() {} drawContacts() {} drawSpray() {}
     },
+    // Records how the frame drives the river debris.
+    Debris: class {
+      constructor(options) { this.options = options; this.calls = []; this.pieces = []; }
+      update(dt) { this.calls.push(['update', dt]); }
+      visible() { return this.pieces; }
+      draw(r, view, piece) { this.calls.push(['draw', piece]); }
+      reflect(r, view, piece) { this.calls.push(['reflect', piece]); }
+      drawSurface() { this.calls.push(['surface']); }
+    },
     WATER,
     AsciiRenderer: class {
       resize(width, height, pixelRatio, cellW, cellH) { cellHeight = cellH; }

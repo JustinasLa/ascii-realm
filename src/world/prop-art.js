@@ -13,6 +13,7 @@ import { ASPECT } from './world.js';
 //   g   optional glyph that overrides the material's texture
 //   acc optional accent { g, c } layered over the cell (moss, a nail...)
 //   depth optional projected ground row, relative to the prop's anchor
+//   h     optional height on a floating hull, kept on the cell
 // Fully covered cells get a texture chosen by material and light and a dark
 // background in the material's own colour, so a form reads as one solid
 // mass. Partly covered cells become outline glyphs pointing at the solid
@@ -211,6 +212,7 @@ export function bakeSurface(w, top, bottom, sample, seed, { shadow, extras, x0 =
         g = (ROUGH.has(m) ? t.cutR : t.cutS)[d][level];
       }
       const cell = makeCell(dx, dy, g, colour[0], colour[1], colour[2], undefined, undefined, undefined, mid.depth);
+      if (mid.h !== undefined) cell.h = mid.h;
       if (back) {
         const kb = mid.back ?? BACK[m] ?? 0.3;
         cell.br = colour[0] * kb;
