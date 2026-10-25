@@ -195,6 +195,28 @@ test('a refused request is retried on the next tap, and only once', async () => 
   }
 });
 
+test('after a refusal, later wishes and a return to the page wait for the next tap', async () => {
+  const world = lockWorld({ refuse: true });
+  const lock = new WakeLock(world);
+  lock.want(true);
+  await settle();
+  assert.equal(world.requests, 1);
+  for (let frame = 0; frame < 5; frame++) {
+    lock.want(true);
+    await settle();
+  }
+  world.setHidden(true);
+  world.setHidden(false);
+  await settle();
+  assert.equal(world.requests, 1, 'no request until a tap');
+  lock.gesture();
+  await settle();
+  assert.equal(world.requests, 2, 'the tap retries once');
+  lock.want(true);
+  await settle();
+  assert.equal(world.requests, 2, 'refused again: waits for another tap');
+});
+
 test('a release that throws or rejects is harmless', async () => {
   const world = lockWorld();
   const lock = new WakeLock(world);

@@ -82,7 +82,7 @@ function release(sentinel) {
 // visible. The browser drops the lock whenever the page is hidden, so it is
 // asked for again on return. A request that resolves after the wish changed
 // is released at once. A refused request (some browsers want a tap, or the
-// battery is low) is retried on the next tap.
+// battery is low) is retried on the next tap, not on every frame's wish.
 export class WakeLock {
   constructor({ nav, doc }) {
     this.nav = nav;
@@ -113,7 +113,7 @@ export class WakeLock {
       if (held) release(held);
       return;
     }
-    if (this.sentinel || this.pending) return;
+    if (this.sentinel || this.pending || this.retryOnGesture) return;
     this.pending = true;
     let request;
     try {
