@@ -31,6 +31,18 @@ test('stacks whose names would overlap share one label naming the first two and 
   assert.equal(labels[0].count, 4);
 });
 
+test('a label grown by a merge takes in the neighbours it now overlaps, so no two labels overlap', () => {
+  const inventory = new Inventory();
+  // Two bones apart on one row; the arrow merges with the second, and the
+  // longer shared label would then reach over the first.
+  const labels = lootLabels([stack('bone', 1, 200, 0), stack('bone', 1, 250, 0), stack('arrow', 1, 260, 0)],
+    player, inventory, project);
+  assert.equal(labels.length, 1);
+  assert.equal(labels[0].text, 'Bone x1, Bone x1 +1 more');
+  assert.equal(labels[0].count, 3);
+  assert.deepEqual([labels[0].x, labels[0].y], [200, -LABELS.lift]);
+});
+
 test('a stack within 4 m is always named, even in a shared label', () => {
   const inventory = new Inventory();
   const labels = lootLabels([stack('bone', 2, 1, 0), stack('arrow', 1, 2, 0), stack('ironIngot', 4, 3, 0)],

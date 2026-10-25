@@ -46,6 +46,19 @@ function box(at, text, font) {
 
 const overlap = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
 
+// Regrows `group`'s label for its members, then folds in every label the
+// longer one now overlaps, the nearer keeping its place, until no two do.
+function settle(groups, group, font) {
+  group.box = box(group.at, caption(group), font);
+  for (let other; (other = groups.find((g) => g !== group && overlap(g.box, group.box)));) {
+    const [keep, gone] = groups.indexOf(other) < groups.indexOf(group) ? [other, group] : [group, other];
+    keep.members = [...keep.members, ...gone.members].sort((a, b) => a.d - b.d);
+    groups.splice(groups.indexOf(gone), 1);
+    group = keep;
+    group.box = box(group.at, caption(group), font);
+  }
+}
+
 // The labels for the stacks in `items` on screen: [{ key, text, x, y,
 // colour, full, count }], (x, y) in CSS pixels at the bottom middle of the
 // label. `project(x, y)` gives { x, y, visible } for a world cell; `font` is
@@ -73,7 +86,7 @@ export function lootLabels(items, player, inventory, project, font = 10) {
       continue;
     }
     group.members.push(s);
-    group.box = box(group.at, caption(group), font);
+    settle(groups, group, font);
   }
   return groups.map((g) => {
     const first = g.members[0].item;
