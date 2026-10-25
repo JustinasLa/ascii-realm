@@ -639,12 +639,17 @@ const HUNT_DROP_LIFT = 3;
 const assistFoes = () => [...monsters.list, ...animals.list];
 // The creature the player last landed a blow on, for the HUD's target frame;
 // `strikeFoe` is the one the aim assist last turned a cut toward, and
-// `spellHits` gathers what the player's runes struck this frame.
+// `spellHits` gathers what the player's runes struck this frame, marked
+// before any later blow so the last to land wins.
 const target = new TargetTracker();
 debug.target = target;
 let strikeFoe = null;
 const spellHits = [];
-const markTarget = (hits, preferred = null) => target.mark(pickStruck(hits, player, preferred), time);
+const markSpellHits = () => spellHits.length && target.mark(pickStruck(spellHits.splice(0), player), time);
+const markTarget = (hits, preferred = null) => {
+  markSpellHits();
+  target.mark(pickStruck(hits, player, preferred), time);
+};
 const targetPresent = (id) => monsters.list.some((e) => targetId(e) === id) || animals.list.some((e) => targetId(e) === id);
 // Short vibrations on touch screens when a blow lands and when hurt.
 const haptics = createHaptics({ nav: navigator, enabled: () => coarse.matches && !document.hidden });
@@ -1388,7 +1393,7 @@ function frame(now) {
       maxHealth: player.vitals.maxHealth,
       note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
         (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
-  if (spellHits.length) markTarget(spellHits.splice(0));
+  markSpellHits();
   hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
   const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;

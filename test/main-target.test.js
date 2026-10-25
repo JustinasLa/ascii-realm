@@ -162,3 +162,25 @@ test('a second STRIKE the swing turns away keeps the foe the first one aimed at'
   for (let i = 0; i < 40 && !game.target.entity; i++) frame(0.02);
   assert.equal(game.target.entity, near);
 });
+
+test('an arrow landing after a rune in the same frame is the later blow, and wins', async () => {
+  const { game, frame } = await start();
+  const troll = monsterAt(game, 4, 3, 0, 'Troll');
+  const rabbit = animalAt(game, 'rabbit', 5);
+  // The rune strikes the troll every frame, before the arrow moves.
+  const update = game.casting.update.bind(game.casting);
+  game.casting.update = (dt) => {
+    update(dt);
+    game.casting.options.onDamage(troll, 1, { caster: game.player });
+  };
+  game.projectiles.launch({ x: game.player.x, y: game.player.y, h: 13 * 1.1, aimTarget: { x: rabbit.x, y: rabbit.y },
+    projectile: { kind: 'arrow' }, strength: 1, damage: 4 });
+  const marked = [];
+  for (let i = 0; i < 40 && rabbit.health === rabbit.maxHealth; i++) {
+    frame();
+    marked.push(game.target.entity);
+  }
+  assert.ok(rabbit.health < rabbit.maxHealth, 'the arrow struck');
+  assert.equal(marked.at(-2), troll, 'the rune marked the troll before the arrow landed');
+  assert.equal(game.target.entity, rabbit);
+});
