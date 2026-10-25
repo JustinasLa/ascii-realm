@@ -362,6 +362,40 @@ test('a piece knocked against the outer bank of a bend snags there, swings round
   assert.equal(q.snag, null);
 });
 
+test('a piece snagged on a stone keeps clear of the banks as it swings round', () => {
+  // A long log in a narrow reach, caught by its downstream end: swinging
+  // round to trail the current, its free end meets the bank and stops there.
+  const stone = { x: -700, y: 0, r: 0.6 };
+  const world = channel({ half: 0.3, speed: 0.6, stones: [stone] });
+  const d = new Debris({ random: mulberry32(4), world });
+  const rings = [];
+  d.splashes = { ring: (...a) => rings.push(a) };
+  const v = view(-2000, -40, 4000, 80);
+  const p = d.spawn('log', { x: -712, y: 0.6, angle: 0.5 });
+  p.length = 0.5;
+  // It snags at the first knock, and stays caught for the longest time.
+  const odds = [0, 0.999];
+  d.random = () => odds.shift() ?? 0.5;
+  let snagged = 0, start = null, worst = 0, dry = 0;
+  for (let t = 0; t < 12 && !p.gone; t += 1 / 30) {
+    d.step(p, 1 / 30, world, v);
+    if (!p.snag) {
+      if (snagged) break;
+      continue;
+    }
+    snagged++;
+    start ??= d.embedded(d.freeHalf(p), world);
+    worst = Math.max(worst, d.embedded(d.freeHalf(p), world) - start);
+    const half = toCells(Math.cos(p.angle) * p.length / 2, Math.sin(p.angle) * p.length / 2);
+    const free = p.snag.end ? [p.x - half.cols, p.y - half.rows] : [p.x + half.cols, p.y + half.rows];
+    if (world.typeAt(free[0], free[1]) !== WATER) dry++;
+  }
+  assert.ok(snagged > 30, `snagged for ${snagged} steps`);
+  assert.equal(dry, 0);
+  assert.ok(worst <= 1e-9, `driven ${worst} deeper into the bank`);
+  assert.ok(rings.length >= 2, 'knocked on the stone, then on the bank');
+});
+
 test('a piece wedged fast in running water works itself free', () => {
   const world = channel({ half: 0.5, speed: 0.5 });
   const d = new Debris({ random: mulberry32(1), world });

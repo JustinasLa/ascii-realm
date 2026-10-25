@@ -338,7 +338,7 @@ export class Debris {
       return;
     }
     if (piece.snag) {
-      this.swing(piece, h, ends, [w0, w1], ease);
+      this.swing(piece, h, ends, [w0, w1], ease, world);
       return;
     }
     piece.vx += (wx - piece.vx) * ease;
@@ -385,8 +385,11 @@ export class Debris {
   }
 
   // A snagged piece turns about its caught end until it trails downstream.
-  swing(piece, h, ends, w, ease) {
+  // Its free half still meets the banks and stones: a turn that would drive
+  // it further into them is undone, and it knocks back off them instead.
+  swing(piece, h, ends, w, ease, world) {
     const pin = piece.snag.end;
+    const before = { x: piece.x, y: piece.y, angle: piece.angle, against: this.embedded(this.freeHalf(piece), world) };
     const free = 1 - pin;
     const g = toGround((ends[free][0] - piece.snag.x) * ASPECT, ends[free][1] - piece.snag.y);
     const len = Math.hypot(g.x, g.y) || piece.length;
@@ -400,6 +403,15 @@ export class Debris {
     piece.x = piece.snag.x + c.cols;
     piece.y = piece.snag.y + c.rows;
     piece.vx = piece.vy = 0;
+    if (this.embedded(this.freeHalf(piece), world) > before.against + 1e-9) {
+      const hit = Math.abs(piece.spin) * len;
+      piece.x = before.x; piece.y = before.y; piece.angle = before.angle;
+      piece.spin *= -RESTITUTION;
+      if (hit > RING_SPEED && piece.knock <= 0) {
+        piece.knock = KNOCK_REST;
+        this.splashes?.ring(ends[free][0], ends[free][1], 0.25 + 3 * hit, 0, true);
+      }
+    }
     const flowHeading = Math.atan2(w[free].y, w[free].x);
     const trails = Math.cos(flowHeading - a) > Math.cos(15 * Math.PI / 180);
     piece.snag.aligned = trails ? piece.snag.aligned + h : 0;
@@ -409,41 +421,81 @@ export class Debris {
     }
   }
 
-  // The hull against the banks and the stones in the river.
-  collide(piece, h, world) {
+  // The half of a snagged piece away from its caught end, which lies against
+  // whatever caught it.
+  freeHalf(piece) {
+    const s = piece.snag.end ? -1 : 1;
+    const q = toCells(Math.cos(piece.angle) * piece.length / 4, Math.sin(piece.angle) * piece.length / 4);
+    return { x: piece.x + s * q.cols, y: piece.y + s * q.rows, angle: piece.angle, length: piece.length / 2,
+      radius: piece.radius };
+  }
+
+  // Probes along the hull no more than a cell apart along its axis, on
+  // its middle and both sides, each handed to `fn(x, y)` (cells).
+  probes(piece, fn) {
     const ax = Math.cos(piece.angle), ay = Math.sin(piece.angle);
     const g = toCells(ax, ay);
-    // Probes no more than a cell apart along the axis, on its middle and
-    // both sides of the hull.
     const lenCells = Math.hypot(g.cols * piece.length, g.rows * piece.length);
     const stations = Math.max(2, Math.ceil(lenCells) + 1);
     const side = toCells(-ay * piece.radius, ax * piece.radius);
+    for (let i = 0; i < stations; i++) {
+      const t = i / (stations - 1) - 0.5;
+      for (const sgn of [0, -1, 1]) {
+        fn(piece.x + g.cols * piece.length * t + side.cols * sgn, piece.y + g.rows * piece.length * t + side.rows * sgn);
+      }
+    }
+  }
+
+  // How deep a piece's hull lies in what it can hit: its probes off the
+  // water, and how far its capsule reaches into each stone (layout units).
+  embedded(piece, world) {
+    let depth = 0;
+    this.probes(piece, (px, py) => {
+      if (world.typeAt(px, py) !== WATER) depth++;
+    });
+    for (const stone of this.stonesNear(world, piece.x, piece.y)) depth += Math.max(0, this.stoneOverlap(piece, stone).overlap);
+    return depth;
+  }
+
+  // The hull's capsule against a stone's circle, in layout space: how far
+  // it reaches in, and the closest point of its axis.
+  stoneOverlap(piece, stone) {
+    const ax = Math.cos(piece.angle), ay = Math.sin(piece.angle);
+    const g = toCells(ax, ay);
+    const side = toCells(-ay * piece.radius, ax * piece.radius);
+    const sx = stone.x * ASPECT, sy = stone.y;
+    const lx = piece.x * ASPECT, ly = piece.y;
+    const ex = g.cols * ASPECT * piece.length, ey = g.rows * piece.length;
+    const len2 = ex * ex + ey * ey || 1;
+    const t = Math.max(-0.5, Math.min(0.5, ((sx - lx) * ex + (sy - ly) * ey) / len2));
+    const cx = lx + ex * t, cy = ly + ey * t;
+    const dist = Math.hypot(cx - sx, cy - sy);
+    return { overlap: stone.r + Math.hypot(side.cols * ASPECT, side.rows) - dist, cx, cy, dist };
+  }
+
+  // The hull against the banks and the stones in the river.
+  collide(piece, h, world) {
     const centre = world.flowAt(piece.x, piece.y, AT);
     // Square across the current, toward its left bank.
     const river = centre.river && centre.halfWidth > 0;
     const lx = centre.y, ly = -centre.x;
     let touched = false;
     let pushX = 0, pushY = 0, count = 0, contactX = 0, contactY = 0;
-    for (let i = 0; i < stations; i++) {
-      const t = i / (stations - 1) - 0.5;
-      for (const sgn of [0, -1, 1]) {
-        const px = piece.x + g.cols * piece.length * t + side.cols * sgn;
-        const py = piece.y + g.rows * piece.length * t + side.rows * sgn;
-        if (world.typeAt(px, py) === WATER) continue;
-        const o = toGround((piece.x - px) * ASPECT, piece.y - py);
-        if (river) {
-          // Away from the bank the probe lies on, toward the middle.
-          const q = centre.across - (o.x * lx + o.y * ly) / centre.halfWidth;
-          const s = q > 0 ? -1 : 1;
-          pushX += lx * s; pushY += ly * s;
-        } else {
-          // Off the current: back toward the piece's middle.
-          const l = Math.hypot(o.x, o.y) || 1;
-          pushX += o.x / l; pushY += o.y / l;
-        }
-        contactX += px; contactY += py; count++;
+    this.probes(piece, (px, py) => {
+      if (world.typeAt(px, py) === WATER) return;
+      const o = toGround((piece.x - px) * ASPECT, piece.y - py);
+      if (river) {
+        // Away from the bank the probe lies on, toward the middle.
+        const q = centre.across - (o.x * lx + o.y * ly) / centre.halfWidth;
+        const s = q > 0 ? -1 : 1;
+        pushX += lx * s; pushY += ly * s;
+      } else {
+        // Off the current: back toward the piece's middle.
+        const l = Math.hypot(o.x, o.y) || 1;
+        pushX += o.x / l; pushY += o.y / l;
       }
-    }
+      contactX += px; contactY += py; count++;
+    });
     const net = Math.hypot(pushX, pushY);
     if (count && net > 1e-6) {
       touched = true;
@@ -454,14 +506,7 @@ export class Debris {
     // Stones: the hull's capsule against each stone's circle, in layout space.
     for (const stone of this.stonesNear(world, piece.x, piece.y)) {
       const sx = stone.x * ASPECT, sy = stone.y;
-      const lx = piece.x * ASPECT, ly = piece.y;
-      const ex = g.cols * ASPECT * piece.length, ey = g.rows * piece.length;
-      const len2 = ex * ex + ey * ey || 1;
-      const t = Math.max(-0.5, Math.min(0.5, ((sx - lx) * ex + (sy - ly) * ey) / len2));
-      const cx = lx + ex * t, cy = ly + ey * t;
-      const rl = Math.hypot(side.cols * ASPECT, side.rows);
-      const dist = Math.hypot(cx - sx, cy - sy);
-      const overlap = stone.r + rl - dist;
+      const { overlap, cx, cy, dist } = this.stoneOverlap(piece, stone);
       if (overlap <= 0) continue;
       touched = true;
       const o = toGround((cx - sx) / (dist || 1), (cy - sy) / (dist || 1));
