@@ -4,7 +4,8 @@
 // Optional: PAIRS (default 2), FRAMES (default 600), SHOTS=<dir> for one
 // screenshot of each run's last frame, LIGHTS=0 for the same spot with no
 // torch or fire (the control), THROTTLE=<n> to slow the CPU n times,
-// SIZES=1280x720,393x852 to pick the sizes.
+// SIZES=1280x720,393x852 to pick the sizes, FIRST=after to start each
+// even pair with the after build (pairs alternate which build goes first).
 const fs = require('node:fs');
 const { join } = require('node:path');
 // Optional browser tooling: npm install --no-save --package-lock=false puppeteer
@@ -90,7 +91,10 @@ async function run(browser, base, size, shot) {
     for (const size of SIZES) {
       results[size.name] = { before: [], after: [] };
       for (let pair = 0; pair < PAIRS; pair++) {
-        for (const name of ['before', 'after']) {
+        // Alternate which build runs first, so a load that drifts during a
+        // pair falls on both alike; FIRST=after starts with the other.
+        const flip = (pair % 2 === 1) !== (process.env.FIRST === 'after');
+        for (const name of flip ? ['after', 'before'] : ['before', 'after']) {
           if (!builds[name]) continue;
           const shot = process.env.SHOTS && join(process.env.SHOTS, `lights-${name}-${size.name}-${pair}.png`);
           if (shot) fs.mkdirSync(process.env.SHOTS, { recursive: true });
