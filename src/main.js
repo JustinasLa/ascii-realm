@@ -1424,6 +1424,7 @@ function frame(now) {
   markSpellHits();
   hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
+  hud.setLoot(huntDrops.in(view.x0 - 2, view.y0 - 2, view.x0 + view.cols + 2, view.y0 + view.rows + 4), player, inventory);
   const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
   hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');

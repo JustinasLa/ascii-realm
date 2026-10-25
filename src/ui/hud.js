@@ -1,5 +1,6 @@
 import { ITEMS } from '../inventory/items.js';
 import { itemArt } from './item-art.js';
+import { lootLabels } from './loot-labels.js';
 
 const MAX_TOASTS = 5;
 const TOAST_LIFETIME = 4;
@@ -66,6 +67,8 @@ export class Hud {
     // Frames over wounded enemies, by id.
     this.foes = [];
     this.foeFrames = new Map();
+    this.lootFrames = new Map();
+    this.loot = [];
     this.target = null;
     this.destroyed = false;
 
@@ -227,6 +230,7 @@ export class Hud {
     }
     this.updateDamage(elapsed, view);
     this.updateFoes(view);
+    this.updateLoot(view);
     this.updateTarget();
   }
 
@@ -289,6 +293,37 @@ export class Hud {
       hidden(frame.node, !at?.visible);
       if (!at?.visible) continue;
       style(frame.node, 'transform', `translate(${at.x.toFixed(1)}px, ${at.y.toFixed(1)}px) translate(-50%, -100%)`);
+    }
+  }
+
+  // The stacks lying on the ground to name, with the player and the bag
+  // that would take them.
+  setLoot(items, player, inventory) {
+    this.loot = Array.isArray(items) ? items : [];
+    this.lootPlayer = player;
+    this.lootInventory = inventory;
+  }
+
+  updateLoot(view) {
+    const projection = this.loot.length ? this.projector(view) : null;
+    const labels = projection ? lootLabels(this.loot, this.lootPlayer, this.lootInventory, projection.project) : [];
+    const present = new Set(labels.map((label) => label.key));
+    for (const [key, node] of this.lootFrames) {
+      if (present.has(key)) continue;
+      node.remove();
+      this.lootFrames.delete(key);
+    }
+    for (const label of labels) {
+      let node = this.lootFrames.get(label.key);
+      if (!node) {
+        node = element('span', 'hud-loot-label');
+        this.damageLayer.append(node);
+        this.lootFrames.set(label.key, node);
+      }
+      text(node, label.text);
+      node.classList.toggle('full', label.full);
+      style(node, 'color', `rgb(${label.colour.join(', ')})`);
+      style(node, 'transform', `translate(${label.x.toFixed(1)}px, ${label.y.toFixed(1)}px) translate(-50%, -100%)`);
     }
   }
 
@@ -438,5 +473,6 @@ export class Hud {
     this.toasts.length = 0;
     this.damageNumbers.length = 0;
     this.foeFrames.clear();
+    this.lootFrames.clear();
   }
 }
