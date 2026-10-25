@@ -1,4 +1,4 @@
-import { currentAt, easeCarry, immersion } from '../world/rivers.js';
+import { currentAt, easeCarry, immersion, settleBump } from '../world/rivers.js';
 import { ASPECT, MAX_WATER_DEPTH } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
@@ -145,6 +145,11 @@ export class Player {
     // How fast a river's current carries the body, metres a second on the
     // ground (x east, y south).
     this.carry = { x: 0, y: 0 };
+    // How a knock from floating debris slides the body, likewise; and the
+    // legs and footing it meets debris with: half-width and mass in metres
+    // and kilograms.
+    this.bump = { x: 0, y: 0 };
+    this.wade = { radius: 0.15, mass: 8 };
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -754,13 +759,16 @@ export class Player {
   }
 
   // The current eases the carry toward its own pace, scaled by how deep
-  // the feet are in it (a jump clears them), and slides the body with it.
+  // the feet are in it (a jump clears them), and slides the body with it,
+  // along with any knock from floating debris.
   drift(dt, world, depth) {
     const target = currentAt(world, this.x, this.y, immersion(depth, this.air), 1.2);
     easeCarry(this.carry, target, dt, this.air > 0);
-    if (!this.carry.x && !this.carry.y) return;
-    this.tryMove(world, this.carry.x * toCols * dt, 0);
-    this.tryMove(world, 0, this.carry.y * toRows * dt);
+    settleBump(this.bump, dt);
+    const vx = this.carry.x + this.bump.x, vy = this.carry.y + this.bump.y;
+    if (!vx && !vy) return;
+    this.tryMove(world, vx * toCols * dt, 0);
+    this.tryMove(world, 0, vy * toRows * dt);
   }
 
   // Moves along one axis at a time so the player slides around solid props.

@@ -33,6 +33,25 @@
 | `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
 
+## Target
+
+The creature you last landed a blow on, with the sword, an arrow or thrown
+spear, or one of your own runes, becomes your target. Its name and health
+(`HP 23/35`, with "enraged" when a monster turns furious) show in a target
+frame at the top of the screen, and its overhead health bar gets a thin
+outline. When one blow strikes several creatures, the target is the one the
+touch aim assist turned to, or else the one nearest straight ahead. Wounds
+dealt by monsters or other animals never pick a target. Striking another
+creature replaces it. When the target dies, the frame shows it as slain for
+a moment and then clears; it also clears once the creature is gone from the
+world, more than 20 m away, or 15 s have passed without another blow, and
+when you are struck down.
+
+The frame sits at the top centre, or beside the player card in narrow
+windows. On phones it is a slim strip on the top edge between the HP/MP strip
+and the **=** button; on the narrowest portrait phones it sits on a second
+row under the HP/MP strip.
+
 ## Touch
 
 On a touch screen, drag the left pad to walk and push it to the outer edge to

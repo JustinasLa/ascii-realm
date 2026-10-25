@@ -3,7 +3,7 @@ import { SCALE, TILT } from '../entities/rig.js';
 import { FINE, putCell } from '../render/cells.js';
 import { family } from '../render/glyphs.js';
 import { bakePiece, pieceModel } from './debris-art.js';
-import { BASE_SPEED, RIVER_CHUNK, screenOrientation, toCells, toGround } from './rivers.js';
+import { BASE_SPEED, RIVER_CHUNK, addBump, immersion, screenOrientation, toCells, toGround } from './rivers.js';
 import { FLOATING } from './terrain/water.js';
 import { WEATHER_EFFECTS } from './weather.js';
 import { ASPECT, WATER } from './world.js';
@@ -21,8 +21,19 @@ import { ASPECT, WATER } from './world.js';
 // game's own: a piece eases toward the full speed of the water, as light
 // floating things do, at a rate set by how heavy it is.
 //
+// Anyone wading shoves the pieces they walk into, and the pieces knock
+// back. Each meeting trades an impulse shared by mass, as two floating
+// things jostle: a light mat flies off faster than the walker, a heavy log
+// only gives way, struck off its middle it turns, and the walker feels a
+// small slide (their `bump`, which settles like the river's carry). Bodies
+// are never stopped and nobody is hurt. Pieces knock each other the same
+// way. Every push a meeting gives a piece is made only as far as its hull
+// stays off the banks and stones, and a piece shoved into the slack water
+// by a bank edges back into the current after a moment.
+//
 // Positions are cells (x columns, y rows); velocities and sizes are ground
-// metres, as flowAt gives them; stones and banks are met in layout space.
+// metres, as flowAt gives them; stones and banks are met in layout space;
+// bodies and pieces meet each other in ground metres.
 
 export const EVERY = [20, 60];
 export const NEAR = 40;
@@ -55,17 +66,49 @@ const MAX_PUSH = 0.03;
 const PROBE_PUSH = 0.006;
 const STONE_PUSH = 0.1;
 const LAND_REACH = 4;
+// Steps a frame is cut into at most.
+const MAX_SUB = 8;
+// Meetings with wading bodies and between pieces.
+export const DEFAULT_WADE = Object.freeze({ radius: 0.13, mass: 6 });
+const BODY_RESTITUTION = 0.3;
+const PIECE_RESTITUTION = 0.2;
+const BODY_PUSH = 0.04;
+export const SPIN_KICK = 2.5;
+export const SPIN_MAX = 4;
+// The share of a knock's impulse that reaches a body: its legs brace.
+export const FOOTING = 0.25;
+export const BODY_RING = 0.1;
+export const HIT_REST = 0.4;
+export const SNAG_FREE = 0.25;
+const MAX_BODY_SPEED = 8;
+// A body further than this from where it was last frame was put there
+// (metres): it did not walk into anything on the way.
+const LEAP = 2;
+const WET = 0.02;
+// Back into the current: past this share of the half-width from the middle,
+// a while after its last shove, a piece edges in at this pace (m/s), easing
+// off over the last tenth.
+export const RETURN_TO = 0.5;
+export const RETURN_SPEED = 0.05;
+export const RETURN_WAIT = 1.5;
+const RETURN_EASE = 0.1;
 
 // Kinds: how often each comes down, its length and half-thickness in metres,
 // how quickly it takes up the water's speed (heavy logs lag), how long it
-// takes to sink at rest in a lake, and its bob between two drafts.
+// takes to sink at rest in a lake, its bob between two drafts, and the
+// density of its wet wood or leaves (kg/m³). Logs, branches and reeds are
+// solid rods; a mat, a board and a stave are slabs `slab` metres thick.
 export const KINDS = Object.freeze({
-  log: { weight: 35, length: [0.3, 0.55], radius: [0.06, 0.09], drag: 0.8, sink: 20, symmetric: true, draft: [0.4, 0.6] },
-  branch: { weight: 25, length: [0.2, 0.4], radius: [0.03, 0.03], drag: 1.5, sink: 12, draft: [0.3, 0.45] },
-  mat: { weight: 20, length: [0.12, 0.25], radius: [0.06, 0.1], drag: 2.5, sink: 6, draft: [0.3, 0.45] },
-  reeds: { weight: 15, length: [0.15, 0.28], radius: [0.03, 0.03], drag: 2, sink: 8, draft: [0.3, 0.45] },
-  crate: { weight: 3, length: [0.18, 0.26], radius: [0.05, 0.05], drag: 1.2, sink: 15, draft: [0.4, 0.6] },
-  stave: { weight: 2, length: [0.2, 0.28], radius: [0.04, 0.04], drag: 1.2, sink: 15, draft: [0.4, 0.6] },
+  log: { weight: 35, length: [0.3, 0.55], radius: [0.06, 0.09], drag: 0.8, sink: 20, symmetric: true, draft: [0.4, 0.6],
+    density: 650 },
+  branch: { weight: 25, length: [0.2, 0.4], radius: [0.03, 0.03], drag: 1.5, sink: 12, draft: [0.3, 0.45], density: 550 },
+  mat: { weight: 20, length: [0.12, 0.25], radius: [0.06, 0.1], drag: 2.5, sink: 6, draft: [0.3, 0.45], density: 300,
+    slab: 0.03 },
+  reeds: { weight: 15, length: [0.15, 0.28], radius: [0.03, 0.03], drag: 2, sink: 8, draft: [0.3, 0.45], density: 250 },
+  crate: { weight: 3, length: [0.18, 0.26], radius: [0.05, 0.05], drag: 1.2, sink: 15, draft: [0.4, 0.6], density: 500,
+    slab: 0.02 },
+  stave: { weight: 2, length: [0.2, 0.28], radius: [0.04, 0.04], drag: 1.2, sink: 15, draft: [0.4, 0.6], density: 600,
+    slab: 0.025 },
 });
 // What a kind too long for the reach gives way to.
 const SMALLER = ['log', 'branch', 'reeds', 'mat'];
@@ -117,6 +160,66 @@ export function footprintLoaded(world, x, y, reach) {
   return true;
 }
 
+// A piece's mass in kilograms, from its kind and size in metres.
+export function pieceMass(kind, length, radius) {
+  const k = KINDS[kind];
+  const volume = k.slab ? length * 2 * radius * k.slab : Math.PI * radius * radius * length;
+  return k.density * volume;
+}
+
+// How a body meets floating debris: the half-width of its legs in the water
+// and its footing, metres and kilograms.
+export function bodyProfile(body) {
+  return body.wade ?? body.kind?.wade ?? DEFAULT_WADE;
+}
+
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+// The closest point on the segment from (ax, ay) to (bx, by) to the point
+// (px, py), and how far along the segment it lies (0 to 1).
+export function segmentPoint(px, py, ax, ay, bx, by) {
+  const ex = bx - ax, ey = by - ay;
+  const len2 = ex * ex + ey * ey;
+  const t = len2 > 0 ? clamp01(((px - ax) * ex + (py - ay) * ey) / len2) : 0;
+  return { x: ax + ex * t, y: ay + ey * t, t };
+}
+
+// The closest points between the segments a0-a1 and b0-b1: (ax, ay) on the
+// first, s along it, and (bx, by) on the second, t along it. Lying side by
+// side, they meet in the middle of where they overlap.
+export function segmentSegment(a0x, a0y, a1x, a1y, b0x, b0y, b1x, b1y) {
+  const d1x = a1x - a0x, d1y = a1y - a0y, d2x = b1x - b0x, d2y = b1y - b0y;
+  const rx = a0x - b0x, ry = a0y - b0y;
+  const a = d1x * d1x + d1y * d1y, e = d2x * d2x + d2y * d2y, f = d2x * rx + d2y * ry;
+  let s = 0, t = 0;
+  if (a <= 1e-12 && e > 1e-12) t = clamp01(f / e);
+  else if (a > 1e-12) {
+    const c = d1x * rx + d1y * ry;
+    if (e <= 1e-12) s = clamp01(-c / a);
+    else {
+      const b = d1x * d2x + d1y * d2y;
+      const denom = a * e - b * b;
+      s = denom > 1e-12 * a * e ? clamp01((b * f - c * e) / denom) : (clamp01(-c / a) + clamp01((b - c) / a)) / 2;
+      t = (b * s + f) / e;
+      if (t < 0) { t = 0; s = clamp01(-c / a); } else if (t > 1) { t = 1; s = clamp01((b - c) / a); }
+    }
+  }
+  return { ax: a0x + d1x * s, ay: a0y + d1y * s, s, bx: b0x + d2x * t, by: b0y + d2y * t, t };
+}
+
+// The impulse (kg m/s) two things meeting at `vn` m/s along their normal
+// trade, from their inverse masses and, for each, its lever (the arm of the
+// contact square to the normal, metres) and inverse moment of inertia.
+export function impulse(vn, restitution, invA, invB, leverA = 0, invIA = 0, leverB = 0, invIB = 0) {
+  const k = invA + invB + leverA * leverA * invIA + leverB * leverB * invIB;
+  return k > 0 ? (1 + restitution) * Math.max(0, vn) / k : 0;
+}
+
+// A snagged piece is held: nothing it meets moves it until it is freed.
+const invMass = (piece) => piece.snag ? 0 : 1 / piece.mass;
+const invInertia = (piece) => piece.snag ? 0 : 12 / (piece.mass * piece.length * piece.length);
+const kick = (spin, d) => Math.max(-SPIN_MAX, Math.min(SPIN_MAX, spin + Math.max(-SPIN_KICK, Math.min(SPIN_KICK, d))));
+
 const inZone = (view, x, y, m) => x >= view.x0 - m.cols && x < view.x0 + view.cols + m.cols &&
   y >= view.y0 - m.rows && y < view.y0 + view.rows + m.rows;
 
@@ -140,6 +243,7 @@ export function spawnPoint(world, view, hit) {
 }
 
 const AT = {};
+const MID_RETURN = Object.freeze({ x: 0, y: 0 });
 const END = [{}, {}];
 const MID = {};
 
@@ -157,6 +261,14 @@ export class Debris {
     this.nextId = 1;
     this.bakesLeft = BAKES_PER_FRAME;
     this.stones = new Map();
+    // Where each body stood last frame, to tell how it moved.
+    this.lastAt = new WeakMap();
+    // Splashes of knocks against bodies, for the sound.
+    this.events = [];
+    this.lastShove = null;
+    // Impulses dealt so far, to tell when a step knocked anything on.
+    this.knocks = 0;
+    this.returnSpeed = RETURN_SPEED;
   }
 
   interval() {
@@ -172,8 +284,9 @@ export class Debris {
   }
 
   // Runs the spawner and moves every piece. `splashes` takes the ripple
-  // rings of knocks; `weather` speeds the spawner up in and after storms.
-  update(dt, world, view, player, weather = null, splashes = null) {
+  // rings of knocks; `weather` speeds the spawner up in and after storms;
+  // `bodies` (the player, monsters) shove what they wade into.
+  update(dt, world, view, player, weather = null, splashes = null, bodies = []) {
     this.bakesLeft = BAKES_PER_FRAME;
     if (!this.enabled || !world.rivers) return;
     this.world = world;
@@ -189,8 +302,33 @@ export class Debris {
         else this.timer = this.spawn(null, null, view, hit) ? this.interval() : RETRY;
       }
     }
-    for (const piece of this.list) this.step(piece, dt, world, view);
+    this.advance(this.list, dt, world, view, this.wading(bodies, dt, world));
     this.list = this.list.filter((p) => !p.gone);
+  }
+
+  // The bodies standing in the water this frame, each with where it stood
+  // at the start of the frame and how fast it went (ground m/s). A body put
+  // down far from where it was, or seen for the first time, went nowhere.
+  wading(bodies, dt, world) {
+    const out = [];
+    for (const body of bodies) {
+      const was = this.lastAt.get(body);
+      this.lastAt.set(body, { x: body.x, y: body.y });
+      if (body.alive === false || body.state === 'rise' || body.state === 'dead') continue;
+      const depth = world.waterDepthAt?.(body.x, body.y) ?? 0;
+      if (!(depth > WET) || !(immersion(depth, body.air ?? 0) > 0)) continue;
+      let from = was ?? body;
+      let g = toGround((body.x - from.x) * ASPECT, body.y - from.y);
+      if (Math.hypot(g.x, g.y) > LEAP || !(dt > 0)) {
+        from = body;
+        g = { x: 0, y: 0 };
+      }
+      let vx = dt > 0 ? g.x / dt : 0, vy = dt > 0 ? g.y / dt : 0;
+      const v = Math.hypot(vx, vy);
+      if (v > MAX_BODY_SPEED) { vx *= MAX_BODY_SPEED / v; vy *= MAX_BODY_SPEED / v; }
+      out.push({ body, wade: bodyProfile(body), x0: from.x, y0: from.y, x1: body.x, y1: body.y, x: from.x, y: from.y, vx, vy });
+    }
+    return out;
   }
 
   // Sets a new piece adrift: of `kind` (or one picked by weight), at `at`
@@ -231,6 +369,7 @@ export class Debris {
       sinking: 0, beached: 0, age: 0, slow: 0, aligned: 0, fade: 1, appear: 1, life: 1, gone: false,
       seed: Math.floor(r() * 2 ** 31), river: flow.river,
       model: null, bakes: new Map(), shown: -1,
+      mass: pieceMass(fits, length, radius), pushed: -Infinity, hits: new WeakMap(),
     };
     if (inView) piece.appear = piece.fade = 0;
     piece.model = pieceModel(piece, this.season);
@@ -280,20 +419,87 @@ export class Debris {
     piece.bakes.clear();
   }
 
+  // Moves one piece on by a frame, meeting nothing but the banks and stones.
   step(piece, dt, world, view) {
-    if (!inZone(view, piece.x, piece.y, SIM_MARGIN) || !footprintLoaded(world, piece.x, piece.y, piece.length)) {
-      this.remove(piece);
-      return;
+    this.advance([piece], dt, world, view, []);
+  }
+
+  // Moves pieces on by a frame. Long frames are taken in short steps shared
+  // by every piece and every body near one, none moving any of them more
+  // than half a cell, so a piece cannot jump a narrow spit of bank nor a body
+  // walk through a piece unmet. Each step moves every piece, then settles
+  // every meeting of a body and a piece, or of two pieces, at that moment.
+  // A step that knocks a piece on looks again, from its new pace over the
+  // rest of the frame, for bodies it may now reach, and cuts the rest finer
+  // if that pace asks it. At most MAX_SUB steps, each meeting every piece
+  // with every near body and every other piece, and at most one look per
+  // step over every body and piece.
+  advance(pieces, dt, world, view, wading) {
+    const live = [];
+    for (const piece of pieces) {
+      if (!inZone(view, piece.x, piece.y, SIM_MARGIN) || !footprintLoaded(world, piece.x, piece.y, piece.length)) {
+        this.remove(piece);
+      } else live.push(piece);
     }
+    if (!live.length) return;
+    let far = wading;
+    const near = [];
+    const look = (left) => {
+      const still = [];
+      for (const w of far) (live.some((p) => !p.gone && this.within(p, w, left)) ? near : still).push(w);
+      far = still;
+    };
+    look(dt);
+    let done = 0, used = 0, steps = this.substeps(live, near, dt);
+    while (used < steps) {
+      const h = (dt - done) / (steps - used);
+      for (const piece of live) if (!piece.gone) this.move(piece, h, world, KINDS[piece.kind]);
+      done += h;
+      used++;
+      const t = done / dt;
+      const knocks = this.knocks;
+      for (const w of near) {
+        w.x = w.x0 + (w.x1 - w.x0) * t;
+        w.y = w.y0 + (w.y1 - w.y0) * t;
+        for (const piece of live) if (!piece.gone) this.meetBody(piece, w, world);
+      }
+      for (let a = 0; a < live.length; a++) {
+        for (let b = a + 1; b < live.length; b++) {
+          if (!live[a].gone && !live[b].gone) this.meetPiece(live[a], live[b], world);
+        }
+      }
+      if (this.knocks === knocks || used === steps) continue;
+      look(dt - done);
+      steps = Math.max(steps, Math.min(MAX_SUB, used + this.substeps(live, near, dt - done)));
+    }
+    for (const piece of live) if (!piece.gone) this.settle(piece, dt);
+  }
+
+  // The steps a stretch of a frame is cut into: enough that no piece nor
+  // near body goes more than half a cell in one, nor longer than MAX_STEP.
+  substeps(live, near, dt) {
+    let fastest = 0;
+    for (const p of live) fastest = Math.max(fastest, Math.hypot(p.vx, p.vy) + 1);
+    for (const w of near) fastest = Math.max(fastest, Math.hypot(w.vx, w.vy) + 1);
+    const c = toCells(fastest, fastest);
+    return Math.min(MAX_SUB, Math.max(Math.ceil(dt / MAX_STEP), Math.ceil(dt * Math.max(c.cols, c.rows) / 0.5)));
+  }
+
+  // Whether a body's way this frame passes anywhere near a piece's: from
+  // where the piece lies to where its drift would take it by the frame's end.
+  within(piece, w, dt) {
+    const r = piece.length / 2 + piece.radius + w.wade.radius + 0.1;
+    const reach = toCells(r, r);
+    const go = toCells(piece.vx * dt, piece.vy * dt);
+    const x0 = Math.min(piece.x, piece.x + go.cols), x1 = Math.max(piece.x, piece.x + go.cols);
+    const y0 = Math.min(piece.y, piece.y + go.rows), y1 = Math.max(piece.y, piece.y + go.rows);
+    return Math.max(w.x0, w.x1) > x0 - reach.cols - 2 && Math.min(w.x0, w.x1) < x1 + reach.cols + 2 &&
+      Math.max(w.y0, w.y1) > y0 - reach.rows - 2 && Math.min(w.y0, w.y1) < y1 + reach.rows + 2;
+  }
+
+  // A piece's bob, age and fade over a frame.
+  settle(piece, dt) {
     const k = KINDS[piece.kind];
-    // Long frames are taken in short steps, none moving a piece more than
-    // half a cell, so it cannot jump a narrow spit of bank.
-    const speed = Math.hypot(piece.vx, piece.vy) + 1;
-    const c = toCells(speed, speed);
-    const steps = Math.min(8, Math.max(Math.ceil(dt / MAX_STEP), Math.ceil(dt * Math.max(c.cols, c.rows) / 0.5)));
-    const h = dt / steps;
-    for (let i = 0; i < steps && !piece.gone; i++) this.move(piece, h, world, k);
-    if (piece.gone) return;
     const bob = bobStep(piece.draft, piece.goingDown, k.draft[0], k.draft[1], (k.draft[1] - k.draft[0]) / RISE_TIME, dt);
     piece.draft = Math.max(k.draft[0] - 0.02, Math.min(0.85, bob.draft));
     piece.goingDown = bob.goingDown;
@@ -358,7 +564,8 @@ export class Debris {
     }
     piece.spin += (target - piece.spin) * ease;
     piece.angle += piece.spin * h;
-    const d = toCells(piece.vx * h, piece.vy * h);
+    const back = this.returnFrom(piece, world);
+    const d = toCells((piece.vx + back.x) * h, (piece.vy + back.y) * h);
     piece.x += d.cols;
     piece.y += d.rows;
     this.collide(piece, h, world);
@@ -385,6 +592,21 @@ export class Debris {
         piece.angle += Math.sin((piece.symmetric ? 2 : 1) * delta) * h;
       }
     }
+  }
+
+  // A piece shoved out toward a bank works its way back into the current:
+  // past RETURN_TO of the half-width, a while after its last shove, it
+  // edges in toward the middle at this (ground m/s), easing off as it
+  // comes, on top of its drift. This is the game's own stand-in for the
+  // eddies that keep floating things off a straight bank; it is too weak to
+  // stop the set toward the outer bank of a bend.
+  returnFrom(piece, world) {
+    if (!(piece.age - piece.pushed > RETURN_WAIT)) return MID_RETURN;
+    const f = world.flowAt(piece.x, piece.y, AT);
+    const out = Math.abs(f.across) - RETURN_TO;
+    if (!f.river || !(f.halfWidth > 0) || !(out > 0)) return MID_RETURN;
+    const s = -Math.sign(f.across) * this.returnSpeed * Math.min(1, out / RETURN_EASE);
+    return { x: f.y * s, y: -f.x * s };
   }
 
   // A snagged piece turns about its caught end until it trails downstream.
@@ -424,25 +646,167 @@ export class Debris {
     }
   }
 
-  // How far a snagged piece's whole hull reaches into what it can hit
-  // (layout units): each probe's depth into the land, and its capsule's
-  // into each stone. The caught end itself, which lies against whatever
-  // caught it and only turns about it, is left out. The same probes
-  // at every heading, so a turn alone does not change their number.
+  // How far a piece's whole hull reaches into what it can hit (layout
+  // units): each probe's depth into the land, and its capsule's into each
+  // stone. A snagged piece's caught end, which lies against whatever caught
+  // it and only turns about it, is left out. The same probes at every
+  // heading, so a turn alone does not change their number.
   penetration(piece, world) {
-    const stations = Math.max(2, Math.ceil(toCells(piece.length, 0).cols) + 1);
-    const caught = piece.snag.end ? stations - 1 : 0;
     let depth = 0;
+    for (const d of this.depths(piece, world).values()) depth += d;
+    return depth;
+  }
+
+  // The same, one by one: each probe's depth by its place along the hull,
+  // and each stone's by the stone.
+  depths(piece, world) {
+    const stations = Math.max(2, Math.ceil(toCells(piece.length, 0).cols) + 1);
+    const caught = !piece.snag ? -1 : piece.snag.end ? stations - 1 : 0;
+    const out = new Map();
+    let n = 0;
     this.probes(piece, (px, py, i) => {
-      if (i !== caught) depth += this.landDepth(world, px, py);
+      out.set(n++, i !== caught ? this.landDepth(world, px, py) : 0);
     }, stations);
     // A stone counts as far as the hull reaches deeper into it than the
     // caught end does.
-    const pin = { ...piece, x: piece.snag.x, y: piece.snag.y, length: 0 };
+    const pin = piece.snag && { ...piece, x: piece.snag.x, y: piece.snag.y, length: 0 };
     for (const stone of this.stonesNear(world, piece.x, piece.y)) {
-      depth += Math.max(0, this.stoneOverlap(piece, stone).overlap - Math.max(0, this.stoneOverlap(pin, stone).overlap));
+      const held = pin ? Math.max(0, this.stoneOverlap(pin, stone).overlap) : 0;
+      out.set(stone, Math.max(0, this.stoneOverlap(piece, stone).overlap - held));
     }
-    return depth;
+    return out;
+  }
+
+  // Moves a piece by a meeting's push (ground metres) only as far as no
+  // probe of its hull reaches deeper into the land, nor it deeper into any
+  // stone, than it did: clear of one is not bought by going into another.
+  // The push is halved till it is so, or dropped. Returns the share made.
+  shift(piece, world, gx, gy) {
+    const x = piece.x, y = piece.y;
+    const before = this.depths(piece, world);
+    const m = toCells(gx, gy);
+    for (let share = 1; share >= 0.25; share /= 2) {
+      piece.x = x + m.cols * share;
+      piece.y = y + m.rows * share;
+      let deeper = false;
+      for (const [at, d] of this.depths(piece, world)) {
+        if (d > (before.get(at) ?? 0) + 1e-9) deeper = true;
+      }
+      if (!deeper) return share;
+    }
+    piece.x = x;
+    piece.y = y;
+    return 0;
+  }
+
+  unsnag(piece) {
+    piece.lastSnag = piece.age;
+    piece.snag = null;
+  }
+
+  // A wading body against a piece's hull: the piece is pushed clear of its
+  // legs by its share of the overlap and, met coming on, takes an impulse
+  // shared by mass that sends it off and turns it, while the body is
+  // slid back a little. A hard enough shove frees a snagged piece.
+  meetBody(piece, w, world) {
+    const rb = w.wade.radius;
+    const b = toGround((w.x - piece.x) * ASPECT, w.y - piece.y);
+    const reach = piece.length / 2 + piece.radius + rb;
+    if (Math.abs(b.x) > reach || Math.abs(b.y) > reach) return;
+    const ax = Math.cos(piece.angle), ay = Math.sin(piece.angle), half = piece.length / 2;
+    const c = segmentPoint(b.x, b.y, -ax * half, -ay * half, ax * half, ay * half);
+    let nx = c.x - b.x, ny = c.y - b.y;
+    const d = Math.hypot(nx, ny);
+    const overlap = rb + piece.radius - d;
+    if (overlap <= 0) return;
+    if (d < 1e-4) {
+      // Square onto the axis, on the side the body comes from.
+      const s = Math.sign(w.vx * -ay + w.vy * ax) || 1;
+      nx = -ay * s; ny = ax * s;
+    } else { nx /= d; ny /= d; }
+    const pvx = piece.vx - piece.spin * c.y, pvy = piece.vy + piece.spin * c.x;
+    const vn = (w.vx - pvx) * nx + (w.vy - pvy) * ny;
+    if (piece.snag && vn > SNAG_FREE) this.unsnag(piece);
+    const inv = invMass(piece), invBody = 1 / w.wade.mass;
+    if (inv > 0) {
+      const push = Math.min(BODY_PUSH, overlap * inv / (inv + invBody));
+      this.shift(piece, world, nx * push, ny * push);
+    }
+    piece.pushed = piece.age;
+    if (!(vn > 0)) return;
+    const lever = c.x * ny - c.y * nx;
+    const invI = invInertia(piece);
+    const j = impulse(vn, BODY_RESTITUTION, inv, invBody, lever, invI);
+    this.knocks++;
+    piece.vx += j * inv * nx;
+    piece.vy += j * inv * ny;
+    piece.spin = kick(piece.spin, lever * j * invI);
+    addBump(w.body, -FOOTING * j * invBody * nx, -FOOTING * j * invBody * ny);
+    this.lastShove = { body: w.body, piece, vn, dv: j * inv };
+    const at = toCells(c.x - nx * piece.radius, c.y - ny * piece.radius);
+    this.knocked(piece, w.body, piece.x + at.cols, piece.y + at.rows, vn, BODY_RING, true);
+  }
+
+  // Two pieces' hulls against each other: pushed apart by their shares of
+  // the overlap, and met coming on, an impulse shared by mass. A held piece
+  // gives way to nothing short of a shove that frees it.
+  meetPiece(a, b, world) {
+    const o = toGround((b.x - a.x) * ASPECT, b.y - a.y);
+    const reach = (a.length + b.length) / 2 + a.radius + b.radius;
+    if (Math.abs(o.x) > reach || Math.abs(o.y) > reach) return;
+    const ha = a.length / 2, hb = b.length / 2;
+    const aax = Math.cos(a.angle), aay = Math.sin(a.angle), bbx = Math.cos(b.angle), bby = Math.sin(b.angle);
+    const q = segmentSegment(-aax * ha, -aay * ha, aax * ha, aay * ha,
+      o.x - bbx * hb, o.y - bby * hb, o.x + bbx * hb, o.y + bby * hb);
+    let nx = q.bx - q.ax, ny = q.by - q.ay;
+    const d = Math.hypot(nx, ny);
+    const overlap = a.radius + b.radius - d;
+    if (overlap <= 0) return;
+    if (d < 1e-4) {
+      const s = Math.sign(o.x * -aay + o.y * aax) || 1;
+      nx = -aay * s; ny = aax * s;
+    } else { nx /= d; ny /= d; }
+    const rbx = q.bx - o.x, rby = q.by - o.y;
+    const vax = a.vx - a.spin * q.ay, vay = a.vy + a.spin * q.ax;
+    const vbx = b.vx - b.spin * rby, vby = b.vy + b.spin * rbx;
+    const vn = (vax - vbx) * nx + (vay - vby) * ny;
+    if (a.snag && vn > SNAG_FREE) this.unsnag(a);
+    if (b.snag && vn > SNAG_FREE) this.unsnag(b);
+    const wa = invMass(a), wb = invMass(b);
+    if (!(wa + wb > 0)) return;
+    const pa = Math.min(BODY_PUSH, overlap * wa / (wa + wb)), pb = Math.min(BODY_PUSH, overlap * wb / (wa + wb));
+    if (pa > 0) this.shift(a, world, -nx * pa, -ny * pa);
+    if (pb > 0) this.shift(b, world, nx * pb, ny * pb);
+    a.pushed = a.age;
+    b.pushed = b.age;
+    if (!(vn > 0)) return;
+    const la = q.ax * ny - q.ay * nx, lb = rbx * ny - rby * nx;
+    const ia = invInertia(a), ib = invInertia(b);
+    const j = impulse(vn, PIECE_RESTITUTION, wa, wb, la, ia, lb, ib);
+    this.knocks++;
+    a.vx -= j * wa * nx; a.vy -= j * wa * ny;
+    b.vx += j * wb * nx; b.vy += j * wb * ny;
+    a.spin = kick(a.spin, -la * j * ia);
+    b.spin = kick(b.spin, lb * j * ib);
+    const at = toCells(q.ax + nx * a.radius, q.ay + ny * a.radius);
+    if (this.knocked(a, b, a.x + at.cols, a.y + at.rows, vn, RING_SPEED, false)) {
+      b.draft = Math.min(0.85, b.draft + 0.1);
+      b.goingDown = true;
+    }
+  }
+
+  // A knock at a point (cells) at `vn` m/s: above `ring`, and not straight
+  // after the last between the same two, it cuts a ring of ripples, dips the
+  // piece, and with `sound` splashes. Returns whether it did.
+  knocked(piece, other, x, y, vn, ring, sound) {
+    if (!(vn > ring) || (piece.hits.get(other) ?? -Infinity) > piece.age) return false;
+    piece.hits.set(other, piece.age + HIT_REST);
+    this.splashes?.ring(x, y, 0.2 + 2 * vn, 0, true);
+    if (this.splashes) this.splashes.world ??= this.world;
+    piece.draft = Math.min(0.85, piece.draft + 0.1);
+    piece.goingDown = true;
+    if (sound) this.events.push({ type: 'splash', x, y, strength: Math.min(0.8, 0.15 + 0.4 * vn * Math.sqrt(piece.mass)) });
+    return true;
   }
 
   // How far a point (cells) lies inside the land: the layout distance to the

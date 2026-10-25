@@ -66,6 +66,7 @@ export class Hud {
     // Frames over wounded enemies, by id.
     this.foes = [];
     this.foeFrames = new Map();
+    this.target = null;
     this.destroyed = false;
 
     this.root = document.getElementById('hud-root');
@@ -97,6 +98,19 @@ export class Hud {
     this.frames.append(status, this.party, this.partyTab);
     this.status = status;
     this.element.append(this.frames);
+
+    // The creature last struck, by name and health, in a frame of its own
+    // at the top of the screen.
+    this.targetFrame = element('section', 'hud-target hud-panel hud-frame');
+    attribute(this.targetFrame, 'aria-label', 'Target');
+    this.targetFrame.hidden = true;
+    const targetHeading = element('div', 'hud-target-heading');
+    this.targetName = element('span', 'hud-name hud-target-name');
+    this.targetNote = element('span', 'hud-target-note');
+    targetHeading.append(this.targetName, this.targetNote);
+    this.targetHealth = makeVital('Target health', 'health hud-target-health', 'HP');
+    this.targetFrame.append(targetHeading, this.targetHealth.node);
+    this.element.append(this.targetFrame);
 
     const hotbarWrap = element('div', 'hud-hotbar-wrap');
     const hotbarHeading = element('div', 'hud-hotbar-heading');
@@ -149,16 +163,18 @@ export class Hud {
     this.update(0);
   }
 
-  updateVital(vital, value, maximum) {
+  // `round` turns the current value into the number shown; `label` leads
+  // the spoken value.
+  updateVital(vital, value, maximum, round = Math.round, label = '') {
     const available = Number.isFinite(value) && Number.isFinite(maximum) && maximum > 0;
     const max = available ? maximum : 1;
     const current = available ? clamp(value, 0, max) : 0;
     const fraction = available ? current / max : 0;
     style(vital.filled, 'width', `${(fraction * 100).toFixed(1)}%`);
-    text(vital.value, available ? `${Math.round(current)}/${Math.round(max)}` : '--/--');
+    text(vital.value, available ? `${round(current)}/${Math.round(max)}` : '--/--');
     attribute(vital.node, 'aria-valuemax', number(max));
     attribute(vital.node, 'aria-valuenow', number(current));
-    attribute(vital.node, 'aria-valuetext', available ? `${number(current)} of ${number(max)}` : 'Unavailable');
+    attribute(vital.node, 'aria-valuetext', `${label}${available ? `${number(current)} of ${number(max)}` : 'Unavailable'}`);
   }
 
   updateHotbar() {
@@ -211,6 +227,26 @@ export class Hud {
     }
     this.updateDamage(elapsed, view);
     this.updateFoes(view);
+    this.updateTarget();
+  }
+
+  // The target frame's creature: { name, health, maxHealth, note, slain },
+  // or null to hide it.
+  setTarget(view) {
+    this.target = view || null;
+  }
+
+  updateTarget() {
+    const view = this.target;
+    hidden(this.targetFrame, !view);
+    if (!view) return;
+    const name = String(view.name || 'Foe').slice(0, 24);
+    text(this.targetName, name);
+    text(this.targetNote, view.note || '');
+    this.targetFrame.classList.toggle('slain', Boolean(view.slain));
+    // A foe on its last sliver of health never reads 0 until it falls.
+    this.updateVital(this.targetHealth, view.health, view.maxHealth, view.slain ? Math.round : Math.ceil,
+      `${name}${view.slain ? ', slain' : ''}, `);
   }
 
   // Wounded enemies to show a health bar over, in the segmented style of the
@@ -242,6 +278,7 @@ export class Hud {
         frame = { node, filled };
         this.foeFrames.set(foe.id, frame);
       }
+      frame.node.classList.toggle('target', Boolean(foe.target));
       const max = Number.isFinite(foe.maxHealth) && foe.maxHealth > 0 ? foe.maxHealth : 1;
       const current = Number.isFinite(foe.health) ? clamp(foe.health, 0, max) : 0;
       style(frame.filled, 'width', `${(current / max * 100).toFixed(1)}%`);

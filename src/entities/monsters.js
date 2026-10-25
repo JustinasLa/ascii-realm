@@ -1,6 +1,6 @@
 import { mulberry32 } from '../core/rng.js';
 import { Projectiles } from '../world/projectiles.js';
-import { currentAt, easeCarry, immersion, toCells as flowCells } from '../world/rivers.js';
+import { currentAt, easeCarry, immersion, settleBump, toCells as flowCells } from '../world/rivers.js';
 import { ASPECT, MAX_WATER_DEPTH, WATER } from '../world/world.js';
 import { SCALE, TILT } from './rig.js';
 
@@ -16,6 +16,9 @@ export const KINDS = freeze({
   // at them with a rusted sword. Three cuts break one apart.
   skeleton: freeze({
     id: 'skeleton',
+    // Its shins in the water, half-width in metres, and the footing it
+    // meets floating debris with, in kilograms: light bones.
+    wade: freeze({ radius: 0.12, mass: 5 }),
     name: 'Skeleton',
     health: 60,
     // Climbing out of the ground, in seconds; 0 for a monster that arrives
@@ -80,6 +83,8 @@ export const KINDS = freeze({
   // finish one.
   goblin: freeze({
     id: 'goblin',
+    // Shins in the water and footing against floating debris (m, kg).
+    wade: freeze({ radius: 0.12, mass: 6 }),
     name: 'Goblin',
     health: 35,
     rise: 0,
@@ -119,6 +124,8 @@ export const KINDS = freeze({
   // badly hurt. Outrun it, or step aside from the smash and cut back.
   troll: freeze({
     id: 'troll',
+    // Shins in the water and footing against floating debris (m, kg).
+    wade: freeze({ radius: 0.28, mass: 30 }),
     name: 'Troll',
     health: 150,
     rise: 0,
@@ -159,6 +166,8 @@ export const KINDS = freeze({
   // Arrows can be dodged by moving; two cuts bring one down.
   elf: freeze({
     id: 'elf',
+    // Shins in the water and footing against floating debris (m, kg).
+    wade: freeze({ radius: 0.13, mass: 7 }),
     name: 'Elf',
     health: 40,
     rise: 0,
@@ -266,6 +275,8 @@ export class Monster {
     // How fast a river's current carries it, metres a second (x east, y
     // south), as for the player.
     this.carry = { x: 0, y: 0 };
+    // How a knock from floating debris slides it, as for the player.
+    this.bump = { x: 0, y: 0 };
     // Ground covered since the last footfall.
     this.stride = 0;
     this.events = [];
@@ -463,11 +474,14 @@ export class Monster {
   }
 
   // Wading, it is carried downstream by a river's current like the
-  // player. It only slides: no detours, and it never counts as walking.
+  // player, and slid by knocks from floating debris. It only slides: no
+  // detours, and it never counts as walking.
   drift(dt, world, depth) {
     easeCarry(this.carry, currentAt(world, this.x, this.y, immersion(depth)), dt);
-    if (!this.carry.x && !this.carry.y) return;
-    const { cols, rows } = flowCells(this.carry.x * dt, this.carry.y * dt);
+    settleBump(this.bump, dt);
+    const vx = this.carry.x + this.bump.x, vy = this.carry.y + this.bump.y;
+    if (!vx && !vy) return;
+    const { cols, rows } = flowCells(vx * dt, vy * dt);
     if (standable(world, this.x + cols, this.y + rows)) {
       this.x += cols;
       this.y += rows;
