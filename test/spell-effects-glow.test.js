@@ -5,6 +5,7 @@ import { SpellEffects } from '../src/spells/effects.js';
 import { AsciiRenderer } from '../src/render/renderer.js';
 import { glyph } from '../src/render/glyphs.js';
 import { toCells } from '../src/entities/monsters.js';
+import ring from '../src/spells/presentations/ring-of-fire.js';
 
 // Profiles may light the ground through an optional third `glow` argument;
 // following effects carry a stable seed and a smoothed drift.
@@ -93,6 +94,34 @@ test('scenery-keeping profiles never cover fine-grid letters; other profiles sti
   const args = [];
   keep.paint((...p) => args.push(p));
   assert.equal(args[0][5], true);
+});
+
+test('unlit glyphs give off no halo: a cooled scorch never lights the grass round it', () => {
+  const scorch = new SpellEffects();
+  scorch.add({ x: 40, y: 20 }, { presentation: ring, stage: 'pulse', shape: 'scorch', radius: 1.5, life: 5, seed: 17 });
+  scorch.update(2);
+  const r = renderer(), plotted = new Set();
+  scorch.paint((x, y) => plotted.add(Math.floor(y) * r.cols + Math.floor(x)));
+  assert.ok(plotted.size > 40, 'the char is drawn');
+  scorch.draw(r, { x0: 0, y0: 0 });
+  for (let cell = 0; cell < r.cols * r.rows; cell++) {
+    assert.ok(r.bg[cell * 4] <= 10 + 1e-9 && r.bg[cell * 4 + 1] <= 12 + 1e-9, `ground at ${cell} is never lifted`);
+    if (!plotted.has(cell)) assert.equal(r.hasLayer(cell), false, `no halo glyph at ${cell}`);
+  }
+  // Lit glyphs still halo, and arena output learns the flag.
+  const lit = new SpellEffects(), plotAt = unlit => ({ draw(effect, plot) { plot(0, 0, '.', [110, 62, 30], 1, unlit); } });
+  lit.add({ x: 10, y: 5 }, { presentation: plotAt(false) });
+  const l = renderer(20, 10);
+  lit.draw(l, { x0: 0, y0: 0 });
+  assert.ok(l.bg[(5 * l.cols + 11) * 4] > 10, 'a lit glyph lifts its neighbours');
+  const flags = [];
+  for (const unlit of [true, false]) {
+    const one = new SpellEffects();
+    one.add({ x: 0, y: 0 }, { presentation: plotAt(unlit) });
+    one.paint((...p) => flags.push(p.slice(5)));
+    one.paint(() => {}, [{ x: 0, y: 0, h: 0, age: 0, life: 1, dx: 0, dz: 1, trail: [], ctx: { spell: { presentation: plotAt(unlit) } } }]);
+  }
+  assert.deepEqual(flags, [[false, true], []]);
 });
 
 test('following effects keep their seed and learn a smoothed, capped velocity', () => {

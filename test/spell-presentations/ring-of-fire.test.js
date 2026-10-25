@@ -15,7 +15,7 @@ function draw(stage, age, overrides = {}) {
   const life = overrides.life ?? LIVES[stage];
   const effect = Object.freeze({ stage, age, life, progress: Math.min(1, age / life), radius: RING_RADIUS, heading: 0,
     x: 40, y: 12, seed: 17, vx: 0, vy: 0, shape: stage === 'pulse' ? 'scorch' : 'burst', ...overrides });
-  presentation.draw(effect, (x, z, char, color, brightness = 1) => points.push({ x, z, char, color, brightness }),
+  presentation.draw(effect, (x, z, char, color, brightness = 1, unlit = false) => points.push({ x, z, char, color, brightness, ...unlit && { unlit } }),
     (x, z, k, reach) => glows.push({ x, z, k, reach }));
   return { points, glows };
 }
@@ -157,6 +157,8 @@ test('the scorch is a dark, broken band where the ring settled, cooling to nothi
   const hot = early.filter(p => Math.max(...p.color) > 110);
   assert.ok(hot.length >= 4 && hot.length <= 12 && hot.every(p => '*.'.includes(p.char)), 'only embers glow early');
   for (const p of at(1).points) assert.ok(Math.abs(radius(p) - RING_RADIUS) <= 0.25, 'no filled disc');
+  assert.ok(at(2).points.every(p => p.unlit), 'cold char gives off no light of its own');
+  assert.ok(hot.every(p => !p.unlit), 'the embers still glow');
   assert.ok(at(1).glows.length > 0 && at(1).glows.every(g => g.k < 0));
   assert.ok(at(1).points.length > 60);
   assert.ok(at(4.8).points.length < at(1).points.length * 0.2, 'fading by the end');

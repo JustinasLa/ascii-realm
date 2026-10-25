@@ -41,13 +41,14 @@ export class SpellEffects {
   }
   clear() { this.list.length = 0; }
   draw(renderer, view, projectiles = []) {
-    const dot = (x, y, char, color, brightness = 1, keepScenery = false) => {
+    const dot = (x, y, char, color, brightness = 1, keepScenery = false, unlit = false) => {
       const sx = Math.floor(x) - view.x0, sy = Math.floor(y) - view.y0;
       if (sx < 0 || sy < 0 || sx >= renderer.cols || sy >= renderer.rows) return;
       // Flames pass behind trees and rocks drawn on the fine grid.
       if (keepScenery && renderer.hasFineGlyph?.(sy * renderer.cols + sx)) return;
       renderer.put(sx, sy, glyph(char), ...color.map(c => c * brightness));
-      halo(renderer, sx, sy, brightness * 0.7, ...color);
+      // Unlit glyphs (cold char) give off no glow onto their neighbours.
+      if (!unlit) halo(renderer, sx, sy, brightness * 0.7, ...color);
     };
     // Warm light is the campfires' own, flicker included; scorch shade is a
     // soft disc measured the same way, in row units.
@@ -69,19 +70,24 @@ export class SpellEffects {
 
   // Both the game and the standalone arena consume this world-cell stream.
   // `light(x, y, k, reach, effect)` receives glow calls; the arena has none.
+  // Output gets (x, y, char, color, brightness, keepScenery, unlit), with the
+  // flags only when a profile sets them.
   paint(output, projectiles = [], light = null) {
     if (this.paused) return;
-    const dot = (x, y, char, color, brightness = 1, keepScenery = false) => {
+    const dot = (x, y, char, color, brightness = 1, keepScenery = false, unlit = false) => {
       if (brightness <= 0) return;
-      if (keepScenery) output(x, y, char, color, brightness, true);
+      if (unlit) output(x, y, char, color, brightness, keepScenery, true);
+      else if (keepScenery) output(x, y, char, color, brightness, true);
       else output(x, y, char, color, brightness);
     };
+    // A profile's sixth plot argument is its unlit flag.
+    const profileDot = keep => (x, y, char, color, brightness, unlit) => dot(x, y, char, color, brightness, keep, unlit === true);
+    const projectileDot = profileDot(false);
     let remaining = 4096, glows = GLOW_FRAME;
     for (const e of this.list) {
       if (remaining <= 0) break;
       if (e.presentation) {
-        const keep = e.presentation.keepScenery === true;
-        const out = keep ? (x, y, char, color, brightness) => dot(x, y, char, color, brightness, true) : dot;
+        const out = profileDot(e.presentation.keepScenery === true);
         const sink = light && ((x, y, k, reach) => { if (glows > 0) { glows--; light(x, y, k, reach, e); } });
         remaining -= paintPresentation(e.presentation, e, out, Math.min(256, remaining), sink);
         continue;
@@ -104,7 +110,7 @@ export class SpellEffects {
       if (presentation) {
         remaining -= paintPresentation(presentation, { x: p.x, y: p.y - p.h * 5,
           stage: 'projectile', age: p.age, life: p.life, radius: 0.65,
-          heading: Math.atan2(p.dx, p.dz) }, dot, Math.min(128, remaining));
+          heading: Math.atan2(p.dx, p.dz) }, projectileDot, Math.min(128, remaining));
         continue;
       }
       const color = COLORS[p.ctx.spell.element] ?? COLORS.martial;

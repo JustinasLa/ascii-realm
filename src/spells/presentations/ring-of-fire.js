@@ -245,9 +245,10 @@ function scorch(plot, glow, effect, R, age, seed) {
     const u = (i + 0.5) / count;
     if (ringNoise(u, 7, -0.35 * RING_LIFE, RING_LIFE * 0.5, seed + 3) < 0.2 || hash(i, seed + 50) > dim * 1.1 - 0.05) continue;
     const p = bandPoint(u, R, RING_LIFE, seed, still), k = hash(i, seed + 51);
-    plot(p.x, p.z, SCORCH[Math.floor(k * 5)], mix(CHAR, ASH, k), dim);
+    // Cold char gives off no light: plotted unlit, so it never haloes the grass.
+    plot(p.x, p.z, SCORCH[Math.floor(k * 5)], mix(CHAR, ASH, k), dim, true);
     // Charred a row wider where the flames burned hottest.
-    if (k > 0.55) plot(p.x * (1 + 0.5 / (R * ROWS)), p.z * (1 + 0.5 / (R * ROWS)), k > 0.8 ? ':' : '.', mix(CHAR, ASH, 1 - k), dim * 0.8);
+    if (k > 0.55) plot(p.x * (1 + 0.5 / (R * ROWS)), p.z * (1 + 0.5 / (R * ROWS)), k > 0.8 ? ':' : '.', mix(CHAR, ASH, 1 - k), dim * 0.8, true);
   }
   for (let i = 0; i < 12; i++) {
     const end = 0.2 + 1.3 * hash(i, seed + 52);
@@ -275,8 +276,10 @@ export default {
     const seed = Number.isFinite(effect.seed) ? effect.seed % 97 : 0;
     const R = clamp(Number.isFinite(effect.radius) ? effect.radius : RING_RADIUS, 0.3, 3);
     // Undo the adapter's heading rotation so the ring stays screen-aligned.
-    const plot = (x, z, char, color, brightness) => {
-      if (brightness > 0.01) draw(x * c - z * s, x * s + z * c, char, color, Math.min(1, brightness));
+    const plot = (x, z, char, color, brightness, unlit = false) => {
+      if (brightness <= 0.01) return;
+      if (unlit) draw(x * c - z * s, x * s + z * c, char, color, Math.min(1, brightness), true);
+      else draw(x * c - z * s, x * s + z * c, char, color, Math.min(1, brightness));
     };
     const glow = (x, z, k, reach) => light(x * c - z * s, x * s + z * c, k, reach);
     switch (effect.stage) {
