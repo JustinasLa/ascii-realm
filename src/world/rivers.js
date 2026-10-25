@@ -56,7 +56,7 @@ const reachOf = (half) => half + BANK + VALLEY + 1;
 // Surface speeds in metres a second.
 export const BASE_SPEED = 0.55;
 const MIN_SPEED = 0.12;
-// The slowest the water is timed at, as it comes to rest in a lake.
+// The slowest the water runs, as it comes to rest in a lake.
 const SLOWEST = 0.05;
 const MAX_SPEED = 1;
 // What a body standing in the current is carried at (see carryTarget).
@@ -83,6 +83,9 @@ const LINE_REACH = 1.75;
 const LINES = Math.round(2 * LINE_REACH / LINE) + 1;
 const CHUNK = 64;
 const MOUTH = 1.5;
+// The narrowest a river's half-width is cut to where it meets a lake
+// narrower than itself: the step the lake's far shore is found to.
+const SHORE_GAP = 0.25;
 const POND = 2.5;
 const STONE_EVERY = 6;
 
@@ -326,26 +329,30 @@ export class RiverNetwork {
       (1.3 + 4.2 * smoothstep(s / WIDEN)) * (0.7 + 0.6 * valueNoise(s * 0.015, 7.5, riverSeed + 1))));
     const lastHalf = halfAt((n - 1) * STEP);
     // A river entering a lake runs on into it a little way, slowing to a
-    // stop, so the lake itself stays calm. It runs only as far as the lake
+    // crawl, so the lake itself stays calm. It runs only as far as the lake
     // does: the mouth, and the rounded end of its channel a half-width
     // beyond, stay over the lake's own water, so a narrow lake is never cut
-    // through into the dry land past it.
+    // through into the dry land past it. Where the lake is narrower still
+    // than the river is wide, the channel narrows as it reaches it, so that
+    // no point's rounded end reaches past the last of the lake's water ahead.
     const mouthFrom = end === 'lake' ? n - 1 : n;
     const pts = raw.slice();
+    let shore = null;
     if (end === 'lake') {
       const ex = raw[2 * n - 2];
       const ey = raw[2 * n - 1];
-      const dx = (ex - raw[2 * n - 4]) / STEP;
-      const dy = (ey - raw[2 * n - 3]) / STEP;
+      const l = Math.hypot(ex - raw[2 * n - 4], ey - raw[2 * n - 3]);
+      const dx = (ex - raw[2 * n - 4]) / l;
+      const dy = (ey - raw[2 * n - 3]) / l;
       const extra = Math.ceil((MOUTH * 2 * lastHalf) / STEP);
+      // How far on the lake runs, sampled every 0.25 units.
+      const reach = STEP * extra + lastHalf;
       let wet = 0;
-      for (let k = 1; k <= extra; k++) {
-        const need = STEP * k + lastHalf;
-        while (wet < need && elev(ex + dx * (wet + 0.25), ey + dy * (wet + 0.25), 5) < WATER_LEVEL) wet += 0.25;
-        if (wet < need) break;
-        pts.push(ex + dx * STEP * k, ey + dy * STEP * k);
-        n++;
-      }
+      while (wet < reach && elev(ex + dx * (wet + 0.25), ey + dy * (wet + 0.25), 5) < WATER_LEVEL) wet += 0.25;
+      const added = Math.max(0, Math.min(extra, Math.floor((wet - lastHalf) / STEP)));
+      for (let k = 1; k <= added; k++) pts.push(ex + dx * STEP * k, ey + dy * STEP * k);
+      n += added;
+      if (wet < reach) shore = { x: ex + dx * wet, y: ey + dy * wet };
     }
     const points = Float32Array.from(pts);
     const half = new Float32Array(n);
@@ -357,6 +364,11 @@ export class RiverNetwork {
     const tau = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       half[i] = i < mouthFrom ? halfAt(i * STEP) : lastHalf;
+      // Only the last few points, whose rounded ends reach on past the end.
+      if (shore && (n - 1 - i) * STEP < half[i]) {
+        const ahead = Math.hypot(shore.x - points[2 * i], shore.y - points[2 * i + 1]);
+        half[i] = Math.min(half[i], Math.max(SHORE_GAP, ahead));
+      }
       // Deeper where it is wider, but never shallower downstream, so the bed
       // never rises toward the mouth, even through the narrows.
       depth[i] = Math.max(i ? depth[i - 1] : 0,
@@ -382,7 +394,9 @@ export class RiverNetwork {
       const bend = Math.min(1, Math.abs(curve[i]) * half[i] * 2);
       let v = BASE_SPEED * (meanHalf / half[i]) * (1 - 0.45 * bend);
       v = Math.max(MIN_SPEED, Math.min(MAX_SPEED, v));
-      if (i >= mouthFrom) v *= 1 - (i - mouthFrom + 1) / (n - mouthFrom);
+      // The mouth slows to the crawl its water is timed at, so the clock
+      // down every line keeps to the current it reports.
+      if (i >= mouthFrom) v = Math.max(SLOWEST, v * (1 - (i - mouthFrom + 1) / (n - mouthFrom)));
       speed[i] = v;
       if (i > 0) {
         const g = toGround(points[2 * i] - points[2 * i - 2], points[2 * i + 1] - points[2 * i - 1]);
@@ -824,11 +838,10 @@ function lineFrame(river, i, lx, ly, out) {
 }
 
 // The seconds a metre takes on average where the pace changes steadily
-// from v0 to v1 (metres a second; never slower than a crawl).
+// from v0 to v1 (metres a second; a river never runs slower than SLOWEST,
+// so this is the pace of the very current it reports).
 function paceOver(v0, v1) {
-  const a = Math.max(SLOWEST, v0);
-  const b = Math.max(SLOWEST, v1);
-  return Math.abs(b - a) > 1e-6 ? Math.log(b / a) / (b - a) : 2 / (a + b);
+  return Math.abs(v1 - v0) > 1e-6 ? Math.log(v1 / v0) / (v1 - v0) : 2 / (v0 + v1);
 }
 
 // The unit direction on the ground of a river's line `q` half-widths out,
@@ -857,12 +870,15 @@ function lineClock(river, i, t, q) {
   const j = Math.min(LINES - 2, Math.floor(u));
   const w = u - j;
   const c = river.clock;
-  const line = (a) => c[a * LINES + j] + (c[a * LINES + j + 1] - c[a * LINES + j]) * w;
+  const a = i * LINES + j;
+  const b = a + LINES;
+  const from = c[a] + (c[a + 1] - c[a]) * w;
+  const to = c[b] + (c[b + 1] - c[b]) * w;
   // How much of the step's time has passed `t` of the way along it.
   const v0 = river.speed[i];
   const v1 = river.speed[i + 1];
   const share = t * paceOver(v0, v0 + (v1 - v0) * t) / paceOver(v0, v1);
-  return (line(i) + (line(i + 1) - line(i)) * share) / crossSpeed(q);
+  return (from + (to - from) * share) / crossSpeed(q);
 }
 
 function writeFlow(flow, k, river, q, i, t, half, id) {

@@ -165,12 +165,15 @@ test('rivers run downhill on the real terrain into a lake or a pond, a few cells
       }
       assert.ok(river.heights[n - 1] < river.heights[0], 'the end lies below the spring');
       for (let i = 0; i < river.half.length; i++) {
-        assert.ok(river.half[i] * 2 >= 2.2 && river.half[i] * 2 <= 12, 'from a couple of rows to a dozen wide');
+        // Only the last few points narrow, where a lake narrower than the
+        // river takes it.
+        const least = river.end === 'lake' && i > river.mouthFrom - 4 ? 0.5 : 2.2;
+        assert.ok(river.half[i] * 2 >= least && river.half[i] * 2 <= 12, 'from a couple of rows to a dozen wide');
       }
       if (river.end === 'lake') {
         lakes++;
         assert.ok(river.heights[river.heights.length - 1] < WATER_LEVEL, 'it reaches a lake');
-        assert.equal(river.speed[river.speed.length - 1], 0, 'and slows to a stop in it');
+        assert.ok(Math.abs(river.speed[river.speed.length - 1] - 0.05) < 1e-6, 'and slows to a crawl in it');
       } else {
         ponds++;
         assert.ok(river.pond.across > 0 && river.pond.along > river.pond.across);
@@ -247,6 +250,31 @@ test('a river mouth runs on into its lake, never through it into the dry land be
       if ((cx * CHUNK_SIZE + (k & 63)) * ASPECT >= 106) assert.notEqual(land.type[k], WATER, 'no water cut past the lake');
     }
   }
+  // A lake narrower than the river's half-width takes no mouth at all, and
+  // the channel narrows as it reaches it, so that its rounded end, and
+  // those of the points before it, stop at the far shore.
+  const sliver = (lx) => {
+    const x = Math.floor(lx / ASPECT) * ASPECT;
+    return x >= 100 && x < 102 ? 0.38 : 0.6 - 0.001 * x;
+  };
+  const short = raw.slice(0, -2);
+  const thin = handMade(short, 'lake', sliver);
+  const last = thin.river.half.length - 1;
+  assert.equal(last, thin.river.mouthFrom, 'no mouth runs on into it');
+  assert.ok(thin.river.half[last - 3] > 2, 'the river is wider than the lake');
+  for (let i = 0; i <= last; i++) {
+    assert.ok(thin.river.points[2 * i] + thin.river.half[i] < 102, `point ${i}'s rounded end stays within the lake`);
+  }
+  let cut = 0;
+  for (let cx = 1; cx <= 3; cx++) {
+    const land = carveLand(thin.network, cx, 0, sliver);
+    for (let k = 0; k < land.type.length; k++) {
+      const x = (cx * CHUNK_SIZE + (k & 63)) * ASPECT;
+      if (x >= 102) assert.notEqual(land.type[k], WATER, 'no water cut past the narrow lake');
+      if (x < 100 && land.type[k] === WATER) cut++;
+    }
+  }
+  assert.ok(cut > 100, 'the river still runs right to the lake');
   // A broad lake takes the whole mouth.
   const broad = (lx) => (Math.floor(lx / ASPECT) * ASPECT >= 100 ? 0.38 : 0.6 - 0.001 * lx);
   const open = handMade(raw, 'lake', broad).river;
@@ -474,6 +502,7 @@ test('the widest reaches report their full width', () => {
 });
 
 test('foam keeps time with the current that carries it, down widening and bending reaches too', () => {
+  let mouths = 0;
   for (let seed = 1; seed <= 3; seed++) {
     const world = new World(seed);
     const rivers = riversOf(world, 3);
@@ -509,7 +538,23 @@ test('foam keeps time with the current that carries it, down widening and bendin
         assert.ok(Math.abs(tau - 3) < 0.3, `seed ${seed}, point ${i}, q=${q}: the clock moved ${tau} s in 3 s`);
       }
     }
+    // So it does where a mouth slows to a crawl in its lake, right to the
+    // end of the channel.
+    for (const river of rivers) {
+      const n = river.half.length;
+      if (river.end !== 'lake' || n - 1 - river.mouthFrom < 3) continue;
+      mouths++;
+      for (const q of [0, 0.3, -0.3]) {
+        for (const i of [river.mouthFrom, n - 3]) {
+          const start = besideOf(river, i, q);
+          const end = follow(world, start, 3);
+          const tau = world.flowAt(end.x, end.y).tau - world.flowAt(start.x, start.y).tau;
+          assert.ok(Math.abs(tau - 3) < 0.3, `seed ${seed}, mouth point ${i}, q=${q}: the clock moved ${tau} s in 3 s`);
+        }
+      }
+    }
   }
+  assert.ok(mouths >= 2, `${mouths} lake mouths`);
   // Away from rivers the line is still; so is a network without rivers.
   const world = new World(1);
   assert.deepEqual(world.rivers.lineAt(world.spawn.x, world.spawn.y), { x: 0, y: 0, speed: 0, tau: 0 });
@@ -672,6 +717,30 @@ test('rivers stay cheap to trace and to carve', () => {
   const without = quickest(plain);
   assert.ok(world.chunk(cx, cy).flow, 'a river chunk');
   assert.ok(withRiver < 2 * without, `with the river ${withRiver.toFixed(2)} ms, without ${without.toFixed(2)} ms`);
+});
+
+test('the current at a point is cheap enough to ask every frame, and fills the caller\'s own object', () => {
+  const world = new World(1);
+  const { river, i } = widest(world);
+  // Points all over the water of one reach, off the middle and on it.
+  const points = [];
+  for (let k = 0; k < 64; k++) points.push(besideOf(river, i + (k >> 3) - 4, ((k & 7) - 3.5) / 4.5));
+  const out = {};
+  for (const p of points) {
+    assert.equal(world.flowAt(p.x, p.y, out), out, 'the answer is written into the object given');
+    assert.ok(out.speed > 0 && out.tau > 0, 'in the current');
+  }
+  // The quickest of a few runs of many queries, so other work on the
+  // machine does not count.
+  const calls = 20000;
+  let best = Infinity;
+  for (let run = 0; run < 7; run++) {
+    const started = performance.now();
+    for (let k = 0; k < calls; k++) world.flowAt(points[k & 63].x, points[k & 63].y, out);
+    best = Math.min(best, performance.now() - started);
+  }
+  const each = best / calls * 1000;
+  assert.ok(each < 5, `a query took ${each.toFixed(2)} µs`);
 });
 
 test('immersion and carry follow the depth of the feet and the pace of the water', () => {
