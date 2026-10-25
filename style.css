@@ -16,7 +16,7 @@
   --mana: #8fb4e3;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body { color: var(--ink); font: 12px/1.4 var(--font); }
 button, input, select, kbd, pre { font: inherit; }
 button, summary { -webkit-tap-highlight-color: transparent; }
@@ -228,6 +228,14 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .inventory-key-hint { display: inline-flex; align-items: center; gap: 5px; }
 .inventory-key-hint kbd { font-size: 10px; }
 
+/* The phone's "Tap to play" card, over a dimmed and paused scene. */
+#play-gate { position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; justify-items: center; gap: 10px; width: 100%; height: 100%; margin: 0; padding: 0; color: var(--ink); background: rgba(5, 6, 10, 0.72); border: 0; border-radius: 0; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+#play-gate:focus-visible { outline: none; }
+#play-gate:focus-visible .play-gate-action { outline: 1px solid var(--accent); outline-offset: 3px; }
+.play-gate-title { font-size: 13px; font-weight: 600; letter-spacing: 4px; }
+.play-gate-action { display: grid; place-items: center; min-width: 168px; min-height: 44px; padding: 0 16px; font-size: 12px; letter-spacing: 2px; background: var(--surface); border: 1px solid var(--frame); }
+body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
+
 /* Touch controls keep generous hit areas and the same square frame styling.
    They follow the primary pointer, so touchscreen laptops and narrow desktop
    windows keep the mouse and keyboard layout. */
@@ -235,6 +243,12 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 /* The phone menu and its sheet rows exist only in the phone layout below. */
 #phone-menu, .phone-sheet-head, #panel-dock > .phone-sheet-row { display: none; }
 @media (pointer: coarse) {
+  /* No text selection, callouts or double-tap zoom anywhere but in text
+     fields; the menu sheet and the inventory still scroll. */
+  body { touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  input, textarea, select, #lobby-share { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
+  #lobby-room-code { user-select: all; -webkit-user-select: all; }
+  #panel-dock, .inventory-screen { touch-action: pan-y; }
   #touch-controls { display: block; position: fixed; z-index: 12; inset: 0; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #touch-controls button, #move-pad { pointer-events: auto; touch-action: none; color: var(--ink); background: var(--surface); border: 1px solid var(--frame); }
   #touch-controls button { min-width: 44px; min-height: 44px; padding: 6px; border-radius: 0; font-size: 10px; }
@@ -374,6 +388,9 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   .hud-prompt, #fire-status, #builder-banner, #builder-cursor,
   kbd, .key-hint, .inventory-help,
   #scenery-builder, #weather-panel, #help-controls, #grass-preview { display: none !important; }
+
+  /* A stray swipe on a gap or a corner never starts a browser gesture. */
+  body { touch-action: none; }
 
   /* Portrait is the base: the stick and the thumb cluster sit in the lower
      corners, clear of rounded corners and the home indicator. The layers

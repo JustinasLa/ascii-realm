@@ -76,6 +76,17 @@ button or a rune wheel held on **CAST**. The controls keep clear of the notch,
 rounded corners and the home indicator, and of browser bars as they slide in
 and out.
 
+Phones play like an app. The game starts behind a **TAP TO PLAY** card; the
+tap turns on the sound and goes full screen where the browser allows it
+(iPhone Safari does not; add the game to the home screen there instead). The
+page itself never zooms, scrolls, bounces, pulls to refresh or selects text,
+and pinching anywhere only zooms the scene. The screen stays awake while you
+play. Switching to another app or locking the phone pauses the whole world and
+its sound; coming back shows **TAP TO RESUME**, and the world waits until the
+tap. The menu's **Full screen** row enters or leaves full screen where the
+browser supports it. **Add to Home Screen** installs the game as an app that
+opens full screen with a dark status bar.
+
 Tablets get the same thumb cluster and keep the full layout: the panels, the quick slots and the upper
 **− / +** zoom buttons, which work alongside pinch. Touch controls appear only
 when touch is the primary input, so touchscreen laptops and narrow desktop

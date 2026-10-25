@@ -28,9 +28,58 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
     const url = new URL(process.env.GAME_URL || 'http://localhost:8000/');
     url.searchParams.set('debug', '');
+    // The phone checks below skip the "Tap to play" card; its own check
+    // (next) loads the game without ?nogate.
+    url.searchParams.set('nogate', '');
     await page.goto(url.href, { waitUntil: 'networkidle0' });
     await page.waitForFunction(() => window.game?.metrics.frames > 30);
     const results = { browser: await browser.version(), samples: [], checks: [] };
+    // Phones start behind "Tap to play" with the world paused. The tap goes
+    // full screen and takes the wake lock; both are spied on, as headless
+    // Chrome may refuse them.
+    {
+      const gated = await browser.newPage();
+      gated.on('pageerror', e => errors.push(e.message));
+      await gated.evaluateOnNewDocument(() => {
+        window.native = { fullscreen: 0, locks: 0, released: 0 };
+        const request = Element.prototype.requestFullscreen;
+        Element.prototype.requestFullscreen = function spy(...args) {
+          window.native.fullscreen++;
+          return request ? request.apply(this, args).catch(() => {}) : Promise.resolve();
+        };
+        Object.defineProperty(navigator, 'wakeLock', { configurable: true, value: { request: async () => {
+          window.native.locks++;
+          const sentinel = new EventTarget();
+          sentinel.release = async () => { window.native.released++; };
+          return sentinel;
+        } } });
+      });
+      await gated.setViewport({ width: 393, height: 852, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+      const gateUrl = new URL(url.href);
+      gateUrl.searchParams.delete('nogate');
+      await gated.goto(gateUrl.href, { waitUntil: 'load' });
+      await gated.waitForFunction(() => window.game?.metrics.frames > 30, { timeout: 180000 });
+      const shown = await gated.evaluate(() => {
+        const card = document.getElementById('play-gate');
+        const r = card.getBoundingClientRect();
+        return { waiting: game.native.gate.waiting, visible: card.checkVisibility(), full: r.width === innerWidth && r.height === innerHeight,
+          controls: getComputedStyle(document.getElementById('touch-controls')).visibility, time: game.player.time,
+          label: card.textContent, locks: window.native.locks };
+      });
+      assert.deepEqual([shown.waiting, shown.visible, shown.full, shown.controls, shown.locks], [true, true, true, 'hidden', 0]);
+      await wait(500);
+      assert.equal(await gated.evaluate(() => game.player.time), shown.time, 'the world waits behind the card');
+      await gated.screenshot({ path: join(output, 'gate.png') });
+      await gated.touchscreen.tap(196, 426);
+      await wait(400);
+      const started = await gated.evaluate(() => ({ waiting: game.native.gate.waiting, hidden: document.getElementById('play-gate').hidden,
+        fullscreen: window.native.fullscreen, held: game.native.wakeLock.held, time: game.player.time,
+        audio: game.audio.context?.state ?? 'none' }));
+      assert.deepEqual([started.waiting, started.hidden, started.fullscreen, started.held], [false, true, 1, true]);
+      assert.ok(started.time > shown.time, 'play runs after the tap');
+      results.checks.push({ gate: { shown, started } });
+      await gated.close();
+    }
     // Every phone check below depends on touch emulation reporting a phone.
     assert.deepEqual(await page.evaluate(() => [matchMedia('(hover: none)').matches,
       matchMedia('(pointer: coarse)').matches, game.device.phone]), [true, true, true]);
@@ -268,6 +317,33 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
     await client.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
     await wait(300);
+    // The phone pacing's wiring (its tiers are unit-tested): with the fit
+    // threshold below any frame's work the cap drops to an even 30, and
+    // comes back to 60 once the frames fit again.
+    {
+      const tuning = await page.evaluate(() => {
+        const p = game.native.pacer;
+        const saved = { fitMs: p.fitMs, refitMs: p.refitMs };
+        p.fitMs = 0;
+        return saved;
+      });
+      await page.waitForFunction(() => game.metrics.rate === 30, { timeout: 5000 });
+      const steady = await page.evaluate(() => new Promise(resolve => {
+        const intervals = [];
+        let frames = game.metrics.frames;
+        (function collect() {
+          if (game.metrics.frames !== frames) { intervals.push(game.metrics.intervalMs); frames = game.metrics.frames; }
+          if (intervals.length < 60) return requestAnimationFrame(collect);
+          intervals.sort((a, b) => a - b);
+          resolve({ rate: game.metrics.rate, median: intervals[30] });
+        })();
+      }));
+      assert.ok(steady.median >= 31, `30 Hz median interval ${steady.median} ms`);
+      await page.evaluate(t => Object.assign(game.native.pacer, { fitMs: t.fitMs, refitMs: 1e6 }), tuning);
+      await page.waitForFunction(() => game.metrics.rate === 60, { timeout: 20000 });
+      await page.evaluate(t => Object.assign(game.native.pacer, t), tuning);
+      results.checks.push({ pacing: steady });
+    }
     const centers = await page.evaluate(() => {
       const center = e => { const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; };
       return { pad: center(document.getElementById('move-pad')), jump: center(document.querySelector('[data-key="Space"]')),
@@ -440,6 +516,90 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
     // Phones can't build scenery.
     assert.equal(await page.evaluate(() => game.builder.setEnabled(true)), false);
     results.checks.push({ phoneMenu: sheet, walked });
+    // No browser gestures: a pinch over the vitals strip zooms only the
+    // camera, a double tap never zooms the page, a swipe down from the top
+    // never scrolls or reloads it, and a long press selects nothing.
+    // Emulation proves the page's CSS and listeners, not iOS's own
+    // pull-to-refresh.
+    {
+      const strip = await page.evaluate(() => { const r = document.querySelector('.hud-status').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+      const cellBefore = await page.evaluate(() => game.renderer.cellH / game.renderer.dpr);
+      const apart = d => [touch(1, { x: strip.x - d, y: strip.y + 4 }), touch(2, { x: strip.x + d, y: strip.y + 4 })];
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: apart(30) });
+      for (let step = 1; step <= 8; step++) {
+        await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: apart(30 + step * 5) });
+        await wait(16);
+      }
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await wait(650);
+      for (const at of [{ x: 196, y: 420 }, strip]) {
+        for (let i = 0; i < 2; i++) {
+          await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(1, at)] });
+          await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+          await wait(60);
+        }
+      }
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(1, { x: 196, y: 4 })] });
+      for (let y = 40; y <= 400; y += 40) {
+        await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [touch(1, { x: 196, y })] });
+        await wait(16);
+      }
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await page.evaluate(() => { window.menus = 0; document.addEventListener('contextmenu', e => { if (!e.defaultPrevented) window.menus++; }); });
+      for (const at of [{ x: 196, y: 420 }, centers.strike, strip]) {
+        await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(1, at)] });
+        await wait(700);
+        await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      }
+      await wait(300);
+      const gestures = await page.evaluate(() => ({ scale: visualViewport.scale, scrollY, reloads: performance.getEntriesByType('navigation').length,
+        selection: getSelection().toString(), menus: window.menus, cell: game.renderer.cellH / game.renderer.dpr,
+        touchAction: getComputedStyle(document.body).touchAction, overscroll: getComputedStyle(document.body).overscrollBehaviorY }));
+      assert.deepEqual([gestures.scale, gestures.scrollY, gestures.reloads, gestures.selection, gestures.touchAction, gestures.overscroll],
+        [1, 0, 1, '', 'none', 'none']);
+      assert.ok(gestures.cell > cellBefore, 'the pinch over the strip zoomed the scene');
+      // The menu sheet still scrolls, and offers Full screen.
+      await page.tap('#phone-menu');
+      await wait(200);
+      const sheetScroll = await page.evaluate(() => {
+        const dock = document.getElementById('panel-dock');
+        for (const d of dock.querySelectorAll('details')) d.open = true;
+        return { row: document.getElementById('phone-menu-fullscreen').checkVisibility(), touchAction: getComputedStyle(dock).touchAction,
+          scrollable: dock.scrollHeight > dock.clientHeight };
+      });
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touch(1, { x: 196, y: 700 })] });
+      for (let y = 660; y >= 300; y -= 40) {
+        await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [touch(1, { x: 196, y })] });
+        await wait(16);
+      }
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await wait(300);
+      sheetScroll.scrolled = await page.evaluate(() => document.getElementById('panel-dock').scrollTop);
+      await page.screenshot({ path: join(output, 'menu-fullscreen-row.png') });
+      assert.equal(sheetScroll.row, true);
+      assert.equal(sheetScroll.touchAction, 'pan-y');
+      assert.ok(!sheetScroll.scrollable || sheetScroll.scrolled > 0, 'the sheet scrolls with a swipe');
+      await page.evaluate(() => { for (const d of document.querySelectorAll('#panel-dock details')) d.open = false; });
+      await page.tap('#phone-menu-close');
+      await wait(100);
+      // The web-app manifest and its icons load.
+      const manifest = await page.evaluate(async () => {
+        const link = document.querySelector('link[rel=manifest]').href;
+        const response = await fetch(link);
+        const json = await response.json();
+        const sizes = await Promise.all(json.icons.map(icon => new Promise(resolve => {
+          const img = new Image();
+          img.onload = () => resolve(`${img.naturalWidth}x${img.naturalHeight}` === icon.sizes);
+          img.onerror = () => resolve(false);
+          img.src = new URL(icon.src, link).href;
+        })));
+        return { status: response.status, display: json.display, sizes };
+      });
+      const parsed = await client.send('Page.getAppManifest');
+      assert.deepEqual([manifest.status, manifest.display, manifest.sizes.every(Boolean)], [200, 'standalone', true]);
+      assert.deepEqual(parsed.errors, []);
+      results.checks.push({ gestures, sheetScroll, manifest });
+    }
     // Tablets keep the zoom buttons and the full layout.
     await page.setViewport({ width: 820, height: 1180, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     await wait(300);
@@ -463,11 +623,21 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
     assert.ok(paused.hidden);
     assert.equal(pausedAfter.frames,paused.frames);
     assert.equal(pausedAfter.time,paused.time);
+    assert.equal(await page.evaluate(() => game.audio.context?.state ?? 'suspended'), 'suspended');
     await foreground.close();
     await page.bringToFront();
     await wait(100);
     assert.ok(await page.evaluate(n=>game.metrics.frames>n,paused.frames));
-    results.checks.push({backgroundPause:true});
+    // A phone comes back paused behind the resume card, the sound waiting.
+    const resume = await page.evaluate(() => ({ waiting: game.native.gate.waiting, label: document.querySelector('.play-gate-action').textContent,
+      time: game.player.time, audio: game.audio.context?.state ?? 'suspended', interval: game.metrics.intervalMs }));
+    assert.deepEqual([resume.waiting, resume.label, resume.time, resume.audio], [true, 'TAP TO RESUME', paused.time, 'suspended']);
+    await page.tap('#play-gate');
+    await wait(300);
+    const resumed = await page.evaluate(() => ({ waiting: game.native.gate.waiting, time: game.player.time }));
+    assert.equal(resumed.waiting, false);
+    assert.ok(resumed.time > paused.time);
+    results.checks.push({backgroundPause:true, resume, resumed});
     await page.evaluate(()=>{window.lose=game.renderer.gl.getExtension('WEBGL_lose_context');window.lose.loseContext();});
     await page.waitForFunction(()=>!document.getElementById('status').hidden);
     const lost = await page.evaluate(()=>game.metrics.frames);

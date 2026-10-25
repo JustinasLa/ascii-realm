@@ -6,7 +6,9 @@ import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
 import { isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
-import { FrameClock, FrameQuality, renderSize } from '../../src/render/budget.js';
+import { FrameClock, FramePacer, FrameQuality, renderSize } from '../../src/render/budget.js';
+import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from '../../src/core/native.js';
+import { PlayGate } from '../../src/ui/play-gate.js';
 import { ASPECT, GRASS, WATER } from '../../src/world/world.js';
 import { PHONE_QUERY, watchPhone } from '../../src/core/phone.js';
 import { FRAME_BIAS, LANDSCAPE_QUERY, phoneDefaultCell, watchLayout, ZoomSlots } from '../../src/core/layout.js';
@@ -28,7 +30,7 @@ const inert = () => class {
 };
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
-  width = 800, height = 600, dpr = undefined } = {}) {
+  width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -48,7 +50,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const coarseQuery = { matches: coarse, addEventListener: noop, removeEventListener: noop };
   // The orientation query: `rotate()` swaps the size and dispatches `change`.
   const landscapeQuery = Object.assign(new EventTarget(), { matches: width > height });
-  const queries = { [PHONE_QUERY]: phoneQuery, [LANDSCAPE_QUERY]: landscapeQuery };
+  const queries = { [PHONE_QUERY]: phoneQuery, [LANDSCAPE_QUERY]: landscapeQuery,
+    '(display-mode: standalone)': { matches: standalone } };
   const window = Object.assign(new EventTarget(), { innerWidth: width, innerHeight: height,
     devicePixelRatio: dpr, matchMedia: text => queries[text] });
   let pinch = null;
@@ -78,15 +81,53 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       return { base: [0, 0], tip: [1, 1] };
     },
   };
+  // The page: the play card, the menu's Full screen row, visibility, the
+  // Fullscreen API and the Screen Wake Lock, all observable.
+  const classes = () => {
+    const set = new Set();
+    return { add: c => set.add(c), remove: c => set.delete(c), contains: c => set.has(c),
+      toggle: (c, on = !set.has(c)) => (on ? set.add(c) : set.delete(c), on) };
+  };
+  const element = () => Object.assign(new EventTarget(), { hidden: true, textContent: '', attributes: new Map(),
+    classList: classes(), focus: noop,
+    setAttribute(name, value) { this.attributes.set(name, String(value)); },
+    getAttribute(name) { return this.attributes.get(name) ?? null; } });
+  const gateAction = { textContent: 'TAP TO PLAY' };
+  const gateButton = Object.assign(element(), { querySelector: () => gateAction });
+  const fullscreenRow = element();
+  const audio = { suspends: 0, unlocks: 0 };
+  const fullscreenRequests = [];
+  const document = Object.assign(new EventTarget(), {
+    getElementById: id => id === 'screen' ? canvas : id === 'play-gate' ? gateButton
+      : id === 'phone-menu-fullscreen' ? fullscreenRow : hint,
+    hidden: false, visibilityState: 'visible', body: { classList: classes() }, fullscreenElement: null,
+    documentElement: fullscreen ? { requestFullscreen(options) {
+      fullscreenRequests.push(options);
+      document.fullscreenElement = this;
+      return Promise.resolve();
+    } } : {},
+    exitFullscreen() { document.fullscreenElement = null; return Promise.resolve(); },
+    createElement: () => ({ classList: { add: noop, remove: noop }, hidden: false, textContent: '' }) });
+  const locks = { requests: 0, released: 0, refuse: false };
+  const navigator = { vibrate: ms => vibrations.push(ms) };
+  if (wakeLock) {
+    navigator.wakeLock = { request: async () => {
+      locks.requests++;
+      if (locks.refuse) throw new Error('NotAllowedError');
+      const sentinel = new EventTarget();
+      sentinel.release = async () => { locks.released++; };
+      return sentinel;
+    } };
+  }
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
   const context = {
     console: { ...console, error: (...args) => startupErrors.push(args) }, URL, URLSearchParams, window,
     sessionStorage: { setItem: noop },
-    document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop,
-      createElement: () => ({ classList: { add: noop, remove: noop }, hidden: false, textContent: '' }) },
+    document,
     matchMedia: () => coarseQuery, innerWidth: width, innerHeight: height,
-    navigator: { vibrate: ms => vibrations.push(ms) },
-    cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: () => touch,
+    navigator,
+    cancelAnimationFrame: noop, FrameClock, FramePacer, FrameQuality, renderSize,
+    blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock, PlayGate, installTouchControls: () => touch,
     assistTarget, castAssist, strikeAssist, createHaptics, interaction, performInteraction,
     watchPhone, installPinchZoom: (_surface, zoomBy) => { pinch = zoomBy; },
     FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots,
@@ -173,9 +214,13 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       drawPreview() {}
     },
     GameAudio: class {
-      constructor() { this.music = { update: noop }; this.engine = { setListener: noop }; this.weather = {}; }
+      constructor() {
+        this.music = { update: noop };
+        this.engine = { setListener: noop, suspend: async () => { audio.suspends++; }, unlock: async () => { audio.unlocks++; } };
+        this.weather = {};
+      }
       play() {}
-      pause() {}
+      pause() { audio.paused = (audio.paused ?? 0) + 1; }
       update() {}
     },
     bindAudioControls: () => Object.assign(() => {}, { updateSong: noop }),
@@ -220,6 +265,22 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       window.dispatchEvent(new Event('resize'));
     },
     pinch: factor => pinch(factor),
+    window,
+    document,
+    gateButton,
+    gateAction,
+    fullscreenRow,
+    fullscreenRequests,
+    locks,
+    audio,
+    // Clicks the play card, as a tap does.
+    tapGate: () => gateButton.dispatchEvent(new Event('click')),
+    // Hides or shows the page, as switching apps or locking the phone does.
+    setHidden(hidden) {
+      document.hidden = hidden;
+      document.visibilityState = hidden ? 'hidden' : 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+    },
     navigatedTo: () => navigatedTo,
     touch,
     vibrations,

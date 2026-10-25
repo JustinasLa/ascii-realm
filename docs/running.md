@@ -44,6 +44,12 @@ waits for you to press **Join lobby**. You can also use the `?room=ABC234` and
 To play this checkout on a phone on the same Wi-Fi, open
 `http://<computer-LAN-IP>:8000` on the phone after starting the server.
 
+`manifest.webmanifest` and the icons in `assets/icons/` let phones install the
+game with **Add to Home Screen**; it opens standalone with the dark theme. Its
+start URL and scope are relative, so it works from a sub-path such as GitHub
+Pages. There is no service worker, so nothing is cached offline. Phones start
+behind a "Tap to play" card; tools and benchmarks add `?nogate` to skip it.
+
 Tests are described in the [README](../README.md#tests). Run `npm run bench` for
 the repeatable CPU benchmark; measurements, browser checks and reproduction
 instructions are in the [performance notes](performance.md).

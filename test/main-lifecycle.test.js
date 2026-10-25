@@ -200,7 +200,8 @@ test('a phone starts at its orientation zoom and framing, and a turn snaps to th
 });
 
 test('a pinched zoom is kept per orientation and comes back with it', async () => {
-  const { game, cellHeight, rotate, frame, pinch } = await loadGame(undefined, { phone: true, width: 393, height: 852 });
+  const { game, cellHeight, rotate, frame, pinch, tapGate } = await loadGame(undefined, { phone: true, width: 393, height: 852 });
+  tapGate();
   pinch(1.25);
   for (let i = 0; i < 120; i++) frame();
   assert.equal(cellHeight(), 8.125);
@@ -247,7 +248,7 @@ test('only a real change of phone mode moves the zoom, and never in the ruin pre
 
 test('a phone re-fits its default as browser bars resize the screen, but keeps a pinch', async () => {
   const { cellHeight, resizeTo, rotate, frame, pinch, game } = await loadGame(undefined,
-    { phone: true, width: 915, height: 356, dpr: 2.625 });
+    { phone: true, width: 915, height: 356, dpr: 2.625, href: 'http://localhost/?debug&nogate' });
   assert.equal(cellHeight(), 6);
   resizeTo(915, 412);
   const fitted = phoneDefaultCell('landscape', 915, 412, 2.625);

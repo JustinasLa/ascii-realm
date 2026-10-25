@@ -9,7 +9,8 @@ import { attachLobbies } from './lobbies.js';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.wav': 'audio/wav', '.json': 'application/json' };
+  '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.wav': 'audio/wav', '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json' };
 
 export function createGameServer({ root = ROOT, reconnectMs, maxRooms, maxPerAddress, roomsPerMinute } = {}) {
   const server = createServer(async (request, response) => {
@@ -29,7 +30,7 @@ export function createGameServer({ root = ROOT, reconnectMs, maxRooms, maxPerAdd
     // Serve game assets only: never expose server code, tests, Git files or dependencies.
     const parts = path.split('/').slice(1);
     if (path.includes('\\') || parts.some((p) => !p || p.startsWith('.'))
-      || !(path === '/index.html' || path === '/style.css' || ['src', 'assets', 'vendor', 'docs'].includes(parts[0]))
+      || !(['/index.html', '/style.css', '/manifest.webmanifest'].includes(path) || ['src', 'assets', 'vendor', 'docs'].includes(parts[0]))
       || !MIME[extname(path)]) {
       response.writeHead(404).end('Not found');
       return;
