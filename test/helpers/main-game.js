@@ -31,7 +31,7 @@ const inert = () => class {
 };
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
-  width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false } = {}) {
+  width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false, real = {} } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -252,6 +252,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     RemotePlayers: class { sync() {} update() {} visible() { return []; } },
     bindMultiplayerControls: noop,
   };
+  // `real` swaps stand-ins for real systems (or for test worlds).
+  Object.assign(context, real);
   runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), context);
   await Promise.resolve();
   await Promise.resolve();

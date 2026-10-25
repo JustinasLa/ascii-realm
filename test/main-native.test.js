@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CELL_CEILING, PHONE_PACING } from '../src/render/budget.js';
+import { GameAudio } from '../src/audio/audio.js';
+import { AudioEngine } from '../src/audio/engine.js';
+import { Debris } from '../src/world/debris.js';
+import { Fires } from '../src/world/fire.js';
+import { WeatherEffects } from '../src/world/weather.js';
+import { GRASS, WATER } from '../src/world/world.js';
 import { loadGame } from './helpers/main-game.js';
 
 const settle = () => new Promise(resolve => setImmediate(resolve));
@@ -29,36 +35,131 @@ test('a phone starts paused behind the card; the tap unlocks sound, goes full sc
   assert.ok(game.player.x > 0, 'the player walks after the tap');
 });
 
-test('behind the card every system steps by zero and the sound is paused', async () => {
+// A fake Web Audio context: enough for the engine's buses, counting every
+// node made so a sound started behind the card would show.
+class FakeAudioContext {
+  constructor() { this.state = 'suspended'; this.currentTime = 0; this.nodes = 0; this.destination = this.node(); }
+  node() {
+    this.nodes++;
+    const param = () => ({ value: 1, setValueAtTime() {}, setTargetAtTime() {}, linearRampToValueAtTime() {},
+      cancelScheduledValues() {}, exponentialRampToValueAtTime() {} });
+    return { gain: param(), pan: param(), connect() {}, disconnect() {} };
+  }
+  createGain() { return this.node(); }
+  createStereoPanner() { return this.node(); }
+  async resume() { this.state = 'running'; }
+  async suspend() { this.state = 'suspended'; }
+}
+
+// A meadow with a river running east a little south of the player, so the
+// real debris has water to drift on. Grass everywhere else.
+const RIVER_ROWS = [18, 26];
+class RiverWorld {
+  constructor() { this.spawn = { x: 0, y: 0 }; }
+  inRiver(y) { return y >= RIVER_ROWS[0] && y <= RIVER_ROWS[1]; }
+  isWalkable(x, y) { return !this.inRiver(y); }
+  typeAt(x, y) { return this.inRiver(y) ? WATER : GRASS; }
+  // Every chunk is generated, with no props on it.
+  loaded() { return { props: [] }; }
+  propsIn() { return []; }
+  propsInView() { return []; }
+  waterDepthAt(x, y) { return this.inRiver(y) ? 0.5 : 0; }
+  flowAt(x, y, out = {}) {
+    Object.assign(out, { x: 0, y: 0, speed: 0, river: 0, across: 0, secondary: 0, halfWidth: 0, bend: 0, depth: 0 });
+    if (!this.inRiver(y)) return out;
+    const mid = (RIVER_ROWS[0] + RIVER_ROWS[1]) / 2, half = (RIVER_ROWS[1] - RIVER_ROWS[0]) / 2;
+    return Object.assign(out, { x: 1, speed: 0.8, river: 1, across: (y - mid) / half, halfWidth: 3, depth: 0.5 });
+  }
+  get rivers() { return { near: () => [], stonesNear: () => [] }; }
+  trim() {}
+}
+
+// The plain numbers, strings and flags of an object, for comparing state.
+const plain = object => Object.fromEntries(Object.entries(object)
+  .filter(([, value]) => ['number', 'string', 'boolean'].includes(typeof value)));
+
+test('behind the card the real fire, weather, world clock, sound, debris and animals hold still', async () => {
+  const contexts = [];
+  // No herds of the land's own: only the two animals placed below.
+  const harness = await loadGame(walk, { ...phone, href: 'http://localhost/?debug&deer=0&rabbits=0', real: {
+    // The real systems; only their drawing is left out, as the renderer is a
+    // stand-in.
+    World: RiverWorld,
+    Fires: class extends Fires { draw() {} drawParticles() {} },
+    WeatherEffects: class extends WeatherEffects { drawSurface() {} drawAtmosphere() {} draw() {} },
+    Debris: class extends Debris { drawSurface() {} draw() {} reflect() {} },
+    GameAudio: class extends GameAudio {
+      constructor(world) {
+        super(world, new AudioEngine({ storage: null, contextFactory: () => {
+          const context = new FakeAudioContext();
+          contexts.push(context);
+          return context;
+        } }));
+      }
+    },
+  } });
+  const { game, frame, tapGate, setHidden } = harness;
+  const { world, player } = game;
+  // Start playing for the sound, then come back to the resume card.
+  tapGate();
+  await settle();
+  assert.equal(game.audio.context.state, 'running');
+  setHidden(true);
+  setHidden(false);
+  await settle();
+  assert.equal(game.native.gate.waiting, true);
+  assert.equal(game.audio.context.state, 'suspended', 'the card suspends the real engine');
+  // Something alive in every system: a burning fire, rain, a drifting log
+  // and a deer and a rabbit nearby.
+  game.sound.weather.preset = 'rain';
+  game.sound.weather.intensity = 1;
+  assert.ok(game.fires.add(world, player.x + 30, player.y - 6));
+  assert.ok(game.debris.spawn('log', { x: 40, y: 22, angle: 0 }));
+  game.animals.spawn('deer', { x: player.x + 20, y: player.y - 8, count: 1 });
+  game.animals.spawn('rabbit', { x: player.x - 20, y: player.y - 8, count: 1 });
+  for (let i = 0; i < 3; i++) frame();
+  const snapshot = () => ({
+    time: game.time,
+    player: [player.x, player.y],
+    fires: game.fires.list.map(plain),
+    sparks: game.fires.particles.map(plain),
+    weather: [game.weather.particles.map(plain), game.weather.crowns.map(plain), game.weather.settled.map(plain),
+      plain(game.weather)],
+    debris: game.debris.list.map(plain),
+    animals: game.animals.list.map(plain),
+    sound: { state: game.audio.context.state, nodes: contexts.map(c => c.nodes), music: plain(game.sound.music) },
+  });
+  const before = snapshot();
+  assert.equal(before.fires.length, 1);
+  assert.ok(before.weather[0].length > 0, 'rain is falling');
+  assert.equal(before.debris.length, 1);
+  assert.equal(before.animals.length, 2);
+  for (let i = 0; i < 300; i++) frame();
+  assert.deepEqual(snapshot(), before, 'five seconds behind the card change nothing');
+  // After the tap the same systems move on, so the check above can fail.
+  tapGate();
+  await settle();
+  for (let i = 0; i < 60; i++) frame();
+  const after = snapshot();
+  assert.ok(after.time > before.time, 'the world clock runs');
+  assert.equal(after.sound.state, 'running');
+  for (const name of ['fires', 'weather', 'debris', 'animals']) {
+    assert.notDeepEqual(after[name], before[name], `${name} move on after the tap`);
+  }
+});
+
+test('behind the card the sound is paused every frame and friends hold still', async () => {
   const harness = await loadGame(walk, phone);
   const { game, frame, audio, tapGate } = harness;
-  const steps = {};
-  const spy = (name, object, method = 'update') => {
-    const original = object[method];
-    object[method] = (dt, ...rest) => {
-      (steps[name] ??= []).push(dt);
-      return typeof original === 'function' ? original.call(object, dt, ...rest) : [];
-    };
-  };
-  for (const name of ['weather', 'fog', 'fires', 'dust', 'splashes', 'fireflies', 'ambience', 'torches', 'projectiles']) {
-    spy(name, game[name]);
-  }
   let remote = 0;
   game.remotePlayers.update = () => { remote++; };
   const pausedBefore = audio.paused ?? 0;
   for (let i = 0; i < 300; i++) frame();
-  for (const [name, list] of Object.entries(steps)) {
-    assert.ok(list.every(dt => dt === 0), `${name} steps by zero`);
-  }
-  assert.ok(steps.weather.length >= 300 && steps.fires.length >= 300, 'the scene is still drawn');
-  assert.equal(steps.projectiles, undefined, 'paused systems are not stepped at all');
   assert.equal(remote, 0, 'friends hold still too');
   assert.ok(audio.paused - pausedBefore >= 300);
   assert.equal(audio.suspends, 1, 'the card suspends the sound when shown');
   tapGate();
-  for (const list of Object.values(steps)) list.length = 0;
   frame();
-  assert.ok(steps.weather[0] > 0 && steps.fires[0] > 0);
   assert.equal(remote, 1);
 });
 

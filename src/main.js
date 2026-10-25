@@ -271,7 +271,7 @@ const debug = { player, camera, world, grass, splashes, debris, weather, fog, fi
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
-  audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0, rate: 60 } };
+  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0, rate: 60 } };
 if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
