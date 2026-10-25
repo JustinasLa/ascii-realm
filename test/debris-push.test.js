@@ -74,11 +74,18 @@ test('a piece weighs its wood: logs 2-9 kg, everything else under a kilogram', (
   close(logLo, 650 * Math.PI * 0.06 ** 2 * 0.3);
   close(logHi, 650 * Math.PI * 0.09 ** 2 * 0.55);
   assert.ok(logLo > 2.2 && logHi < 9.2);
-  close(range('branch')[1], 550 * Math.PI * 0.03 ** 2 * 0.4);
-  close(range('reeds')[0], 250 * Math.PI * 0.03 ** 2 * 0.15);
-  close(range('mat')[1], 300 * 0.25 * 0.2 * 0.03);
-  close(range('crate')[0], 500 * 0.18 * 0.1 * 0.02);
-  close(range('stave')[1], 600 * 0.28 * 0.08 * 0.025);
+  // Every kind at both ends of its size: rods are solid, slabs flat.
+  const want = {
+    branch: [550 * Math.PI * 0.03 ** 2 * 0.2, 550 * Math.PI * 0.03 ** 2 * 0.4],
+    reeds: [250 * Math.PI * 0.03 ** 2 * 0.15, 250 * Math.PI * 0.03 ** 2 * 0.28],
+    mat: [300 * 0.12 * 0.12 * 0.03, 300 * 0.25 * 0.2 * 0.03],
+    crate: [500 * 0.18 * 0.1 * 0.02, 500 * 0.26 * 0.1 * 0.02],
+    stave: [600 * 0.2 * 0.08 * 0.025, 600 * 0.28 * 0.08 * 0.025],
+  };
+  for (const [kind, [lo, hi]] of Object.entries(want)) {
+    close(range(kind)[0], lo);
+    close(range(kind)[1], hi);
+  }
   // The lightest log outweighs the heaviest of anything else.
   for (const kind of ['branch', 'mat', 'reeds', 'crate', 'stave']) {
     assert.ok(range(kind)[1] < 0.7, kind);
