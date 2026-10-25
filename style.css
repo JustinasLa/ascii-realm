@@ -435,24 +435,6 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .chat-system .chat-text { color: var(--quiet); }
 .chat-error .chat-text { color: var(--foe); }
 #chat-open { display: none; }
-
-/* Speech bubbles: plain ASCII boxes over the speakers' heads, on a light
-   shade so the grass shows through. Above the scene and its fog, below
-   every HUD layer, never in the way of a click or a tap. */
-#bubble-root { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; contain: strict; }
-.bubble { position: absolute; left: 0; top: 0; font: 12px/14px var(--font); white-space: pre; font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; will-change: transform; contain: layout style; }
-.bubble-covered { opacity: 0.6; }
-.bubble-probe { visibility: hidden; }
-.bubble-bold { font-weight: 700; }
-.bubble-row { display: block; background: rgba(6, 9, 10, 0.25); }
-.bubble-frame { color: var(--quiet); }
-.bubble-tail { color: var(--frame); }
-.bubble-text { color: var(--ink); }
-.bubble-rp .bubble-text { color: #e6d58a; }
-.bubble-shout .bubble-text { color: #e0b060; }
-.bubble-yell .bubble-text { color: #e07a6e; font-weight: 700; }
-.bubble-no-bold .bubble-yell .bubble-text { font-weight: 400; }
-.bubble-muffled .bubble-text { color: var(--quiet); font-style: italic; }
 /* Narrower windows raise the log above the quick slots, whose bar is 544px
    wide and 98px tall: 12px + 420px + 12px clear of it needs a window 1432px
    wide. The log also narrows so the centred prompts above the bar stay
@@ -471,6 +453,24 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 @media (pointer: coarse) {
   #chat { bottom: calc(max(132px, calc(env(safe-area-inset-bottom) + 132px)) + 108px); }
 }
+
+/* Speech bubbles: plain ASCII boxes over the speakers' heads, on a light
+   shade so the grass shows through. Above the scene and its fog, below
+   every HUD layer, never in the way of a click or a tap. */
+#bubble-root { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; contain: strict; }
+.bubble { position: absolute; left: 0; top: 0; font: 12px/14px var(--font); white-space: pre; font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; will-change: transform; contain: layout style; }
+.bubble-covered { opacity: 0.6; }
+.bubble-probe { visibility: hidden; }
+.bubble-bold { font-weight: 700; }
+.bubble-row { display: block; background: rgba(6, 9, 10, 0.25); }
+.bubble-frame { color: var(--quiet); }
+.bubble-tail { color: var(--frame); }
+.bubble-text { color: var(--ink); }
+.bubble-rp .bubble-text { color: #e6d58a; }
+.bubble-shout .bubble-text { color: #e0b060; }
+.bubble-yell .bubble-text { color: #e07a6e; font-weight: 700; }
+.bubble-no-bold .bubble-yell .bubble-text { font-weight: 400; }
+.bubble-muffled .bubble-text { color: var(--quiet); font-style: italic; }
 
 /* Phones: a coarse pointer with no hover and a short side of 600px or less
    (src/core/phone.js holds the same query). Only the stick, the action
