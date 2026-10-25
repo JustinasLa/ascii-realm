@@ -187,7 +187,8 @@ test('frames that no longer fit drop to a steady 30 after about two seconds, and
   const down = run(pacer, 10, 15);
   assert.equal(down.length, 1);
   assert.equal(down[0].rate, 30);
-  assert.ok(down[0].t >= 1.9 && down[0].t <= 2.6, `dropped after ${down[0].t}s`);
+  // Three settling seconds after loading, then two above 13 ms.
+  assert.ok(down[0].t >= 4.9 && down[0].t <= 5.6, `dropped after ${down[0].t}s`);
   const up = run(pacer, 30, 6);
   assert.equal(up.length, 1);
   assert.equal(up[0].rate, 60);
@@ -212,6 +213,38 @@ test('a phone that cannot hold 30 draws fewer cells, and gets them back before t
   assert.deepEqual(run(pacer, 20, 35), [], 'reduced once only');
   const recovery = run(pacer, 30, 5);
   assert.deepEqual(recovery.map(c => [c.rate, c.cells]), [[30, CELL_CEILING.mobile], [60, CELL_CEILING.mobile]]);
+});
+
+test('heavy frames while the page loads never set the pacing', () => {
+  const pacer = new FramePacer();
+  assert.deepEqual(run(pacer, 30, t => (t < PHONE_PACING.settleAfter ? 60 : 8)), []);
+  assert.equal(pacer.rate, 60);
+});
+
+test('a GPU starved at the lowest resolution gets a steady 30 that holds; cells still follow the work', () => {
+  const pacer = new FramePacer();
+  let t = 0;
+  const feed = (seconds, work, starved) => {
+    const changes = [];
+    for (const end = t + seconds; t < end;) {
+      const ms = 1000 / pacer.rate;
+      t += ms / 1000;
+      const change = pacer.sample(work, ms, starved);
+      if (change.rate || change.cells) changes.push({ rate: pacer.rate, cells: pacer.cellCeiling });
+    }
+    return changes;
+  };
+  assert.deepEqual(feed(10, 6, false), []);
+  assert.deepEqual(feed(10, 6, true), [{ rate: 30, cells: CELL_CEILING.mobile }]);
+  assert.equal(pacer.held, true);
+  assert.deepEqual(feed(60, 4, false), [], 'quick work alone cannot prove the GPU would keep up');
+  assert.deepEqual(feed(10, 40, false), [{ rate: 30, cells: PHONE_PACING.reducedCells }]);
+  assert.deepEqual(feed(20, 4, false), [{ rate: 30, cells: CELL_CEILING.mobile }]);
+  pacer.reset();
+  assert.equal(pacer.held, false);
+  const cpu = new FramePacer();
+  run(cpu, 10, 20);
+  assert.equal(cpu.held, false, 'a CPU-bound drop is not held');
 });
 
 test('single long stalls never change the pacing; a disabled pacer never acts; reset restores it', () => {

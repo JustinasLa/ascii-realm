@@ -304,6 +304,8 @@ const gate = new PlayGate({ button: document.getElementById('play-gate'), doc: d
     updateWakeLock();
     canvas.focus({ preventScroll: true });
   } });
+// Tools and benchmarks (?nogate) never see the card.
+const gated = () => device.phone && !params.has('nogate');
 function updateWakeLock() {
   wakeLock.want(device.phone && !gate.waiting && !debug.freeze && !builder.enabled);
 }
@@ -589,7 +591,7 @@ function onPhoneChange(phone) {
   applyFraming();
   resize();
 }
-if (device.phone && !params.has('nogate')) gate.show('start');
+if (gated()) gate.show('start');
 onPhoneChange(device.phone);
 
 // Skeletons rise from the ground around the player, goblins come running,
@@ -838,14 +840,14 @@ function suspend() {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     suspend();
-    if (device.phone) gate.show('resume');
+    if (gated()) gate.show('resume');
   } else {
     if (gate.waiting) void sound.engine.suspend();
     schedule();
   }
 });
 window.addEventListener('pagehide', (event) => {
-  if (event.persisted && device.phone) gate.show('resume');
+  if (event.persisted && gated()) gate.show('resume');
 });
 canvas.addEventListener('webglcontextlost', (e) => {
   e.preventDefault();
@@ -1265,7 +1267,9 @@ function frame(now) {
   const workMs = performance.now() - started;
   // Frames are measured by the real time between them, never the clamped
   // simulation step, so long frames are not hidden.
-  const paced = pacer.sample(workMs, clock.rawMs);
+  // A GPU still late at the lowest backing resolution is starved.
+  const starved = quality.scale <= quality.minimum && quality.average > 0.7;
+  const paced = pacer.sample(workMs, clock.rawMs, starved);
   if (paced.rate) clock.setRate(pacer.rate);
   if (quality.sample(workMs, clock.rawMs / 1000, clock.period) || paced.cells) resize();
   debug.metrics.frames++;

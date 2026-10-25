@@ -106,9 +106,15 @@ export class FrameClock {
 // 60th of a second, and returns once it fits with room to spare. A phone
 // that cannot hold even 30 draws fewer, larger cells as a last resort; the
 // zoom stays the player's and only the hard ceiling moves, as with large
-// screens. One change at a time, each after a sustained spell.
+// screens. One change at a time, each after a sustained spell, and none in
+// the first seconds after loading, whose frames build the world.
+//
+// A graphics card that cannot keep pace even at the lowest backing
+// resolution (`starved`) also gets the even 30: fewer frames queued behind
+// it arrive more evenly. Its own time per frame cannot be measured under the
+// cap, so that 30 holds until the page is reloaded.
 export const PHONE_PACING = { fastHz: 60, steadyHz: 30, fitMs: 13, refitMs: 9, overMs: 30,
-  downAfter: 2, upAfter: 8, cellsAfter: 6, reducedCells: 12_000 };
+  downAfter: 2, upAfter: 8, cellsAfter: 6, reducedCells: 12_000, settleAfter: 3 };
 
 export class FramePacer {
   constructor({ enabled = () => true, ...tuning } = {}) {
@@ -122,6 +128,9 @@ export class FramePacer {
     this.cellCeiling = CELL_CEILING.mobile;
     // Work per rendered frame, smoothed over about a second.
     this.work = null;
+    // Seconds sampled since the reset, and whether 30 was chosen for the GPU.
+    this.warm = 0;
+    this.held = false;
     this.slow = 0;
     this.fast = 0;
     this.over = 0;
@@ -131,14 +140,17 @@ export class FramePacer {
 
   // Work is measured per rendered frame and does not depend on the cap, so
   // the thresholds compare like with like at either rate.
-  sample(workMs, rawMs) {
+  sample(workMs, rawMs, starved = false) {
     const change = { rate: false, cells: false };
     if (!this.enabled() || !(rawMs > 0) || rawMs > STALL_MS) return change;
     const dt = rawMs / 1000;
+    this.warm += dt;
+    if (this.warm < this.settleAfter) return change;
     this.work = this.work === null ? workMs : this.work + (workMs - this.work) * (1 - Math.exp(-dt));
     if (this.rate === this.fastHz) {
-      this.slow = this.work > this.fitMs ? this.slow + dt : 0;
+      this.slow = this.work > this.fitMs || starved ? this.slow + dt : 0;
       if (this.slow >= this.downAfter) {
+        this.held = this.work <= this.fitMs;
         this.rate = this.steadyHz;
         this.slow = this.fast = this.over = 0;
         change.rate = true;
@@ -147,16 +159,15 @@ export class FramePacer {
     }
     this.fast = this.work < this.refitMs ? this.fast + dt : 0;
     this.over = this.work > this.overMs ? this.over + dt : 0;
-    if (this.fast >= this.upAfter) {
-      // Cells come back before the rate rises.
+    // Cells come back before the rate rises.
+    if (this.fast >= this.upAfter && this.reduced) {
       this.fast = this.over = 0;
-      if (this.reduced) {
-        this.cellCeiling = CELL_CEILING.mobile;
-        change.cells = true;
-      } else {
-        this.rate = this.fastHz;
-        change.rate = true;
-      }
+      this.cellCeiling = CELL_CEILING.mobile;
+      change.cells = true;
+    } else if (this.fast >= this.upAfter && !this.held) {
+      this.fast = this.over = 0;
+      this.rate = this.fastHz;
+      change.rate = true;
     } else if (this.over >= this.cellsAfter && !this.reduced) {
       this.over = 0;
       this.cellCeiling = this.reducedCells;

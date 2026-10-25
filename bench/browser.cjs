@@ -77,8 +77,35 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
         audio: game.audio.context?.state ?? 'none' }));
       assert.deepEqual([started.waiting, started.hidden, started.fullscreen, started.held], [false, true, 1, true]);
       assert.ok(started.time > shown.time, 'play runs after the tap');
-      results.checks.push({ gate: { shown, started } });
+      // Hidden, the loop, the sound and the wake lock stop; it comes back
+      // paused behind the resume card until a tap.
+      const foreground = await browser.newPage();
+      await foreground.bringToFront();
+      await wait(200);
+      const hidden = await gated.evaluate(() => ({ hidden: document.hidden, frames: game.metrics.frames, held: game.native.wakeLock.held,
+        released: window.native.released, audio: game.audio.context?.state ?? 'none' }));
+      await wait(300);
+      assert.equal(await gated.evaluate(() => game.metrics.frames), hidden.frames, 'the loop stops while hidden');
+      assert.deepEqual([hidden.hidden, hidden.held, hidden.released], [true, false, 1]);
+      assert.ok(['suspended', 'none'].includes(hidden.audio), `sound ${hidden.audio}`);
+      await foreground.close();
+      await gated.bringToFront();
+      await wait(400);
+      const resume = await gated.evaluate(() => ({ waiting: game.native.gate.waiting, label: document.querySelector('.play-gate-action').textContent,
+        time: game.player.time, held: game.native.wakeLock.held, audio: game.audio.context?.state ?? 'none' }));
+      assert.deepEqual([resume.waiting, resume.label, resume.held], [true, 'TAP TO RESUME', false]);
+      assert.ok(['suspended', 'none'].includes(resume.audio), `sound ${resume.audio} behind the card`);
+      await gated.screenshot({ path: join(output, 'resume.png') });
+      await wait(300);
+      assert.equal(await gated.evaluate(() => game.player.time), resume.time, 'paused behind the card');
+      await gated.touchscreen.tap(196, 426);
+      await wait(400);
+      const resumed = await gated.evaluate(() => ({ waiting: game.native.gate.waiting, time: game.player.time, held: game.native.wakeLock.held }));
+      assert.deepEqual([resumed.waiting, resumed.held], [false, true]);
+      assert.ok(resumed.time > resume.time);
+      results.checks.push({ gate: { shown, started, hidden, resume, resumed } });
       await gated.close();
+      await page.bringToFront();
     }
     // Every phone check below depends on touch emulation reporting a phone.
     assert.deepEqual(await page.evaluate(() => [matchMedia('(hover: none)').matches,
@@ -623,21 +650,12 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
     assert.ok(paused.hidden);
     assert.equal(pausedAfter.frames,paused.frames);
     assert.equal(pausedAfter.time,paused.time);
-    assert.equal(await page.evaluate(() => game.audio.context?.state ?? 'suspended'), 'suspended');
     await foreground.close();
     await page.bringToFront();
     await wait(100);
     assert.ok(await page.evaluate(n=>game.metrics.frames>n,paused.frames));
-    // A phone comes back paused behind the resume card, the sound waiting.
-    const resume = await page.evaluate(() => ({ waiting: game.native.gate.waiting, label: document.querySelector('.play-gate-action').textContent,
-      time: game.player.time, audio: game.audio.context?.state ?? 'suspended', interval: game.metrics.intervalMs }));
-    assert.deepEqual([resume.waiting, resume.label, resume.time, resume.audio], [true, 'TAP TO RESUME', paused.time, 'suspended']);
-    await page.tap('#play-gate');
-    await wait(300);
-    const resumed = await page.evaluate(() => ({ waiting: game.native.gate.waiting, time: game.player.time }));
-    assert.equal(resumed.waiting, false);
-    assert.ok(resumed.time > paused.time);
-    results.checks.push({backgroundPause:true, resume, resumed});
+    assert.equal(await page.evaluate(() => game.native.gate.waiting), false, '?nogate never shows the resume card');
+    results.checks.push({backgroundPause:true});
     await page.evaluate(()=>{window.lose=game.renderer.gl.getExtension('WEBGL_lose_context');window.lose.loseContext();});
     await page.waitForFunction(()=>!document.getElementById('status').hidden);
     const lost = await page.evaluate(()=>game.metrics.frames);

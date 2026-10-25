@@ -48,7 +48,8 @@ To play this checkout on a phone on the same Wi-Fi, open
 game with **Add to Home Screen**; it opens standalone with the dark theme. Its
 start URL and scope are relative, so it works from a sub-path such as GitHub
 Pages. There is no service worker, so nothing is cached offline. Phones start
-behind a "Tap to play" card; tools and benchmarks add `?nogate` to skip it.
+behind a "Tap to play" card and come back from being hidden behind "Tap to
+resume"; tools and benchmarks add `?nogate` to skip both.
 
 Tests are described in the [README](../README.md#tests). Run `npm run bench` for
 the repeatable CPU benchmark; measurements, browser checks and reproduction

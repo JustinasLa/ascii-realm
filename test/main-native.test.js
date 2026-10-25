@@ -105,6 +105,10 @@ test('a page kept in the back-forward cache comes back behind the resume card, w
 test('?nogate skips the card; installed to the home screen the tap does not ask for full screen', async () => {
   const tools = await loadGame(walk, { ...phone, href: 'http://localhost/?debug&nogate' });
   assert.equal(tools.game.native.gate.waiting, false);
+  tools.setHidden(true);
+  tools.setHidden(false);
+  tools.window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+  assert.equal(tools.game.native.gate.waiting, false, 'nor the resume card');
   tools.frame();
   await settle();
   assert.equal(tools.game.native.wakeLock.held, true);
@@ -166,7 +170,7 @@ test('slow phone frames drop the cap to 30, then to fewer cells, through the rea
   pacer.fitMs = -1;
   pacer.overMs = -1;
   pacer.refitMs = -2;
-  for (let i = 0; i < 150; i++) frame();
+  for (let i = 0; i < 330; i++) frame();
   assert.equal(game.metrics.rate, 30);
   const before = game.metrics.frames;
   for (let i = 0; i < 60; i++) frame();
@@ -180,6 +184,18 @@ test('slow phone frames drop the cap to 30, then to fewer cells, through the rea
   for (let i = 0; i < 60 * PHONE_PACING.upAfter + 60; i++) frame();
   assert.equal(pacer.cellCeiling, CELL_CEILING.mobile);
   assert.ok(Math.abs(cellHeight() - cell) < 1e-9, 'cells come back first');
+});
+
+test('a phone GPU late even at the lowest resolution gets the steady 30 through the real loop', async () => {
+  const { game, frame } = await loadGame(walk, { ...phone, href: 'http://localhost/?debug&nogate' });
+  for (let i = 0; i < 400; i++) frame();
+  assert.equal(game.metrics.rate, 60, 'quick work, no GPU trouble');
+  game.quality.scale = game.quality.minimum;
+  game.quality.sample = () => false;
+  game.quality.average = 1;
+  for (let i = 0; i < 180; i++) frame();
+  assert.equal(game.metrics.rate, 30);
+  assert.equal(game.native.pacer.held, true);
 });
 
 test('the Full screen row follows the Fullscreen API and toggles it', async () => {

@@ -21,11 +21,12 @@ export function blockPageGestures(doc) {
   };
 }
 
-// Launched from the home screen, the game already fills the screen.
+// Launched from the home screen, the game already fills the screen. (The
+// display-mode "fullscreen" query is not asked: it also matches while the
+// page is merely in element full screen, where the menu must still offer
+// to leave it.)
 export function isStandalone(win) {
-  return Boolean(win.matchMedia?.('(display-mode: standalone)')?.matches
-    || win.matchMedia?.('(display-mode: fullscreen)')?.matches
-    || win.navigator?.standalone === true);
+  return Boolean(win.matchMedia?.('(display-mode: standalone)')?.matches || win.navigator?.standalone === true);
 }
 
 // The Fullscreen API, prefixed or not, or null where there is none (iPhone

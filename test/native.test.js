@@ -35,10 +35,10 @@ test('page pinch gestures and double taps outside text fields are cancelled unti
   assert.ok(!after.defaultPrevented);
 });
 
-test('standalone is any of the installed display modes or the iOS flag', () => {
+test('standalone is the installed display mode or the iOS flag, never mere full screen', () => {
   const win = (modes = [], standalone) => ({ matchMedia: q => ({ matches: modes.includes(q) }), navigator: { standalone } });
   assert.equal(isStandalone(win(['(display-mode: standalone)'])), true);
-  assert.equal(isStandalone(win(['(display-mode: fullscreen)'])), true);
+  assert.equal(isStandalone(win(['(display-mode: fullscreen)'])), false);
   assert.equal(isStandalone(win([], true)), true);
   assert.equal(isStandalone(win()), false);
   assert.equal(isStandalone({}), false);
