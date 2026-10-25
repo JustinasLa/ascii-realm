@@ -228,6 +228,32 @@ test('the wheel learns whether a lift is still a tap, and loses a finger CAST lo
   assert.deepEqual(drops, [5]);
 });
 
+test('leaving the page after a hold puts the wheel away with the finger', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { touch, cast } = await installPage();
+  const drops = [];
+  touch.setCastHold(() => true, id => drops.push(id));
+  const leaves = [
+    () => window.dispatchEvent(new Event('blur')),
+    () => window.dispatchEvent(new Event('resize')),
+    () => { document.hidden = true; document.dispatchEvent(new Event('visibilitychange')); document.hidden = false; },
+  ];
+  for (const [i, leave] of leaves.entries()) {
+    pointer(cast, 'pointerdown', 10 + i);
+    t.mock.timers.tick(400);
+    leave();
+    assert.equal(cast.classList.contains('pressed'), false);
+    pointer(cast, 'lostpointercapture', 10 + i);
+  }
+  assert.deepEqual(drops, [10, 11, 12], 'each leave drops the held finger once');
+  // Leaving before the hold, or with nothing held, drops nothing.
+  pointer(cast, 'pointerdown', 20);
+  t.mock.timers.tick(100);
+  for (const leave of leaves) leave();
+  t.mock.timers.tick(1000);
+  assert.deepEqual(drops, [10, 11, 12]);
+});
+
 test('a hold the wheel refuses, or a cancelled press, casts nothing', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { touch, cast, input } = await installPage();

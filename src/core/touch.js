@@ -131,16 +131,18 @@ function castButton(button) {
     if (isTap(e)) input.tapped.add('TouchCast');
     reset();
   });
+  // Forgetting the finger after the hold gave it to the wheel puts the
+  // wheel away too, or nothing would be left to close it.
+  const forget = () => {
+    if (pointer !== null && timer === null) drop(pointer);
+    reset();
+  };
   for (const type of ['pointercancel', 'lostpointercapture']) {
-    button.addEventListener(type, (e) => {
-      if (e.pointerId !== pointer) return;
-      if (timer === null) drop(pointer);
-      reset();
-    });
+    button.addEventListener(type, (e) => { if (e.pointerId === pointer) forget(); });
   }
   button.addEventListener('click', (e) => { if (e.detail === 0) input.tapped.add('TouchCast'); });
-  window.addEventListener('blur', reset);
-  window.addEventListener('resize', reset);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
+  window.addEventListener('blur', forget);
+  window.addEventListener('resize', forget);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) forget(); });
   return { setHold: (open, cancel = () => {}) => { hold = open; drop = cancel; } };
 }
