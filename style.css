@@ -51,6 +51,11 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-mana .hud-vital-filled { background: repeating-linear-gradient(90deg, var(--mana) 0 3px, transparent 3px 4px); }
 .hud-frame-note { position: static; max-width: none; margin-top: 3px; padding: 0; color: var(--muted); background: none; border: 0; font: 11px/1.4 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud-frame-note:empty { display: none; }
+/* The pouch: the balance in the coin's two golds, brighter for a moment
+   after a gain (a colour change only). */
+.hud-purse { margin-top: 3px; font: 11px/1.4 var(--font); color: var(--muted); white-space: nowrap; }
+.hud-purse-value { color: #b39122; transition: color 160ms; }
+.hud-purse-unit, .hud-purse.gain .hud-purse-value { color: #dbaf1d; }
 .hud-party { display: flex; flex-direction: column; gap: 6px; }
 .hud-party:empty { display: none; }
 .hud-party-tab { align-self: flex-start; padding: 1px 6px; background: var(--surface); border: 1px solid var(--frame); font-size: 11px; }
@@ -77,6 +82,7 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-toasts { display: grid; gap: 4px; }
 .hud-toast { padding: 5px 8px; background: var(--surface); border: 1px solid var(--line); font-size: 11px; overflow-wrap: anywhere; }
 .hud-toast[data-kind="error"], .hud-toast[data-kind="damage"] { border-color: var(--frame); border-left-width: 3px; }
+.hud-toast[data-kind="coin"] { border-left: 3px solid #dbaf1d; color: #dbaf1d; }
 .hud-damage-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .hud-damage { position: absolute; color: var(--accent); font-size: 14px; font-weight: 600; text-shadow: 1px 1px #000, -1px -1px #000; white-space: nowrap; }
 /* A wounded enemy's health: the status frame's segmented bar on its own. */
@@ -383,7 +389,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #fire-status { bottom: 198px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hud, #fire-status, #inventory-root::before { transition: none; }
+  .hud, #fire-status, #inventory-root::before, .hud-purse-value { transition: none; }
 }
 /* The bound rune sits above the hotbar; the rune wheel picks it. */
 
@@ -425,6 +431,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-vital-label { font-size: 9px; line-height: 10px; }
   .hud-vital-value { display: none; }
   .hud-vital-bar { height: 5px; }
+  .hud-purse { margin-top: 1px; font-size: 10px; line-height: 11px; }
   .hud-toast { padding: 2px 6px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
   .hud-toast:nth-last-child(n+3) { display: none; }
 
@@ -472,9 +479,9 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-target { width: min(220px, calc(100vw - max(8px, env(safe-area-inset-left)) - min(40vw, 320px) - max(4px, env(safe-area-inset-right)) - 60px)); }
 }
 /* Portrait phones too narrow for a 120px target strip beside the vitals
-   (100vw - 46vw - 72px < 120px) put it on a second row under them, and the
-   notices below move down to make room. */
+   (100vw - 46vw - 72px < 120px) put it on a second row under them (and
+   the pouch line), and the notices below move down to make room. */
 @media (pointer: coarse) and (hover: none) and (max-width: 355px) and (orientation: portrait) {
-  .hud-target { top: calc(max(6px, env(safe-area-inset-top)) + 34px); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(46vw, 200px); }
+  .hud-target { top: calc(max(6px, env(safe-area-inset-top)) + 46px); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(46vw, 200px); }
   .hud:has(.hud-target:not([hidden])) .hud-toasts { margin-top: 30px; }
 }

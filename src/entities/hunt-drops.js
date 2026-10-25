@@ -105,8 +105,15 @@ export class HuntDrops {
       this.laid.set(item, this.items.time);
       laid.push(item);
     });
-    while (this.laid.size > MAX_STACKS) this.forget(this.laid.keys().next().value);
+    this.trim();
     return laid;
+  }
+
+  // Forgets the stacks already picked up, then the oldest past MAX_STACKS,
+  // so a stack taken this very frame never costs one still lying its room.
+  trim() {
+    for (const item of this.laid.keys()) if (item.count <= 0) this.forget(item);
+    while (this.laid.size > MAX_STACKS) this.forget(this.laid.keys().next().value);
   }
 
   forget(item) {

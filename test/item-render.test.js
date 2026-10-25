@@ -249,3 +249,17 @@ test('distant and invalid entities produce no writes', () => {
   drawResource(r, view, { kind: 'grass', x: 0, y: -1000 }, 1, capture);
   assert.equal(writes.length, 0);
 });
+
+test('coin lies as its own glyph, gold from a denar up and silver below, never a fog o', () => {
+  const draw = (count) => {
+    const writes = [];
+    drawItem(buffer(), view, { ...item, uid: `coin-${count}`, id: 'denars', count }, 0, (...args) => writes.push(args));
+    return writes;
+  };
+  const gold = draw(100);
+  const silver = draw(73);
+  assert.equal(gold.length, 1);
+  assert.equal(gold[0][3], glyph('*'));
+  assert.ok(gold[0][4] > gold[0][6] * 2, 'gold');
+  assert.ok(Math.abs(silver[0][4] - silver[0][6]) < 20, 'silver below a denar');
+});

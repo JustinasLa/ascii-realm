@@ -13,7 +13,7 @@
 | `T` | Stow the torch or draw a fresh lit torch |
 | `G` | Throw the carried torch in the direction faced; dry ground ignites on landing |
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
-| `E` | Disturb a nearby glowcap mushroom to release glowing spores |
+| `E` | Pick up the nearest ground item, or else disturb a nearby glowcap mushroom to release glowing spores (the same as TAKE / SPORES; fires are left to `C`) |
 | `R` / right click | Cast the rune bound to `R` towards the cursor; the caster turns to face it |
 | Hold middle mouse | Open the rune wheel: point at a school (Oseni, Seithr, Cerrith, Mitlan), then at a rune, and let go to bind it to `R`. Pushing out through a school opens it in one motion; letting go on a school keeps its runes open for a click. Right click or the centre goes back, `Escape` closes |
 | `M` | Mute or unmute all sound |
@@ -58,12 +58,21 @@ A monster you helped bring down, with at least 1 % of its health taken by
 your own sword or runes, may leave loot on dry ground beside its body, where
 you can walk to it: a skeleton always leaves a bone or two, often an arrow or
 two, and now and then an outlaw's hood; a goblin or an elf sometimes leaves an
-iron ingot, and a troll sometimes four. A monster slain by a friend's rune
+iron ingot or a denar, and a troll sometimes four of either. A monster slain by a friend's rune
 alone leaves nothing on your screen. Every stack on the ground, the hunt's
 included, has its name shown above it. Stacks within 4 m are always named;
 farther ones whose names would overlap share one label ("Bone x2, Arrow x1 +2
 more"). Walk close to draw them in, or use E / TAKE. A full bag leaves them
 lying with the name dimmed. They last five minutes.
+
+## Denars
+
+Coins sometimes lie among a slain monster's loot, and felling a tree now and
+then turns up a few beside the stump. Each shows its value above it, such as
+`0.73d`. Walk over them or use E / TAKE: they go straight to your pouch, shown
+under your health as "Pouch 0.73d", even when the bag is full. Each gain shows
+a `+0.73d` notice and the pouch line brightens for a moment. The pouch is kept
+on this device between visits, and you keep it when you are struck down.
 
 ## Touch
 

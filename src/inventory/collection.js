@@ -1,5 +1,6 @@
 import { ASPECT, WATER } from '../world/world.js';
 import { ITEMS } from './items.js';
+import { DENARS, denars } from './wallet.js';
 
 const TOUCH_RADIUS = 1.3;
 const MAGNET_RADIUS = 6;
@@ -14,15 +15,19 @@ const positionValid = (position) => Number.isFinite(position?.x) && Number.isFin
 const distance = (a, b) => Math.hypot((a.x - b.x) * ASPECT, a.y - b.y);
 const validCount = (count) => Number.isSafeInteger(count) && count > 0;
 const result = (status, message, details = {}) => ({ ok: false, status, message, ...details });
+const coin = (item) => item.id === DENARS;
 
 // Collection owns transfers between the bag and the persistent loose stacks.
 // Effects consume its events only after an actual, possibly partial transfer.
+// Coin skips the bag: with a wallet it goes to the pouch, however full the
+// bag is; without one it is left lying.
 export class Collection {
-  constructor(world, inventory, groundItems, harvesting = null) {
+  constructor(world, inventory, groundItems, harvesting = null, wallet = null) {
     this.world = world;
     this.inventory = inventory;
     this.items = groundItems;
     this.harvesting = harvesting;
+    this.wallet = wallet;
     this.events = [];
     this.time = 0;
     this.blocked = false;
@@ -78,8 +83,14 @@ export class Collection {
     }
   }
 
+  // Whether this stack has somewhere to go: the pouch for coin, else the bag.
+  takes(item) {
+    return coin(item) ? !!this.wallet : this.inventory.spaceFor(item.id, item.count) > 0;
+  }
+
   available(item, player, { manual = false } = {}) {
     if (!Object.hasOwn(ITEMS, item.id) || !validCount(item.count) || !positionValid(item)) return false;
+    if (coin(item) && !this.wallet) return false;
     if (Number.isFinite(item.pickupAfter) && item.pickupAfter > this.currentTime) return false;
     if (!manual && positionValid(item.dropOrigin)) {
       const radius = Number.isFinite(item.dropOrigin.radius) && item.dropOrigin.radius > 0
@@ -96,12 +107,27 @@ export class Collection {
     );
     return nearbyItems
       .filter((item) => this.available(item, player, { manual }) && distance(item, player) <= MAGNET_RADIUS
-        && (!requireSpace || this.inventory.spaceFor(item.id, item.count) > 0)
+        && (!requireSpace || this.takes(item))
         && this.pathClear(item, player))
       .sort((a, b) => distance(a, player) - distance(b, player));
   }
 
+  // Pays a coin stack into the pouch once, under its own id. Paid or
+  // refused, it leaves the ground with its count spent, so it never lies
+  // as free money nor counts against the drop store's room.
+  earn(item) {
+    const cents = item.count;
+    const paid = this.wallet.earn(`coin:${item.uid}`, cents);
+    item.count = 0;
+    this.items.remove(item);
+    this.drops.delete(item);
+    if (!paid) return result('paid', 'Those coins were already taken.', { id: DENARS, cents: 0 });
+    this.events.push({ type: 'coin', cents, x: item.x, y: item.y });
+    return result('earned', `+${denars(cents)}d`, { ok: true, id: DENARS, cents });
+  }
+
   transfer(item) {
+    if (coin(item)) return this.earn(item);
     const accepted = this.inventory.add(item.id, item.count);
     if (!accepted) return result('full', 'Inventory full — make room before collecting.', { id: item.id, count: 0 });
     item.count -= accepted;
@@ -140,7 +166,7 @@ export class Collection {
     for (const item of candidates) this.releaseDropOrigin(item, player);
 
     for (const item of this.nearby(player, { candidates, requireSpace: true })) {
-      if (this.inventory.spaceFor(item.id, item.count) <= 0) continue;
+      if (!this.takes(item)) continue;
       let gap = distance(item, player);
       if (gap > TOUCH_RADIUS && elapsed > 0) {
         const amount = Math.min(gap, MAGNET_SPEED * elapsed);
@@ -164,6 +190,7 @@ export class Collection {
   prompt(player) {
     if (!this.canCollect(player)) return '';
     const { item, resource } = this.interactionTarget(player);
+    if (item && coin(item)) return `E Pick up ${denars(item.count)}d`;
     if (item) {
       const name = `${ITEMS[item.id].name}${item.count > 1 ? ` x${item.count}` : ''}`;
       return this.inventory.spaceFor(item.id, item.count) > 0 ? `E Pick up ${name}` : `Inventory full · ${name}`;

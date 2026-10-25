@@ -1,4 +1,5 @@
 import { ITEMS } from '../inventory/items.js';
+import { coinOf, DENARS } from '../inventory/wallet.js';
 import { hash2 } from '../core/rng.js';
 import { putCell } from '../render/cells.js';
 import { dg, glyph, over } from '../render/glyphs.js';
@@ -39,12 +40,15 @@ const ITEM_ART = {
   staminaTonic: { base: 'props.item.flask', c: [168, 186, 196], layer: 'props.item.liquid' },
   bandage: { base: 'props.item.roll' },
 };
+// Coin lies as its own glyph, never a pebble (pebbles read as fog's `o`):
+// gold, or silver when worth less than a denar.
+const SILVER = [198, 202, 210];
 
 // The base and layer glyphs and colours for one loose item, kept per item.
 const arts = new WeakMap();
 function itemArt(item, definition) {
   const art = Object.hasOwn(ITEM_ART, item.id) ? ITEM_ART[item.id] : null;
-  const colour = definition.colour;
+  const colour = item.id === DENARS && coinOf(item.count).cents < 100 ? SILVER : definition.colour;
   if (!art) {
     const body = typeof definition.groundGlyph === 'number' ? definition.groundGlyph : glyph(definition.groundGlyph);
     return { base: body, c: colour, layer: null };

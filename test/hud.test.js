@@ -4,6 +4,7 @@ import { Player } from '../src/entities/player.js';
 import { Inventory } from '../src/inventory/inventory.js';
 import { ITEMS } from '../src/inventory/items.js';
 import { Hud } from '../src/ui/hud.js';
+import { Wallet } from '../src/inventory/wallet.js';
 import { allElements, byClass, installDocument } from './helpers/dom.js';
 
 // Cell sizes and scroll offsets are device pixels, while the overlay uses
@@ -361,4 +362,54 @@ test('stacks lying on the ground are named above them, dimmed when the bag is fu
   hud.setLoot(null);
   hud.update(0, view);
   assert.equal(byClass(document.body, 'hud-loot-label').length, 0);
+});
+
+test('the pouch shows its balance under the bag and brightens for a moment on each gain', (t) => {
+  const wallet = new Wallet({ storage: null });
+  const { document, hud } = mount(t, { wallet });
+  const purse = byClass(document.body, 'hud-purse')[0];
+  assert.equal(purse.hidden, false);
+  assert.equal(purse.textContent, 'Pouch 0.00d');
+  assert.equal(purse.getAttribute('aria-label'), 'Pouch 0.00 denars');
+  wallet.earn('coin:1', 73);
+  hud.update(0, view);
+  assert.equal(byClass(purse, 'hud-purse-value')[0].textContent, '0.73');
+
+  hud.earned(73);
+  const toast = byClass(document.body, 'hud-toast').at(-1);
+  assert.equal(toast.textContent, '+0.73d');
+  assert.equal(toast.dataset.kind, 'coin');
+  assert.ok(purse.classList.contains('gain'));
+  for (let i = 0; i < 11; i++) hud.update(0.1, view);
+  assert.ok(purse.classList.contains('gain'), 'still bright at 1.1 s');
+  hud.update(0.2, view);
+  assert.ok(!purse.classList.contains('gain'), 'at rest after 1.2 s');
+
+  // A coin event tells the same way; nonsense gains tell nothing.
+  hud.showEvent({ type: 'coin', cents: 5 });
+  assert.equal(byClass(document.body, 'hud-toast').at(-1).textContent, '+0.05d');
+  const toasts = byClass(document.body, 'hud-toast').length;
+  for (const bad of [0, -3, 1.5, undefined]) hud.earned(bad);
+  assert.equal(byClass(document.body, 'hud-toast').length, toasts);
+});
+
+test('an unchanged pouch leaves its DOM untouched, and without a pouch the line is hidden', (t) => {
+  const wallet = new Wallet({ storage: null });
+  const { document, hud } = mount(t, { wallet });
+  const purse = byClass(document.body, 'hud-purse')[0];
+  const value = byClass(purse, 'hud-purse-value')[0];
+  const writes = [];
+  const setAttribute = purse.setAttribute.bind(purse);
+  purse.setAttribute = (name, v) => { writes.push(name); setAttribute(name, v); };
+  Object.defineProperty(value, 'textContent', { get: () => '0.00', set: () => writes.push('text') });
+  for (let i = 0; i < 3; i++) hud.update(0.1, view);
+  assert.deepEqual(writes, []);
+
+  const other = mount(t);
+  const bare = byClass(other.document.body, 'hud-purse')[0];
+  assert.equal(bare.hidden, true);
+  other.hud.earned(100);
+  assert.equal(byClass(other.document.body, 'hud-toast').at(-1).textContent, '+1.00d');
+  other.hud.destroy();
+  other.hud.earned(100);
 });
