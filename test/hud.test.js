@@ -343,3 +343,22 @@ test('an unchanged target leaves the frame\'s DOM untouched', (t) => {
   assert.deepEqual(writes, []);
   assert.equal(byClass(frame, 'hud-target-health')[0].getAttribute('aria-valuetext'), 'Goblin, 22.4 of 35');
 });
+
+test('stacks lying on the ground are named above them, dimmed when the bag is full, gone once taken', (t) => {
+  const { document, hud, player, inventory } = mount(t);
+  const bone = { uid: 'drop:1', id: 'bone', count: 2, x: 140, y: 210 };
+  hud.setLoot([bone], player, inventory);
+  hud.update(0, view);
+  const [label] = byClass(document.body, 'hud-loot-label');
+  assert.equal(label.textContent, 'Bone x2');
+  assert.match(label.style.transform, /translate\([-\d.]+px, [-\d.]+px\) translate\(-50%, -100%\)/);
+  assert.match(label.style.color, /^rgb\(/);
+  assert.equal(label.classList.contains('full'), false);
+  inventory.spaceFor = () => 0;
+  hud.update(0, view);
+  assert.equal(byClass(document.body, 'hud-loot-label')[0], label, 'reused');
+  assert.equal(label.classList.contains('full'), true);
+  hud.setLoot(null);
+  hud.update(0, view);
+  assert.equal(byClass(document.body, 'hud-loot-label').length, 0);
+});

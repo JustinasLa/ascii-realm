@@ -4,6 +4,8 @@ import { runInNewContext } from 'node:vm';
 import { Player } from '../../src/entities/player.js';
 import { Animals } from '../../src/entities/animals.js';
 import { HuntDrops } from '../../src/entities/hunt-drops.js';
+import { layLoot, LootCredit, rollLoot } from '../../src/world/loot.js';
+import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
@@ -160,7 +162,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     setGameplayBlocked: value => { blocked = value; taps.clear(); held.clear(); },
     Inventory, ITEMS, Hud: inert(),
     InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
-    GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, drawItem: noop, drawResource: noop,
+    GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, LootCredit, rollLoot, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
       constructor() { super(); this.spores = []; this.ambient = []; }
       nearby() { return null; }
