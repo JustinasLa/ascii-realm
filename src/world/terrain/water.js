@@ -20,7 +20,7 @@ import { fbm, valueNoise, valueNoiseRow } from '../../core/noise.js';
 import { hash2 } from '../../core/rng.js';
 import { GLYPH_COUNT, dg, family } from '../../render/glyphs.js';
 import { FOAM } from '../../render/palette.js';
-import { ACROSS, WIDTH, crossSpeed, readFlow, screenOrientation, toCells } from '../rivers.js';
+import { ACROSS, WIDTH, screenOrientation, toCells } from '../rivers.js';
 import { ASPECT, WATER, WATER_LEVEL } from '../world.js';
 import { emit } from './cell.js';
 
@@ -223,8 +223,11 @@ function statics(chunk, seed) {
 // What the current needs to draw a river cell, fixed per cell: which way
 // its foam lies on screen, its lane across the river, the travel time of
 // the water along its own line, how much of that one cell spans, its speed
-// and place across the stream, and any stone it flows past.
-const FLOW = { x: 0, y: 0, speed: 0 };
+// and place across the stream, and any stone it flows past. The way, pace
+// and travel time are those of the water's own line through the middle of
+// the cell, exactly as world.flowAt gives them there, so the foam and the
+// leaves keep to the current that carries bodies and splashes.
+const FLOW = { x: 0, y: 0, speed: 0, tau: 0 };
 function riverStatics(s, chunk, seed) {
   const n = N * N;
   const f = chunk.flow;
@@ -245,16 +248,16 @@ function riverStatics(s, chunk, seed) {
   const stones = chunk.riverStones ?? [];
   for (let i = 0; i < n; i++) {
     if (chunk.type[i] !== WATER || !f.river[i]) continue;
-    readFlow(f, i, FLOW);
-    if (FLOW.speed < STILL) continue;
-    s.river[i] = 1;
     const wx = chunk.cx * N + (i & 63);
     const wy = chunk.cy * N + (i >> 6);
+    chunk.rivers.lineAt(wx + 0.5, wy + 0.5, FLOW);
+    if (FLOW.speed < STILL) continue;
+    s.river[i] = 1;
     const q = f.across[i] / ACROSS;
     const half = f.width[i] / WIDTH;
     const bend = f.bend[i] / 255;
-    // Lanes of foam lie along the current. Each keeps the pace of the water
-    // down its middle line, so a streak holds together as it travels.
+    // Lanes of foam lie along the current, each with its own run of
+    // streaks; every cell of a lane times them by its own water.
     const across = Math.floor(q * half / LANE);
     const lane = across + 64 + f.river[i] * 131;
     const h = hash2(lane, f.river[i], seed + 1700);
@@ -264,7 +267,7 @@ function riverStatics(s, chunk, seed) {
     s.rLen[i] = 0.3 + hash2(lane, 7, seed + 1703) * 0.2;
     // Foam gathers mid-channel and breaks up on bends.
     s.rDensity[i] = (0.8 - 0.3 * Math.abs(q)) * (1 - 0.5 * bend);
-    s.rTau[i] = f.tau[i] / crossSpeed(Math.min(1, Math.abs((across + 0.5) * LANE / half)));
+    s.rTau[i] = FLOW.tau;
     s.rSpeed[i] = FLOW.speed;
     s.rAcross[i] = q;
     // The water's travel time across this one cell, along the flow.

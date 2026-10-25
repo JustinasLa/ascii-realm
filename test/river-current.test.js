@@ -5,7 +5,7 @@ import { EnvironmentSampler } from '../src/audio/environment.js';
 import { KINDS, Monster } from '../src/entities/monsters.js';
 import { Player } from '../src/entities/player.js';
 import { family } from '../src/render/glyphs.js';
-import { currentAt, immersion, screenOrientation, toCells, toGround } from '../src/world/rivers.js';
+import { crossSpeed, currentAt, immersion, screenOrientation, toCells, toGround } from '../src/world/rivers.js';
 import { Splashes } from '../src/world/splashes.js';
 import { animated, bedStone, FLOATING, shade } from '../src/world/terrain/water.js';
 import { ASPECT, CHUNK_SIZE, MAX_WATER_DEPTH, WATER, WATER_LEVEL, World } from '../src/world/world.js';
@@ -294,6 +294,60 @@ test('river water is drawn with streaks of foam that travel downstream, lying al
     `foam moved ${shift} columns; the water ${expected * sign}`);
 });
 
+test('by the banks the foam the water is drawn with keeps to the slower water there', () => {
+  const world = new World(1);
+  const { x, y } = reach(world, { eastward: true });
+  const cx = Math.floor(x / CHUNK_SIZE);
+  const cy = Math.floor(y / CHUNK_SIZE);
+  const chunk = world.chunk(cx, cy);
+  const STEP = 0.02;
+  const FRAMES = 2000;
+  // Whether a cell shows foam, frame by frame.
+  const out = { fg: new Uint8ClampedArray(4), bg: new Uint8ClampedArray(4), ov: new Uint8ClampedArray(4) };
+  const timeline = (i) => {
+    const on = new Uint8Array(FRAMES);
+    for (let k = 0; k < FRAMES; k++) {
+      shade(out, 0, chunk, i, cx * 64 + (i & 63), cy * 64 + (i >> 6), 1, 5 + k * STEP, 0);
+      on[k] = isStreak(shown(out, 0)) ? 1 : 0;
+    }
+    return on;
+  };
+  const a = {};
+  const b = {};
+  let pairs = 0;
+  for (let i = 0; i < 4096; i++) {
+    const col = i & 63;
+    if (col > 59 || chunk.type[i] !== WATER) continue;
+    world.flowAt(cx * 64 + col + 0.5, cy * 64 + (i >> 6) + 0.5, a);
+    if (!(a.speed > 0.05) || Math.abs(a.across) < 0.5 || Math.abs(a.across) > 0.9) continue;
+    // The next cell but one downstream along the row.
+    const j = i + 2 * Math.sign(a.x);
+    world.flowAt(cx * 64 + (j & 63) + 0.5, cy * 64 + (j >> 6) + 0.5, b);
+    // Off the middle, the clock changes fast across the water's lines as
+    // well as along them; only foam due within the window is timed.
+    if (chunk.type[j] !== WATER || !(b.speed > 0.05) || !(b.tau - a.tau > 0.1 && b.tau - a.tau < 5.5)) continue;
+    const from = timeline(i);
+    const to = timeline(j);
+    // How long after it shows here the same foam shows downstream.
+    let lag = 0;
+    let best = 0;
+    let seen = 0;
+    for (const v of from) seen += v;
+    for (let l = 0; l < 300; l++) {
+      let match = 0;
+      for (let k = 0; k + l < FRAMES; k++) match += from[k] & to[k + l];
+      if (match > best) { best = match; lag = l * STEP; }
+    }
+    // Cells in different lanes carry different foam.
+    if (seen < 50 || best < 0.7 * seen) continue;
+    pairs++;
+    const expected = b.tau - a.tau;
+    assert.ok(Math.abs(lag - expected) < STEP * 1.5 + expected * 0.03,
+      `foam took ${lag.toFixed(2)} s where the water takes ${expected.toFixed(2)} s`);
+  }
+  assert.ok(pairs >= 3, `${pairs} pairs of cells by the banks`);
+});
+
 test('lake water away from rivers is drawn exactly as before', () => {
   const rivers = new World(1);
   const plain = new World(1, { rivers: false });
@@ -309,7 +363,11 @@ test('lake water away from rivers is drawn exactly as before', () => {
 function riverChunk({ speed = 0.6, bend = 0, secondary = 0, stones = [], depth = 0.05 } = {}) {
   const n = 64 * 64;
   const chunk = { cx: 0, cy: 0, version: 0, type: new Uint8Array(n).fill(2), elev: new Float32Array(n).fill(0.5),
-    rnd: new Float32Array(n), shade: new Float32Array(n).fill(0.5), riverStones: stones, flow: {
+    rnd: new Float32Array(n), shade: new Float32Array(n).fill(0.5), riverStones: stones,
+    rivers: { lineAt(x, y, out) {
+      const pace = speed * crossSpeed((Math.floor(y) - 32) / 12.5);
+      return Object.assign(out, { x: 1, y: 0, speed: pace, tau: x / 21.67 / pace });
+    } }, flow: {
       heading: new Uint8Array(n), speed: new Uint8Array(n), across: new Int8Array(n), bend: new Uint8Array(n),
       secondary: new Int8Array(n), width: new Uint8Array(n), tau: new Float32Array(n), river: new Uint16Array(n) } };
   const f = chunk.flow;
