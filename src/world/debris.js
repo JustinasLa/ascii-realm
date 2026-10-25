@@ -626,33 +626,47 @@ export class Debris {
   // it and only turns about it, is left out. The same probes at every
   // heading, so a turn alone does not change their number.
   penetration(piece, world) {
+    let depth = 0;
+    for (const d of this.depths(piece, world).values()) depth += d;
+    return depth;
+  }
+
+  // The same, one by one: each probe's depth by its place along the hull,
+  // and each stone's by the stone.
+  depths(piece, world) {
     const stations = Math.max(2, Math.ceil(toCells(piece.length, 0).cols) + 1);
     const caught = !piece.snag ? -1 : piece.snag.end ? stations - 1 : 0;
-    let depth = 0;
+    const out = new Map();
+    let n = 0;
     this.probes(piece, (px, py, i) => {
-      if (i !== caught) depth += this.landDepth(world, px, py);
+      out.set(n++, i !== caught ? this.landDepth(world, px, py) : 0);
     }, stations);
     // A stone counts as far as the hull reaches deeper into it than the
     // caught end does.
     const pin = piece.snag && { ...piece, x: piece.snag.x, y: piece.snag.y, length: 0 };
     for (const stone of this.stonesNear(world, piece.x, piece.y)) {
       const held = pin ? Math.max(0, this.stoneOverlap(pin, stone).overlap) : 0;
-      depth += Math.max(0, this.stoneOverlap(piece, stone).overlap - held);
+      out.set(stone, Math.max(0, this.stoneOverlap(piece, stone).overlap - held));
     }
-    return depth;
+    return out;
   }
 
-  // Moves a piece by a meeting's push (ground metres) only as far as its
-  // hull stays as clear of the banks and stones as it was: the push is
-  // halved till it does, or dropped. Returns the share of it made.
+  // Moves a piece by a meeting's push (ground metres) only as far as no
+  // probe of its hull reaches deeper into the land, nor it deeper into any
+  // stone, than it did: clear of one is not bought by going into another.
+  // The push is halved till it is so, or dropped. Returns the share made.
   shift(piece, world, gx, gy) {
     const x = piece.x, y = piece.y;
-    const before = this.penetration(piece, world);
+    const before = this.depths(piece, world);
     const m = toCells(gx, gy);
     for (let share = 1; share >= 0.25; share /= 2) {
       piece.x = x + m.cols * share;
       piece.y = y + m.rows * share;
-      if (this.penetration(piece, world) <= before + 1e-9) return share;
+      let deeper = false;
+      for (const [at, d] of this.depths(piece, world)) {
+        if (d > (before.get(at) ?? 0) + 1e-9) deeper = true;
+      }
+      if (!deeper) return share;
     }
     piece.x = x;
     piece.y = y;

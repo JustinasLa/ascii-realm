@@ -322,6 +322,26 @@ test('the hull is never shoved onto the land or a stone, even pressed there by a
   assert.ok(d.penetration(p, world) <= before + 1e-9);
 });
 
+test('a piece wedged between a stone and the bank is not shoved off the bank into the stone', () => {
+  // A mat along the north bank, its outer side on the land, and a stone
+  // just touching its inner side.
+  const stone = { x: 0, y: -0.63, r: 0.3 };
+  const world = channel({ half: 0.3, stones: [stone] });
+  const d = new Debris({ random: () => 0.5, world });
+  const p = piece(d, 'mat', { angle: 0, length: 0.25, radius: 0.08, y: -1.45 });
+  const land = (q) => { let depth = 0; d.probes(q, (x, y) => { depth += d.landDepth(world, x, y); }); return depth; };
+  const bank = land(p), into = d.stoneOverlap(p, stone).overlap;
+  assert.ok(bank > 0 && Math.abs(into) < 1e-9);
+  // Off the bank, at the cost of the stone, it is held where it was.
+  assert.equal(d.shift(p, world, 0, 0.04), 0);
+  assert.equal(p.y, -1.45);
+  assert.ok(d.stoneOverlap(p, stone).overlap <= into + 1e-9 && land(p) <= bank);
+  // With no stone there, it goes off the bank.
+  const open = channel({ half: 0.3 });
+  assert.equal(new Debris({ random: () => 0.5, world: open }).shift(p, open, 0, 0.04), 1);
+  assert.equal(land(p), 0);
+});
+
 test('shoved out to the bank a piece lies there a moment, then edges back into the current', () => {
   const half = 0.3;
   const across = (p) => -(p.y / 6.5) / half;
