@@ -1,6 +1,7 @@
 // The sword: drawing it from the hip, holding a guard, the swings and
-// sheathing it again. This only decides where the sword hand and blade
-// should be; the rig bends the arms to match (see rig.js).
+// sheathing it again. The first strike draws the sword; it is put away after
+// SHEATHE_AFTER seconds of calm while standing. This only decides where the
+// sword hand and blade should be; the rig bends the arms to match (see rig.js).
 //
 // Which swing comes out depends on what the warrior is doing:
 //   standing or walking  a combo: forehand, then a backhand or a rising
@@ -119,7 +120,7 @@ const NEXT = { a: () => (Math.random() < 0.5 ? 'b' : 'd'), b: () => 'c', d: () =
 const SWINGS = 'abcd';
 
 // Seconds the sword stays out after the last swing before it is put away.
-const SHEATHE_AFTER = 5;
+export const SHEATHE_AFTER = 5;
 // Seconds the button must be held to charge a spin.
 const CHARGE_TIME = 0.5;
 

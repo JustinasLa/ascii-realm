@@ -9,6 +9,9 @@ import { Projectiles } from '../../src/world/projectiles.js';
 import { FrameClock, FrameQuality, renderSize } from '../../src/render/budget.js';
 import { ASPECT, GRASS, WATER } from '../../src/world/world.js';
 import { watchPhone } from '../../src/core/phone.js';
+import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assist.js';
+import { createHaptics } from '../../src/core/haptics.js';
+import { interaction, performInteraction } from '../../src/core/interact.js';
 
 const noop = () => {};
 
@@ -23,7 +26,7 @@ const inert = () => class {
   }
 };
 
-export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false } = {}) {
+export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -39,6 +42,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) });
   // The phone media query: flip `phoneQuery.matches` and dispatch `change`.
   const phoneQuery = Object.assign(new EventTarget(), { matches: phone });
+  // The touch-screen query: flip `coarseQuery.matches` to plug in a mouse.
+  const coarseQuery = { matches: coarse, addEventListener: noop, removeEventListener: noop };
   const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600,
     matchMedia: () => phoneQuery });
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
@@ -47,6 +52,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   let bladeSamples = 0;
   let modelUpdates = 0;
   let cellHeight;
+  // The touch controls: the CAST hold hook and what the contextual button shows.
+  const touch = { castHold: null, castDrop: null, interactions: [],
+    setCastHold(open, drop) { this.castHold = open; this.castDrop = drop; },
+    interact: { update: (target) => touch.interactions.push(target) } };
+  const vibrations = [];
   const model = {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
     update: () => { modelUpdates++; },
@@ -68,8 +78,10 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     sessionStorage: { setItem: noop },
     document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop,
       createElement: () => ({ classList: { add: noop, remove: noop }, hidden: false, textContent: '' }) },
-    matchMedia: () => ({ matches: false, addEventListener: noop, removeEventListener: noop }), innerWidth: 800, innerHeight: 600,
-    cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: noop,
+    matchMedia: () => coarseQuery, innerWidth: 800, innerHeight: 600,
+    navigator: { vibrate: ms => vibrations.push(ms) },
+    cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: () => touch,
+    assistTarget, castAssist, strikeAssist, createHaptics, interaction, performInteraction,
     watchPhone, installPinchZoom: noop,
     PhoneMenu: class {
       constructor(options) { Object.assign(this, options); this.open = false; }
@@ -93,7 +105,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       nearby() { return null; }
     },
     Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
-    Spellcasting: class extends inert() { constructor() { super(); this.effects = { draw: noop }; } },
+    Spellcasting: class extends inert() { constructor(options) { super(); this.options = options; this.effects = { draw: noop }; } },
     SpellControls: class extends inert() {
       constructor(casting, options) { super(); this.options = options; }
       populate() { populatedSpellControls++; }
@@ -122,7 +134,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Dust: class { update() {} draw() {} burst() {} sparks() {} breath() {} },
     Footprints: class { draw() {} },
     Ambience: class { update() {} drawMist() {} draw() {} }, lightsOf: () => [],
-    Fires: inert(),
+    Fires: class extends inert() { nearest() { return null; } },
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
     Fog: inert(), MAX_WALKERS: 20, figureScale: () => 1,
@@ -180,7 +192,10 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       phoneQuery.matches = matches;
       phoneQuery.dispatchEvent(Object.assign(new Event('change'), { matches }));
     },
+    setCoarse(matches) { coarseQuery.matches = matches; },
     navigatedTo: () => navigatedTo,
+    touch,
+    vibrations,
     pointer(type, button = 0, pointerType = 'mouse') {
       (type === 'pointerdown' ? canvas : window).dispatchEvent(Object.assign(new Event(type), { button, pointerType }));
     },
