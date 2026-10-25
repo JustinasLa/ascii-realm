@@ -212,7 +212,9 @@ export class World {
     const baseElev = elev.slice();
     const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
       baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
-      flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null };
+      flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null,
+      // The water shader times a river's foam by its water's own lines.
+      rivers: flow ? this.rivers : null };
     // Ground rendering reads these arrays directly, so overrides must live in
     // the chunk as well as in the editor's portable scene description.
     for (let ly = 0; ly < CHUNK; ly++) {

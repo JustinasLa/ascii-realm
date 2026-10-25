@@ -93,10 +93,14 @@ notes are under `docs/audio-<family>.html` and `docs/audio-<family>.md`.
   during a held charge and releases it smoothly when charging ends. All sword
   sounds use the `sword` bus.
 - `environment.js` samples the same gust noise field as rendered grass,
-  nearby lake position and an audio day/night cycle. Water searches are bounded
-  to a local radius and reused between samples.
+  nearby lake position, the nearest river and an audio day/night cycle. Water
+  searches are bounded to a local radius and reused between samples. Rivers
+  can be narrower than the lake search grid, so the river is found by its
+  exact distance from the water's edge rather than by sampling cells.
 - `ambience.js` layers slowly breathing low wind, soft grass/leaf rustle and
-  occasional gust textures, alongside quieter positional lake beds. Its sparse,
+  occasional gust textures, alongside quieter positional lake beds and, near a
+  river, a babbling band of filtered noise whose level wobbles quickly and
+  scales with how fast the water runs; both water beds can sound at once. Its sparse,
   distant outdoor calls use softened attacks and filtered decays, and include
   daytime birds and insect chirrs, nighttime crickets and owl hoots, frogs near
   lakes, rare distant deer-like calls and nearby insect buzz/clicks. It also adds

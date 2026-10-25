@@ -9,6 +9,9 @@
 //   life        - lily pad colonies with blooms in calm shallow bays, pond
 //                 skaters, bubbles off the weed, drifting leaves and fish
 //                 rising in rings out in the deep.
+//   the current - on rivers, long pale foam streaks carried downstream at
+//                 the water's own speed, riffles over fast shallows, and
+//                 the froth, V-wake and eddy a midstream stone leaves.
 //
 // Calm gaps are cached ground. Only scattered swell bands, the shoreline
 // and surface life are reshaded, with fixed detail decided once per chunk.
@@ -17,6 +20,7 @@ import { fbm, valueNoise, valueNoiseRow } from '../../core/noise.js';
 import { hash2 } from '../../core/rng.js';
 import { GLYPH_COUNT, dg, family } from '../../render/glyphs.js';
 import { FOAM } from '../../render/palette.js';
+import { ACROSS, WIDTH, screenOrientation, toCells } from '../rivers.js';
 import { ASPECT, WATER, WATER_LEVEL } from '../world.js';
 import { emit } from './cell.js';
 
@@ -48,12 +52,16 @@ const FROTH = family('water.froth.');
 const BUBBLES = family('water.bubbles.');
 const SKATER = family('water.skater.');
 const LEAF = Array.from({ length: 8 }, (_, k) => dg(`leaf.${k}`));
+const STREAK = Array.from({ length: 4 }, (_, o) => family(`water.streak.${o}.`));
+const RIFFLE = family('water.riffle.');
+const EDDY = family('water.eddy.');
+const VEE = family('water.vee.');
 
 // Glyphs that float on the surface and hide what the water would mirror,
 // and how strongly each surface glyph catches the moon (where glitter and
 // moonlight gather). Both are indexed by glyph.
 export const FLOATING = new Uint8Array(GLYPH_COUNT);
-for (const g of [...PAD, ...PADS, ...PAD_FILL, ...PAD_RIM.flat(), ...FOAM_CH]) FLOATING[g] = 1;
+for (const g of [...PAD, ...PADS, ...PAD_FILL, ...PAD_RIM.flat(), ...FOAM_CH, ...STREAK.flat(), ...VEE]) FLOATING[g] = 1;
 export const SHEEN = new Float32Array(GLYPH_COUNT);
 for (const g of WAVE) SHEEN[g] = 1;
 for (const g of LINE) SHEEN[g] = 0.8;
@@ -85,10 +93,21 @@ const RING_COL = [150, 176, 216];
 const BED = 1;
 const FLOAT = 2;
 
+// River water slower than this (m/s) is drawn as calm as a lake.
+const STILL = 0.04;
+// Lanes of foam across a river, in layout units.
+const LANE = 0.8;
+// Seconds between the leaves drifting down one lane.
+const LEAF_EVERY = 5;
+// What a midstream stone does to the water around it.
+const PILLOW = 1;
+const EDDY_WAKE = 2;
+const VEE_WAKE = 3;
+
 const cache = new WeakMap();
 
 function moving(s, i) {
-  return !!(s.surface[i] || s.kind[i] === FLOAT || s.depth[i] < 0.23 || s.life[i] || s.rise[i] !== Infinity);
+  return !!((s.river && s.river[i]) || s.surface[i] || s.kind[i] === FLOAT || s.depth[i] < 0.23 || s.life[i] || s.rise[i] !== Infinity);
 }
 
 export function animated(chunk, i, wx, wy, seed) {
@@ -129,7 +148,9 @@ function statics(chunk, seed) {
     risePhase: new Float32Array(n),
     // 1 bubbles rise here now and then; 2 a pond skater rests here.
     life: new Uint8Array(n),
+    river: null,
   };
+  if (chunk.flow) riverStatics(s, chunk, seed);
   const pads = new Map();
   const rises = new Map();
   for (let ly = 0; ly < N; ly++) {
@@ -157,7 +178,8 @@ function statics(chunk, seed) {
       // World coordinates keep the bands joined across chunk boundaries.
       s.surface[i] = valueNoise(xs * 0.05, wy * 0.32, seed + 1601) > 0.6 ? 1 : 0;
 
-      if (d > 0.06 && d < 0.95 && placePad(s, i, wx, wy, seed, pads)) continue;
+      const river = s.river?.[i];
+      if (!river && d > 0.06 && d < 0.95 && placePad(s, i, wx, wy, seed, pads)) continue;
 
       // The bed shows through the shallows, fading with depth.
       if (d > 0.03 && d < 0.5) {
@@ -168,12 +190,14 @@ function statics(chunk, seed) {
         let g = 0;
         let col = SAND_COL;
         let k = see;
-        if (weed > 0.6 && d > 0.12) {
+        // Weed only takes root where the water is slow.
+        if (weed > 0.6 && d > 0.12 && (!river || s.rSpeed[i] < 0.15)) {
           g = WEED[Math.floor(pick * WEED.length)];
           col = WEED_COL;
           k *= 0.7 + (weed - 0.6) * 1.5;
-          if (pick < 0.08) s.life[i] = 1;
-        } else if (stones > 0.6 || pick < 0.06) {
+          if (pick < 0.08 && !river) s.life[i] = 1;
+        } else if (stones > (river ? 0.7 : 0.6) || pick < (river ? 0.1 : 0.06)) {
+          // River beds are gravelly.
           g = STONES[Math.floor(pick * 97) % STONES.length];
           col = STONE_COL;
         } else if (pick < 0.55) {
@@ -186,13 +210,118 @@ function statics(chunk, seed) {
           for (let c = 0; c < 3; c++) s.col[i * 3 + c] = s.bg[i * 3 + c] + (col[c] - s.bg[i * 3 + c]) * k;
         }
         // Pond skaters keep to calm, shallow water.
-        if (d > 0.1 && d < 0.35 && h < 0.006) s.life[i] = 2;
+        if (d > 0.1 && d < 0.35 && h < 0.006 && !river) s.life[i] = 2;
       }
-      if (d > 0.3) placeRise(s, i, wx, wy, seed, rises);
+      // Fish rise only in a river's slow, deep pools.
+      if (d > 0.3 && (!river || s.rSpeed[i] < 0.12)) placeRise(s, i, wx, wy, seed, rises);
     }
   }
   cache.set(chunk, s);
   return (last = s);
+}
+
+// What the current needs to draw a river cell, fixed per cell: which way
+// its foam lies on screen, its lane across the river, the travel time of
+// the water along its own line, how much of that one cell spans, its speed
+// and place across the stream, and any stone it flows past. The way, pace
+// and travel time are those of the water's own line through the middle of
+// the cell, exactly as world.flowAt gives them there, so the foam and the
+// leaves keep to the current that carries bodies and splashes.
+const FLOW = { x: 0, y: 0, speed: 0, tau: 0 };
+function riverStatics(s, chunk, seed) {
+  const n = N * N;
+  const f = chunk.flow;
+  s.river = new Uint8Array(n);
+  s.rOrient = new Uint8Array(n);
+  s.rLane = new Int32Array(n);
+  s.rPeriod = new Float32Array(n);
+  s.rLen = new Float32Array(n);
+  s.rDensity = new Float32Array(n);
+  s.rTau = new Float32Array(n);
+  s.rSpan = new Float32Array(n);
+  s.rSpeed = new Float32Array(n);
+  s.rAcross = new Float32Array(n);
+  s.rOuter = new Float32Array(n);
+  s.rWake = new Uint8Array(n);
+  s.rWakeGlyph = new Uint16Array(n);
+  s.rWakeK = new Float32Array(n);
+  const stones = chunk.riverStones ?? [];
+  for (let i = 0; i < n; i++) {
+    if (chunk.type[i] !== WATER || !f.river[i]) continue;
+    const wx = chunk.cx * N + (i & 63);
+    const wy = chunk.cy * N + (i >> 6);
+    chunk.rivers.lineAt(wx + 0.5, wy + 0.5, FLOW);
+    if (FLOW.speed < STILL) continue;
+    s.river[i] = 1;
+    const q = f.across[i] / ACROSS;
+    const half = f.width[i] / WIDTH;
+    const bend = f.bend[i] / 255;
+    // Lanes of foam lie along the current, each with its own run of
+    // streaks; every cell of a lane times them by its own water.
+    const across = Math.floor(q * half / LANE);
+    const lane = across + 64 + f.river[i] * 131;
+    const h = hash2(lane, f.river[i], seed + 1700);
+    s.rOrient[i] = screenOrientation(FLOW.x, FLOW.y);
+    s.rLane[i] = lane;
+    s.rPeriod[i] = 1.6 + h * 1.4;
+    s.rLen[i] = 0.3 + hash2(lane, 7, seed + 1703) * 0.2;
+    // Foam gathers mid-channel and breaks up on bends.
+    s.rDensity[i] = (0.8 - 0.3 * Math.abs(q)) * (1 - 0.5 * bend);
+    s.rTau[i] = FLOW.tau;
+    s.rSpeed[i] = FLOW.speed;
+    s.rAcross[i] = q;
+    // The water's travel time across this one cell, along the flow.
+    const c = toCells(FLOW.x, FLOW.y);
+    s.rSpan[i] = 1 / Math.max(Math.abs(c.cols), Math.abs(c.rows), 1e-6) / FLOW.speed;
+    // The outer bank of a bend froths; the inner bank stays quiet.
+    const secondary = f.secondary[i] / 127;
+    s.rOuter[i] = Math.sign(secondary) === Math.sign(q) && Math.abs(q) > 0.55 ? Math.abs(secondary) : 0;
+    // Water piles up in front of a stone, opens into a V behind it and
+    // curls into a calm eddy in its lee.
+    const lx = toCellsLayout(FLOW.x, FLOW.y);
+    for (const stone of stones) {
+      const ox = (wx + 0.5 - stone.x) * ASPECT;
+      const oy = wy + 0.5 - stone.y;
+      const along = ox * lx.x + oy * lx.y;
+      const side = oy * lx.x - ox * lx.y;
+      const r = stone.r;
+      if (along < -2.2 * r || along > 4.5 * r || Math.abs(side) > 2.5 * r) continue;
+      if (along < -0.5 * r && along > -1.9 * r && Math.abs(side) < r) {
+        s.rWake[i] = PILLOW;
+        s.rWakeK[i] = 1 - Math.abs(side) / r * 0.5;
+      } else if (along > 0.4 * r && along < 2.2 * r && Math.abs(side) < 0.75 * r) {
+        s.rWake[i] = EDDY_WAKE;
+        s.rWakeGlyph[i] = EDDY[Math.floor(hash2(wx, wy, seed + 1704) * EDDY.length)];
+        s.rDensity[i] = 0;
+      } else if (along > 0.3 * r) {
+        // The arms spread from the stone's sides at about 20 degrees.
+        const arm = 0.85 * r + along * 0.36;
+        if (Math.abs(Math.abs(side) - arm) < 0.55) {
+          const sign = Math.sign(side) || 1;
+          const ax = lx.x + -lx.y * sign * 0.36;
+          const ay = lx.y + lx.x * sign * 0.36;
+          s.rWake[i] = VEE_WAKE;
+          s.rWakeGlyph[i] = VEE[layoutOrientation(ax, ay)];
+          s.rWakeK[i] = Math.max(0, 1 - along / (4.5 * r));
+        }
+      }
+    }
+  }
+}
+
+// A ground direction as a unit step in layout space, and the screen
+// direction (as for foam) of a layout step.
+function toCellsLayout(gx, gy) {
+  const c = toCells(gx, gy);
+  const x = c.cols * ASPECT;
+  const l = Math.hypot(x, c.rows) || 1;
+  return { x: x / l, y: c.rows / l };
+}
+
+function layoutOrientation(x, y) {
+  let a = Math.atan2(y, x);
+  if (a < 0) a += Math.PI;
+  return [0, 3, 2, 1][Math.round(a / (Math.PI / 4)) % 4];
 }
 
 // Each frame's rotations of the swell, wavelet and lapping phases.
@@ -367,6 +496,10 @@ export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
     return;
   }
   if (t !== clock) tick(t);
+  if (s.river && s.river[i]) {
+    shadeRiver(out, o, s, chunk, i, wx, wy, seed, t, bgR, bgG, bgB);
+    return;
+  }
 
   // Floating pads ride the swell with a slow sheen and keep their blooms.
   if (kind === FLOAT) {
@@ -505,4 +638,127 @@ export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   }
 
   emit(out, o, g, cr, cg, cb, bgR, bgG, bgB, lg, lr, lgG, lb);
+}
+
+// A river cell. Foam is laid out along each lane by the time the water took
+// to get there, so it travels at the water's own speed: stretched out in the
+// narrows, bunched in slow pools, slower by the banks. Nothing here calls
+// noise; a frame costs a hash or two per cell.
+function shadeRiver(out, o, s, chunk, i, wx, wy, seed, t, bgR, bgG, bgB) {
+  const i3 = i * 3;
+  const p8 = i * 8;
+  const ph = s.phase;
+  const d = s.depth[i];
+  const rnd = chunk.rnd[i];
+  const speed = s.rSpeed[i];
+  const fast = Math.min(1, speed / 0.6);
+  const q = Math.abs(s.rAcross[i]);
+  const lane = s.rLane[i];
+  const tau = s.rTau[i];
+  const period = s.rPeriod[i];
+  const p = (tau - t) / period;
+  const cycle = Math.floor(p);
+  const fr = p - cycle;
+  const len = s.rLen[i];
+  // A faint sheen on fast water.
+  bgR += 3 * fast; bgG += 5 * fast; bgB += 9 * fast;
+
+  let g = 0, cr = 0, cg = 0, cb = 0;
+  let lg = 0, lr = 0, lgG = 0, lb = 0;
+  const wake = s.rWake[i];
+  if (fr < len && hash2(lane, cycle, seed + 1701) < s.rDensity[i]) {
+    // A streak of foam, heaviest at its head downstream.
+    const k = fr > len * 0.62 ? 2 : fr > len * 0.25 ? 1 : 0;
+    g = STREAK[s.rOrient[i]][k];
+    const b = (0.8 + 0.14 * k) * (1 - 0.3 * q) * (0.85 + 0.15 * fast);
+    cr = (CREST_COL[0] + (GLINT_COL[0] - CREST_COL[0]) * k * 0.25) * b;
+    cg = (CREST_COL[1] + (GLINT_COL[1] - CREST_COL[1]) * k * 0.25) * b;
+    cb = (CREST_COL[2] + (GLINT_COL[2] - CREST_COL[2]) * k * 0.25) * b;
+  } else if (wake !== EDDY_WAKE) {
+    // Between the streaks, dimmer wavelets ride the same water.
+    const p2 = p * 2.6 + 0.37;
+    const c2 = Math.floor(p2);
+    if (p2 - c2 < 0.35 && hash2(lane, c2, seed + 1702) < 0.5 * (1 - q)) {
+      g = STREAK[s.rOrient[i]][0];
+      cr = TROUGH_COL[0] * 1.15; cg = TROUGH_COL[1] * 1.15; cb = TROUGH_COL[2] * 1.15;
+    } else if (d < 0.35 && speed > 0.3 && fract(p * 2.3 + rnd) < 0.3) {
+      // Broken chop where fast water runs shallow.
+      g = RIFFLE[(cycle + lane) & 3];
+      const b = 0.55 + 0.3 * fast;
+      cr = (TROUGH_COL[0] + (CREST_COL[0] - TROUGH_COL[0]) * 0.5) * b;
+      cg = (TROUGH_COL[1] + (CREST_COL[1] - TROUGH_COL[1]) * 0.5) * b;
+      cb = (TROUGH_COL[2] + (CREST_COL[2] - TROUGH_COL[2]) * 0.5) * b;
+    }
+  }
+  // Froth heaps on the outer bank of a bend.
+  const outer = s.rOuter[i];
+  if (outer && fract(p * 1.7 + rnd * 3) < outer * 0.6) {
+    lg = FROTH[Math.floor(rnd * 4)];
+    const f = 0.5 + 0.3 * outer;
+    lr = FOAM[0] * f; lgG = FOAM[1] * f; lb = FOAM[2] * f;
+  }
+  if (wake === PILLOW) {
+    lg = FROTH[Math.floor(rnd * 4 + t * 3) & 3];
+    const f = 0.55 + 0.35 * s.rWakeK[i];
+    lr = FOAM[0] * f; lgG = FOAM[1] * f; lb = FOAM[2] * f;
+  } else if (wake === VEE_WAKE && fract((tau - t) / 0.9 + rnd * 0.3) < 0.75) {
+    g = s.rWakeGlyph[i];
+    const f = (0.45 + 0.4 * s.rWakeK[i]) * (0.85 + 0.15 * Math.sin(t * 5 + rnd * 20));
+    cr = CREST_COL[0] * f; cg = CREST_COL[1] * f; cb = CREST_COL[2] * f;
+  } else if (wake === EDDY_WAKE && fract(t * 0.35 + rnd) < 0.55) {
+    // The eddy turns slowly in the stone's lee.
+    g = EDDY[(Math.floor(t * 1.5 + rnd * 3) % 3 + 3) % 3];
+    cr = TROUGH_COL[0] * 1.3; cg = TROUGH_COL[1] * 1.3; cb = TROUGH_COL[2] * 1.3;
+  }
+
+  // The bed shows beneath the moving surface.
+  if (s.kind[i] === BED) {
+    if (g && !lg) { lg = g; lr = cr; lgG = cg; lb = cb; }
+    g = s.glyph[i];
+    cr = s.col[i3]; cg = s.col[i3 + 1]; cb = s.col[i3 + 2];
+  }
+
+  // Lacy foam at the banks, as on the lakes.
+  if (d < 0.23) {
+    const lap = ph[p8 + 6] * turn[7] + ph[p8 + 7] * turn[6];
+    const reach = 0.07 + 0.07 * (0.5 + 0.5 * lap);
+    if (d < reach) {
+      const f = (0.5 + 0.5 * (1 - d / reach)) * (0.7 + 0.3 * Math.max(0, lap));
+      g = FOAM_CH[(Math.floor(rnd * 6 + t * 0.5) % 6)];
+      cr = FOAM[0] * f; cg = FOAM[1] * f; cb = FOAM[2] * f;
+    }
+  }
+
+  // Fish rise in the slow pools.
+  const dist = s.rise[i];
+  if (dist !== Infinity) {
+    const period2 = s.risePeriod[i];
+    const age = fract((t + s.risePhase[i]) / period2) * period2;
+    if (age < 2.2 && Math.abs(dist - (0.25 + age * 1.5)) < 0.42) {
+      const fade = (1 - age / 2.2) ** 1.5;
+      lg = RING[s.riseHeading[i]];
+      lr = bgR + (RING_COL[0] - bgR) * fade; lgG = bgG + (RING_COL[1] - bgG) * fade; lb = bgB + (RING_COL[2] - bgB) * fade;
+    }
+  }
+
+  // Leaves ride the current down their lane, one cell at a time.
+  if (d > 0.1) {
+    const lq = (tau - t) / LEAF_EVERY;
+    const slot = Math.floor(lq);
+    if ((lq - slot) * LEAF_EVERY < s.rSpan[i] && hash2(lane, slot, seed + 1502) < 0.05) {
+      lg = LEAF[Math.floor(hash2(lane, slot, seed + 1503) * 8)];
+      const f = 0.6 + 0.3 * hash2(lane, slot, seed + 1504);
+      lr = LEAF_COL[0] * f; lgG = LEAF_COL[1] * f; lb = LEAF_COL[2] * f;
+    }
+  }
+
+  emit(out, o, g, cr, cg, cb, bgR, bgG, bgB, lg, lr, lgG, lb);
+}
+
+// Whether a river cell shows a stone breaking the surface (2), one just
+// under it (1), or none (0): the wet stone the light catches.
+export function bedStone(chunk, i, seed) {
+  const s = statics(chunk, seed);
+  if (s.kind[i] !== BED || !STONES.includes(s.glyph[i])) return 0;
+  return s.depth[i] < 0.12 ? 2 : 1;
 }
