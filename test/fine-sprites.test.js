@@ -274,3 +274,15 @@ test('a solid sprite is ringed by an outline of nothing that later cells cover',
   r.clearFine();
   assert.equal(flagsAt(r, 8, 6), 0);
 });
+
+test('only small letters count as fine scenery, not outlines or solid backing', () => {
+  const r = renderer();
+  assert.equal(r.hasFineGlyph(3 * r.cols + 2), false, 'an empty cell');
+  r.outlineCell(2, 3, 5, 5, 5);
+  assert.equal(r.fineMark[3 * r.cols + 2], 1);
+  assert.equal(r.hasFineGlyph(3 * r.cols + 2), false, 'an actor\'s solid backing');
+  assert.equal(r.fineMark[3 * r.cols + 3], 1);
+  assert.equal(r.hasFineGlyph(3 * r.cols + 3), false, 'its outline of nothing');
+  r.fineAt(5 * FINE + 1, 1 * FINE, glyph('@'), 200, 180, 160, 10, 12, 20);
+  assert.equal(r.hasFineGlyph(1 * r.cols + 5), true, 'a tree\'s letter');
+});

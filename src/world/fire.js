@@ -132,13 +132,18 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
   const bx = source.x - view.x0;
   const by = source.y - height - view.y0;
   const pulse = firePulse(source, time);
-  const x0 = Math.max(0, Math.floor(bx - radius / ASPECT));
-  const x1 = Math.min(r.cols - 1, Math.ceil(bx + radius / ASPECT));
   const y0 = Math.max(0, Math.floor(by - radius));
   const y1 = Math.min(r.rows - 1, Math.ceil(by + radius));
+  const r2 = radius * radius, fine = r.fineMark;
   for (let y = y0; y <= y1; y++) {
+    // Only the cells of this row that lie inside the disc are visited.
+    const dy2 = (y - by) * (y - by);
+    if (dy2 >= r2) continue;
+    const half = Math.sqrt(r2 - dy2) / ASPECT;
+    const x0 = Math.max(0, Math.floor(bx - half)), x1 = Math.min(r.cols - 1, Math.ceil(bx + half));
     for (let x = x0; x <= x1; x++) {
-      const distance = Math.hypot((x - bx) * ASPECT, y - by);
+      const dx = (x - bx) * ASPECT;
+      const distance = Math.sqrt(dx * dx + dy2);
       if (distance >= radius) continue;
       const k = pulse * (1 - distance / radius) ** 2;
       const o = (y * r.cols + x) * 4;
@@ -148,7 +153,7 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
       r.ov[o] += 156 * k;
       r.ov[o + 1] += 72 * k;
       r.ov[o + 2] += 12 * k;
-      if (r.fineMark?.[o >> 2]) r.lightFine(o >> 2, 156 * k, 72 * k, 12 * k);
+      if (fine?.[o >> 2]) r.lightFine(o >> 2, 156 * k, 72 * k, 12 * k);
       r.bg[o] += 34 * k;
       r.bg[o + 1] += 16 * k;
       r.bg[o + 2] += 4 * k;
