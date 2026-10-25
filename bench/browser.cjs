@@ -366,9 +366,20 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
         })();
       }));
       assert.ok(steady.median >= 31, `30 Hz median interval ${steady.median} ms`);
-      await page.evaluate(t => Object.assign(game.native.pacer, { fitMs: t.fitMs, refitMs: 1e6 }), tuning);
-      await page.waitForFunction(() => game.metrics.rate === 60, { timeout: 20000 });
-      await page.evaluate(t => Object.assign(game.native.pacer, t), tuning);
+      // Back to 60, unless the GPU is starved at the lowest resolution (as a
+      // software renderer is), when the steady 30 rightly holds.
+      await page.evaluate(t => Object.assign(game.native.pacer, { fitMs: t.fitMs, refitMs: 1e6, held: false }), tuning);
+      await page.waitForFunction(() => game.metrics.rate === 60 || game.native.pacer.held, { timeout: 20000 });
+      steady.back = await page.evaluate(() => ({ rate: game.metrics.rate, held: game.native.pacer.held,
+        scale: game.quality.scale, floor: game.quality.minimum }));
+      if (steady.back.rate !== 60) assert.ok(steady.back.held && steady.back.scale <= steady.back.floor, `held at 30: ${JSON.stringify(steady.back)}`);
+      // The checks after this one compare with the unpaced build.
+      await page.evaluate(t => {
+        const p = Object.assign(game.native.pacer, t);
+        p.enabled = () => false;
+        p.reset();
+        game.native.clock.setRate(60);
+      }, tuning);
       results.checks.push({ pacing: steady });
     }
     const centers = await page.evaluate(() => {

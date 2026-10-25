@@ -196,6 +196,7 @@ test('a phone GPU late even at the lowest resolution gets the steady 30 through 
   for (let i = 0; i < 180; i++) frame();
   assert.equal(game.metrics.rate, 30);
   assert.equal(game.native.pacer.held, true);
+  assert.equal(game.native.clock.period, 1000 / 30);
 });
 
 test('the Full screen row follows the Fullscreen API and toggles it', async () => {

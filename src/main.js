@@ -320,7 +320,7 @@ function updateFullscreenRow() {
 fullscreenRow.addEventListener('click', () => { void toggleFullscreen(document); });
 for (const type of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(type, updateFullscreenRow);
 updateFullscreenRow();
-debug.native = { gate, wakeLock, pacer, get fullscreen() { return fullscreenApi(document)?.active ?? false; } };
+debug.native = { gate, wakeLock, pacer, get clock() { return clock; }, get fullscreen() { return fullscreenApi(document)?.active ?? false; } };
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
