@@ -1,4 +1,4 @@
-import { HuntDrops, MAX_STACKS, PICKUP_DELAY } from '../entities/hunt-drops.js';
+import { HuntDrops, PICKUP_DELAY } from '../entities/hunt-drops.js';
 import { ITEMS } from '../inventory/items.js';
 import { DENARS } from '../inventory/wallet.js';
 import { ASPECT } from './world.js';
@@ -196,6 +196,6 @@ export function layLoot(store, world, { x, y, killer, items }, path) {
     store.laid.set(item, store.items.time);
     laid.push(item);
   });
-  while (store.laid.size > MAX_STACKS) store.forget(store.laid.keys().next().value);
+  store.trim();
   return laid;
 }

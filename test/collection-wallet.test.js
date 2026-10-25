@@ -76,19 +76,29 @@ test('a coin already paid is not paid again, and still leaves the ground', () =>
   assert.equal(collection.events.length, 1);
 });
 
-test('a taken coin no longer counts against the drop store\'s room', () => {
+test('a stack taken no longer counts against the drop store\'s room, even before it expires', () => {
   const { world, drops, collection, player } = setup();
   const store = drops;
   const far = { x: player.x + 40, y: player.y + 40 };
   const [kept] = layLoot(store, world, { ...far, killer: far, items: [{ id: 'bone', count: 1 }] });
+  // A coin and an ordinary stack, each taken with E / TAKE.
   const coin = lay(store, 'denars', 60, player.x, player.y);
-  coin.pickupAfter = 0;
-  collection.update(0, player);
+  assert.equal(collection.interact(player).status, 'earned');
+  const bone = lay(store, 'bone', 2, player.x, player.y);
+  assert.equal(collection.interact(player).status, 'picked');
   assert.equal(coin.count, 0);
-  store.expire(store.items.time);
-  // Fill the store to its cap beside the kept bone: none of it is lost.
-  for (let i = 0; i < MAX_STACKS - 1; i++) layLoot(store, world, { ...far, killer: far, items: [{ id: 'arrow', count: 1 }] });
+  assert.equal(bone.count, 0);
+  // Fill the store to its cap beside the kept bone in the same frame, with
+  // no expiry between: none of it is lost.
+  for (let i = 0; i < MAX_STACKS - 2; i++) layLoot(store, world, { ...far, killer: far, items: [{ id: 'arrow', count: 1 }] });
+  store.lay({ ...far, killer: far, items: [{ id: 'deerHide', count: 1 }] }, world);
   assert.ok(store.all().includes(kept), 'the bone laid before the coin is still there');
+  assert.equal(store.all().length, MAX_STACKS);
+  assert.equal(store.laid.size, MAX_STACKS, 'the taken stacks are forgotten');
+  assert.ok(!store.laid.has(coin) && !store.laid.has(bone));
+  // Past the cap the oldest still lying goes first.
+  layLoot(store, world, { ...far, killer: far, items: [{ id: 'arrow', count: 1 }] });
+  assert.ok(!store.all().includes(kept));
   assert.equal(store.all().length, MAX_STACKS);
 });
 
