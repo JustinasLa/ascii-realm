@@ -22,7 +22,7 @@ const RUN = 6;
 // Cooling fire: ash red, ember, flame orange, gold, straw, white heat.
 const HEAT = [[64, 8, 4], [150, 26, 8], [226, 70, 16], [255, 128, 28],
   [255, 184, 64], [255, 228, 150], [255, 250, 232]];
-const CHAR = [110, 50, 20], ASH = [58, 44, 36];
+const CHAR = [110, 62, 30], ASH = [108, 102, 96];
 const BAND = ['+', 'o', '%', '&', '@'];
 const SPARK = ['*', "'", '.', '.'];
 const SCORCH = ['.', ',', ':', ';', '~'];
@@ -98,7 +98,7 @@ function inGap(u, t, seed, extra = 0) {
     const period = 1.3 + hash(k, seed + 20) * 0.9, phase = (t + hash(k, seed + 21) * period) / period;
     const cycle = Math.floor(phase), f = phase - cycle;
     const centre = hash(k * 13 + cycle, seed + 22) + f * 0.03;
-    const width = 0.016 + 0.012 * Math.sin(Math.PI * f) + extra;
+    const width = 0.014 + 0.01 * Math.sin(Math.PI * f) + extra;
     const d = Math.abs(u - centre + 0.5 - Math.floor(u - centre + 0.5) - 0.5);
     if (d < width) return true;
   }
@@ -113,7 +113,7 @@ function driftOf(effect) {
 
 // Band samples: about one per cell along the ring, shared by the scorch so
 // it lies exactly where the flames were.
-const bandCount = R => clamp(Math.round(R * 82), 24, 124);
+const bandCount = R => clamp(Math.round(R * 96), 24, 144);
 
 // The standing ring.
 function ring(plot, glow, effect, R, age, seed) {
@@ -127,7 +127,7 @@ function ring(plot, glow, effect, R, age, seed) {
     const clump = ringNoise(u, 7, -0.35 * age, age * 0.5, seed + 3);
     // A few points keep a dot alight to the very end.
     const lingering = gutter > 0 && (i + Math.floor(seed)) % 16 === 0;
-    if (!lingering && (hash(i, seed + 5) < gutter * 1.05 || clump < 0.12 + gutter * 0.3 || inGap(u, age, seed))) continue;
+    if (!lingering && (hash(i, seed + 5) < gutter * 1.05 || clump < 0.05 + gutter * 0.35 || inGap(u, age, seed))) continue;
     const p = bandPoint(u, R, age, seed, drift);
     const flick = 0.85 + 0.15 * Math.sin(age * 13 + i * 2.1);
     if (gutter > 0.4) {
@@ -137,7 +137,7 @@ function ring(plot, glow, effect, R, age, seed) {
     const h = 0.64 + 0.32 * clump + 0.04 * flick * (1 - gutter);
     plot(p.x, p.z, BAND[clamp(Math.floor((h - 0.64) / 0.07), 0, 4)], heat(h), fade * (0.85 + 0.15 * clump) * flick);
     // The band burns a row thicker where it is hot, an ember-red skin outside.
-    if (clump > 0.4 && thick < 64) {
+    if (clump > 0.4 && thick < 40) {
       const out = 1 + 0.55 / (R * ROWS);
       plot(p.x * out, p.z * out, clump > 0.7 ? 'o' : '+', heat(h - 0.28), fade * (0.45 + 0.4 * clump) * flick);
       thick++;
@@ -162,7 +162,7 @@ function ring(plot, glow, effect, R, age, seed) {
         heat(0.78 - j * 0.12), fade * flick * (1 - (j - 1) * 0.3));
     }
     // The flames light the grass along the band, never a disc in the middle.
-    if (lights < 16) { glow(p.x * 1.06, p.z * 1.06, flick * fade * (1 - gutter * 0.8), 0.9); lights++; }
+    if (lights < 16) { glow(p.x * 1.1, p.z * 1.1, flick * fade * (1 - gutter * 0.8), 1.6); lights++; }
   }
 
   // Sparks rise from the band and drift up the screen, fading with height.
@@ -246,6 +246,8 @@ function scorch(plot, glow, effect, R, age, seed) {
     if (ringNoise(u, 7, -0.35 * RING_LIFE, RING_LIFE * 0.5, seed + 3) < 0.2 || hash(i, seed + 50) > dim * 1.1 - 0.05) continue;
     const p = bandPoint(u, R, RING_LIFE, seed, still), k = hash(i, seed + 51);
     plot(p.x, p.z, SCORCH[Math.floor(k * 5)], mix(CHAR, ASH, k), dim);
+    // Charred a row wider where the flames burned hottest.
+    if (k > 0.55) plot(p.x * (1 + 0.5 / (R * ROWS)), p.z * (1 + 0.5 / (R * ROWS)), k > 0.8 ? ':' : '.', mix(CHAR, ASH, 1 - k), dim * 0.8);
   }
   for (let i = 0; i < 12; i++) {
     const end = 0.2 + 1.3 * hash(i, seed + 52);

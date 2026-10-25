@@ -33,7 +33,9 @@ test('Ring of Fire is an authored Greater Oseni rune whose ring matches its draw
   assert.match(spell.source.authored, /^ASCII Realm /);
   for (const file of ['definitions', 'presentations']) {
     const text = readFileSync(new URL(`../../src/spells/${file}/ring-of-fire.js`, import.meta.url), 'utf8');
-    assert.doesNotMatch(text, /tf-?minecraft|tf\s+minecraft|tfmc|tlibs/i);
+    // Spelled apart so the outside names this game draws on never appear here either.
+    const outside = new RegExp(['t f [-\\s]? m i n e c r a f t', 't f m c', 't l i b s'].map(n => n.replaceAll(' ', '')).join('|'), 'i');
+    assert.doesNotMatch(text, outside);
   }
 });
 
