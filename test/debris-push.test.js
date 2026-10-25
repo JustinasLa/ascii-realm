@@ -264,6 +264,26 @@ test('a piece shoved fast past a standing body within one long frame still meets
   assert.ok(b.bump.x > 0, 'knocked on');
 });
 
+test('a still piece shoved within a long frame meets a body ahead it was nowhere near at the start', () => {
+  const world = lake();
+  const d = new Debris({ random: () => 0.5, world });
+  const p = piece(d, 'mat', { angle: 0, length: 0.25, radius: 0.08 });
+  // One wader walks into the mat from the west at a run; a second stands
+  // 0.6 m on to the east, out of the still mat's reach at the frame's start.
+  const pusher = body(...Object.values(cells(-(0.08 + 0.15 + 0.125 - 0.01), 0)));
+  const at = cells(0.6, 0);
+  const ahead = body(at.x, at.y);
+  d.wading([pusher, ahead], 0.05, world);
+  pusher.x += cells(5.3 * 0.05, 0).x;
+  const wading = d.wading([pusher, ahead], 0.05, world);
+  assert.ok(!wading.filter((w) => w.body === ahead).some((w) => d.within(p, w, 0.05)), 'not near at the start');
+  d.advance([p], 0.05, world, view(), wading);
+  assert.equal(d.lastShove?.body, ahead, 'met the second wader');
+  assert.ok(ground(p, ahead.x, ahead.y).x > 0.08 + 0.15 - 0.05, 'and stopped short of it, not through it');
+  assert.ok(ahead.bump.x > 0, 'knocked on');
+  assert.ok(d.events.filter((e) => e.type === 'splash').length >= 2, 'with a splash for each');
+});
+
 test('a body on dry land, a rising or dead monster, or a fallen player never shoves', () => {
   const world = channel({ half: 1, grass: (x) => x < -1 });
   for (const make of [() => body(-2.5, 0), () => ({ ...body(), state: 'rise' }), () => ({ ...body(), state: 'dead' }),

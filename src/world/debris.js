@@ -266,6 +266,8 @@ export class Debris {
     // Splashes of knocks against bodies, for the sound.
     this.events = [];
     this.lastShove = null;
+    // Impulses dealt so far, to tell when a step knocked anything on.
+    this.knocks = 0;
     this.returnSpeed = RETURN_SPEED;
   }
 
@@ -427,6 +429,11 @@ export class Debris {
   // than half a cell, so a piece cannot jump a narrow spit of bank nor a body
   // walk through a piece unmet. Each step moves every piece, then settles
   // every meeting of a body and a piece, or of two pieces, at that moment.
+  // A step that knocks a piece on looks again, from its new pace over the
+  // rest of the frame, for bodies it may now reach, and cuts the rest finer
+  // if that pace asks it. At most MAX_SUB steps, each meeting every piece
+  // with every near body and every other piece, and at most one look per
+  // step over every body and piece.
   advance(pieces, dt, world, view, wading) {
     const live = [];
     for (const piece of pieces) {
@@ -435,16 +442,22 @@ export class Debris {
       } else live.push(piece);
     }
     if (!live.length) return;
-    const near = wading.filter((w) => live.some((p) => this.within(p, w, dt)));
-    let fastest = 0;
-    for (const p of live) fastest = Math.max(fastest, Math.hypot(p.vx, p.vy) + 1);
-    for (const w of near) fastest = Math.max(fastest, Math.hypot(w.vx, w.vy) + 1);
-    const c = toCells(fastest, fastest);
-    const steps = Math.min(MAX_SUB, Math.max(Math.ceil(dt / MAX_STEP), Math.ceil(dt * Math.max(c.cols, c.rows) / 0.5)));
-    const h = dt / steps;
-    for (let i = 0; i < steps; i++) {
+    let far = wading;
+    const near = [];
+    const look = (left) => {
+      const still = [];
+      for (const w of far) (live.some((p) => !p.gone && this.within(p, w, left)) ? near : still).push(w);
+      far = still;
+    };
+    look(dt);
+    let done = 0, used = 0, steps = this.substeps(live, near, dt);
+    while (used < steps) {
+      const h = (dt - done) / (steps - used);
       for (const piece of live) if (!piece.gone) this.move(piece, h, world, KINDS[piece.kind]);
-      const t = (i + 1) / steps;
+      done += h;
+      used++;
+      const t = done / dt;
+      const knocks = this.knocks;
       for (const w of near) {
         w.x = w.x0 + (w.x1 - w.x0) * t;
         w.y = w.y0 + (w.y1 - w.y0) * t;
@@ -455,8 +468,21 @@ export class Debris {
           if (!live[a].gone && !live[b].gone) this.meetPiece(live[a], live[b], world);
         }
       }
+      if (this.knocks === knocks || used === steps) continue;
+      look(dt - done);
+      steps = Math.max(steps, Math.min(MAX_SUB, used + this.substeps(live, near, dt - done)));
     }
     for (const piece of live) if (!piece.gone) this.settle(piece, dt);
+  }
+
+  // The steps a stretch of a frame is cut into: enough that no piece nor
+  // near body goes more than half a cell in one, nor longer than MAX_STEP.
+  substeps(live, near, dt) {
+    let fastest = 0;
+    for (const p of live) fastest = Math.max(fastest, Math.hypot(p.vx, p.vy) + 1);
+    for (const w of near) fastest = Math.max(fastest, Math.hypot(w.vx, w.vy) + 1);
+    const c = toCells(fastest, fastest);
+    return Math.min(MAX_SUB, Math.max(Math.ceil(dt / MAX_STEP), Math.ceil(dt * Math.max(c.cols, c.rows) / 0.5)));
   }
 
   // Whether a body's way this frame passes anywhere near a piece's: from
@@ -711,6 +737,7 @@ export class Debris {
     const lever = c.x * ny - c.y * nx;
     const invI = invInertia(piece);
     const j = impulse(vn, BODY_RESTITUTION, inv, invBody, lever, invI);
+    this.knocks++;
     piece.vx += j * inv * nx;
     piece.vy += j * inv * ny;
     piece.spin = kick(piece.spin, lever * j * invI);
@@ -756,6 +783,7 @@ export class Debris {
     const la = q.ax * ny - q.ay * nx, lb = rbx * ny - rby * nx;
     const ia = invInertia(a), ib = invInertia(b);
     const j = impulse(vn, PIECE_RESTITUTION, wa, wb, la, ia, lb, ib);
+    this.knocks++;
     a.vx -= j * wa * nx; a.vy -= j * wa * ny;
     b.vx += j * wb * nx; b.vy += j * wb * ny;
     a.spin = kick(a.spin, -la * j * ia);
