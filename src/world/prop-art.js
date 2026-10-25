@@ -14,9 +14,9 @@ import { ASPECT } from './world.js';
 //   acc optional accent { g, c } layered over the cell (moss, a nail...)
 //   depth optional projected ground row, relative to the prop's anchor
 //   h     optional height on a floating hull, kept on the cell
-//   n     optional unit normal in the world's frame (see surface-light.js):
-//         the cell keeps the mean of its samples' as nx, ny, and so does an
-//         accent layered over it, being the same surface
+//   nx, ny, nz optional unit normal in the world's frame (see
+//         surface-light.js): the cell keeps the mean of its samples' as nx,
+//         ny, and so does an accent layered over it, being the same surface
 // Fully covered cells get a texture chosen by material and light and a dark
 // background in the material's own colour, so a form reads as one solid
 // mass. Partly covered cells become outline glyphs pointing at the solid
@@ -144,11 +144,12 @@ function average(samples, m) {
 // The mean normal of the samples of one material, kept on the cell.
 function normalOf(cell, samples, m) {
   let x = 0, y = 0, z = 0;
-  for (const s of samples) {
-    if (!s || s.m !== m || !s.n) continue;
-    x += s.n[0]; y += s.n[1]; z += s.n[2];
+  for (let i = 0; i < samples.length; i++) {
+    const s = samples[i];
+    if (!s || s.m !== m || s.nx === undefined) continue;
+    x += s.nx; y += s.ny; z += s.nz;
   }
-  const k = Math.hypot(x, y, z) || 1;
+  const k = Math.sqrt(x * x + y * y + z * z) || 1;
   cell.nx = x / k;
   cell.ny = y / k;
 }
@@ -228,7 +229,7 @@ export function bakeSurface(w, top, bottom, sample, seed, { shadow, extras, x0 =
       }
       const cell = makeCell(dx, dy, g, colour[0], colour[1], colour[2], undefined, undefined, undefined, mid.depth);
       if (mid.h !== undefined) cell.h = mid.h;
-      if (mid.n) normalOf(cell, samples, m);
+      if (mid.nx !== undefined) normalOf(cell, samples, m);
       if (back) {
         const kb = mid.back ?? BACK[m] ?? 0.3;
         cell.br = colour[0] * kb;

@@ -11,7 +11,7 @@ import { fineOf } from './fine-bakes.js';
 import { shade } from './glow.js';
 import { bakeSurface, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
-import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, glossByte, worldNormal } from './surface-light.js';
+import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, VIEW_C, VIEW_S, glossByte } from './surface-light.js';
 import { makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
@@ -143,22 +143,33 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
       const d = (u - f.u) ** 2 + (v - f.v) ** 2 * 1.4;
       if (d < bestD) { nextD = bestD; next = best; bestD = d; best = f; } else if (d < nextD) { nextD = d; next = f; }
     }
-    const n = dome(u, v);
-    const smooth = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
+    // dome(u, v), written out: this runs for every sample of a bake.
+    const dz = Math.sqrt(Math.max(0.04, 1 - u * u - v * v));
+    const dy = v * 0.85 - 0.35;
+    const dk = Math.hypot(u, dy, dz);
+    const n0 = u / dk, n1 = dy / dk, n2 = dz / dk;
+    const smooth = Math.max(0, n0 * LIGHT[0] + n1 * LIGHT[1] + n2 * LIGHT[2]);
     const grain = (hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 17) - 0.5) * 0.08;
     let l = Math.max(0, Math.min(1, (best.lit * 0.55 + smooth * 0.55 - 0.5) * 1.5 + 0.48 + grain));
     // The face tucks in under itself near the ground, out of the light.
     const low = undercut ? Math.max(0, 1 + py / (ry * 2 * undercut)) : 0;
     if (low > 0) l *= 1 - low * 0.65;
-    const s = { m: 'stone', l, c: stone };
+    let s;
     if (normals.on) {
       // The facet's face blended into the dome the way the moon sees it,
       // with a small bump per small cell, so wet stone sparkles in specks.
+      // This runs for every sample of a fine bake, so it is worldNormal
+      // written out, into fields made with the sample.
       const fx = Math.floor(px * FINE / ASPECT), fy = Math.floor(py * FINE);
-      const bx = best.n[0] + n[0] + (hash2(fx, fy, seed + 61) - 0.5) * 0.44;
-      const by = best.n[1] + n[1] + (hash2(fy, fx, seed + 62) - 0.5) * 0.44;
-      s.n = worldNormal(bx, by, best.n[2] + n[2]);
-    }
+      const fn = best.n;
+      const bx = fn[0] + n0 + (hash2(fx, fy, seed + 61) - 0.5) * 0.44;
+      const by = fn[1] + n1 + (hash2(fy, fx, seed + 62) - 0.5) * 0.44;
+      const bz = fn[2] + n2;
+      const wy = VIEW_C * by + VIEW_S * bz;
+      const wz = Math.max(0, VIEW_C * bz - VIEW_S * by);
+      const k = Math.sqrt(bx * bx + wy * wy + wz * wz) || 1;
+      s = { m: 'stone', l, c: stone, nx: bx / k, ny: wy / k, nz: wz / k };
+    } else s = { m: 'stone', l, c: stone };
     for (const pts of cracks) {
       for (let i = 1; i < pts.length; i++) {
         const [ax, ay] = pts[i - 1];
@@ -166,7 +177,11 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
         const vx = bx - ax;
         const vy = by - ay;
         const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)));
-        if (Math.hypot(px - ax - vx * t, py - ay - vy * t) < crackWidth) {
+        // A distance is never shorter than either of its legs, so most
+        // samples are ruled out before the square root.
+        const ex = px - ax - vx * t;
+        const ey = py - ay - vy * t;
+        if (Math.abs(ex) < crackWidth && Math.abs(ey) < crackWidth && Math.hypot(ex, ey) < crackWidth) {
           const a = (Math.round(-Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 4;
           s.acc = { g: fissures[a][i % 2], c: STONE_GAP };
           return s;
