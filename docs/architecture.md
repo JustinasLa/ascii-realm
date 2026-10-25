@@ -15,7 +15,7 @@ src/
                      shading, props and their fine bakes (with a worker), sky, reflections,
                      fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement;
-                     monsters, animals, predators and their figures, hunt drops
+                     monsters, animals, predators, birds, fish and their figures, hunt drops
 ```
 
 Animals are described in [wildlife](wildlife.md).

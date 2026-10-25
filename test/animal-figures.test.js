@@ -43,7 +43,7 @@ register(dataURL(`
     return redirect.has(resolved.url) ? { url: redirect.get(resolved.url), shortCircuit: true } : resolved;
   }
 `));
-const { AnimalFigures, LOOKS } = await import('../src/entities/animal-figures.js');
+const { AnimalFigures, LOOKS, MAX_DRAWN, MAX_DRAWN_PHONE, MAX_SMALL, MAX_SMALL_PHONE, PLAIN } = await import('../src/entities/animal-figures.js');
 const THREE = await import(threeURL);
 
 // Node has no image decoder, so the rabbit's fur texture is dropped from
@@ -93,7 +93,7 @@ function fakeGPU() {
             for (let j = 0; j < s.h; j++) {
               for (let i = 0; i < s.w; i++) {
                 if (((i / s.w - 0.5) / 0.3) ** 2 + ((j / s.h - 0.5) / 0.3) ** 2 > 1) continue;
-                out.set([200, 150, 90, 255], (j * w + s.x + i) * 4);
+                out.set([200, 150, 90, 255], ((j + s.y) * w + s.x + i) * 4);
               }
             }
           }
@@ -311,7 +311,7 @@ test('the animal models are credited, CC0, and light enough', () => {
   assert.match(text, /Quaternius/);
   assert.match(text, /Dammer/);
   const total = Object.values(LOOKS).reduce((sum, l) => sum + statSync(new URL(`../${l.url}`, import.meta.url)).size, 0);
-  assert.ok(total < 4 * 1024 * 1024, `${total} bytes`);
+  assert.ok(total < 6 * 1024 * 1024, `${total} bytes`);
 });
 
 test('a fallen animal plays its fall once and holds it; a rabbit then lies in its dead pose', () => {
@@ -556,4 +556,272 @@ test('the wolf model is credited and light', () => {
   const text = readFileSync(new URL('../assets/animals/LICENSE.txt', import.meta.url), 'utf8');
   assert.match(text, /wolf\.glb/);
   assert.ok(statSync(new URL('../assets/animals/wolf.glb', import.meta.url)).size < 1.2 * 1024 * 1024);
+});
+
+// Birds and fish.
+const { BIRD, Bird } = await import('../src/entities/birds.js');
+const { FISH, Fish } = await import('../src/entities/fish.js');
+const { FLOATING, SHEEN } = await import('../src/world/terrain/water.js');
+const { family, glyph } = await import('../src/render/glyphs.js');
+const pigeon = (state = 'feed', extra = {}) => Object.assign(new Bird(0, 0), { state }, extra);
+const fish = (extra = {}) => Object.assign(new Fish(0, 0), extra);
+
+test('every clip the pigeon and fish play is in their models, at the lengths their kinds expect', () => {
+  for (const [name, kind] of [['pigeon', BIRD], ['fish', FISH]]) {
+    for (const [key, clipName] of Object.entries(kind.clips)) {
+      const clip = gltfs[name].animations.find((c) => c.name === clipName);
+      assert.ok(clip, `${name} ${clipName}`);
+      assert.ok(Math.abs(clip.duration - kind.lengths[key]) < 0.01, `${clipName} ${clip.duration}`);
+    }
+  }
+  // The fish's measured swim speed: one tail beat a loop.
+  const tail = gltfs.fish.scene.getObjectByName('Tail');
+  const mixer = new THREE.AnimationMixer(gltfs.fish.scene);
+  const clip = gltfs.fish.animations[0];
+  const action = mixer.clipAction(clip).play();
+  const xs = [];
+  for (let i = 0; i < 60; i++) {
+    action.time = (clip.duration * i) / 60;
+    mixer.update(0);
+    gltfs.fish.scene.updateMatrixWorld(true);
+    xs.push(tail.getWorldPosition(new THREE.Vector3()).x);
+  }
+  mixer.stopAllAction();
+  const mid = (Math.max(...xs) + Math.min(...xs)) / 2;
+  let crossings = 0;
+  for (let i = 0; i < 60; i++) if (Math.sign(xs[i] - mid) !== Math.sign(xs[(i + 1) % 60] - mid)) crossings++;
+  assert.equal(crossings, 2, 'one sweep each way a loop');
+  assert.ok(Math.abs(FISH.swimSpeed - (0.7 * FISH.length) / clip.duration) < 1e-3);
+});
+
+test('the pigeon and the fish are scaled nose to tail and face their heading', () => {
+  const f = figures();
+  for (const [name, kind, make] of [['pigeon', BIRD, () => pigeon()], ['fish', FISH, () => fish()]]) {
+    const scene = f.sources[name];
+    scene.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(scene, true);
+    const length = (box.max.z - box.min.z) * f.fits[name].scale;
+    assert.ok(Math.abs(length - kind.length) < kind.length * 0.05, `${name} ${length}`);
+    const s = make();
+    f.update(dt, [], [s]);
+    f.shown.add(s);
+    const rig = f.rigOf(s);
+    for (const heading of [0, Math.PI / 2]) {
+      s.heading = heading;
+      rig.update(dt, s);
+      const head = rig.bones[LOOKS[name].head.replace('.', '')].getWorldPosition(new THREE.Vector3());
+      const hips = rig.bones[LOOKS[name].hips.replace('.', '')].getWorldPosition(new THREE.Vector3());
+      const bearing = Math.atan2(head.x - hips.x, head.z - hips.z);
+      assert.ok(Math.abs(Math.atan2(Math.sin(bearing - heading), Math.cos(bearing - heading))) < 0.5, `${name} ${bearing}`);
+    }
+    assert.equal(f.speeds[name], undefined, 'no gait speeds are measured');
+    assert.deepEqual(rig.waterContacts(), []);
+  }
+});
+
+test('a pigeon plays its own clip for every state, and never a graze', () => {
+  const f = figures();
+  const want = [['feed', 'idle'], ['alert', 'idle'], ['takeoff', 'takeoff'], ['land', 'land'],
+    ['fly', 'flap', { clip: 'flap' }], ['fly', 'glide', { clip: 'glide' }],
+    ['flutter', 'takeoff', { va: 1 }], ['flutter', 'takeoff', { va: 0 }], ['flutter', 'land', { va: -1 }]];
+  for (const [state, clip, extra] of want) {
+    const b = pigeon(state, extra);
+    const rig = f.rigOf(b);
+    for (let i = 0; i < 30; i++) rig.update(dt, b);
+    assert.ok(rig.weights[clip] > 0.95, `${state} ${clip}`);
+    assert.equal(rig.weights.graze, undefined);
+  }
+  assert.throws(() => f.rigOf(pigeon('dead')).update(dt, pigeon('dead')), /No pose/);
+});
+
+test('a flying pigeon keeps the height it left the ground at; a fish hangs at its swim depth', () => {
+  const f = figures();
+  const b = pigeon('feed');
+  const rig = f.rigOf(b);
+  rig.update(dt, b);
+  const standing = rig.model.position.y;
+  assert.ok(standing > 0.05, 'on its toes');
+  Object.assign(b, { state: 'fly', alt: 5, clip: 'flap' });
+  for (let i = 0; i < 20; i++) rig.update(dt, b);
+  assert.equal(rig.model.position.y, standing, 'not pulled to the ground');
+  b.pitch = 0.3;
+  rig.update(dt, b);
+  assert.ok(Math.abs(rig.model.rotation.x + 0.3) < 1e-9, 'the whole body pitches');
+  const s = fish({ swim: 0.2 });
+  const fr = f.rigOf(s);
+  for (let i = 0; i < 5; i++) fr.update(dt, s);
+  assert.equal(fr.model.position.y, -0.2);
+  assert.equal(fr.tips.length, 0);
+});
+
+test('a creature posed again after a while resumes from its own clock', () => {
+  const f = figures();
+  const s = fish({ clipTime: 0, rate: 2 });
+  const rig = f.rigOf(s);
+  rig.update(dt, s);
+  s.clipTime = 7.3;
+  rig.update(dt, s);
+  const length = rig.actions.swim.getClip().duration;
+  assert.ok(Math.abs(rig.actions.swim.time - (7.3 % length)) < 1e-6);
+  // A one-shot is held at its end, not looped.
+  const b = pigeon('land', { clipTime: 9 });
+  const br = f.rigOf(b);
+  br.update(dt, b);
+  assert.ok(br.actions.land.time > br.actions.land.getClip().duration - 0.01);
+  // A clip fading out runs on at its own rate.
+  b.state = 'feed';
+  b.clipTime = 0;
+  const before = br.times.land;
+  br.update(dt, b);
+  assert.ok(br.times.land > before);
+});
+
+test('birds and fish ride a shelf of their own in the same single readback, capped apart from the animals', (t) => {
+  const gpu = fakeGPU();
+  const f = new AnimalFigures(gltfs, { renderer: gpu });
+  const reads = t.mock.method(gpu, 'getContext');
+  const view = { x0: -300, y0: -150, cols: 600, rows: 300 };
+  const deer = Array.from({ length: 6 }, (_, i) => Object.assign(hind(), { x: i * 30 - 75, y: 10 }));
+  const flock = Array.from({ length: 10 }, (_, i) => pigeon('feed', { x: i * 12 - 60, y: -20 }));
+  const pack = new Animals({ counts: { wolf: 4 } }).spawn('wolf', { x: 200, y: 60, count: 1 });
+  pack.pack.phase = 'hunt';
+  const prowler = pack.members[0];
+  f.update(dt, [...deer, prowler], flock);
+  const out = f.rasterise(view, [...deer, prowler], { x: 0, y: 0 }, flock);
+  assert.equal(reads.mock.callCount(), 1, 'one readback');
+  assert.equal(out.filter((d) => !d.small).length, MAX_DRAWN);
+  assert.equal(out.filter((d) => d.small).length, MAX_SMALL);
+  assert.ok(out.some((d) => d.animal === prowler), 'an engaged wolf still outranks the grazers');
+  assert.ok(out.filter((d) => d.small).every((d) => d.cells.length > 0), 'the shelf is read back');
+  assert.ok(out.filter((d) => d.small).every((d) => !d.air && !d.submerged && d.shadowFade === 1));
+  // On phones, fewer of each; only those drawn are posed next frame.
+  const phone = new AnimalFigures(gltfs, { renderer: fakeGPU(), phone: () => true });
+  phone.update(dt, deer, flock);
+  const few = phone.rasterise(view, deer, { x: 0, y: 0 }, flock);
+  assert.equal(few.filter((d) => !d.small).length, MAX_DRAWN_PHONE);
+  assert.equal(few.filter((d) => d.small).length, MAX_SMALL_PHONE);
+  const posedBefore = [...phone.rigs].filter(([s, r]) => flock.includes(s) && r.posed === phone.frameNo).length;
+  assert.equal(posedBefore, MAX_SMALL_PHONE);
+  phone.update(dt, deer, flock);
+  const posed = [...phone.rigs].filter(([s, r]) => flock.includes(s) && r.posed === phone.frameNo);
+  assert.equal(posed.length, MAX_SMALL_PHONE);
+  assert.ok(posed.every(([s]) => phone.shown.has(s)));
+  // Only small creatures: still drawn; nothing in view: nothing read.
+  const lone = new AnimalFigures(gltfs, { renderer: fakeGPU() });
+  assert.equal(lone.rasterise(view, [], { x: 0, y: 0 }, [pigeon('feed')]).length, 1);
+  assert.equal(lone.rasterise(view, [], { x: 0, y: 0 }, [pigeon('feed', { x: 5000 })]).length, 0);
+});
+
+test('birds rising or flying near come first, then darting fish, then the nearest', () => {
+  const f = new AnimalFigures(gltfs, { renderer: fakeGPU() });
+  const view = { x0: -300, y0: -150, cols: 600, rows: 300 };
+  const near = Array.from({ length: 8 }, (_, i) => pigeon('feed', { x: i * 6 - 24, y: 0 }));
+  const flying = pigeon('fly', { x: 150, y: 60, alt: 2, clip: 'glide' });
+  const darting = fish({ x: -150, y: 60, state: 'dart' });
+  const all = [...near, flying, darting];
+  f.update(dt, [], all);
+  const out = f.rasterise(view, [], { x: 0, y: 0 }, all);
+  assert.ok(out.some((d) => d.animal === flying && d.air && d.shadowFade === 0));
+  assert.ok(out.some((d) => d.animal === darting && d.submerged && d.shadowFade === 0));
+});
+
+test('a bird 6 m up is framed round its body, whole inside its slot', () => {
+  const f = new AnimalFigures(gltfs, { renderer: fakeGPU() });
+  const b = pigeon('fly', { x: 0, y: 40, alt: 6, clip: 'glide' });
+  const view = { x0: -150, y0: -60, cols: 300, rows: 160 };
+  f.update(dt, [], [b]);
+  const [d] = f.rasterise(view, [], { x: 0, y: 40 }, [b]);
+  assert.ok(d.cells.length > 0);
+  const slot = f.slotOf(b, view);
+  assert.ok(slot.anchor < b.y - 50, 'raised by its altitude');
+  assert.ok(slot.rows < 30, 'a small slot');
+  assert.equal(d.base, Math.floor(b.y) - view.y0, 'standing over its ground row');
+  assert.ok(Math.max(...d.cells.map((c) => c.sy)) < d.base - 40);
+});
+
+test('a fish under water is a soft smudge, no outline, its colour sunk toward the water\'s', () => {
+  const f = new AnimalFigures(gltfs, { renderer: fakeGPU() });
+  const s = fish({ x: 0, y: 0, swim: 0.2 });
+  const view = { x0: -100, y0: -50, cols: 200, rows: 100 };
+  f.update(dt, [], [s]);
+  const [d] = f.rasterise(view, [], { x: 0, y: 0 }, [s]);
+  const soft = new Set([...' .,:;~=≈'].map(glyph));
+  assert.ok(d.cells.length > 0);
+  for (const c of d.cells) {
+    assert.ok(soft.has(c.g), 'no outline glyphs');
+    assert.equal(c.br, undefined, 'no blot behind');
+    assert.ok(Math.abs(c.k - 0.85 * (1 - 0.2 / 0.6)) < 1e-9);
+  }
+  // Drawn into water: only plain water cells take it, mixed between the
+  // water and the fish.
+  const cols = 200;
+  const rows = 100;
+  const fg = new Uint8ClampedArray(cols * rows * 4);
+  const bg = new Uint8ClampedArray(cols * rows * 4).fill(10);
+  const glyphs = new Uint16Array(cols * rows);
+  const pad = family('water.pad.')[0];
+  const crest = family('water.wave.')[0];
+  const chop = family('water.chop.')[0];
+  const sand = family('water.sand.')[0];
+  const r = {
+    cols, rows, bg, fg, mask: new Uint8Array(cols * rows).fill(WATER),
+    glyphAt: (cell) => glyphs[cell],
+    putAt(cell, g, cr, cg, cb) { glyphs[cell] = g; fg.set([cr, cg, cb], cell * 4); this.written.push(cell); },
+    written: [],
+  };
+  const cells = d.cells.map((c) => c.sy * cols + c.sx);
+  glyphs[cells[0]] = pad;
+  glyphs[cells[1]] = crest;
+  glyphs[cells[2]] = chop;
+  glyphs[cells[3]] = sand;
+  r.mask[cells[4]] = WATER + 1;
+  AnimalFigures.drawSubmerged(r, { ...d, cells: [...d.cells, { sx: -1, sy: 0 }, { sx: 0, sy: rows }] });
+  assert.ok(!r.written.includes(cells[0]), 'a lily pad stays over it');
+  assert.ok(!r.written.includes(cells[1]), 'a crest stays over it');
+  assert.ok(!r.written.includes(cells[2]), 'chop stays over it');
+  assert.ok(r.written.includes(cells[3]), 'the sandy bed shows it');
+  assert.ok(!r.written.includes(cells[4]), 'never off the water');
+  const c = d.cells[5];
+  const at5 = cells[5] * 4;
+  for (const [i, v] of [[0, c.r], [1, c.gg], [2, c.b]]) {
+    const lo = Math.min(10, v);
+    const hi = Math.max(10, v) + 18;
+    assert.ok(fg[at5 + i] >= lo - 1 && fg[at5 + i] <= hi + 1, 'between the water and the fish');
+  }
+});
+
+test('plain water is only bed and blank water: nothing that floats or catches the moon', () => {
+  for (let g = 0; g < PLAIN.length; g++) {
+    if (!PLAIN[g]) continue;
+    assert.equal(FLOATING[g] ?? 0, 0, `floating ${g}`);
+    assert.equal(SHEEN[g] ?? 0, 0, `sheen ${g}`);
+  }
+  for (const f of ['water.ring.', 'water.bubbles.', 'water.foam.', 'water.glint.', 'water.dash.']) {
+    for (const g of family(f)) assert.equal(PLAIN[g], 0, f);
+  }
+  assert.equal(PLAIN[family('water.caustic.')[0]], 1);
+});
+
+test('a bird\'s shadow fades as it rises; a fish has none', () => {
+  const r = { cols: 40, rows: 40, fg: new Float32Array(40 * 40 * 4).fill(100), bg: new Float32Array(40 * 40 * 4).fill(100),
+    mask: new Uint8Array(40 * 40).fill(WATER + 1) };
+  const view = { x0: -20, y0: -20, cols: 40, rows: 40 };
+  const b = pigeon('feed', { x: 0, y: 0 });
+  AnimalFigures.drawShadow(r, view, { animal: b, shadow: LOOKS.pigeon.shadow, shadowFade: 1 });
+  const dark = Math.min(...r.fg);
+  assert.ok(dark < 100);
+  r.fg.fill(100);
+  AnimalFigures.drawShadow(r, view, { animal: b, shadow: LOOKS.pigeon.shadow, shadowFade: 0 });
+  AnimalFigures.drawShadow(r, view, { animal: fish(), shadow: null });
+  assert.equal(Math.min(...r.fg), 100);
+});
+
+test('the pigeon and fish models are credited with their sources and licences', () => {
+  const text = readFileSync(new URL('../assets/animals/LICENSE.txt', import.meta.url), 'utf8');
+  assert.match(text, /pigeon\.glb/);
+  assert.match(text, /Paul Spooner/);
+  assert.match(text, /public domain/i);
+  assert.match(text, /peripheralarbor\.com\/bird\.blend/);
+  assert.match(text, /fish\.glb/);
+  assert.match(text, /XWl86YFtpF/);
 });

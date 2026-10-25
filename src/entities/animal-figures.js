@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from '../../vendor/three/utils/SkeletonUtils.js';
-import { glyph } from '../render/glyphs.js';
+import { BLANK_GLYPH, GLYPH_KIND, family, glyph } from '../render/glyphs.js';
 import { ASPECT, WATER } from '../world/world.js';
 import { KINDS } from './animals.js';
+import { BIRD } from './birds.js';
+import { FISH } from './fish.js';
 import { ModelFigure, outline } from './model.js';
 import { engaged } from './predators.js';
 import { SCALE, TILT } from './rig.js';
@@ -25,12 +27,29 @@ const PAD = 2;
 // then anything in flight, then the nearest.
 export const MAX_DRAWN = 6;
 export const MAX_DRAWN_PHONE = 4;
+// Birds and fish have their own cap, so they never take a deer's place.
+export const MAX_SMALL = 8;
+export const MAX_SMALL_PHONE = 4;
 const COS = Math.sqrt(1 - TILT * TILT);
 
 // Wolves this near the player, metres, are drawn before anything else.
 const PRIORITY = 25;
 
 const RAMP = [...' .:-=+*#%@'].map(glyph);
+// Under water a fish shows as a soft smudge of marks, not a solid sprite.
+const SOFT = [...' .,:;~=≈'].map(glyph);
+// The faint blue a fish picks up under the surface; how much of its own
+// colour shows just under it, fading out by `depth` metres down.
+const LIFT = [6, 10, 18];
+export const SINK = { gain: 0.85, depth: 0.6 };
+// The glyphs of plain water a fish may show through: the bed (sand, stones,
+// weed), the caustics netting it, and blank water; the families are those
+// terrain/water.js draws them from. Swell marks, glints, pads, foam, rings
+// and every other surface detail stay over the fish.
+export const PLAIN = new Uint8Array(GLYPH_KIND.length);
+for (const g of ['water.sand.', 'water.stones.', 'water.weed.', 'water.caustic.'].flatMap((f) => family(f))) PLAIN[g] = 1;
+for (let g = 0; g < GLYPH_KIND.length; g++) if (GLYPH_KIND[g] === BLANK_GLYPH) PLAIN[g] = 1;
+PLAIN[0] = 1;
 // A softer rim and gain than the monsters': animals are part of the land,
 // and the player stays the brightest thing on screen.
 const RIM = [170, 182, 204];
@@ -68,7 +87,17 @@ export const LOOKS = {
     foot: 'BackPaw_L_end', flesh: 0.06, shadow: [0.18, 0.09],
     legs: [['FrontLeg_L', 'FrontPaw_L', 'FrontPaw_L_end'], ['FrontLeg_R', 'FrontPaw_R', 'FrontPaw_R_end'],
       ['BackLeg_L001', 'BackPaw_L', 'BackPaw_L_end'], ['BackLeg_R001', 'BackPaw_R', 'BackPaw_R_end']] },
+  // Small creatures are scaled nose to tail and posed their own way: the
+  // pigeon stands on its toes, the fish has no legs at all.
+  pigeon: { url: 'assets/animals/pigeon.glb', kind: 'pigeon', small: 'bird', head: 'DEF-head', hips: 'DEF-spine',
+    foot: 'DEF-toe.L', flesh: 0.04, shadow: [0.16, 0.07],
+    legs: ['L', 'R'].map((side) => [`DEF-thigh.${side}`, `DEF-shin.${side}`, `DEF-foot.${side}`, `DEF-toe.${side}`]) },
+  fish: { url: 'assets/animals/fish.glb', kind: 'fish', small: 'fish', head: 'Face', hips: 'Tail', flesh: 0.03,
+    shadow: null, legs: [] },
 };
+
+// The kind profile each look is made for.
+export const kindOf = (look) => (look.small === 'bird' ? BIRD : look.small === 'fish' ? FISH : KINDS[look.kind]);
 
 // Which look an animal wears.
 export const lookOf = (animal) => (animal.variant === 'stag' ? 'stag' : animal.kind.id);
@@ -94,14 +123,20 @@ function relight(scene) {
 
 // The scale and turn that stand a model at its kind's withers height,
 // facing +z, measured once in its rest pose.
+// A small creature is scaled by its length along its facing instead.
 function measure(scene, look, height) {
   scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(scene, true);
   const at = (name) => scene.getObjectByName(bone(name)).getWorldPosition(new THREE.Vector3());
-  const withers = at(look.withers).y - box.min.y;
   const head = at(look.head);
   const hips = at(look.hips);
-  return { scale: height / withers, yaw: Math.atan2(head.x - hips.x, head.z - hips.z) };
+  const yaw = Math.atan2(head.x - hips.x, head.z - hips.z);
+  if (look.small) {
+    const along = Math.abs(Math.sin(yaw)) * (box.max.x - box.min.x) + Math.abs(Math.cos(yaw)) * (box.max.z - box.min.z);
+    return { scale: height / along, yaw };
+  }
+  const withers = at(look.withers).y - box.min.y;
+  return { scale: height / withers, yaw };
 }
 
 class Rig {
@@ -109,6 +144,7 @@ class Rig {
     this.name = name;
     this.look = LOOKS[name];
     this.model = new THREE.Group();
+    this.model.rotation.order = 'YXZ';
     this.inner = cloneSkinned(source);
     this.inner.scale.setScalar(fit.scale);
     this.inner.rotation.y = -fit.yaw;
@@ -128,6 +164,11 @@ class Rig {
       action.setEffectiveWeight(0);
       this.actions[key] = action;
     }
+    // A small creature's clips run on its own clocks, so each keeps its own
+    // time and rate as it fades out.
+    this.times = Object.fromEntries(Object.keys(clips).map((k) => [k, 0]));
+    this.rates = Object.fromEntries(Object.keys(clips).map((k) => [k, 1]));
+    this.posed = -1;
     // The fall, the hit-reacts and the bite play once and hold their last pose.
     for (const key of ['death', 'dead', 'hitL', 'hitR', 'attack']) {
       if (!this.actions[key]) continue;
@@ -211,7 +252,74 @@ class Rig {
     return w;
   }
 
+  // A bird's clip for what it is doing; every state it has is here.
+  poseBird(s) {
+    switch (s.state) {
+      case 'feed':
+      case 'alert':
+        return 'idle';
+      case 'takeoff':
+        return 'takeoff';
+      case 'flutter':
+        return s.va < 0 ? 'land' : 'takeoff';
+      case 'fly':
+        return s.clip === 'glide' ? 'glide' : 'flap';
+      case 'land':
+        return 'land';
+      default:
+        throw new Error(`No pose for a bird that is ${s.state}`);
+    }
+  }
+
+  // A fish only ever swims, its rate set by its speed.
+  poseFish() {
+    return 'swim';
+  }
+
+  // Poses a bird or fish: the clip it plays is set to its own clock (so a
+  // creature posed again after a while picks up where its clock has got
+  // to), the others fade out over about 0.3 s on theirs. A bird stands on
+  // its toes until it is off the ground, then holds that height while its
+  // altitude lifts the whole figure; a fish hangs at its swim depth.
+  updateSmall(dt, s) {
+    const key = this.look.small === 'bird' ? this.poseBird(s) : this.poseFish(s);
+    const ease = this.state === null ? 1 : 1 - Math.exp(-dt / 0.1);
+    this.state = s.state;
+    for (const k in this.actions) {
+      const a = this.actions[k];
+      const length = a.getClip().duration;
+      const once = k === 'takeoff' || k === 'land';
+      if (k === key) {
+        this.rates[k] = s.rate ?? 1;
+        this.times[k] = s.clipTime ?? 0;
+      } else if (this.weights[k] > 1e-3) this.times[k] += dt * this.rates[k];
+      const t = this.times[k];
+      a.time = once ? Math.min(Math.max(0, t), length - 1e-3) : ((t % length) + length) % length;
+      this.weights[k] += ((k === key ? 1 : 0) - this.weights[k]) * ease;
+      a.setEffectiveWeight(this.weights[k]);
+    }
+    this.mixer.update(0);
+    this.model.rotation.y = s.heading;
+    this.model.rotation.x = -(s.pitch ?? 0);
+    // Only a bird on the ground needs its toes found first.
+    if (this.tips.length && (s.alt ?? 0) < 0.3) {
+      this.model.position.y = 0;
+      this.model.updateMatrixWorld(true);
+      const v = new THREE.Vector3();
+      let lowest = Infinity;
+      for (const tip of this.tips) lowest = Math.min(lowest, tip.getWorldPosition(v).y);
+      this.ground = -lowest;
+    }
+    this.model.position.y = this.look.small === 'fish' ? -(s.swim ?? 0) : this.ground;
+    this.model.updateMatrixWorld(true);
+    this.flash = 0;
+  }
+
   update(dt, s) {
+    if (this.look.small) {
+      this.updateSmall(dt, s);
+      return;
+    }
     const w = this.pose(s);
     // A fall is sudden, everything else blends.
     const ease = s.state === 'dead' && this.state !== 'dead' ? 1 : 1 - Math.exp(-dt * 14);
@@ -240,7 +348,7 @@ class Rig {
 
   // Where each wading leg meets the water's surface, for splash rings.
   waterContacts() {
-    if (this.waterDepth <= 0.001 || this.state === 'dead') return [];
+    if (this.look.small || this.waterDepth <= 0.001 || this.state === 'dead') return [];
     const contacts = [];
     for (const leg of this.legs) {
       const joints = leg.map((b) => b.getWorldPosition(new THREE.Vector3()));
@@ -329,10 +437,10 @@ export class AnimalFigures {
     this.fits = {};
     for (const [name, look] of Object.entries(LOOKS)) {
       const gltf = gltfs[name];
-      const kind = KINDS[look.kind];
+      const kind = kindOf(look);
       relight(gltf.scene);
       this.sources[name] = gltf.scene;
-      this.fits[name] = measure(gltf.scene, look, name === 'stag' ? kind.stagHeight : kind.height);
+      this.fits[name] = measure(gltf.scene, look, look.small ? kind.length : name === 'stag' ? kind.stagHeight : kind.height);
       this.clips[name] = Object.fromEntries(Object.entries(kind.clips).map(([key, clipName]) => {
         const clip = gltf.animations.find((c) => c.name === clipName);
         if (!clip) throw new Error(`Missing clip ${clipName}`);
@@ -371,6 +479,12 @@ export class AnimalFigures {
     this.ground = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.02)];
     this.surface = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)];
     this.drawn = [];
+    // The small creatures drawn last frame, the view they were drawn in, and
+    // a count of frames, so each rig knows when it was last posed.
+    this.shown = new Set();
+    this.view = null;
+    this.frameNo = 0;
+    this.posedCount = 0;
   }
 
   rigOf(animal) {
@@ -380,27 +494,52 @@ export class AnimalFigures {
     rig = this.spare[name].pop();
     if (rig) rig.reset();
     else rig = new Rig(name, this.sources[name], this.clips[name], this.fits[name]);
-    this.speeds[name] ??= { walk: rig.actions.walk ? groundSpeed(rig, 'walk') : 0, run: groundSpeed(rig, 'run') };
-    rig.walkSpeed = this.speeds[name].walk;
-    rig.runSpeed = this.speeds[name].run;
+    // Small creatures have no gaits: their speeds are their kinds' own.
+    if (!rig.look.small) {
+      this.speeds[name] ??= { walk: rig.actions.walk ? groundSpeed(rig, 'walk') : 0, run: groundSpeed(rig, 'run') };
+      rig.walkSpeed = this.speeds[name].walk;
+      rig.runSpeed = this.speeds[name].run;
+    }
     this.rigs.set(animal, rig);
     this.scene.add(rig.model);
     return rig;
   }
 
   // Poses every live animal; rigs of animals let go are kept for the next.
-  update(dt, animals) {
-    const present = new Set(animals);
+  // Birds and fish are posed only if drawn last frame (on a desktop, also
+  // if within two metres of the view), at most as many as may be drawn;
+  // the rest live on unseen and unposed.
+  update(dt, animals, small = []) {
+    const present = new Set([...animals, ...small]);
     for (const [animal, rig] of this.rigs) {
       if (present.has(animal)) continue;
       this.rigs.delete(animal);
       this.scene.remove(rig.model);
       this.spare[rig.name].push(rig);
     }
+    this.frameNo++;
     for (const animal of animals) this.rigOf(animal).update(dt, animal);
+    const phone = this.phone();
+    const cap = phone ? MAX_SMALL_PHONE : MAX_SMALL;
+    const view = this.view;
+    const [mx, my] = [(2 * SCALE) / ASPECT, 2 * SCALE * TILT];
+    const near = (s) => !phone && view && s.x > view.x0 - mx && s.x < view.x0 + view.cols + mx
+      && s.y > view.y0 - my && s.y < view.y0 + view.rows + my + (s.alt ?? 0) * SCALE * COS;
+    const due = [...small.filter((s) => this.shown.has(s)), ...small.filter((s) => !this.shown.has(s) && near(s))];
+    this.posedCount = 0;
+    for (const s of due.slice(0, cap)) {
+      const rig = this.rigOf(s);
+      rig.update(dt, s);
+      rig.posed = this.frameNo;
+      this.posedCount++;
+    }
   }
 
-  rasterise(view, animals, near) {
+  // The animals in view drawn into slots of one image, read back at once
+  // and turned into cells: the large ones along the bottom row, birds and
+  // fish on a shelf of their own above them.
+  rasterise(view, animals, near, small = []) {
+    this.view = view;
     const inView = [];
     for (const s of animals) {
       const slot = this.slotOf(s, view);
@@ -411,15 +550,28 @@ export class AnimalFigures {
     inView.sort((a, b) => rank(a.s) - rank(b.s)
       || Math.hypot(a.s.x - near.x, a.s.y - near.y) - Math.hypot(b.s.x - near.x, b.s.y - near.y));
     const drawn = inView.slice(0, this.phone() ? MAX_DRAWN_PHONE : MAX_DRAWN);
+    const smalls = this.rankSmall(view, small, near);
+    this.shown = new Set(smalls.map((d) => d.s));
     this.drawn = [];
-    if (!drawn.length) return this.drawn;
+    if (!drawn.length && !smalls.length) return this.drawn;
     let width = 0;
     let height = 0;
     for (const { slot } of drawn) {
       slot.x = width;
+      slot.y = 0;
       width += slot.cols * SX;
       height = Math.max(height, slot.rows * SY);
     }
+    let shelf = 0;
+    let shelfHeight = 0;
+    for (const { slot } of smalls) {
+      slot.x = shelf;
+      slot.y = height;
+      shelf += slot.cols * SX;
+      shelfHeight = Math.max(shelfHeight, slot.rows * SY);
+    }
+    width = Math.max(width, shelf);
+    height += shelfHeight;
     this.fit(width, height);
     this.readWidth = width;
     const r = this.renderer;
@@ -427,12 +579,15 @@ export class AnimalFigures {
     r.setViewport(0, 0, this.width, this.height);
     r.clear();
     r.setScissorTest(true);
-    for (const { s, slot } of drawn) {
-      for (const [other, rig] of this.rigs) rig.model.visible = other === s;
-      r.clippingPlanes = this.rigs.get(s).waterDepth > 0.001 ? this.surface : this.ground;
-      this.frame(s.x, s.y, slot);
-      r.setViewport(slot.x, 0, slot.cols * SX, slot.rows * SY);
-      r.setScissor(slot.x, 0, slot.cols * SX, slot.rows * SY);
+    for (const { s, slot } of [...drawn, ...smalls]) {
+      const rig = this.rigs.get(s);
+      for (const [other, each] of this.rigs) each.model.visible = other === s;
+      // Birds and fish are never clipped: a bird's feet may tuck under it
+      // in the air, and a fish is under the surface on purpose.
+      r.clippingPlanes = rig.look.small ? [] : rig.waterDepth > 0.001 ? this.surface : this.ground;
+      this.frame(s.x, slot.anchor ?? s.y, slot);
+      r.setViewport(slot.x, slot.y, slot.cols * SX, slot.rows * SY);
+      r.setScissor(slot.x, slot.y, slot.cols * SX, slot.rows * SY);
       r.render(this.scene, this.camera);
     }
     r.setScissorTest(false);
@@ -444,24 +599,66 @@ export class AnimalFigures {
       const contacts = rig.waterContacts().map((c) => ({ x: s.x + c.x * SCALE / ASPECT, y: s.y + c.z * SCALE * TILT }));
       this.drawn.push({ animal: s, contacts, depth: s.y, shadow: rig.look.shadow, ...this.cellsOf(slot, s, view, rig.flash) });
     }
+    for (const { s, slot } of smalls) {
+      const rig = this.rigs.get(s);
+      const fish = rig.look.small === 'fish';
+      const alt = s.alt ?? 0;
+      this.drawn.push({ animal: s, small: true, air: !fish && alt >= 0.3, submerged: fish, contacts: [], depth: s.y,
+        shadow: rig.look.shadow, shadowFade: fish ? 0 : Math.max(0, 1 - alt / 2),
+        ...this.cellsOf(slot, s, view, 0, fish ? { submerged: s.swim ?? 0 } : {}) });
+    }
     return this.drawn;
   }
 
+  // The birds and fish to draw: birds rising or flying within 20 metres
+  // first, then darting fish, then the nearest, up to the small cap; each
+  // posed now if it was not this frame, from its own clock. Those poses come
+  // out of the same cap: with none left, the next one already posed is drawn
+  // instead, and the newcomer waits a frame.
+  rankSmall(view, small, near) {
+    const inView = [];
+    for (const s of small) {
+      const slot = this.slotOf(s, view);
+      if (slot) inView.push({ s, slot });
+    }
+    const far = (s) => Math.hypot(((s.x - near.x) * ASPECT) / SCALE, (s.y - near.y) / (SCALE * TILT));
+    const rank = (s) => ((s.state === 'takeoff' || s.state === 'fly') && far(s) <= 20 ? 0 : s.state === 'dart' ? 1 : 2);
+    inView.sort((a, b) => rank(a.s) - rank(b.s) || far(a.s) - far(b.s));
+    const cap = this.phone() ? MAX_SMALL_PHONE : MAX_SMALL;
+    const drawn = [];
+    for (const d of inView) {
+      if (drawn.length >= cap) break;
+      const rig = this.rigs.get(d.s);
+      if (rig.posed !== this.frameNo) {
+        if (this.posedCount >= cap) continue;
+        rig.update(0, d.s);
+        rig.posed = this.frameNo;
+        this.posedCount++;
+        Object.assign(d.slot, this.slotOf(d.s, view) ?? d.slot);
+      }
+      drawn.push(d);
+    }
+    return drawn;
+  }
+
+  // The cells a figure covers on screen. A bird in the air is framed round
+  // its body, its altitude above the ground row it flies over.
   slotOf(s, view) {
+    const y = s.y - (s.alt ?? 0) * SCALE * COS;
     if (s.x < view.x0 - MAX_COLS / 2 || s.x > view.x0 + view.cols + MAX_COLS / 2
-      || s.y < view.y0 - MAX_ROWS * 0.3 || s.y > view.y0 + view.rows + MAX_ROWS * 0.7) return null;
+      || y < view.y0 - MAX_ROWS * 0.3 || y > view.y0 + view.rows + MAX_ROWS * 0.7) return null;
     const reach = this.rigOf(s).reach();
     const cols = SCALE / ASPECT;
     let cx0 = Math.floor(s.x + reach.left * cols) - PAD;
     let cx1 = Math.ceil(s.x + reach.right * cols) + PAD;
-    let cy0 = Math.floor(s.y - reach.up * SCALE) - PAD;
-    let cy1 = Math.ceil(s.y - reach.down * SCALE) + PAD;
+    let cy0 = Math.floor(y - reach.up * SCALE) - PAD;
+    let cy1 = Math.ceil(y - reach.down * SCALE) + PAD;
     cx0 = Math.max(cx0, view.x0 - 1, Math.floor(s.x) - MAX_COLS / 2);
     cx1 = Math.min(cx1, view.x0 + view.cols + 1, Math.floor(s.x) + MAX_COLS / 2);
-    cy0 = Math.max(cy0, view.y0 - 1, Math.floor(s.y) - MAX_ROWS * 0.7);
-    cy1 = Math.min(cy1, view.y0 + view.rows + 1, Math.floor(s.y) + MAX_ROWS * 0.3);
+    cy0 = Math.max(cy0, view.y0 - 1, Math.floor(y) - MAX_ROWS * 0.7);
+    cy1 = Math.min(cy1, view.y0 + view.rows + 1, Math.floor(y) + MAX_ROWS * 0.3);
     if (cx1 <= cx0 || cy1 <= cy0) return null;
-    return { x: 0, cx0, cy0, cols: cx1 - cx0, rows: cy1 - cy0 };
+    return { x: 0, y: 0, anchor: y, cx0, cy0, cols: cx1 - cx0, rows: cy1 - cy0 };
   }
 
   fit(width, height) {
@@ -483,10 +680,13 @@ export class AnimalFigures {
 
   // The slot's pixels as cells: outline glyphs round the edge, lit by a
   // soft rim, and a density ramp inside. A fresh hit flashes the body.
-  cellsOf(slot, s, view, flash = 0) {
+  // Under water (`submerged`, the fish's swim depth) there is no outline:
+  // a soft ramp of marks whose colour sinks toward the water's the deeper
+  // the fish swims, mixed in when drawn (see drawSubmerged).
+  cellsOf(slot, s, view, flash = 0, { submerged = null } = {}) {
     const { cx0, cy0 } = slot;
     const w = this.readWidth;
-    const h = slot.rows * SY;
+    const h = (slot.y ?? 0) + slot.rows * SY;
     const px = this.pixels;
     const cells = [];
     let top = Infinity;
@@ -523,6 +723,12 @@ export class AnimalFigures {
         }
         const sx = cx0 + cx - view.x0;
         const sy = cy0 + cy - view.y0;
+        if (submerged !== null) {
+          const lum = (r * 0.3 + g * 0.55 + b * 0.15) / 255;
+          const ch = SOFT[Math.max(1, Math.min(SOFT.length - 1, Math.round((hits / N) * (0.6 + lum) * (SOFT.length - 1))))];
+          cells.push({ sx, sy, g: ch, r, gg: g, b, k: SINK.gain * Math.max(0, 1 - submerged / SINK.depth) });
+          continue;
+        }
         if (hits < N - 4) {
           const o = outline(mx, my, hits / N);
           const t = Math.min(1, 0.25 + o.rim * 0.5);
@@ -543,8 +749,25 @@ export class AnimalFigures {
     for (const c of figure.cells) write(renderer, c.sx, c.sy, c.g, c.r, c.gg, c.b, figure.base, c.br, c.bgG, c.bb);
   }
 
+  // A fish under the surface: only on lake cells showing plain water, its
+  // colour mixed into the water's own, so the swell marks, pads, foam and
+  // everything later drawn on the water stay over it.
+  static drawSubmerged(r, figure) {
+    const { cols, rows, bg } = r;
+    for (const c of figure.cells) {
+      if (c.sx < 0 || c.sy < 0 || c.sx >= cols || c.sy >= rows) continue;
+      const cell = c.sy * cols + c.sx;
+      if (r.mask[cell] !== WATER || !PLAIN[r.glyphAt(cell)]) continue;
+      const o = cell * 4;
+      const mix = (i, v) => bg[o + i] + (v - bg[o + i]) * c.k + LIFT[i];
+      r.putAt(cell, c.g, mix(0, c.r), mix(1, c.gg), mix(2, c.b));
+    }
+  }
+
   // A dark ellipse on the ground under the body, long along its heading.
   static drawShadow(r, view, figure) {
+    const fade = figure.shadowFade ?? 1;
+    if (!figure.shadow || fade <= 0) return;
     const { animal: s, shadow: [along, across] } = figure;
     const { fg, bg, cols } = r;
     const sin = Math.sin(s.heading);
@@ -566,7 +789,7 @@ export class AnimalFigures {
         const b = (mx * cos - mz * sin) / across;
         const d = a * a + b * b;
         if (d >= 1) continue;
-        const k = 1 - 0.6 * (1 - d);
+        const k = 1 - 0.6 * fade * (1 - d);
         const o = (sy * cols + sx) * 4;
         for (let c = 0; c < 3; c++) {
           fg[o + c] *= k;

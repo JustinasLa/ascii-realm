@@ -228,3 +228,50 @@ test('struck down by wolves, the player wakes at the start and the pack goes hom
   assert.equal(game.animals.count('wolf'), 0);
   assert.equal(game.player.vitals.health, game.player.vitals.maxHealth);
 });
+
+test('birds and fish live through the frame: noises reach them, a dart rings the water, figures split by kind', async () => {
+  const { game, frame, loadAnimalFigures } = await loadGame();
+  game.world.loaded = () => ({ props: [] });
+  const [dx, dy] = toCells(20, 0);
+  const flock = game.birds.spawn({ x: game.player.x + dx, y: game.player.y + dy, count: 4 });
+  game.birds.calm();
+  game.birds.spawn({ x: game.player.x - dx, y: game.player.y, count: 3, airborne: true });
+  const rings = [];
+  game.splashes ??= {};
+  const ring = game.splashes.ring;
+  game.splashes.ring = (...args) => rings.push(args);
+  game.fish.events.push({ type: 'dart', x: 1, y: 2, ring: true }, { type: 'dart', x: 1, y: 2, ring: false });
+  const kinds = { submerged: 0, air: 0, ground: 0 };
+  await loadAnimalFigures({
+    update: (dt, list, small) => { assert.equal(small.length, game.birds.list.length + game.fish.list.length); },
+    rasterise: (view, list, near, small) => small.map((animal) => {
+      const fig = { animal, small: true, air: animal.alt > 1, submerged: !('alt' in animal), cells: [], contacts: [],
+        depth: animal.y, shadow: null, base: 0 };
+      kinds[fig.submerged ? 'submerged' : fig.air ? 'air' : 'ground']++;
+      return fig;
+    }),
+  });
+  game.player.events.push({ type: 'strike', x: flock.members[0].x, y: flock.members[0].y, strength: 1 });
+  for (let i = 0; i < 5; i++) frame();
+  game.splashes.ring = ring;
+  assert.equal(flock.phase, 'air', 'the cut put the flock up');
+  assert.deepEqual(rings, [[1, 2, 0.35, 0, true]]);
+  assert.equal(game.fish.events.length, 0);
+  assert.equal(game.birds.events.length, 0);
+  assert.ok(kinds.air > 0 && kinds.ground + kinds.air >= 5);
+});
+
+test('?birds=0&fish=0 leaves out birds and fish while deer still come; ?animals=0 leaves out all', async () => {
+  const { game } = await loadGame({ x: 0, y: 0 }, { href: 'http://localhost/?debug&birds=0&fish=0' });
+  assert.equal(game.birds.cap, 0);
+  assert.equal(game.fish.cap, 0);
+  assert.equal(game.animals.enabled, true);
+  const none = await loadGame({ x: 0, y: 0 }, { href: 'http://localhost/?debug&animals=0' });
+  none.game.birds.spawn({ x: 0, y: 0, count: 2 });
+  none.frame();
+  assert.equal(none.game.birds.list.length, 0);
+  assert.equal(none.game.fish.enabled, false);
+  const plain = await loadGame({ x: 0, y: 0 });
+  assert.equal(plain.game.birds.cap, 8);
+  assert.equal(plain.game.fish.cap, 8);
+});
