@@ -116,6 +116,10 @@ short version see the [README](../README.md).
   drawn in small letters with its reflection, never stops or hurts anyone,
   and is never saved: each player sees their own, and only they and the
   monsters shove it.
+
+  ![The player wades into a log and shoves it off downstream](media/player-pushes-log.gif)
+  ![A skeleton strides through a log and knocks it away](media/skeleton-pushes-log.gif)
+
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
