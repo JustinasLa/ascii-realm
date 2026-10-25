@@ -13,7 +13,7 @@
 | `T` | Stow the torch or draw a fresh lit torch |
 | `G` | Throw the carried torch in the direction faced; dry ground ignites on landing |
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
-| `E` | Disturb a nearby glowcap mushroom to release glowing spores |
+| `E` | Pick up the nearest ground item, or else disturb a nearby glowcap mushroom to release glowing spores (the same as TAKE / SPORES; fires are left to `C`) |
 | `R` / right click | Cast the rune bound to `R` towards the cursor; the caster turns to face it |
 | Hold middle mouse | Open the rune wheel: point at a school (Oseni, Seithr, Cerrith, Mitlan), then at a rune, and let go to bind it to `R`. Pushing out through a school opens it in one motion; letting go on a school keeps its runes open for a click. Right click or the centre goes back, `Escape` closes |
 | `M` | Mute or unmute all sound |

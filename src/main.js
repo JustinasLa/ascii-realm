@@ -1036,9 +1036,10 @@ function frame(now) {
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
-    if (interact && !isGameplayBlocked() && !player.magicStunned) mushrooms.interact(player);
-    if (touchInteract && !isGameplayBlocked() && !player.magicStunned) {
-      const done = performInteraction(interactables());
+    // E and TAKE do the same nearest thing, a ground item before a glowcap;
+    // only TAKE puts out a fire, which the keyboard leaves to C.
+    if ((interact || touchInteract) && !isGameplayBlocked() && !player.magicStunned) {
+      const done = performInteraction(interactables(), { douse: touchInteract });
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
       // What the drop store's collection takes is told once, with its sound,
       // as its pickup events are spent below.

@@ -165,7 +165,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
     GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
-      constructor() { super(); this.spores = []; this.ambient = []; }
+      constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }
     },
     Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,

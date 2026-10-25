@@ -159,6 +159,43 @@ test('struck down, the pouch is kept; TAKE pays a coin once with one notice', as
   assert.equal(game.wallet.balance, '1.00d');
 });
 
+test('E takes the nearest coin as TAKE does, paid once with one notice, and other loot too', async () => {
+  const { game, frame, gains, notes, tap } = await start();
+  const skeleton = monsterAhead(game, 'skeleton');
+  const [coin, bone] = game.loot.drop(skeleton, [{ id: 'denars', count: 73 }, { id: 'bone', count: 1 }]);
+  coin.pickupAfter = 0;
+  bone.pickupAfter = 0;
+  // No magnet: only the key takes it.
+  game.collection.update = () => {};
+  let spores = 0;
+  game.mushrooms.interact = () => { spores++; return true; };
+  game.mushrooms.nearby = () => ({ cooldown: 0 });
+  game.player.x = coin.x + 0.6;
+  game.player.y = coin.y;
+  tap('KeyE');
+  frame();
+  assert.equal(game.wallet.cents, 73);
+  assert.equal(coin.count, 0);
+  assert.equal(spores, 0, 'the ground item comes before the glowcap');
+  game.player.x = bone.x + 0.6;
+  game.player.y = bone.y;
+  const bones = game.inventory.slots.reduce((n, s) => n + (s?.id === 'bone' ? s.count : 0), 0);
+  tap('KeyE');
+  frame();
+  assert.equal(bone.count, 0);
+  assert.equal(game.inventory.slots.reduce((n, s) => n + (s?.id === 'bone' ? s.count : 0), 0), bones + 1);
+  delete game.collection.update;
+  for (let i = 0; i < 5; i++) frame();
+  assert.deepEqual(gains, [73], 'told once');
+  assert.ok(!notes.some(([text]) => /0\.73d/.test(text)), 'no second notice');
+  assert.deepEqual(notes.filter(([text]) => /Bone/.test(text)), [['Picked up Bone.', 'pickup']], 'the bone told once');
+  assert.deepEqual(game.huntDrops.all(), []);
+  // With nothing left on the ground, E falls through to the glowcap.
+  tap('KeyE');
+  frame();
+  assert.equal(spores, 1);
+});
+
 test('the pouch is still there after the page is loaded again', async () => {
   const storage = memory();
   const first = await start({ storage });
