@@ -106,6 +106,7 @@ if (device.phone && !ruinPreview) cellH = zoomTarget = phoneDefault(layout.orien
 const quality = new FrameQuality();
 // Phones hold an even frame rate, and draw fewer cells as a last resort.
 const pacer = new FramePacer({ enabled: () => device.phone });
+const clock = new FrameClock();
 // The page never zooms; a pinch only zooms the scene.
 blockPageGestures(document);
 
@@ -586,7 +587,11 @@ function onPhoneChange(phone) {
     builder.panel.open = false;
   }
   if (!phone && phoneMenu.open) phoneMenu.setOpen(false);
-  if (!phone) pacer.reset();
+  // Off a phone the pacing's 30 and smaller cell ceiling no longer apply.
+  if (!phone) {
+    pacer.reset();
+    clock.setRate(pacer.rate);
+  }
   updateWakeLock();
   canvas.setAttribute('aria-label', phone ? 'Game scene.' : SCENE_LABEL);
   const changed = lastPhone !== undefined && phone !== lastPhone;
@@ -837,7 +842,6 @@ function woundedFoes(figures) {
 }
 
 let time = 0;
-const clock = new FrameClock();
 let animation = null;
 let contextLost = false;
 

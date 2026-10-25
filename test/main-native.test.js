@@ -147,6 +147,26 @@ test('freezing or leaving phone mode releases the wake lock and resets the pacin
   assert.equal(game.native.pacer.rate, 60);
 });
 
+test('leaving phone mode after the pacing dropped to 30 renders at 60 again, with the full cell ceiling', async () => {
+  const harness = await loadGame(walk, { ...phone, href: 'http://localhost/?debug&nogate' });
+  const { game, frame, setPhone } = harness;
+  const pacer = game.native.pacer;
+  pacer.fitMs = -1;
+  pacer.overMs = -1;
+  pacer.refitMs = -2;
+  for (let i = 0; i < 60 * (PHONE_PACING.settleAfter + PHONE_PACING.downAfter + PHONE_PACING.cellsAfter) + 120; i++) frame();
+  assert.equal(game.native.clock.period, 1000 / 30);
+  assert.equal(pacer.cellCeiling, PHONE_PACING.reducedCells);
+  setPhone(false);
+  assert.equal(game.native.clock.period, 1000 / 60);
+  assert.equal(pacer.cellCeiling, CELL_CEILING.mobile);
+  frame();
+  const before = game.metrics.frames;
+  for (let i = 0; i < 60; i++) frame();
+  assert.equal(game.metrics.frames - before, 60, 'every display frame is drawn');
+  assert.equal(game.metrics.rate, 60);
+});
+
 test('a refused wake lock is asked for again on the next tap', async () => {
   const harness = await loadGame(walk, { ...phone, href: 'http://localhost/?debug&nogate' });
   const { game, frame, locks, pointer } = harness;
