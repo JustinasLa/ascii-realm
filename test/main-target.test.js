@@ -184,3 +184,24 @@ test('an arrow landing after a rune in the same frame is the later blow, and win
   assert.equal(marked.at(-2), troll, 'the rune marked the troll before the arrow landed');
   assert.equal(game.target.entity, rabbit);
 });
+
+test('separate rune impacts in one frame apply in landing order; within one, the hit ahead wins', async () => {
+  const { game, frame } = await start();
+  const ahead = monsterAt(game, 5, 3, 0, 'Troll');
+  const aside = monsterAt(game, 6, 3, 60 * DEG, 'Goblin');
+  let impacts = [];
+  const update = game.casting.update.bind(game.casting);
+  game.casting.update = (dt) => {
+    update(dt);
+    for (const { ctx, hits } of impacts) for (const struck of hits) game.casting.options.onDamage(struck, 1, ctx);
+    impacts = [];
+  };
+  // The rune straight ahead lands first, then another off to the side.
+  impacts = [{ ctx: { caster: game.player }, hits: [ahead] }, { ctx: { caster: game.player }, hits: [aside] }];
+  frame();
+  assert.equal(game.target.entity, aside, 'the later impact wins');
+  // One impact through both picks the one straight ahead.
+  impacts = [{ ctx: { caster: game.player }, hits: [aside, ahead] }];
+  frame();
+  assert.equal(game.target.entity, ahead);
+});
