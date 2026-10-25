@@ -204,3 +204,110 @@ test('malformed lobby members are dropped and names, colours and seeds are clean
   socket.message({ type: 'joined', ...joined(), id: { toString: () => 'a1' } });
   assert.equal(client.id, 'a1');
 });
+
+test('chat, toggles and casts are sent only while online and not backed up', (t) => {
+  const client = setup(t);
+  assert.equal(client.sendChat('rp', 'early'), false);
+  client.connect({ mode: 'create' });
+  const socket = Socket.instances[0];
+  socket.open();
+  assert.equal(client.sendChat('rp', 'still joining'), false);
+  socket.message(joined());
+  assert.equal(client.sendChat('rp', 'hello'), true);
+  assert.equal(client.toggleChat('ooc'), true);
+  client.sendCast({ id: 'rune', heading: 0 });
+  assert.deepEqual(socket.sent.slice(-3), [{ type: 'chat', channel: 'rp', text: 'hello' },
+    { type: 'chat-toggle', channel: 'ooc' }, { type: 'spellcast', cast: { id: 'rune', heading: 0 } }]);
+  socket.bufferedAmount = 40000;
+  assert.equal(client.sendChat('rp', 'lagging'), false);
+  assert.equal(client.toggleChat('ooc'), false);
+  assert.equal(socket.sent.at(-1).type, 'spellcast');
+});
+
+test('relayed chat, notices and casts reach their callbacks only when well formed', (t) => {
+  const lines = [];
+  const notices = [];
+  const casts = [];
+  const client = setup(t);
+  Object.assign(client, { onChat: (m) => lines.push(m), onChatNotice: (n) => notices.push(n), onCast: (c) => casts.push(c) });
+  client.connect({ mode: 'create' });
+  const socket = Socket.instances[0];
+  socket.open();
+  const line = { type: 'chat', seq: 1, channel: 'rp', from: 'b2', name: 'Rowan', text: 'hi', clarity: 1, muffled: false };
+  socket.message(line);
+  socket.message({ type: 'chat-notice', code: 'rate' });
+  assert.equal(lines.length + notices.length, 0, 'nothing before joining');
+  socket.message(joined());
+  socket.message(line);
+  socket.message({ ...line, channel: 'admin' });
+  socket.message({ ...line, text: '<img src=x onerror=alert(1)>', seq: 2 });
+  socket.message({ type: 'chat-notice', code: 'rate' });
+  socket.message({ type: 'chat-notice', code: 'nonsense' });
+  socket.message({ type: 'spellcast', casterId: 'b2', id: 'rune' });
+  socket.message({ type: 'spellcast', casterId: 7 });
+  socket.emit('message', { data: 'not json' });
+  socket.message(null);
+  assert.deepEqual(lines.map((m) => m.text), ['hi', '<img src=x onerror=alert(1)>']);
+  assert.deepEqual(notices, [{ code: 'rate' }]);
+  assert.equal(casts.length, 1);
+  client.onChat = client.onChatNotice = undefined;
+  socket.message(line);
+  socket.message({ type: 'chat-notice', code: 'rate' });
+});
+
+test('the roster reports who joins and leaves, but not who was already there', (t) => {
+  const changes = [];
+  const client = setup(t, { retryDelay: 5 });
+  client.onRoster = (change) => changes.push(change);
+  client.connect({ mode: 'create' });
+  const socket = Socket.instances[0];
+  socket.open();
+  const rowan = { ...joined().self, id: 'b2', name: 'Rowan', color: 1 };
+  socket.message({ ...joined(), players: [joined().self, rowan] });
+  assert.deepEqual(changes, [{ self: true, code: 'ABC234', resumed: false }]);
+  socket.message({ type: 'snapshot', time: 2, players: [joined().self, rowan] });
+  assert.equal(changes.length, 1, 'Rowan was already here');
+  const bryn = { ...rowan, id: 'c3', name: 'Bryn' };
+  socket.message({ type: 'snapshot', time: 3, players: [joined().self, bryn] });
+  assert.deepEqual(changes.at(-1), { joined: [client.players[1]], left: [{ id: 'b2', name: 'Rowan' }] });
+  socket.message({ type: 'snapshot', time: 4, players: [joined().self, { ...bryn, name: 'Bryn the Bold' }] });
+  assert.equal(changes.length, 2, 'a new name is no join or leave');
+  client.leave();
+  assert.deepEqual(changes.at(-1), { left: 'self' });
+  client.leave();
+  assert.equal(changes.length, 3, 'leaving twice says so once');
+});
+
+test('a resumed lobby is reported as a reconnect', async (t) => {
+  const changes = [];
+  const client = setup(t, { retryDelay: 5 });
+  client.onRoster = (change) => changes.push(change);
+  client.connect({ mode: 'create' });
+  Socket.instances[0].open();
+  Socket.instances[0].message(joined());
+  Socket.instances[0].close();
+  await delay(20);
+  Socket.instances[1].open();
+  Socket.instances[1].message({ ...joined(), resumed: true });
+  assert.deepEqual(changes.at(-1), { self: true, code: 'ABC234', resumed: true });
+});
+
+test('a client gives up after five failed reconnects and a connection that cannot open fails', async (t) => {
+  const client = setup(t, { retryDelay: 1, connectionTimeout: 5 });
+  client.connect({ mode: 'create' });
+  Socket.instances[0].open();
+  Socket.instances[0].message(joined());
+  Socket.instances[0].close();
+  for (let i = 0; i < 80 && client.status !== 'error'; i++) await delay(5);
+  assert.equal(client.status, 'error');
+  assert.equal(client.message, 'Connection lost. Enter the lobby code to join again.');
+  const broken = setup(t, { WebSocketImpl: class { constructor() { throw new Error('blocked'); } } });
+  broken.connect({ mode: 'create' });
+  assert.equal(broken.status, 'error');
+  assert.match(broken.message, /Could not connect/);
+  const refused = setup(t);
+  refused.connect({ mode: 'create' });
+  Socket.instances.at(-1).close();
+  assert.equal(refused.status, 'error');
+  assert.match(refused.message, /Could not reach the lobby server/);
+});

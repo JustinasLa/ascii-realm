@@ -1,6 +1,6 @@
 import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 export const MAX_PLAYERS = 8;
 export const UPDATE_MS = 50;
 export const PLAYER_COLORS = [

@@ -51,6 +51,11 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-mana .hud-vital-filled { background: repeating-linear-gradient(90deg, var(--mana) 0 3px, transparent 3px 4px); }
 .hud-frame-note { position: static; max-width: none; margin-top: 3px; padding: 0; color: var(--muted); background: none; border: 0; font: 11px/1.4 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hud-frame-note:empty { display: none; }
+/* The pouch: the balance in the coin's two golds, brighter for a moment
+   after a gain (a colour change only). */
+.hud-purse { margin-top: 3px; font: 11px/1.4 var(--font); color: var(--muted); white-space: nowrap; }
+.hud-purse-value { color: #b39122; transition: color 160ms; }
+.hud-purse-unit, .hud-purse.gain .hud-purse-value { color: #dbaf1d; }
 .hud-party { display: flex; flex-direction: column; gap: 6px; }
 .hud-party:empty { display: none; }
 .hud-party-tab { align-self: flex-start; padding: 1px 6px; background: var(--surface); border: 1px solid var(--frame); font-size: 11px; }
@@ -77,6 +82,7 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-toasts { display: grid; gap: 4px; }
 .hud-toast { padding: 5px 8px; background: var(--surface); border: 1px solid var(--line); font-size: 11px; overflow-wrap: anywhere; }
 .hud-toast[data-kind="error"], .hud-toast[data-kind="damage"] { border-color: var(--frame); border-left-width: 3px; }
+.hud-toast[data-kind="coin"] { border-left: 3px solid #dbaf1d; color: #dbaf1d; }
 .hud-damage-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .hud-damage { position: absolute; color: var(--accent); font-size: 14px; font-weight: 600; text-shadow: 1px 1px #000, -1px -1px #000; white-space: nowrap; }
 /* A wounded enemy's health: the status frame's segmented bar on its own. */
@@ -383,7 +389,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #fire-status { bottom: 198px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hud, #fire-status, #inventory-root::before { transition: none; }
+  .hud, #fire-status, #inventory-root::before, .hud-purse-value { transition: none; }
 }
 /* The bound rune sits above the hotbar; the rune wheel picks it. */
 
@@ -393,6 +399,60 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .spell-wheel-ring { position: absolute; transform-origin: 50% 50%; animation: spell-wheel-in 110ms ease-out; }
 @keyframes spell-wheel-in { from { opacity: 0; } }
 .spell-wheel-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Lobby chat: a log in the lower left and, when open, a bar under it. The
+   closed log shades each line rather than framing the whole log, so the
+   scene shows through; the open log is a framed, scrolling panel. */
+#chat { position: fixed; z-index: 11; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); width: min(420px, calc(100vw - 24px)); font: 12px/16px var(--font); pointer-events: none; }
+#chat[hidden], #chat-bar[hidden], #chat-open[hidden] { display: none !important; }
+#chat-log { display: flex; flex-direction: column; align-items: flex-start; gap: 0; margin: 0; padding: 0; list-style: none; overflow: hidden; }
+.chat-line { max-width: 100%; padding: 0 5px; background: rgba(6, 9, 10, 0.62); color: var(--ink); overflow-wrap: anywhere; }
+#chat:not(.open) .chat-line.faded, #chat:not(.open) .chat-line:nth-last-child(n+11) { display: none; }
+#chat.open { z-index: 14; pointer-events: auto; }
+#chat.open #chat-log { max-height: calc(20 * 16px + 8px); padding: 4px 0; overflow-y: auto; background: var(--surface); border: 1px solid var(--frame); overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); }
+#chat.open .chat-line { opacity: 1 !important; background: none; }
+#chat-bar { display: flex; gap: 4px; margin-top: 4px; }
+#chat-bar :is(select, input, button) { min-height: 28px; padding: 3px 6px; color: var(--ink); background: var(--solid); border: 1px solid var(--frame); border-radius: 0; font: 12px var(--font); }
+#chat-bar select { flex: 0 0 auto; max-width: 9em; }
+#chat-bar input { flex: 1 1 auto; min-width: 0; }
+#chat-bar input:focus-visible, #chat-bar select:focus-visible, #chat-bar button:focus-visible { outline: 1px solid var(--ink); outline-offset: -2px; }
+#chat-bar button:hover { background: var(--hover); }
+.chat-name { color: var(--ink); }
+.chat-punct, .chat-bracket { color: var(--ink); }
+.chat-rp .chat-text, .chat-action .chat-lead { color: #e6d58a; }
+.chat-shout .chat-text, .chat-shout .chat-name + .chat-punct { color: #e0b060; }
+.chat-yell .chat-text, .chat-yell .chat-name + .chat-punct { color: #e07a6e; }
+.chat-yell .chat-text { font-weight: 700; }
+.chat-whisper .chat-text, .chat-whisper .chat-name + .chat-punct { color: var(--mana); }
+.chat-whisper :is(.chat-text, .chat-punct) { font-style: italic; }
+.chat-looc .chat-tag { color: #7fb77e; }
+.chat-ooc .chat-tag { color: #8f9de3; }
+:is(.chat-looc, .chat-ooc) .chat-text { color: var(--quiet); }
+.chat-action .chat-text { color: #d9a3d9; }
+.chat-scene .chat-tag { color: #6fb8b0; }
+.chat-scene .chat-text { color: #6fb8b0; font-style: italic; }
+.chat-muffled .chat-text { color: var(--quiet); font-style: italic; }
+.chat-system .chat-text { color: var(--quiet); }
+.chat-error .chat-text { color: var(--foe); }
+#chat-open { display: none; }
+/* Narrower windows raise the log above the quick slots, whose bar is 544px
+   wide and 98px tall: 12px + 420px + 12px clear of it needs a window 1432px
+   wide. The log also narrows so the centred prompts above the bar stay
+   clear of it. */
+@media (max-width: 1440px) {
+  #chat { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 108px); width: min(420px, calc(50vw - 160px)); }
+}
+@media (max-width: 680px) {
+  #chat { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 100px); width: calc(100vw - 24px); }
+}
+@media (max-width: 520px) {
+  #chat { bottom: calc(max(128px, calc(env(safe-area-inset-bottom) + 128px)) + 148px); }
+}
+/* Touch screens that aren't phones keep the stick, so the log sits above
+   the raised quick slots. */
+@media (pointer: coarse) {
+  #chat { bottom: calc(max(132px, calc(env(safe-area-inset-bottom) + 132px)) + 108px); }
+}
 
 /* Phones: a coarse pointer with no hover and a short side of 600px or less
    (src/core/phone.js holds the same query). Only the stick, the action
@@ -425,6 +485,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-vital-label { font-size: 9px; line-height: 10px; }
   .hud-vital-value { display: none; }
   .hud-vital-bar { height: 5px; }
+  .hud-purse { margin-top: 1px; font-size: 10px; line-height: 11px; }
   .hud-toast { padding: 2px 6px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
   .hud-toast:nth-last-child(n+3) { display: none; }
 
@@ -456,6 +517,23 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   body.phone-menu-open #touch-controls { visibility: hidden; }
   body.phone-menu-open .hud { opacity: 0.2; }
 
+  /* Chat: the newest three lines above the thumb clusters, and a CHAT
+     square under the menu button while in a lobby. Open, the bar sits on
+     the keyboard (ChatUi sets --chat-kb) and the touch controls step aside. */
+  #chat { left: max(8px, env(safe-area-inset-left)); bottom: calc(max(16px, calc(env(safe-area-inset-bottom) + 8px)) + 156px); width: min(80vw, 320px); font-size: 10px; line-height: 13px; }
+  #chat:not(.open) .chat-line:nth-last-child(n+4) { display: none; }
+  #chat-open { position: fixed; z-index: 13; top: calc(max(4px, env(safe-area-inset-top)) + 48px); right: max(4px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: var(--ink); background: transparent; border: 0; border-radius: 0; font: 9px/1 var(--font); opacity: 0.8; touch-action: manipulation; }
+  #chat-open::before { content: ""; position: absolute; inset: 4px; background: var(--surface); border: 1px solid var(--frame); }
+  #chat-open:active::before { background: var(--hover); }
+  #chat-open > span { position: relative; }
+  :is(.inventory-open, .phone-menu-open, .spell-wheel-open, .play-gated, .chat-open) #chat-open { display: none; }
+  body.chat-open #touch-controls { visibility: hidden; }
+  body.chat-open .hud { opacity: 0.6; }
+  #chat.open { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: calc(var(--chat-kb, 0px) + max(8px, env(safe-area-inset-bottom))); width: auto; }
+  #chat.open #chat-log { max-height: calc(8 * 13px + 8px); touch-action: pan-y; }
+  #chat-bar :is(select, input, button) { min-height: 44px; }
+  #chat-bar input { font-size: 16px; }
+  #chat-bar select { max-width: 7.5em; font-size: 12px; }
   /* The inventory is a full-screen sheet too. */
   .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
   .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
@@ -470,11 +548,17 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-frames { width: min(40vw, 320px); }
   .hud-status { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; }
   .hud-target { width: min(220px, calc(100vw - max(8px, env(safe-area-inset-left)) - min(40vw, 320px) - max(4px, env(safe-area-inset-right)) - 60px)); }
+  /* The closed log sits low in the middle, between the stick and the
+     cluster, two lines tall. */
+  #chat { left: 50%; transform: translateX(-50%); width: min(46vw, 360px, calc(100vw - 2 * (max(16px, calc(env(safe-area-inset-right) + 12px)) + 152px))); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 6dvh); }
+  #chat:not(.open) .chat-line:nth-last-child(n+3) { display: none; }
+  #chat.open { transform: none; }
+  #chat.open #chat-log { max-height: calc(5 * 13px + 8px); }
 }
 /* Portrait phones too narrow for a 120px target strip beside the vitals
-   (100vw - 46vw - 72px < 120px) put it on a second row under them, and the
-   notices below move down to make room. */
+   (100vw - 46vw - 72px < 120px) put it on a second row under them (and
+   the pouch line), and the notices below move down to make room. */
 @media (pointer: coarse) and (hover: none) and (max-width: 355px) and (orientation: portrait) {
-  .hud-target { top: calc(max(6px, env(safe-area-inset-top)) + 34px); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(46vw, 200px); }
+  .hud-target { top: calc(max(6px, env(safe-area-inset-top)) + 46px); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(46vw, 200px); }
   .hud:has(.hud-target:not([hidden])) .hud-toasts { margin-top: 30px; }
 }

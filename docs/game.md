@@ -293,3 +293,7 @@ short version see the [README](../README.md).
   friend's health appears in the party frames under your own. Players
   have distinct nameplate colours, and brief connection drops reconnect
   automatically. The lobby keeps working when its creator leaves.
+- **Chat.** In a lobby, `Enter` opens a chat bar (a **CHAT** button on
+  phones). Local speech carries 15 m and blurs with distance; shouts, yells,
+  whispers, emotes, scene lines and local out-of-character chat have their own
+  reach, and `/ooc` reaches the whole lobby. See [controls](controls.md#chat).

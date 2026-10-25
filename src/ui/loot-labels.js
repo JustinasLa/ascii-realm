@@ -1,4 +1,5 @@
 import { ITEMS } from '../inventory/items.js';
+import { DENARS, denars } from '../inventory/wallet.js';
 import { ASPECT } from '../world/world.js';
 import { SCALE, TILT } from '../entities/rig.js';
 
@@ -23,7 +24,11 @@ const LIGHT = [236, 232, 220];
 
 const distance = (a, b) => Math.hypot(((b.x - a.x) * ASPECT) / SCALE, (b.y - a.y) / (SCALE * TILT));
 
+const coin = (item) => item.id === DENARS;
+
+// A stack's name; coin reads as its value, `0.73d`.
 const named = (item, always) => {
+  if (coin(item)) return `${denars(item.count)}d`;
   const name = (ITEMS[item.id]?.name ?? item.id).slice(0, LABELS.chars);
   return item.count > 1 || always ? `${name} x${item.count}` : name;
 };
@@ -63,7 +68,8 @@ function settle(groups, group, font) {
 // colour, full, count }], (x, y) in CSS pixels at the bottom middle of the
 // label. `project(x, y)` gives { x, y, visible } for a world cell; `font` is
 // the label's font size in pixels; `inventory.spaceFor` tells which stacks
-// the bag has no room for.
+// the bag has no room for. Coin goes to the pouch, so it is never full, and
+// a coin label keeps the coin's own gold.
 export function lootLabels(items, player, inventory, project, font = 10) {
   const stacks = items.filter((item) => item.count > 0)
     .map((item) => ({ item, d: distance(player, item), at: project(item.x, item.y - LABELS.lift) }))
@@ -90,8 +96,10 @@ export function lootLabels(items, player, inventory, project, font = 10) {
   }
   return groups.map((g) => {
     const first = g.members[0].item;
-    const colour = (ITEMS[first.id]?.colour ?? LIGHT).map((c, i) => Math.round(c + (LIGHT[i] - c) * 0.55));
+    const colour = coin(first) ? [...ITEMS[DENARS].colour]
+      : (ITEMS[first.id]?.colour ?? LIGHT).map((c, i) => Math.round(c + (LIGHT[i] - c) * 0.55));
+    const goods = g.members.filter((m) => !coin(m.item));
     return { key: first.uid, text: caption(g), x: g.at.x, y: g.at.y, colour, count: g.members.length,
-      full: g.members.every((m) => inventory.spaceFor(m.item.id, m.item.count) <= 0) };
+      full: goods.length > 0 && goods.every((m) => inventory.spaceFor(m.item.id, m.item.count) <= 0) };
   });
 }

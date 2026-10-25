@@ -3,8 +3,11 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../../src/entities/player.js';
 import { Animals } from '../../src/entities/animals.js';
+import { Birds } from '../../src/entities/birds.js';
+import { Fishes } from '../../src/entities/fish.js';
 import { HuntDrops } from '../../src/entities/hunt-drops.js';
-import { layLoot, LootCredit, rollLoot } from '../../src/world/loot.js';
+import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/loot.js';
+import { Wallet } from '../../src/inventory/wallet.js';
 import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
@@ -21,6 +24,7 @@ import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assis
 import { pickStruck, TargetTracker, targetId } from '../../src/core/target.js';
 import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
+import { metresBetween } from '../../src/multiplayer/chat.js';
 
 const noop = () => {};
 
@@ -133,6 +137,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     load: () => figuresReady,
     draw: noop,
     drawShadow: noop,
+    drawSubmerged: noop,
   };
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
   const context = {
@@ -150,6 +155,28 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       constructor(options) { Object.assign(this, options); this.open = false; }
       setOpen(open) { this.open = open; this.onToggle(open); }
     },
+    // The chat's open state and its rules for opening; the real one is
+    // tested on its own.
+    ChatUi: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.closes = []; this.updates = 0; }
+      open() {
+        if (this.isOpen || !this.mayOpen()) return;
+        this.isOpen = true;
+        this.onToggle(true);
+      }
+      close(options = {}) {
+        this.closes.push(options);
+        if (!this.isOpen) return;
+        this.isOpen = false;
+        this.onToggle(false);
+      }
+      setAvailable(available) { this.available = available; }
+      receive(message, roster) { this.received = [message, roster]; }
+      notice(notice) { this.noticed = notice; }
+      roster(change) { this.rostered = change; }
+      update() { this.updates++; }
+    },
+    metresBetween,
     Grass: inert(),
     MAX_TREE_HALF_WIDTH: 40, MAX_TREE_HEIGHT: 160, MAX_LEAF_DRIFT: 8,
     propInView: () => true, drawLeaves: noop,
@@ -162,9 +189,9 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     setGameplayBlocked: value => { blocked = value; taps.clear(); held.clear(); },
     Inventory, ITEMS, Hud: inert(),
     InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
-    GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, LootCredit, rollLoot, mulberry32, drawItem: noop, drawResource: noop,
+    GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
-      constructor() { super(); this.spores = []; this.ambient = []; }
+      constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }
     },
     Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
@@ -226,11 +253,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     buildAtlas: noop, glyph: noop, drawGround: noop, drawSkyReflection: noop,
     drawShadow: noop, drawProp: noop, fineOf: noop, fineBakesPending: () => false, bakeFine: noop, startFineWorkers: noop,
     reflector: noop, dressFigure: noop,
-    drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop,
+    drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop, putOutlinedCell: noop,
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
-    Animals, AnimalFigures: animalFigures,
+    Animals, Birds, Fishes, AnimalFigures: animalFigures,
     SceneryBuilder: class {
       constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
       setEnabled(value) { this.enabled = value; this.onModeChange(); }
@@ -309,6 +336,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       document.dispatchEvent(new Event('visibilitychange'));
     },
     navigatedTo: () => navigatedTo,
+    // Whether gameplay input is blocked by a panel, the inventory or chat.
+    blocked: () => blocked,
     // Hands the game a stand-in for the animals' figures.
     loadAnimalFigures: async (figures) => {
       figuresLoaded(figures);

@@ -1,6 +1,6 @@
 // The contextual touch button: it shows only when something in reach can be
-// used, names it, and does that one thing when pressed. Keyboard players keep
-// E (glowcaps, pickups) and C (fires).
+// used, names it, and does that one thing when pressed. E does the same
+// from the keyboard, but leaves fires to C.
 import { ITEMS } from '../inventory/items.js';
 
 // How long, in seconds, the button stays after its target goes out of
@@ -11,14 +11,15 @@ const FIRE_REACH = 12;
 
 // What the button would do right now, best first: pick up a ground item,
 // release a glowcap's spores, put out a fire. Null when there is nothing.
-export function interaction({ player, mushrooms, fires, collection = null }) {
+// `douse: false` skips the fire, as E does.
+export function interaction({ player, mushrooms, fires, collection = null }, { douse = true } = {}) {
   const item = collection?.canCollect(player) ? collection.interactionTarget(player).item : null;
   if (item) return { kind: 'pickup', label: 'TAKE', ariaLabel: `Pick up ${ITEMS[item.id]?.name ?? 'item'}` };
   const node = mushrooms.nearby(player);
   if (node && node.cooldown <= mushrooms.time) {
     return { kind: 'spores', label: 'SPORES', ariaLabel: 'Release spores from the glowcap' };
   }
-  if (player.air <= 0.05 && fires.nearest(player.x, player.y, FIRE_REACH)) {
+  if (douse && player.air <= 0.05 && fires.nearest(player.x, player.y, FIRE_REACH)) {
     return { kind: 'fire', label: 'DOUSE', ariaLabel: 'Put out the fire' };
   }
   return null;
@@ -26,8 +27,8 @@ export function interaction({ player, mushrooms, fires, collection = null }) {
 
 // Does what the button offers, checked again at the press so a late tap can
 // never build a campfire. Returns what happened, or null.
-export function performInteraction(context) {
-  const target = interaction(context);
+export function performInteraction(context, options) {
+  const target = interaction(context, options);
   if (!target) return null;
   const { player, mushrooms, fires, world, collection } = context;
   if (target.kind === 'pickup') return { kind: 'pickup', result: collection.interact(player) };

@@ -18,6 +18,8 @@ import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters } from './entities/monsters.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
 import { Animals } from './entities/animals.js';
+import { Birds } from './entities/birds.js';
+import { Fishes } from './entities/fish.js';
 import { AnimalFigures } from './entities/animal-figures.js';
 import { HuntDrops } from './entities/hunt-drops.js';
 import { isBow, isThrown } from './entities/loadout.js';
@@ -29,6 +31,8 @@ import { SCALE, TILT } from './entities/rig.js';
 import { Collection } from './inventory/collection.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
+import { Wallet } from './inventory/wallet.js';
+import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
 import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
@@ -36,6 +40,7 @@ import { RemotePlayers } from './multiplayer/remote-players.js';
 import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { ChatUi } from './ui/chat.js';
 import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
 import { PhoneMenu } from './ui/phone-menu.js';
@@ -55,7 +60,7 @@ import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
 import { drawItem, drawResource } from './world/item-draw.js';
-import { layLoot, LootCredit, rollLoot } from './world/loot.js';
+import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from './world/loot.js';
 import { mulberry32 } from './core/rng.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
 import { Projectiles } from './world/projectiles.js';
@@ -201,6 +206,10 @@ inventory.add('shortSword');
 inventory.equip(0);
 inventory.assignHotbar(0, 'shortSword');
 inventory.events.length = 0;
+// The pouch: money carried, in cents, kept on this device between visits.
+let walletStorage = null;
+try { walletStorage = localStorage; } catch {}
+const wallet = new Wallet({ storage: walletStorage });
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
 // Harvestable tufts and berry bushes stay disabled.
 const harvesting = new Harvesting(world, null, { wild: false });
@@ -244,7 +253,7 @@ if (ruinPreview) {
 }
 sound.weather.onLightning = event => {
   const bolt = weather.strike(world, camera.view(renderer), event);
-  if (bolt) animals.hear({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+  if (bolt) hearWild({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
   return bolt;
 };
 let summonLightning = false;
@@ -291,11 +300,12 @@ const phoneMenu = new PhoneMenu({
   dock: document.getElementById('panel-dock'),
   closeButton: document.getElementById('phone-menu-close'),
   inventoryButton: document.getElementById('phone-menu-inventory'),
-  outside: ['touch-controls', 'hud-root', 'screen'].map((id) => document.getElementById(id)),
+  outside: ['touch-controls', 'hud-root', 'screen', 'chat', 'chat-open'].map((id) => document.getElementById(id)),
   canvas,
   phone: device,
   onToggle: (open) => {
-    setGameplayBlocked(open || inventoryScreen.isOpen);
+    if (open) chat.close();
+    blockGameplay();
     cancelActions();
   },
   onInventory: () => inventoryScreen.setOpen(true),
@@ -311,6 +321,7 @@ const wakeLock = new WakeLock({ nav: navigator, doc: document });
 const gate = new PlayGate({ button: document.getElementById('play-gate'), doc: document,
   onShow: () => {
     void sound.engine.suspend();
+    chat.close({ keepDraft: true });
     updateWakeLock();
   },
   onStart: () => {
@@ -342,21 +353,27 @@ debug.native = { gate, wakeLock, pacer, get clock() { return clock; }, get fulls
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
-  player, inventory, name,
+  player, inventory, name, wallet,
   onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
   onInventory: () => inventoryScreen.toggle(),
 });
 const inventoryScreen = new InventoryScreen({
   inventory, player, name,
   onToggle: (open) => {
-    setGameplayBlocked(open);
+    if (open) chat.close();
+    blockGameplay();
     cancelActions();
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
   phone: () => device.phone,
 });
+// Play stops while any of these is open, and resumes only once all are shut.
+function blockGameplay() {
+  setGameplayBlocked(phoneMenu.open || inventoryScreen.isOpen || chat.isOpen);
+}
 debug.hud = hud;
+debug.wallet = wallet;
 debug.inventoryScreen = inventoryScreen;
 
 // Friends in a lobby share the world's seed and see one another walk about.
@@ -387,11 +404,34 @@ const multiplayer = new MultiplayerClient({
 });
 debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
-bindMultiplayerControls(multiplayer, {
+const renderLobby = bindMultiplayerControls(multiplayer, {
   name, seed: () => seed,
   onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
   onDone: () => canvas.focus({ preventScroll: true }),
 });
+// Lobby chat. It opens only in a lobby, with nothing else in the way, and
+// Escape closes a panel opened over it before the chat. The builder and the
+// rune wheel are declared further down and are read only once a key or tap
+// arrives.
+const panelOpen = () => builder.enabled || inventoryScreen.isOpen || phoneMenu.open || !!spellControls.menu?.isOpen;
+const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
+  isControlTarget,
+  mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
+  isCovered: panelOpen,
+  onToggle: (open) => {
+    blockGameplay();
+    cancelActions();
+    if (!open) canvas.focus({ preventScroll: true });
+  },
+  colorOf: (member) => colorOf(member.color) });
+debug.chat = chat;
+multiplayer.onChat = (message) => chat.receive(message, multiplayer.players);
+multiplayer.onChatNotice = (notice) => chat.notice(notice);
+multiplayer.onRoster = (change) => chat.roster(change);
+multiplayer.onChange = (client) => {
+  renderLobby?.(client);
+  chat.setAvailable(!!client.room);
+};
 window.addEventListener('pagehide', () => multiplayer.leave(false));
 window.addEventListener('pageshow', (event) => { if (event.persisted) multiplayer.leave(); });
 const colorOf = (index) => PLAYER_COLORS[index % PLAYER_COLORS.length];
@@ -595,6 +635,7 @@ function onPhoneChange(phone) {
     builder.panel.open = false;
   }
   if (!phone && phoneMenu.open) phoneMenu.setOpen(false);
+  chat.close({ keepDraft: true });
   // Off a phone the pacing's 30 and smaller cell ceiling no longer apply.
   if (!phone) {
     pacer.reset();
@@ -634,9 +675,25 @@ const animals = new Animals({ seed,
   counts: { deer: countOf('deer', 8), rabbit: countOf('rabbits', 6), wolf: countOf('wolves', 4) },
   enabled: params.get('animals') !== '0' });
 debug.animals = animals;
+// Flocks of pigeons and schools of fish, ?birds=N and ?fish=N at most of
+// each; ?animals=0 leaves them out too.
+const birds = new Birds({ seed, cap: countOf('birds', 8), enabled: animals.enabled });
+const fishes = new Fishes({ seed, cap: countOf('fish', 8), enabled: animals.enabled });
+// Their debug handles place groups on the game's own world.
+const onWorld = (manager) => new Proxy(manager, {
+  get: (m, key) => (key === 'spawn' ? (options = {}) => m.spawn({ world, ...options }) : Reflect.get(m, key)),
+});
+debug.birds = onWorld(birds);
+debug.fish = onWorld(fishes);
+// Every noise reaches the animals, the birds and the fish alike.
+const hearWild = (e) => {
+  animals.hear(e);
+  birds.hear(e);
+  fishes.hear(e);
+};
 // What hunted animals leave lying, and the collection that picks it up.
 const huntDrops = new HuntDrops();
-const huntCollection = new Collection(world, inventory, huntDrops.items);
+const huntCollection = new Collection(world, inventory, huntDrops.items, null, wallet);
 debug.huntDrops = huntDrops;
 debug.collection ??= huntCollection;
 // Monster loot lies in the same drop store as the hunt's, so one collection
@@ -647,8 +704,16 @@ const lootRandom = mulberry32((seed * 104729) ^ 0x1007);
 const dropLoot = (monster, items = rollLoot(monster.kind.id, lootRandom)) => layLoot(huntDrops, world,
   { x: monster.x, y: monster.y, killer: { x: player.x, y: player.y }, items }, (a, b) => huntCollection.pathClear(a, b));
 debug.loot = { credit: lootCredit, roll: (kind) => rollLoot(kind, lootRandom), drop: dropLoot };
+// Felling a tree now and then turns up a few coins beside the stump.
+function payGather(tree) {
+  const items = rollPay('tree', logsOf(tree), lootRandom);
+  if (items.length) layLoot(huntDrops, world, { x: tree.x, y: tree.y, killer: { x: player.x, y: player.y }, items },
+    (a, b) => huntCollection.pathClear(a, b));
+}
 // Rows a lying stack is drawn ahead of its own, over the grass in front.
 const HUNT_DROP_LIFT = 3;
+// Rows a bird on the ground is drawn ahead of its own.
+const BIRD_LIFT = 3;
 // Touch aim assist turns toward monsters and animals alike.
 const assistFoes = () => [...monsters.list, ...animals.list];
 // The creature the player last landed a blow on, for the HUD's target frame;
@@ -686,12 +751,12 @@ const casting = new Spellcasting({ player, world, monsters, peers: () => [...spe
   notify: message => hud.notify(message), onCast: e => multiplayer.sendCast(e),
   onSound: e => {
     sound.play(e);
-    animals.hear(e);
+    hearWild(e);
   },
   // Rune lightning (e.g. Mitlan's Lightning) answers with the storm's own thunder.
   onLightning: ({ x, y, strength }) => {
     sound.play({ type: 'lightning', x, y, strength });
-    animals.hear({ type: 'lightning', x, y, strength });
+    hearWild({ type: 'lightning', x, y, strength });
   },
   onDamage: (struck, amount, ctx) => {
     if (struck.takeHit) lootCredit.observe(struck, ctx?.caster === player);
@@ -811,7 +876,7 @@ function hurtPlayer(e, shake, strength) {
 // What the monsters do: their blows on the player, the player's on them,
 // and their coming and falling. Each kind has its own voice.
 function monsterEvent(e) {
-  animals.hear(e);
+  hearWild(e);
   // An arrow can outlive the archer who loosed it.
   const kind = e.monster?.kind;
   const voice = kind?.sounds[e.type];
@@ -1027,9 +1092,10 @@ function frame(now) {
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
-    if (interact && !isGameplayBlocked() && !player.magicStunned) mushrooms.interact(player);
-    if (touchInteract && !isGameplayBlocked() && !player.magicStunned) {
-      const done = performInteraction(interactables());
+    // E and TAKE do the same nearest thing, a ground item before a glowcap;
+    // only TAKE puts out a fire, which the keyboard leaves to C.
+    if ((interact || touchInteract) && !isGameplayBlocked() && !player.magicStunned) {
+      const done = performInteraction(interactables(), { douse: touchInteract });
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
       // What the drop store's collection takes is told once, with its sound,
       // as its pickup events are spent below.
@@ -1101,7 +1167,10 @@ function frame(now) {
     }
     // Each cut can fell a tree a blow at a time or mow tall grass.
     if (e.type === 'strike' && !paused) {
-      for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
+      for (const result of harvesting.react(e, player)) {
+        if (result.message) hud.notify(result.message, 'pickup');
+        if (result.status === 'harvested' && result.node?.kind === 'tree') payGather(result.node);
+      }
       const damage = Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0));
       const hit = monsters.strike(e, player, damage);
       for (const m of hit) lootCredit.observe(m, true);
@@ -1113,7 +1182,7 @@ function frame(now) {
       }
     }
     if (!debug.freeze) fires.react(world, e, player);
-    animals.hear(e);
+    hearWild(e);
     sound.play(e);
     splashes.react(world, e);
     if (e.type === 'step') {
@@ -1161,6 +1230,8 @@ function frame(now) {
       if (struck.has(impact.id)) continue;
       sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
       animals.landed(impact.x, impact.y);
+      birds.landed(impact.x, impact.y);
+      fishes.landed(impact.x, impact.y);
     }
     projectiles.events.length = 0;
     // Walking over a landed arrow or spear picks it up again.
@@ -1181,7 +1252,8 @@ function frame(now) {
   huntCollection.update(paused ? 0 : dt, player, { blocked: paused || isGameplayBlocked() || respawned });
   for (const ev of huntCollection.events) {
     sound.play({ ...ev, type: 'pickup' });
-    hud.notify(`Picked up ${ITEMS[ev.id].name}${ev.count > 1 ? ` x${ev.count}` : ''}.`, 'pickup');
+    if (ev.type === 'coin') hud.earned(ev.cents);
+    else hud.notify(`Picked up ${ITEMS[ev.id].name}${ev.count > 1 ? ` x${ev.count}` : ''}.`, 'pickup');
   }
   huntCollection.events.length = 0;
   huntDrops.expire(huntCollection.currentTime);
@@ -1214,7 +1286,7 @@ function frame(now) {
     const bolt = weather.summon(world, view, player);
     if (bolt) {
       sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
-      animals.hear({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+      hearWild({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
     }
     summonLightning = false;
   }
@@ -1245,8 +1317,16 @@ function frame(now) {
   // Wildlife shies from the player, friends and monsters alike.
   if (!paused) {
     animals.update(playerDt, world, { player, peers, monsters: monsters.living, view });
-    animalFigures?.update(playerDt, animals.list);
+    birds.update(playerDt, world, { player, peers, monsters: monsters.living,
+      predators: animals.list.filter((a) => a.alive && a.predator), view });
+    fishes.update(playerDt, world, { player, peers, view });
+    animalFigures?.update(playerDt, animals.list, [...birds.list, ...fishes.list]);
   }
+  // A darting fish now and then breaks the surface in a small ring.
+  for (const e of fishes.events) if (e.ring) splashes.ring(e.x, e.y, 0.35, 0, true);
+  fishes.events.length = 0;
+  // Take-offs are kept for a wing-clatter sound to listen for.
+  birds.events.length = 0;
   for (const e of animals.events) {
     if (e.type === 'hurt') {
       hud.damage(e.amount, e.x, e.y);
@@ -1259,7 +1339,7 @@ function frame(now) {
     } else if (e.type === 'hit-player') hurtPlayer(e, 0.3, 0.4);
     else if (e.type === 'swing') sound.play({ type: 'swing', x: e.x, y: e.y, strength: 0.5 });
     else if (e.type === 'bite') sound.play({ type: 'slam', x: e.x, y: e.y, strength: 0.2 });
-    animals.hear(e);
+    hearWild(e);
   }
   animals.events.length = 0;
   for (const drop of animals.drops) huntDrops.lay(drop, world, (a, b) => huntCollection.pathClear(a, b));
@@ -1284,8 +1364,11 @@ function frame(now) {
   for (const { monster } of monsterCells) {
     if (monster.alive) drawShadow(renderer, view, monster.x, monster.y, 0);
   }
-  const animalCells = animalFigures ? animalFigures.rasterise(view, animals.list, player) : [];
-  for (const figure of animalCells) AnimalFigures.drawShadow(renderer, view, figure);
+  const wildCells = animalFigures ? animalFigures.rasterise(view, animals.list, player, [...birds.list, ...fishes.list]) : [];
+  const animalCells = wildCells.filter((f) => !f.small);
+  const fishCells = wildCells.filter((f) => f.submerged);
+  const birdCells = wildCells.filter((f) => f.small && !f.submerged);
+  for (const figure of [...animalCells, ...birdCells]) AnimalFigures.drawShadow(renderer, view, figure);
 
   // Match the reveal region to this pose, including a jump or sword swing.
   let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
@@ -1377,6 +1460,14 @@ function frame(now) {
     reflections.push({ y: figure.animal.y, draw: () => AnimalFigures.draw(renderer, figure, mirror) });
     drawables.push({ y: figure.depth, draw: () => AnimalFigures.draw(renderer, figure, putOutlinedCell) });
   }
+  // A bird on the ground is shorter than the grass, so like a lying stack
+  // it is drawn a few rows ahead of its own, over the blades in front; one
+  // in the air is drawn over everything below it. Both are mirrored in the
+  // lakes they stand by or cross.
+  for (const figure of birdCells) {
+    reflections.push({ y: figure.animal.y, draw: () => AnimalFigures.draw(renderer, figure, mirror) });
+    if (!figure.air) drawables.push({ y: figure.depth + BIRD_LIFT, draw: () => AnimalFigures.draw(renderer, figure, putOutlinedCell) });
+  }
   // Friends are drawn as the shape-built outlaw in their own gear.
   for (const peer of peers) {
     reflections.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure, mirror) });
@@ -1384,6 +1475,8 @@ function frame(now) {
   }
   reflections.sort((a, b) => a.y - b.y);
   drawables.sort((a, b) => a.y - b.y);
+  // Fish swim under the water: everything on its surface draws over them.
+  for (const figure of fishCells) AnimalFigures.drawSubmerged(renderer, figure);
   grass.drawReflections(renderer, world, view, time, mirror, reflections);
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
@@ -1400,6 +1493,7 @@ function frame(now) {
   torches.light(renderer, view, time, visibleTorches);
   weather.drawAtmosphere(renderer, view, time);
 
+  for (const figure of birdCells) if (figure.air) AnimalFigures.draw(renderer, figure, putOutlinedCell);
   projectiles.drawFlying(renderer, view);
   monsters.arrows.drawFlying(renderer, view);
   casting.effects.draw(renderer, view, casting.projectiles);
@@ -1433,8 +1527,7 @@ function frame(now) {
   hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)
     .map((member) => ({ id: member.id, name: member.name, health: member.state.health,
       maxHealth: player.vitals.maxHealth,
-      note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
-        (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
+      note: `${Math.round(metresBetween(member.state, player))}m` })) : []);
   markSpellHits();
   hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
@@ -1444,6 +1537,7 @@ function frame(now) {
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
   touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
+  chat.update(dt);
   inventoryScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;

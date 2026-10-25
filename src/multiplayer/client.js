@@ -1,14 +1,21 @@
+import { readChat, readChatNotice } from './chat.js';
 import { cleanCode, cleanName, cleanSeed, lobbyServerUrl, MAX_PLAYERS, PROTOCOL_VERSION, readMembers,
   UPDATE_MS, validCode } from './protocol.js';
 
 const validId = (id) => typeof id === 'string' && /^[0-9a-f]{1,32}$/.test(id);
 
 export class MultiplayerClient {
-  sendCast(cast) {
-    if (this.status === 'online' && this.socket?.readyState === 1 && this.socket.bufferedAmount < 32768) {
-      this.socket.send(JSON.stringify({ type: 'spellcast', cast }));
-    }
+  // Sends a lobby message if the connection is up and not backed up.
+  sendNow(message) {
+    if (this.status !== 'online' || this.socket?.readyState !== 1 || this.socket.bufferedAmount >= 32768) return false;
+    this.socket.send(JSON.stringify(message));
+    return true;
   }
+  sendCast(cast) { this.sendNow({ type: 'spellcast', cast }); }
+  // Chat goes through the server, which echoes it back: false means it
+  // wasn't sent at all.
+  sendChat(channel, text) { return this.sendNow({ type: 'chat', channel, text }); }
+  toggleChat(channel) { return this.sendNow({ type: 'chat-toggle', channel }); }
   constructor({ getState, onJoin = () => {}, onSnapshot = () => {}, onChange = () => {},
     WebSocketImpl = globalThis.WebSocket, baseUrl = globalThis.location?.href,
     connectionTimeout = 8000, retryDelay = 1000 } = {}) {
@@ -87,6 +94,9 @@ export class MultiplayerClient {
         this.retry = 0;
         this.players = readMembers(message.players);
         const self = this.players.find((p) => p.id === this.id);
+        // Those already here aren't announced; changes from now on are.
+        this.known = new Map(this.players.map((p) => [p.id, p.name]));
+        this.onRoster?.({ self: true, code: message.code, resumed: message.resumed === true });
         this.onJoin({ code: message.code, seed, id: this.id, self: self?.state ?? null });
         if (this.socket !== socket) return;
         this.onSnapshot(this.players, this.id);
@@ -98,12 +108,21 @@ export class MultiplayerClient {
         this.sendState();
       } else if (message.type === 'spellcast' && this.room && typeof message.casterId === 'string') {
         this.onCast?.(message);
+      } else if (message.type === 'chat' && this.room) {
+        const line = readChat(message);
+        if (line) this.onChat?.(line);
+      } else if (message.type === 'chat-notice' && this.room) {
+        const notice = readChatNotice(message);
+        if (notice) this.onChatNotice?.(notice);
       } else if (message.type === 'snapshot' && this.room && Array.isArray(message.players)) {
         const before = this.players.map((p) => `${p.id}:${p.name}`).join('|');
         this.players = readMembers(message.players);
         this.onSnapshot(this.players, this.id);
         const after = this.players.map((p) => `${p.id}:${p.name}`).join('|');
-        if (before !== after) this.onChange(this);
+        if (before !== after) {
+          this.diffRoster();
+          this.onChange(this);
+        }
       }
     });
     socket.addEventListener('error', () => {}); // The close event owns retries and the user-facing error.
@@ -114,6 +133,15 @@ export class MultiplayerClient {
       if (this.room) this.reconnect();
       else this.fail('Could not reach the lobby server. Check its address under Lobby server.');
     });
+  }
+
+  // Tells the chat who joined and who left since the last roster.
+  diffRoster() {
+    const now = new Map(this.players.map((p) => [p.id, p.name]));
+    const joined = this.players.filter((p) => !this.known.has(p.id));
+    const left = [...this.known].filter(([id]) => !now.has(id)).map(([id, name]) => ({ id, name }));
+    this.known = now;
+    if (joined.length || left.length) this.onRoster?.({ joined, left });
   }
 
   sendState() {
@@ -139,6 +167,7 @@ export class MultiplayerClient {
 
   leave(notify = true) {
     this.clearTimers();
+    if (this.room) this.onRoster?.({ left: 'self' });
     const socket = this.socket;
     this.socket = null;
     if (socket) {

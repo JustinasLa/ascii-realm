@@ -1,5 +1,6 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { WebSocket } from 'ws';
+import { createChatRelay } from './chat.js';
 import { Player } from '../src/entities/player.js';
 import { spellIds } from '../src/spells/catalog.js';
 import { readSpellCast } from '../src/spells/protocol.js';
@@ -15,7 +16,7 @@ const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const ANCHOR_RANGE = 2000;
 
 export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPerAddress = 16,
-  roomsPerMinute = 6 } = {}) {
+  roomsPerMinute = 6, heartbeatMs = 15000 } = {}) {
   const rooms = new Map();
   const connections = new Map();
   // Per address: open sockets, and recent lobby creations.
@@ -31,6 +32,8 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
       socket.send(JSON.stringify(message));
     }
   }
+
+  const chat = createChatRelay({ send });
 
   function members(room) {
     return [...room.players.values()].filter((p) => p.socket).map((p) => ({
@@ -96,7 +99,7 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
       if (created.length >= roomsPerMinute) return fail(socket, 'Too many lobbies created. Try again in a minute.');
       created.push(now);
       const seed = cleanSeed(request.seed);
-      room = { code: newCode(), seed, world: new World(seed, { spawnRuins: true }), createdAt: Date.now(), players: new Map() };
+      room = { code: newCode(), seed, world: new World(seed, { spawnRuins: true }), createdAt: Date.now(), players: new Map(), chatSeq: 0 };
       rooms.set(room.code, room);
     } else {
       if (!validCode(request.code)) return fail(socket, 'Enter a six-character lobby code.');
@@ -116,7 +119,9 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
         .find((i) => ![...room.players.values()].some((p) => p.color === i));
       const { x, y } = spawnFor(room);
       player = { id: randomBytes(8).toString('hex'), token: randomBytes(24).toString('hex'),
-        name: cleanName(request.name), color, state: playerState(new Player(x, y)) };
+        name: cleanName(request.name), color, state: playerState(new Player(x, y)),
+        // Chat channels this player has hidden; kept through a reconnect.
+        hidden: new Set() };
       room.players.set(player.id, player);
     }
     player.socket = socket;
@@ -166,6 +171,8 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
             send(peer.socket, { type: 'spellcast', casterId: session.player.id, ...cast });
           }
         }
+      } else if (request.type === 'chat' || request.type === 'chat-toggle') {
+        chat.handle(session, request);
       } else if (request.type === 'state' && session.player && now - session.lastState >= 20) {
         const state = readPlayerState(request.state);
         if (state) {
@@ -200,7 +207,7 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
       if (!session.alive) socket.terminate();
       else { session.alive = false; socket.ping(); }
     }
-  }, 15000);
+  }, heartbeatMs);
   tick.unref();
   heartbeat.unref();
 

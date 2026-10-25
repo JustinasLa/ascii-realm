@@ -174,11 +174,13 @@ export function rollDrops(kind, random) {
 // The forest field the trees are placed by: trees grow above 0.44.
 export const forestAt = (seed, x, y) => fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
 
-// Lakes and shores, straight from the terrain's own noise, and river
-// channels from the seeded river lines: neither needs a chunk.
+// Lakes and their shores, straight from the terrain's own noise; no chunk
+// is needed.
+export const lakeAt = (world, x, y) => fbm(x * ASPECT * 0.011, y * 0.011, world.seed, 5) + LAND_LIFT < SHORE_LEVEL;
+
+// Lakes and shores, and river channels from the seeded river lines.
 export function wetAt(world, x, y) {
-  if (fbm(x * ASPECT * 0.011, y * 0.011, world.seed, 5) + LAND_LIFT < SHORE_LEVEL) return true;
-  return Boolean(world.rivers?.near?.(x, y, 1)?.length);
+  return lakeAt(world, x, y) || Boolean(world.rivers?.near?.(x, y, 1)?.length);
 }
 
 // The habitat at a cell: 'water', 'woodland', 'edge' or 'meadow'. It depends

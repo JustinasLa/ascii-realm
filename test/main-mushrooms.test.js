@@ -6,6 +6,7 @@ test('E interacts once and is consumed while frozen or building', async () => {
   const { game, tap, frame } = await loadGame();
   let interactions = 0;
   game.mushrooms.interact = () => { interactions++; return true; };
+  game.mushrooms.nearby = () => ({ cooldown: 0 });
   tap('KeyE'); frame(); frame();
   assert.equal(interactions, 1);
   game.freeze = true;
