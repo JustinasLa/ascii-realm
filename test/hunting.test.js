@@ -182,6 +182,51 @@ test('a rabbit bolts at once when struck; one hurt in flight runs on for longer'
   assert.equal(d.flinch, null, 'running, it does not stop to flinch');
 });
 
+test('a deer hit late in its flight runs on four more seconds, even from a hunter far off', () => {
+  const { animals, world, far } = herd('deer', 1);
+  const deer = animals.list[0];
+  const hunter = at(deer, 0, -40);
+  deer.bolt(world, hunter);
+  deer.duration = KINDS.deer.flee.min + 0.1;
+  run(animals, world, far, KINDS.deer.flee.min - 0.2);
+  assert.equal(deer.state, 'flee');
+  animals.hit(deer, 5, hunter.x, hunter.y);
+  let last = metres(hunter, deer);
+  run(animals, world, far, KINDS.deer.flee.min - 0.2, () => {
+    assert.equal(deer.state, 'flee', 'still running');
+    const now = metres(hunter, deer);
+    assert.ok(now > last, 'and still away');
+    last = now;
+  });
+  run(animals, world, far, 0.5);
+  assert.notEqual(deer.state, 'flee', 'then safe, it settles');
+});
+
+test('a kill sends the herd from the killer, not from the body\'s cry', () => {
+  const { animals, world, far } = herd('deer', 3);
+  const [deer, mate] = animals.list;
+  // The hunter stands beyond the mate, so a flight from the body would
+  // run at them.
+  const off = toMetres(mate.x - deer.x, mate.y - deer.y);
+  const length = Math.hypot(...off);
+  const hunter = at(mate, (off[0] / length) * 8, (off[1] / length) * 8);
+  animals.hit(deer, 999, hunter.x, hunter.y);
+  // The frame hears the body's hurt and death noises, as the game does.
+  for (const e of deer.events) animals.hear({ ...e, animal: deer });
+  deer.events.length = 0;
+  const before = animals.list.slice(1).map((a) => metres(hunter, a));
+  run(animals, world, far, 2);
+  animals.list.slice(1).forEach((a, i) => {
+    assert.equal(a.state, 'flee');
+    assert.deepEqual([a.threat.x, a.threat.y], [hunter.x, hunter.y], 'from the hunter');
+    assert.ok(metres(hunter, a) > before[i] + 3, 'and away from them');
+  });
+  // Once off, a mate hears noises again.
+  assert.equal(mate.alarmed, false);
+  animals.calm();
+  assert.equal(mate.alarmed, false);
+});
+
 test('the fallen lie still, sink away and are cleared; the next living one leads; corpses take no slot', () => {
   const { animals, world, far } = herd('deer', 3);
   const [leader, second] = animals.list;
@@ -406,11 +451,36 @@ test('a hunted herd comes back smaller, without its stag if the stag fell, and n
   assert.equal(animals.hit(stray, 999, 0, 0), true);
 });
 
-test('the carcass land starts every chunk empty and loaded', () => {
+test('the carcass land starts every chunk empty, and keeps only those holding stacks', () => {
   const landOf = createCarcassLand();
   assert.deepEqual(landOf.chunk(3, 4), { items: [], props: [] });
-  assert.equal(landOf.loaded(3, 4), landOf.chunk(3, 4));
-  assert.equal(landOf.loot, null);
+  assert.equal(landOf.loaded(3, 4), null, 'an empty chunk is not loaded');
+  const drops = new HuntDrops();
+  const [item] = drops.lay({ x: 100, y: 50, killer: null, items: [{ id: 'bone', count: 1 }] }, land());
+  assert.equal(drops.land.chunks.size, 1);
+  const key = [...drops.land.chunks.keys()][0];
+  const [cx, cy] = key.split(',').map(Number);
+  assert.deepEqual(drops.land.loaded(cx, cy).items, [item]);
+  // A stack moved to the next chunk leaves its old one empty, let go of.
+  drops.items.move(item, item.x + CHUNK_SIZE, item.y);
+  drops.expire();
+  assert.deepEqual([...drops.land.chunks.keys()], [`${cx + 1},${cy}`]);
+  drops.forget(item);
+  assert.equal(drops.land.chunks.size, 0, 'picked up or lost, its chunk goes');
+});
+
+test('exploring without hunting holds no chunks in the drop store', () => {
+  const world = land();
+  const drops = new HuntDrops();
+  const collection = new Collection(world, new Inventory({ starter: false }), drops.items);
+  for (let i = 0; i < 200; i++) {
+    const x = i * 50;
+    const y = (i % 7) * 40;
+    assert.equal(drops.in(x - 100, y - 60, x + 100, y + 60).length, 0);
+    collection.update(1 / 30, walker(x, y));
+  }
+  assert.equal(drops.land.chunks.size, 0);
+  assert.equal(world.chunkCalls, 0);
 });
 
 test('stacks lie on dry ground beside the body, are drawn, and never bring loose items to the world', () => {
@@ -454,7 +524,8 @@ test('a body in water drops on the bank; with no dry ground near, beside the hun
   const lake = land({ water: (x) => x < 200 && x > 0 });
   const [byHunter] = drops.lay({ x: 100, y: 50, killer: { x: -5, y: 50 }, items: [{ id: 'bone', count: 1 }] }, lake);
   assert.deepEqual([byHunter.x, byHunter.y], [-5, 50]);
-  assert.deepEqual(drops.lay({ x: 100, y: 50, killer: { x: 20, y: 50 }, items: [{ id: 'bone', count: 1 }] }, lake), []);
+  const sea = land({ water: (x) => x < 400 && x > 0 });
+  assert.deepEqual(drops.lay({ x: 100, y: 50, killer: { x: 200, y: 50 }, items: [{ id: 'bone', count: 1 }] }, sea), []);
   assert.deepEqual(drops.lay({ x: 100, y: 50, killer: null, items: [{ id: 'bone', count: 1 }] }, lake), []);
   // Nor on land that isn't loaded, or behind a wall from the body.
   const unloaded = land({ loaded: () => false });
@@ -463,6 +534,29 @@ test('a body in water drops on the bank; with no dry ground near, beside the hun
   const fenced = drops.lay({ x: 100, y: 50, killer: null, items: [{ id: 'bone', count: 1 }] }, walled,
     (a, b) => collection.pathClear(a, b));
   assert.deepEqual(fenced, []);
+});
+
+test('a hunter wading when the body falls far out finds the loot on the nearest bank', () => {
+  const lake = land({ water: (x) => x < 200 && x > 0 });
+  const drops = new HuntDrops();
+  const inventory = new Inventory({ starter: false });
+  const collection = new Collection(lake, inventory, drops.items);
+  const hunter = { x: 20, y: 50 };
+  const laid = drops.lay({ x: 100, y: 50, killer: hunter, items: [{ id: 'deerHide', count: 1 }, { id: 'bone', count: 1 }] },
+    lake, (a, b) => collection.pathClear(a, b));
+  assert.equal(laid.length, 2);
+  for (const item of laid) {
+    assert.ok(item.x <= 0, 'on dry ground');
+    assert.ok(metres(hunter, item) <= 1 + 1e-9, 'the nearest to the hunter');
+  }
+  const player = walker(laid[0].x - 1, laid[0].y);
+  for (let i = 0; i < 60; i++) collection.update(1 / 30, player);
+  assert.equal(inventory.slots.find((s) => s?.id === 'deerHide')?.count, 1, 'picked up from the bank');
+  // A hunter on dry ground has it laid at their feet.
+  const walled = land({ water: (x) => x < 200 && x > 0, solid: (x) => x < -5 });
+  const stuck = drops.lay({ x: 100, y: 50, killer: { x: -3, y: 50 }, items: [{ id: 'bone', count: 1 }] }, walled,
+    (a, b) => collection.pathClear(a, b));
+  assert.deepEqual([stuck[0].x, stuck[0].y], [-3, 50]);
 });
 
 test('stacks are lost after five minutes, the oldest first past the cap, and once picked up', () => {

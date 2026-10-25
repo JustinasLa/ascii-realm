@@ -227,6 +227,8 @@ export class Animal {
     // What it is watching or running from.
     this.threat = null;
     this.fleeFor = 0;
+    // Into a flight, the seconds before reaching safety may end it.
+    this.safeAfter = 0;
     this.nextTurn = 0;
     this.away = 0;
     this.blocked = 0;
@@ -253,6 +255,9 @@ export class Animal {
     // coming bolt was set by a blow rather than passed on by a mate.
     this.flinch = null;
     this.struck = false;
+    // Whether its coming bolt is from the one who felled a mate, which no
+    // noise turns it from.
+    this.alarmed = false;
     this.deadTime = 0;
     // How far the body has sunk into the ground, 0 to 1.
     this.sunk = 0;
@@ -369,9 +374,11 @@ export class Animal {
       herd.flightFor = k.flee.min;
     }
     this.setState('flee', between(this.random, [k.flee.min, k.flee.max]));
+    this.safeAfter = k.flee.min;
     this.boltIn = null;
     this.flinch = null;
     this.struck = false;
+    this.alarmed = false;
     this.nextTurn = k.flee.zigzag ? between(this.random, k.flee.zigzag) : Infinity;
     this.blocked = 0;
     this.events.push({ type: 'bolt', x: this.x, y: this.y, strength: 1 });
@@ -451,8 +458,9 @@ export class Animal {
     }
     this.threat = from;
     if (this.state === 'flee') {
-      // Hurt in flight, it runs on for longer.
+      // Hurt in flight, it runs on for longer, however far off the hunter.
       this.duration = Math.max(this.duration, this.stateTime + k.flee.min);
+      this.safeAfter = this.stateTime + k.flee.min;
       return true;
     }
     if (!this.struck) {
@@ -564,7 +572,7 @@ export class Animal {
       speed = k.fleeSpeed;
       turn = k.turn.flee;
       const safe = threat ? threat.distance > k.flee.safe : from.distance > k.flee.safe;
-      if (this.stateTime >= this.duration || (safe && this.stateTime >= k.flee.min)) {
+      if (this.stateTime >= this.duration || (safe && this.stateTime >= this.safeAfter)) {
         this.wary = k.flee.calm;
         if (world.typeAt(this.x, this.y) === WATER) {
           // Still in the stream: it wades on out to the nearest bank first.
@@ -739,6 +747,7 @@ export class Animals {
       a.boltIn = null;
       a.flinch = null;
       a.struck = false;
+      a.alarmed = false;
       a.wary = 0;
     }
     for (const herd of this.herds.values()) herd.flightFor = 0;
@@ -836,6 +845,7 @@ export class Animals {
       if (metres(mate.x - animal.x, mate.y - animal.y) > animal.kind.contagion.radius) continue;
       mate.boltIn = between(mate.random, animal.kind.contagion.delay);
       mate.threat = { ...animal.killer };
+      mate.alarmed = true;
     }
   }
 
@@ -960,8 +970,9 @@ export class Animals {
     }
     for (const { at, loud } of this.noises) {
       for (const a of this.list) {
-        // The fallen hear nothing; one struck runs on its own blow's clock.
-        if (!a.alive || a.struck) continue;
+        // The fallen hear nothing; one struck runs on its own blow's clock,
+        // and one a fall alarmed runs from the killer, not the body's cry.
+        if (!a.alive || a.struck || a.alarmed) continue;
         const r = Math.min(loud, a.kind.senses.noise);
         const d = metres(at.x - a.x, at.y - a.y);
         if (d < r) {

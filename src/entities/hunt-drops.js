@@ -17,22 +17,33 @@ export const PICKUP_DELAY = 0.5;
 // Stacks lie this far from where the animal stood, metres, clear of the
 // body as it falls, or as near as dry ground allows within the last ring.
 const RINGS = [1.2, 1.6, 2, 2.5, 3];
+// Failing that, the dry ground nearest the hunter, out to as far.
+const HUNTER_RINGS = [0, 0.5, 1, 1.5, 2, 2.5, 3];
 const AROUND = 12;
 
-// The chunks the drop store keeps its stacks in: each starts with no items
-// and counts as loaded, so the store's on-screen query keeps it.
+// The land the drop store keeps its stacks in. Every chunk starts with no
+// items; only those holding stacks are kept, and only they count as
+// loaded, so looking over empty land holds nothing in memory.
 export function createCarcassLand() {
   const chunks = new Map();
-  const chunk = (cx, cy) => {
-    const key = `${cx},${cy}`;
-    let c = chunks.get(key);
-    if (!c) {
-      c = { items: [], props: [] };
-      chunks.set(key, c);
-    }
-    return c;
+  // The ground-item code keeps each changed chunk's list here.
+  const loot = {
+    get: (key) => chunks.get(key),
+    set(key, list) {
+      if (list.length) chunks.set(key, list);
+      else chunks.delete(key);
+    },
   };
-  return { chunk, loaded: chunk, loot: null, chunks };
+  const chunk = () => ({ items: [], props: [] });
+  const loaded = (cx, cy) => {
+    const items = chunks.get(`${cx},${cy}`);
+    return items ? { items, props: [] } : null;
+  };
+  // Lets go of lists left empty by stacks that moved away.
+  const prune = () => {
+    for (const [key, list] of chunks) if (!list.length) chunks.delete(key);
+  };
+  return { chunk, loaded, loot, chunks, prune };
 }
 
 const toCells = (mx, mz) => [(mx * SCALE) / ASPECT, mz * SCALE * TILT];
@@ -51,27 +62,33 @@ export class HuntDrops {
     return world.isWalkable(x, y) && world.typeAt(x, y) !== WATER;
   }
 
-  // The cells round a body a stack may lie on: dry and reachable from where
-  // the body lies, nearest first; or, the body in water, the dry ground
-  // nearest the one who brought it down.
-  spots(world, near, path) {
+  // The dry cells in rings round a point, nearest ring first, reachable
+  // from it if it is dry itself; it stops at the first ring that brings the
+  // count to `enough`.
+  static around(world, centre, rings, path, enough) {
     const out = [];
-    const from = HuntDrops.dry(world, near.x, near.y) ? near : null;
-    for (const r of RINGS) {
-      for (let i = 0; i < AROUND; i++) {
+    const from = HuntDrops.dry(world, centre.x, centre.y) ? centre : null;
+    for (const r of rings) {
+      for (let i = 0; i < (r ? AROUND : 1); i++) {
         const angle = (i / AROUND) * Math.PI * 2 + r;
         const [dx, dy] = toCells(Math.sin(angle) * r, Math.cos(angle) * r);
-        const spot = { x: near.x + dx, y: near.y + dy };
+        const spot = { x: centre.x + dx, y: centre.y + dy };
         if (!HuntDrops.dry(world, spot.x, spot.y)) continue;
         if (from && !path(from, spot)) continue;
         out.push(spot);
       }
-      if (out.length >= 3) return out;
+      if (out.length >= enough) return out;
     }
-    if (out.length) return out;
-    const killer = near.killer;
-    if (killer && HuntDrops.dry(world, killer.x, killer.y)) return [{ x: killer.x, y: killer.y }];
-    return [];
+    return out;
+  }
+
+  // The cells round a body a stack may lie on: dry and reachable from where
+  // the body lies, nearest first; or, the body in water, the dry ground
+  // nearest the one who brought it down.
+  spots(world, near, path) {
+    const out = HuntDrops.around(world, near, RINGS, path, 3);
+    if (out.length || !near.killer) return out;
+    return HuntDrops.around(world, near.killer, HUNTER_RINGS, path, 1);
   }
 
   // Lays each of a body's stacks ({ x, y, killer, items }) on its own dry
@@ -102,6 +119,7 @@ export class HuntDrops {
     for (const [item, at] of this.laid) {
       if (item.count <= 0 || time - at >= DROP_LIFETIME) this.forget(item);
     }
+    this.land.prune();
   }
 
   in(x0, y0, x1, y1) {

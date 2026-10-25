@@ -910,7 +910,10 @@ function frame(now) {
     if (touchInteract && !isGameplayBlocked() && !player.magicStunned) {
       const done = performInteraction(interactables());
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
-      if (done?.kind === 'pickup' && done.result.message) hud.notify(done.result.message, 'pickup');
+      // What the drop store's collection takes is told once, with its sound,
+      // as its pickup events are spent below.
+      const told = done?.result?.ok && debug.collection === huntCollection;
+      if (done?.kind === 'pickup' && done.result.message && !told) hud.notify(done.result.message, 'pickup');
     }
     if (cast && !isGameplayBlocked() && !player.magicStunned) {
       syncSpellPeers();

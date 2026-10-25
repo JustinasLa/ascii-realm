@@ -95,6 +95,36 @@ test('a sword cut brings down a deer whose drops lie beside it, picked up with a
   for (let i = 0; i < 120; i++) frame();
 });
 
+test('touch TAKE on hunted drops tells each pickup once', async () => {
+  const { game, frame, tap } = await loadGame(undefined, { coarse: true });
+  game.world.loaded = () => ({ props: [] });
+  const notes = [];
+  game.hud.notify = (text, kind) => notes.push([text, kind]);
+  const deer = deerAt(game, 1);
+  deer.health = 15;
+  game.animals.random = () => 0;
+  game.player.events.push({ type: 'strike', swing: 'cut', x: game.player.x, y: game.player.y, strength: 1 });
+  frame();
+  const stacks = game.huntDrops.all();
+  assert.equal(stacks.length, 3);
+  for (const s of stacks) s.pickupAfter = 0;
+  // Beside the first stack, TAKE picks it up; the rest are walked over.
+  const [first, ...rest] = stacks;
+  game.player.x = first.x + 3;
+  game.player.y = first.y;
+  tap('TouchInteract');
+  frame();
+  assert.equal(first.count, 0, 'taken by the tap');
+  for (const s of rest) {
+    game.player.x = s.x;
+    game.player.y = s.y;
+    for (let i = 0; i < 3; i++) frame();
+  }
+  assert.equal(game.huntDrops.all().length, 0, 'all taken');
+  const picked = notes.filter(([text]) => /^Picked up/.test(text)).map(([text]) => text).sort();
+  assert.deepEqual(picked, ['Picked up Bone.', 'Picked up Deer Hide.', 'Picked up Raw Venison.']);
+});
+
 test('two full-draw arrows bring down a deer and are spent; a miss startles it', async () => {
   const { game, frame } = await loadGame();
   const deer = deerAt(game, 6);
