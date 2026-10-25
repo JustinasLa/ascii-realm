@@ -22,3 +22,26 @@ test('the frame drifts, draws and reflects the river debris', async () => {
   frame(0.05);
   assert.ok(!debris.calls.some(([kind]) => kind === 'update'));
 });
+
+// The player and every risen monster wade into the debris, and the splashes
+// of their knocks are heard.
+test('the frame hands the debris its wading bodies and plays its splashes', async () => {
+  const { game, frame } = await loadGame();
+  const debris = game.debris;
+  const monster = (state) => ({ state, kind: { id: 'skeleton' }, x: 0, y: 0, alive: true });
+  const risen = monster('chase'), rising = monster('rise');
+  game.monsters.living = [risen, rising];
+  const played = [];
+  game.sound.play = (e) => played.push(e);
+  const splash = { type: 'splash', x: 1, y: 2, strength: 0.3 };
+  debris.update = (dt, world, view, player, weather, splashes, bodies) => {
+    debris.calls.push(['update', dt, bodies]);
+    debris.events.push(splash);
+  };
+  debris.calls.length = 0;
+  frame(0.05);
+  // The list is built inside the game's own realm, so compare its members.
+  assert.deepEqual([...debris.calls.find(([kind]) => kind === 'update')[2]], [game.player, risen]);
+  assert.ok(played.includes(splash));
+  assert.equal(debris.events.length, 0);
+});

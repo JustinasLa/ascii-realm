@@ -663,6 +663,12 @@ const casting = new Spellcasting({ player, world, monsters, peers: () => [...spe
   },
   onDamage: (target, amount, ctx) => { if (ctx?.caster === player && target !== player && amount > 0) haptics.hit(); } });
 debug.casting = casting;
+debug.monsters = monsters;
+
+// Who wades into the river debris and shoves it: the player and every
+// monster that has climbed out of the ground.
+const debrisBodies = () => [player, ...monsters.living.filter(m => m.state !== 'rise')];
+
 hud.attachMana(casting);
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
 window.addEventListener('pagehide', () => casting.clearPresentation());
@@ -1142,7 +1148,11 @@ function frame(now) {
 
   const view = camera.view(renderer);
   weather.update(dt, time, world, view, sound.weather);
-  if (!paused) debris.update(dt, world, view, player, weather, splashes);
+  if (!paused) {
+    debris.update(dt, world, view, player, weather, splashes, debrisBodies());
+    for (const e of debris.events) sound.play(e);
+    debris.events.length = 0;
+  }
   const spellFog = fogSpells.collect(casting);
   fog.update(dt, weather, fogWalkers(view, spellFog.walkers), spellFog, view);
   if (wasTapped('KeyL') || summonLightning) {

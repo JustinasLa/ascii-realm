@@ -251,6 +251,31 @@ export function easeCarry(carry, target, dt, airborne = false) {
   return carry;
 }
 
+// A knock from floating debris slides a wading body a little, like the
+// carry: metres a second, east and south, never more than the river's own
+// carry, and dying away within a fraction of a second.
+export const BUMP_RATE = 6;
+export const MAX_BUMP = CURRENT_CARRY;
+
+// Adds a knock (gx, gy) to a body's bump.
+export function addBump(body, gx, gy) {
+  const bump = body.bump ??= { x: 0, y: 0 };
+  bump.x += gx;
+  bump.y += gy;
+  const l = Math.hypot(bump.x, bump.y);
+  if (l > MAX_BUMP) { bump.x *= MAX_BUMP / l; bump.y *= MAX_BUMP / l; }
+  return bump;
+}
+
+// Lets a bump die away.
+export function settleBump(bump, dt) {
+  const k = Math.exp(-BUMP_RATE * dt);
+  bump.x *= k;
+  bump.y *= k;
+  if (Math.hypot(bump.x, bump.y) < 1e-3) { bump.x = 0; bump.y = 0; }
+  return bump;
+}
+
 export class RiverNetwork {
   constructor(seed, spawn, { enabled = true } = {}) {
     this.seed = seed;

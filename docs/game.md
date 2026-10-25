@@ -104,9 +104,22 @@ short version see the [README](../README.md).
   wake when the water runs past it. Carried into a lake it slows, soaks up
   and sinks. Only a few pieces are afloat at once (four, six after a storm),
   and nothing too long for a reach comes down it, so the narrowest brooks
-  carry only leaves and reeds, or nothing. Debris is drawn in small letters
-  with its reflection, hurts nobody, and is never saved: each player sees
-  their own.
+  carry only leaves and reeds, or nothing. Wading into a piece shoves it
+  away, harder the faster you go and the lighter it is: a mat of leaves or a
+  branch flies off, a log only gives way and coasts on, and one struck off
+  its middle turns. Monsters wading after you or fleeing shove it the same
+  way, and pieces knock into each other. A piece drifting into someone in
+  the water bumps them a little sideways with a small splash; a heavy log in
+  a fast current is felt, a troll barely notices. A jump clears your feet of
+  it, and a hard enough shove frees a snagged one. Shoved out to a bank, a
+  piece lies there a moment, then edges back into the current. Debris is
+  drawn in small letters with its reflection, never stops or hurts anyone,
+  and is never saved: each player sees their own, and only they and the
+  monsters shove it.
+
+  ![The player wades into a log and shoves it off downstream](media/player-pushes-log.gif)
+  ![A skeleton strides through a log and knocks it away](media/skeleton-pushes-log.gif)
+
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
