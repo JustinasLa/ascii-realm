@@ -187,6 +187,32 @@ test('a light to one side of a fine stone lights that side', () => {
   assert.ok(re > rw, 'east light: east face brighter');
 });
 
+test('a bright stone letter lit on its face turns warm instead of white, its back keeps its colour', () => {
+  // Two small cells of moonlit stone (near white), one facing west and one
+  // east, and a strong light low to the west.
+  const lit = (base, k) => {
+    const r = renderer(10, 6);
+    for (let i = 0; i < FINE; i++) {
+      r.fineAt(8 + i, 4, glyph('@'), ...base, 4, 4, 4, 0, normalByte(i ? 0.7 : -0.7), normalByte(0), glossByte(GLOSS_DRY), 2);
+    }
+    r.lightFineLit(2 * 10 + 4, k, 0, 2.5, 3, 156, 72, 12);
+    const a = (4 * r.fineCols + 8) * 4;
+    return [[...r.fine.slice(a, a + 3)], [...r.fine.slice(a + 4, a + 7)]];
+  };
+  const [face, back] = lit([210, 208, 214], 0.9);
+  // The face is warm: red over green over blue, blue well below the moon's.
+  assert.ok(face[0] > face[1] && face[1] > face[2], `face ${face}`);
+  assert.ok(face[2] < 214 - 60, `face blue ${face[2]}`);
+  // Scaled as a whole past full brightness: red at the top, not every
+  // channel clipped to white.
+  assert.ok(face[0] >= 254 && face[2] < 200, `face ${face}`);
+  // The back keeps more of its cool colour than the face.
+  assert.ok(back[2] - back[0] > face[2] - face[0], `back ${back}`);
+  // A dim letter under a weak light is not scaled: it only gains.
+  const [dim] = lit([40, 40, 40], 0.2);
+  assert.ok(dim[0] > 40 && dim[0] < 255 && Math.max(...dim) < 255, `dim ${dim}`);
+});
+
 test('river stone bakes carry normals in the fine bake only, the ordinary bake unchanged', () => {
   const stone = makeRiverStone(10, 20, mulberry32(1));
   assert.ok(stone.cells.every((c) => c.nx === undefined));

@@ -25,7 +25,7 @@ import { ASPECT } from '../world/world.js';
 import { FINE } from './cells.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
 import { FOG, FOG_PILED, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
-import { GLINT, normalOf, shadeFactors } from '../world/surface-light.js';
+import { GLINT, LIT_INK, TINT, TINT_MAX, normalOf, shadeFactors } from '../world/surface-light.js';
 
 // An rgb triple as a GLSL vec3 literal.
 // How much of a cell's ground colour shows behind its glyph.
@@ -658,10 +658,30 @@ export class AsciiRenderer {
             (lx - (cx + (i + 0.5) / FINE)) * ASPECT, gy - ((fy + 0.5) / FINE + lift), h - lift, gloss, lit);
           d = lit.diffuse;
           s = lit.spec * k;
+          // A stone's small letters are near full brightness in the
+          // moonlight already, so the light shows on them as colour: a face
+          // turns toward LIT_INK by the light it takes, a back keeps most of
+          // its cool colour. Scaled down as a whole past full brightness, a
+          // lit face stays warm instead of turning white.
+          const w = Math.min(TINT_MAX, k * d * TINT);
+          const lum = (0.3 * fine[at] + 0.59 * fine[at + 1] + 0.11 * fine[at + 2]) * w / 255;
+          let red = fine[at] * (1 - w) + LIT_INK[0] * lum + cr * k * d + GLINT[0] * s;
+          let green = fine[at + 1] * (1 - w) + LIT_INK[1] * lum + cg * k * d + GLINT[1] * s;
+          let blue = fine[at + 2] * (1 - w) + LIT_INK[2] * lum + cb * k * d + GLINT[2] * s;
+          const top = Math.max(red, green, blue);
+          if (top > 255) {
+            red *= 255 / top;
+            green *= 255 / top;
+            blue *= 255 / top;
+          }
+          fine[at] = red;
+          fine[at + 1] = green;
+          fine[at + 2] = blue;
+        } else {
+          fine[at] += cr * k;
+          fine[at + 1] += cg * k;
+          fine[at + 2] += cb * k;
         }
-        fine[at] += cr * k * d + GLINT[0] * s;
-        fine[at + 1] += cg * k * d + GLINT[1] * s;
-        fine[at + 2] += cb * k * d + GLINT[2] * s;
         fineBg[at] += cr * k * d * ground;
         fineBg[at + 1] += cg * k * d * ground;
         fineBg[at + 2] += cb * k * d * ground;

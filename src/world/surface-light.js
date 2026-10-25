@@ -36,6 +36,12 @@ export const PEBBLE_SHARPNESS = 0.35;
 // A glint is a warm near-white rather than more of the light's orange, so
 // it reads as wet. It follows the light's own strength and flicker.
 export const GLINT = [255, 214, 130];
+// The colour a rock's small letters take where a warm light outshines the
+// moon on them, how fast they turn to it with the light they take, and how
+// far at most (see AsciiRenderer.lightFineLit).
+export const LIT_INK = [255, 196, 96];
+export const TINT = 1.4;
+export const TINT_MAX = 0.8;
 // How glossy each kind of stone is.
 export const GLOSS_DRY = 0.15;
 export const GLOSS_DAMP = 0.4;
