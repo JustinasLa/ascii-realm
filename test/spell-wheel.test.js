@@ -312,3 +312,23 @@ test('a font that measures nothing still lays out the grid, and toggled auras sa
   assert.deepEqual(wheel.stats(ward), ['0 mana', 'Active - cast off']);
   assert.equal(WHEEL.inner, 84);
 });
+
+test('on a phone a turn moves a wheel held on CAST to the new centre; others close', async (t) => {
+  const { window } = await page(t, { width: 393, height: 852 });
+  const { wheel } = controls({ isPhone: () => true });
+  wheel.openTouch(1);
+  Object.assign(globalThis, { innerWidth: 852, innerHeight: 393 });
+  window.dispatchEvent(new Event('resize'));
+  assert.equal(wheel.menu.isOpen, true, 'the finger keeps the wheel');
+  assert.deepEqual([wheel.cx, wheel.cy], [426, 196.5]);
+  assert.equal(wheel.ring.style.left, '426px');
+  pointer(window, 'pointerup', { pointerId: 1 });
+  assert.equal(wheel.menu.isOpen, false);
+  wheel.open(100, 100, true, 'mouse');
+  window.dispatchEvent(new Event('resize'));
+  assert.equal(wheel.menu.isOpen, false, 'a mouse wheel closes on a phone too');
+  const tablet = controls().wheel;
+  tablet.openTouch(1);
+  window.dispatchEvent(new Event('resize'));
+  assert.equal(tablet.menu.isOpen, false, 'tablets close a touch wheel as before');
+});

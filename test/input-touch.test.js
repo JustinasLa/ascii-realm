@@ -72,10 +72,11 @@ class FakeElement extends EventTarget {
   setAttribute(name, value) { this.attributes.set(name, String(value)); }
   getAttribute(name) { return this.attributes.get(name) ?? null; }
   setPointerCapture(id) { this.captured.push(id); }
-  getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; }
+  getBoundingClientRect() { return this.rect ?? { left: 0, top: 0, width: 100, height: 100 }; }
 }
 
-const page = {};
+// Every page installed so far still listens, so they all read one phone flag.
+const page = { phone: false };
 async function installPage() {
   if (!page.window) {
     page.window = globalThis.window = new EventTarget();
@@ -102,7 +103,7 @@ async function installPage() {
     'touch-cast': cast, 'touch-interact': buttons.interact };
   document.getElementById = id => nodes[id];
   const zooms = [];
-  const touch = page.modules.touch.installTouchControls(factor => zooms.push(factor));
+  const touch = page.modules.touch.installTouchControls(factor => zooms.push(factor), { isPhone: () => page.phone });
   page.modules.input.clearInput();
   return { ...page.modules, touch, root, pad, cast, canvas, buttons, zooms };
 }
@@ -344,4 +345,69 @@ test('the contextual button shows only what is in reach', async () => {
   assert.equal(buttons.interact.textContent, 'DOUSE');
   touch.interact.update(null, 1);
   assert.equal(buttons.interact.hidden, true);
+});
+
+// A phone turning, or its browser bar sliding, resizes the window while
+// fingers are down: they keep what they hold.
+async function installPhone(t) {
+  page.phone = true;
+  t.after(() => { page.phone = false; });
+  return installPage();
+}
+const resize = () => window.dispatchEvent(new Event('resize'));
+
+test('on a phone a resize keeps the stick walking and re-centres it under the finger', async (t) => {
+  const { input, pad } = await installPhone(t);
+  // Radius 34 around (50, 50): 20.4 px right is a deflection of 0.6.
+  pointer(pad, 'pointerdown', 1, { clientX: 70.4, clientY: 50 });
+  const before = input.moveAxis();
+  assert.ok(Math.abs(before.x - 0.6) < 1e-9 && before.y === 0);
+  resize();
+  assert.deepEqual(input.moveAxis(), before, 'the axis holds through the resize');
+  // The pad moved; the finger reports from somewhere else entirely.
+  pad.rect = { left: 300, top: 10, width: 100, height: 100 };
+  pointer(pad, 'pointermove', 1, { clientX: 500, clientY: 400 });
+  const after = input.moveAxis();
+  assert.ok(Math.abs(after.x - 0.6) < 1e-9 && Math.abs(after.y) < 1e-9, 'no jump on the first move');
+  pointer(pad, 'pointermove', 1, { clientX: 510, clientY: 400 });
+  assert.ok(input.moveAxis().x > 0.85, 'later moves steer from the new centre');
+  pointer(pad, 'pointermove', 2, { clientX: 0, clientY: 0 });
+  assert.ok(input.moveAxis().x > 0.85, 'another finger still cannot steer');
+  pointer(pad, 'pointerup', 1);
+  assert.deepEqual(input.moveAxis(), { x: 0, y: 0 });
+  pad.rect = undefined;
+  resize();
+  pointer(pad, 'pointerdown', 3, { clientX: 70.4, clientY: 50 });
+  pointer(pad, 'pointermove', 3, { clientX: 30, clientY: 50 });
+  assert.ok(input.moveAxis().x < -0.5, 'a resize with no finger down leaves the next press alone');
+  pointer(pad, 'pointerup', 3);
+});
+
+test('on a phone held buttons and a CAST hold survive a resize, and leaving still lets go', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { input, pad, cast, buttons, touch } = await installPhone(t);
+  const holds = [];
+  touch.setCastHold(id => { holds.push(id); return true; });
+  pointer(pad, 'pointerdown', 1, { clientX: 90, clientY: 50 });
+  pointer(buttons.strike, 'pointerdown', 2);
+  pointer(cast, 'pointerdown', 3);
+  t.mock.timers.tick(100);
+  resize();
+  assert.ok(input.isDown('TouchStrike'));
+  assert.ok(buttons.strike.classList.contains('pressed'));
+  assert.ok(cast.classList.contains('pressed'));
+  t.mock.timers.tick(300);
+  assert.deepEqual(holds, [3], 'the CAST hold still opens the wheel');
+  assert.ok(input.moveAxis().x > 0.8);
+  window.dispatchEvent(new Event('blur'));
+  assert.deepEqual(input.moveAxis(), { x: 0, y: 0 });
+  assert.equal(input.isDown('TouchStrike'), false);
+  assert.equal(buttons.strike.classList.contains('pressed'), false);
+  pointer(pad, 'pointerdown', 4, { clientX: 90, clientY: 50 });
+  pointer(buttons.jump, 'pointerdown', 5);
+  document.hidden = true;
+  document.dispatchEvent(new Event('visibilitychange'));
+  document.hidden = false;
+  assert.deepEqual(input.moveAxis(), { x: 0, y: 0 });
+  assert.equal(input.isDown('Space'), false);
 });

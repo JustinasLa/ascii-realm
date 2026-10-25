@@ -20,6 +20,7 @@
 // fine sprite is laid over the sprite's small cells there.
 
 import { NOISE, NOISE_SIZE } from '../world/fog-banks.js';
+import { gridSize } from '../core/layout.js';
 import { ASPECT } from '../world/world.js';
 import { FINE } from './cells.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
@@ -446,8 +447,7 @@ export class AsciiRenderer {
     this.cellW = deviceW * scale;
     this.cellH = deviceH * scale;
     // One spare row and column so sub-cell scrolling never exposes a gap.
-    const cols = Math.ceil(w / this.cellW) + 1;
-    const rows = Math.ceil(h / this.cellH) + 1;
+    const { cols, rows } = gridSize(w, h, this.cellH, this.cellW);
     if (cols === this.cols && rows === this.rows) return;
     this.allocate(cols, rows);
 

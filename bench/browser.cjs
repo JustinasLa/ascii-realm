@@ -79,8 +79,150 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
       results.checks.push({ layout });
       if (width === 844) await page.screenshot({ path: join(output, 'landscape.png') });
     }
-    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
-    for (const rate of [1, 4, 6]) {
+    // Portrait and landscape on three phones, with their safe-area insets:
+    // the controls sit in the thumb zones, inside the safe rect, and the
+    // default zoom keeps the view within the phone cell budget.
+    const phones = [
+      { name: 'se', width: 375, height: 667, dpr: 2, insets: { portrait: {}, landscape: {} } },
+      { name: 'iphone15', width: 393, height: 852, dpr: 3,
+        insets: { portrait: { top: 59, bottom: 34 }, landscape: { left: 59, right: 59, bottom: 21 } } },
+      { name: 'pixel8', width: 412, height: 915, dpr: 2.625, insets: { portrait: { top: 24 }, landscape: { left: 24 } } },
+    ];
+    const orient = async (phone, orientation, shrink = 0) => {
+      const [w, h] = orientation === 'landscape' ? [phone.height, phone.width] : [phone.width, phone.height];
+      const insets = { top: 0, left: 0, bottom: 0, right: 0, ...phone.insets[orientation] };
+      await client.send('Emulation.setSafeAreaInsetsOverride', { insets });
+      await page.setViewport({ width: w, height: h - shrink, deviceScaleFactor: phone.dpr, isMobile: true, hasTouch: true,
+        isLandscape: orientation === 'landscape' });
+      return { w, h: h - shrink, insets };
+    };
+    const placement = () => page.evaluate(() => {
+      const rect = s => document.querySelector(s).getBoundingClientRect().toJSON();
+      const r = game.renderer, v = game.camera.view(r);
+      return { w: innerWidth, h: innerHeight, stick: rect('#move-pad'), cluster: rect('.actions'), strip: rect('.hud-status'),
+        buttons: [...document.querySelectorAll('#touch-controls .actions > button, #phone-menu')]
+          .filter(e => e.checkVisibility()).map(e => e.getBoundingClientRect().toJSON()),
+        cells: r.cols * r.rows, cell: r.cellH / r.dpr, orientation: game.layout.orientation, bias: game.layout.bias,
+        expected: game.layout.phoneDefaultCell(game.layout.orientation, innerWidth, innerHeight),
+        targetY: (game.camera.y - v.y0 - v.offY / r.cellH) * r.cellH / r.canvas.height };
+    });
+    const inside = (c, { w, h, insets }, name) => assert.ok(c.left >= insets.left && c.top >= insets.top
+      && c.right <= w - insets.right && c.bottom <= h - insets.bottom, `${name} leaves the safe area`);
+    for (const phone of phones) {
+      for (const orientation of ['portrait', 'landscape']) {
+        const screen = await orient(phone, orientation);
+        await wait(300);
+        const at = await placement();
+        const label = `${phone.name} ${orientation}`;
+        assert.equal(at.orientation, orientation, label);
+        for (const [name, c] of [['stick', at.stick], ['cluster', at.cluster], ['strip', at.strip], ...at.buttons.map(b => ['button', b])]) {
+          inside(c, screen, `${label} ${name}`);
+        }
+        const overlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+        assert.ok(!overlap(at.stick, at.cluster), `${label} stick / cluster`);
+        const { insets, w, h } = screen;
+        if (orientation === 'portrait') {
+          assert.ok(at.stick.right <= w / 2 && at.cluster.left >= w / 2, `${label} stick left, cluster right`);
+          for (const c of [at.stick, at.cluster]) assert.ok(h - c.bottom <= insets.bottom + 24, `${label} low in the thumb zone`);
+        } else {
+          assert.ok(at.stick.left <= insets.left + 24 && w - at.cluster.right <= insets.right + 24, `${label} at the edges`);
+          for (const c of [at.stick, at.cluster]) {
+            const mid = (c.top + c.bottom) / 2 / h;
+            assert.ok(mid >= 0.5 && mid <= 0.85, `${label} mid-to-low (${mid.toFixed(2)})`);
+            assert.ok(c.right <= w / 2 - 120 || c.left >= w / 2 + 120, `${label} keeps the middle clear`);
+          }
+        }
+        assert.ok(at.cells <= 16000, `${label} ${at.cells} cells`);
+        assert.ok(Math.abs(at.cell - at.expected) < 0.01, `${label} cell ${at.cell} vs ${at.expected}`);
+        assert.ok(Math.abs(at.targetY - (orientation === 'portrait' ? 0.6 : 0.5)) < 0.02, `${label} framing ${at.targetY}`);
+        results.checks.push({ orientation: { label, ...at } });
+      }
+    }
+    // Turning the phone while the stick and STRIKE are held keeps both, and
+    // the controls re-lay out within a frame.
+    {
+      const phone = phones[1];
+      await orient(phone, 'portrait');
+      await wait(300);
+      const point = (id, p) => ({ id, x: Math.round(p.x), y: Math.round(p.y), radiusX: 5, radiusY: 5, force: 1 });
+      const centre = s => page.evaluate(s => { const r = document.querySelector(s).getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }, s);
+      const pad = await centre('#move-pad'), strike = await centre('.strike');
+      let finger = { x: pad.x + 30, y: pad.y };
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(1, pad)] });
+      await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [point(1, finger)] });
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(1, finger), point(2, strike)] });
+      await wait(200);
+      const held = () => page.evaluate(async () => {
+        const { input } = await import('./src/core/input.js');
+        return { move: input.moveAxis(), strike: input.isDown('TouchStrike'), x: game.player.x };
+      });
+      for (const orientation of ['landscape', 'portrait']) {
+        await orient(phone, orientation);
+        const relaid = await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() =>
+          resolve(document.getElementById('move-pad').getBoundingClientRect().right / innerWidth))));
+        assert.ok(relaid <= (orientation === 'landscape' ? 0.25 : 0.5), `${orientation} re-laid out (${relaid})`);
+        finger = { x: finger.x + 2, y: finger.y };
+        await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [point(1, finger), point(2, strike)] });
+        const start = await held();
+        await wait(500);
+        const end = await held();
+        assert.ok(start.move.x > 0.5 && end.strike, `${orientation}: still walking and striking`);
+        assert.ok(end.x > start.x, `${orientation}: the outlaw keeps walking`);
+        results.checks.push({ rotation: { orientation, relaid, start, end } });
+      }
+      // A browser bar sliding in shortens the view; the stick keeps going.
+      await orient(phone, 'portrait', 56);
+      await wait(200);
+      const short = { ...(await held()), ...(await placement()) };
+      assert.ok(short.move.x > 0.5);
+      for (const c of [short.stick, short.cluster]) assert.ok(c.bottom <= short.h);
+      await orient(phone, 'portrait');
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [point(1, finger), point(2, strike)] });
+      await wait(100);
+      const released = await held();
+      assert.deepEqual([released.move, released.strike], [{ x: 0, y: 0 }, false]);
+      // A wheel held on CAST follows the turn to the new centre.
+      const cast = await centre('#touch-cast');
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(3, cast)] });
+      await page.waitForFunction(() => !document.getElementById('spell-wheel').hidden, { timeout: 5000 });
+      await orient(phone, 'landscape');
+      await wait(200);
+      const ring = await page.evaluate(() => {
+        const r = document.querySelector('.spell-wheel-ring').getBoundingClientRect();
+        return { open: !document.getElementById('spell-wheel').hidden, dx: r.x + r.width / 2 - innerWidth / 2, dy: r.y + r.height / 2 - innerHeight / 2 };
+      });
+      assert.ok(ring.open && Math.abs(ring.dx) <= 2 && Math.abs(ring.dy) <= 2, `wheel ${JSON.stringify(ring)}`);
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [point(3, cast)] });
+      await wait(200);
+      // A pinch belongs to its orientation; the other keeps its default.
+      await orient(phone, 'portrait');
+      await wait(200);
+      const mid = { x: 196, y: 400 };
+      await client.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point(5, { x: mid.x - 40, y: mid.y }), point(6, { x: mid.x + 40, y: mid.y })] });
+      for (let step = 1; step <= 6; step++) {
+        await client.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [point(5, { x: mid.x - 40 - step * 6, y: mid.y }), point(6, { x: mid.x + 40 + step * 6, y: mid.y })] });
+        await wait(30);
+      }
+      await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await wait(700);
+      const pinched = (await placement()).cell;
+      assert.ok(pinched > 7, `pinched to ${pinched}`);
+      await orient(phone, 'landscape');
+      await wait(200);
+      assert.equal((await placement()).cell, 6);
+      await orient(phone, 'portrait');
+      await wait(200);
+      assert.ok(Math.abs((await placement()).cell - pinched) < 0.05, 'portrait gets its pinch back');
+      // Nothing is saved: a reload starts from the defaults again.
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForFunction(() => window.game?.metrics.frames > 30, { timeout: 180000 });
+      assert.equal((await placement()).cell, 6.5, 'a reload forgets the pinch');
+      results.checks.push({ orientationHold: { short, released, ring, pinched } });
+      await client.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, left: 0, bottom: 0, right: 0 } });
+    }
+    const runs = [[390, 844, 1], [390, 844, 4], [390, 844, 6], [393, 852, 1], [393, 852, 4], [852, 393, 1], [852, 393, 4]];
+    for (const [width, height, rate] of runs) {
+      await page.setViewport({ width, height, deviceScaleFactor: 3, isMobile: true, hasTouch: true, isLandscape: width > height });
       await client.send('Emulation.setCPUThrottlingRate', { rate });
       await wait(rate === 6 ? 10000 : 2000);
       const sample = await page.evaluate(() => new Promise(resolve => {
@@ -103,10 +245,12 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
         }
         requestAnimationFrame(collect);
       }));
-      results.samples.push({ rate, ...sample });
-      console.log(JSON.stringify({ rate, ...sample }));
+      results.samples.push({ width, height, rate, ...sample });
+      console.log(JSON.stringify({ width, height, rate, ...sample }));
     }
     await client.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+    await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+    await wait(300);
     const centers = await page.evaluate(() => {
       const center = e => { const r=e.getBoundingClientRect(); return {x:r.x+r.width/2,y:r.y+r.height/2}; };
       return { pad: center(document.getElementById('move-pad')), jump: center(document.querySelector('[data-key="Space"]')),
@@ -283,6 +427,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     await page.setViewport({ width: 820, height: 1180, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     await wait(300);
     assert.equal(await page.evaluate(() => game.device.phone), false);
+    assert.equal(await page.evaluate(() => game.layout.bias), 0, 'tablets keep the camera centred');
     const tabletBefore = await page.evaluate(()=>game.renderer.cellH/game.renderer.dpr);
     await page.tap('[aria-label="Zoom in"]');
     await wait(650);

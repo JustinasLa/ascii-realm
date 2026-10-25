@@ -219,14 +219,18 @@ short version see the [README](../README.md).
   Wounded monsters show a segmented health bar over their heads.
 - **Phone controls and performance.** A touch stick for walking/running and a
   thumb cluster in the opposite corner (a large STRIKE with JUMP, CAST and a
-  contextual INTERACT around it) in portrait or landscape; touch strikes and
+  contextual INTERACT around it); touch strikes and
   casts turn to the nearest enemy ahead, and phones vibrate briefly on a hit or
   a wound. They appear only
   when touch is the primary input, so touchscreen laptops and narrow desktop
   windows keep the keyboard and mouse layout. Phones (touch with no hover and a
   short side of 600px or less) show nothing else but a slim health and mana strip
   and a corner menu holding Inventory, Multiplayer and Audio; pinch the scene to
-  zoom. Tablets keep the full layout with the − / + zoom buttons. Rendering
+  zoom. Phones lay out for portrait (controls in the bottom corners, the view
+  framed to show more ahead) or landscape (controls at the side edges, the
+  middle clear), each with its own zoom, and re-lay out at once when turned
+  without letting go of held controls. Controls keep clear of notches, the home
+  indicator and sliding browser bars. Tablets keep the full layout with the − / + zoom buttons. Rendering
   targets 60 fps, caps backing resolution, and lowers that resolution under
   sustained load without changing your zoom. Zoom stops at the furthest scale
   that still draws grass blades, swaying trees and reflections; a very wide

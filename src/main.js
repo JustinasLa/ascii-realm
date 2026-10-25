@@ -8,6 +8,7 @@ import { installTouchControls } from './core/touch.js';
 import { assistTarget, castAssist, strikeAssist } from './core/aim-assist.js';
 import { createHaptics } from './core/haptics.js';
 import { interaction, performInteraction } from './core/interact.js';
+import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
 import { watchPhone } from './core/phone.js';
 import { installPinchZoom } from './core/pinch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
@@ -91,6 +92,10 @@ const coarse = matchMedia('(pointer: coarse)');
 const mobile = coarse.matches || Math.min(innerWidth, innerHeight) <= 600;
 // Phones get the stripped-down layout (style.css) and no scenery builder.
 const device = watchPhone(window, (phone) => onPhoneChange(phone));
+// Phones lay out for portrait or landscape (style.css follows the same
+// query), each with its own default zoom and camera framing.
+const layout = watchLayout(window, (next, previous) => onOrientation(next, previous));
+if (device.phone && !ruinPreview) cellH = zoomTarget = phoneDefaultCell(layout.orientation, innerWidth, innerHeight);
 const quality = new FrameQuality();
 
 const baseChunks = mobile ? 64 : 128;
@@ -117,8 +122,14 @@ function zoomBy(factor) {
   }
   zoomTarget = Math.max(MIN_CELL, Math.min(MAX_CELL, zoomTarget * factor));
 }
-const touch = installTouchControls(zoomBy);
-installPinchZoom(canvas, zoomBy);
+const touch = installTouchControls(zoomBy, { isPhone: () => device.phone });
+// A pinched zoom is remembered per orientation until the page is reloaded.
+const zoomSlots = new ZoomSlots({ portrait: null, landscape: null });
+let pinched = false;
+installPinchZoom(canvas, (factor) => {
+  pinched = true;
+  zoomBy(factor);
+});
 
 function updateZoom(dt) {
   if (cellH === zoomTarget) return;
@@ -172,6 +183,24 @@ const harvesting = new Harvesting(world, null, { wild: false });
 const mushrooms = new Mushrooms(world);
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
+// Portrait phones show more of the world ahead; everything else is centred.
+function applyFraming() {
+  camera.bias = device.phone ? FRAME_BIAS[layout.orientation] : 0;
+}
+applyFraming();
+// A turned phone keeps the pinched zoom it left and returns to the one it
+// had, and snaps to it at once, as the controls re-lay out in CSS.
+function onOrientation(next, previous) {
+  if (!device.phone) return;
+  if (pinched) zoomSlots.set(previous, zoomTarget);
+  if (!ruinPreview) {
+    const slot = zoomSlots.get(next);
+    pinched = slot !== null;
+    cellH = zoomTarget = slot ?? phoneDefaultCell(next, innerWidth, innerHeight);
+  }
+  applyFraming();
+  resize();
+}
 const fireflies = new Fireflies();
 const ambience = new Ambience();
 const dust = new Dust();
@@ -216,6 +245,7 @@ const fogSpells = new SpellFogStirs();
 const debug = { player, camera, world, grass, splashes, weather, fog, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
+  layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
   audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
 if (params.has('debug')) window.game = debug;
 
@@ -483,7 +513,10 @@ if (params.has('builder') && !device.phone) builder.setEnabled(true);
 
 const SCENE_LABEL = canvas.getAttribute('aria-label');
 // A device can become a phone or stop being one while playing, for example
-// when a mouse is plugged in; the layout follows in CSS at once.
+// when a mouse is plugged in; the layout follows in CSS at once. The zoom
+// and framing follow only on a real change, never at start-up, which has
+// already chosen them.
+let lastPhone;
 function onPhoneChange(phone) {
   if (phone && builder.enabled) {
     builder.forceExit();
@@ -491,6 +524,16 @@ function onPhoneChange(phone) {
   }
   if (!phone && phoneMenu.open) phoneMenu.setOpen(false);
   canvas.setAttribute('aria-label', phone ? 'Game scene.' : SCENE_LABEL);
+  const changed = lastPhone !== undefined && phone !== lastPhone;
+  lastPhone = phone;
+  if (!changed) return;
+  if (!ruinPreview) {
+    pinched = false;
+    if (phone) cellH = zoomTarget = phoneDefaultCell(layout.orientation, innerWidth, innerHeight);
+    else zoomTarget = 8;
+  }
+  applyFraming();
+  resize();
 }
 onPhoneChange(device.phone);
 
@@ -535,7 +578,8 @@ const castKey = () => coarse.matches ? 'CAST' : 'R';
 const spellControls = new SpellControls(casting, { surface: canvas,
   canOpen: () => !builder.enabled && !debug.freeze && !isGameplayBlocked(),
   onBind: spell => hud.notify(castKey() === 'R' ? `${spell.name} bound to R` : `${spell.name} ready: tap ${castKey()}`, 'spell'),
-  onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell'), castKey });
+  onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell'), castKey,
+  isPhone: () => device.phone });
 debug.spellControls = spellControls;
 touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap),
   (pointerId) => spellControls.dropTouch(pointerId));
@@ -1120,7 +1164,7 @@ function frame(now) {
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
-  fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
+  fireflies.update(dt, time, world, camera.x, camera.centreY(view), view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   ambience.draw(renderer, view, time);
   weather.draw(renderer, view);

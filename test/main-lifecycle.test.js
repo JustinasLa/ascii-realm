@@ -184,3 +184,62 @@ test('binding a rune names CAST on touch screens and R elsewhere', async () => {
   onBind({ name: 'Fire Shard' });
   assert.deepEqual(toasts, [['Fire Shard ready: tap CAST', 'spell'], ['Fire Shard bound to R', 'spell']]);
 });
+
+test('a phone starts at its orientation zoom and framing, and a turn snaps to the other', async () => {
+  const { game, cellHeight, rotate, frame } = await loadGame(undefined, { phone: true, width: 393, height: 852 });
+  assert.equal(cellHeight(), 6.5);
+  assert.equal(game.layout.orientation, 'portrait');
+  assert.equal(game.layout.bias, 0.1);
+  rotate();
+  assert.equal(cellHeight(), 6, 'the turn re-fits the camera at once');
+  assert.equal(game.layout.orientation, 'landscape');
+  assert.equal(game.layout.bias, 0);
+  frame();
+  assert.equal(cellHeight(), 6);
+});
+
+test('a pinched zoom is kept per orientation and comes back with it', async () => {
+  const { game, cellHeight, rotate, frame, pinch } = await loadGame(undefined, { phone: true, width: 393, height: 852 });
+  pinch(1.25);
+  for (let i = 0; i < 120; i++) frame();
+  assert.equal(cellHeight(), 8.125);
+  rotate();
+  assert.equal(cellHeight(), 6, 'landscape keeps its own default');
+  rotate();
+  assert.equal(cellHeight(), 8.125, 'portrait gets its pinch back');
+  assert.equal(game.layout.zoomSlots.get('portrait'), 8.125);
+  rotate();
+  rotate();
+  assert.equal(cellHeight(), 8.125, 'a returned pinch is saved again on the next turn');
+  game.layout.zoomSlots.set('portrait', null);
+});
+
+test('turning a tablet or desktop window changes neither zoom nor framing', async () => {
+  const { game, cellHeight, rotate } = await loadGame(undefined, { coarse: true, width: 1024, height: 768 });
+  assert.equal(cellHeight(), 8);
+  rotate();
+  assert.equal(cellHeight(), 8);
+  assert.equal(game.layout.bias, 0);
+  assert.equal(game.layout.orientation, 'portrait', 'the watcher still follows');
+});
+
+test('only a real change of phone mode moves the zoom, and never in the ruin preview', async () => {
+  const ruins = await loadGame(undefined, { href: 'http://localhost/?debug&scene=ruins' });
+  assert.equal(ruins.cellHeight(), 6, 'start-up keeps the preview zoom');
+  ruins.setPhone(true);
+  assert.equal(ruins.cellHeight(), 6);
+  assert.equal(ruins.game.layout.bias, 0, 'the 800x600 window is landscape');
+  ruins.rotate();
+  assert.equal(ruins.cellHeight(), 6, 'a turn keeps the preview zoom');
+  assert.equal(ruins.game.layout.bias, 0.1);
+
+  const { game, cellHeight, setPhone, frame } = await loadGame(undefined, { width: 393, height: 852 });
+  assert.equal(cellHeight(), 8);
+  setPhone(true);
+  assert.equal(cellHeight(), 6.5, 'becoming a phone takes the orientation default');
+  assert.equal(game.layout.bias, 0.1);
+  setPhone(false);
+  assert.equal(game.layout.bias, 0);
+  for (let i = 0; i < 120; i++) frame();
+  assert.equal(cellHeight(), 8, 'leaving phone mode glides back');
+});

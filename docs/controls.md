@@ -65,6 +65,17 @@ full-screen sheet with **Inventory**, **Multiplayer** and **Audio**; **Close**
 returns to a clean screen. A phone here means touch as the primary input with no
 hover and a short side of 600px or less.
 
+Phones lay out for the way they are held. In portrait the stick and the thumb
+cluster sit in the bottom corners and the camera frames you a little below the
+middle, so more of the world shows ahead; in landscape they sit at the left and
+right edges, low to mid height, leaving the middle clear, and the camera is
+centred. Each orientation starts at its own zoom, and a pinched zoom is kept
+for that orientation until the page is reloaded. Turning the phone re-lays out
+the controls and re-fits the view at once, without dropping the stick, a held
+button or a rune wheel held on **CAST**. The controls keep clear of the notch,
+rounded corners and the home indicator, and of browser bars as they slide in
+and out.
+
 Tablets get the same thumb cluster and keep the full layout: the panels, the quick slots and the upper
 **− / +** zoom buttons, which work alongside pinch. Touch controls appear only
 when touch is the primary input, so touchscreen laptops and narrow desktop

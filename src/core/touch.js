@@ -10,7 +10,11 @@ export const CAST_HINT_MS = 150;
 // The stick, the thumb cluster (STRIKE, JUMP, CAST and the contextual
 // INTERACT) and the tablet zoom buttons. STRIKE, CAST and INTERACT press
 // input codes no keyboard sends, so the game can tell them from J, R and E.
-export function installTouchControls(zoomBy) {
+// On tablets a resize lets go of every touch. On phones (`isPhone()`) a
+// resize is a turn or a browser bar showing or hiding, so held buttons stay
+// held and the stick keeps its axis, re-centring under the finger on its next
+// move. Losing focus, hiding the page or a cancelled touch still lets go.
+export function installTouchControls(zoomBy, { isPhone = () => false } = {}) {
   const root = document.getElementById('touch-controls');
   const pad = document.getElementById('move-pad');
   const stick = document.getElementById('move-stick');
@@ -18,9 +22,14 @@ export function installTouchControls(zoomBy) {
   let centerX = 0;
   let centerY = 0;
   let radius = 1;
+  // The last unit deflection, kept so the stick can re-centre after a resize.
+  let lastX = 0;
+  let lastY = 0;
+  let reanchor = false;
 
   function resetStick() {
     pointer = null;
+    reanchor = false;
     input.setMove(0, 0);
     stick.style.transform = 'translate(0px, 0px)';
     pad.classList.remove('running');
@@ -34,6 +43,8 @@ export function installTouchControls(zoomBy) {
     const scale = Math.max(1, distance);
     const x = dx / scale;
     const y = dy / scale;
+    lastX = x;
+    lastY = y;
     const running = distance > 0.82;
     input.setMove(distance < 0.16 ? 0 : x, distance < 0.16 ? 0 : y, running);
     stick.style.transform = `translate(${x * radius}px, ${y * radius}px)`;
@@ -54,7 +65,17 @@ export function installTouchControls(zoomBy) {
     pad.setPointerCapture(pointer);
     move(e);
   });
-  pad.addEventListener('pointermove', move);
+  pad.addEventListener('pointermove', (e) => {
+    if (reanchor && e.pointerId === pointer) {
+      // The pad moved under a held finger: put its centre where the finger
+      // keeps the last deflection, so walking carries on without a jump.
+      reanchor = false;
+      radius = pad.getBoundingClientRect().width * 0.34;
+      centerX = e.clientX - lastX * radius;
+      centerY = e.clientY - lastY * radius;
+    }
+    move(e);
+  });
   for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) {
     pad.addEventListener(type, (e) => { if (e.pointerId === pointer) resetStick(); });
   }
@@ -78,16 +99,19 @@ export function installTouchControls(zoomBy) {
     button.addEventListener('click', (e) => { if (e.detail === 0) input.tapped.add(button.dataset.key); });
     const clear = () => { pointers.clear(); button.classList.remove('pressed'); };
     window.addEventListener('blur', clear);
-    window.addEventListener('resize', clear);
+    window.addEventListener('resize', () => { if (!isPhone()) clear(); });
     document.addEventListener('visibilitychange', () => { if (document.hidden) clear(); });
   }
-  const cast = castButton(document.getElementById('touch-cast'));
+  const cast = castButton(document.getElementById('touch-cast'), isPhone);
   for (const button of root.querySelectorAll('[data-zoom]')) {
     button.addEventListener('click', () => zoomBy(Number(button.dataset.zoom)));
   }
   const reset = () => { resetStick(); input.clear(); };
   window.addEventListener('blur', reset);
-  window.addEventListener('resize', reset);
+  window.addEventListener('resize', () => {
+    if (!isPhone()) reset();
+    else if (pointer !== null) reanchor = true;
+  });
   document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
   root.addEventListener('contextmenu', (e) => e.preventDefault());
   return { setCastHold: cast.setHold, interact: new InteractButton(document.getElementById('touch-interact')) };
@@ -99,7 +123,7 @@ export function installTouchControls(zoomBy) {
 // the wheel open) still casts a quick tap; `isTap` lets the wheel close on
 // that lift without choosing anything. Losing the finger after the wheel has
 // it calls `drop(pointerId)`, which puts the wheel away.
-function castButton(button) {
+function castButton(button, isPhone) {
   let hold = () => false;
   let drop = () => {};
   let pointer = null;
@@ -142,7 +166,7 @@ function castButton(button) {
   }
   button.addEventListener('click', (e) => { if (e.detail === 0) input.tapped.add('TouchCast'); });
   window.addEventListener('blur', forget);
-  window.addEventListener('resize', forget);
+  window.addEventListener('resize', () => { if (!isPhone()) forget(); });
   document.addEventListener('visibilitychange', () => { if (document.hidden) forget(); });
   return { setHold: (open, cancel = () => {}) => { hold = open; drop = cancel; } };
 }
