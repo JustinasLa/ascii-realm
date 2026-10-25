@@ -102,3 +102,68 @@ test('the party frames measure friends in metres', async () => {
   assert.equal(party.length, 1);
   assert.equal(party[0].note, '10m');
 });
+
+test('relayed lines and roster changes reach the speech bubbles as well as the log', async () => {
+  const { game } = await loadGame();
+  const { bubbles, multiplayer } = game;
+  multiplayer.id = 'a1';
+  const said = { channel: 'rp', from: 'b2', text: 'hi' };
+  multiplayer.onChat(said);
+  assert.deepEqual(bubbles.received, [[said, 'a1']]);
+  multiplayer.onRoster({ left: 'self' });
+  assert.deepEqual(bubbles.rostered, [{ left: 'self' }]);
+  assert.equal(bubbles.reducedMotion(), false, 'the bob follows the reduced-motion setting');
+});
+
+test('each frame with bubbles gives them every speaker in view, their nameplate row and whether a crown hides them', async () => {
+  const parts = [{ y0: -20.5 }, { y0: -3 }];
+  const harness = await loadGame(undefined, { real: { dressFigure: () => parts } });
+  const { game } = harness;
+  const { bubbles, player, remotePlayers } = game;
+  harness.frame();
+  assert.equal(bubbles.updates.length, 0, 'no work while nobody has spoken');
+  const near = { player: { x: player.x + 10, y: player.y + 4.5 } };
+  const far = { player: { x: player.x + 900, y: player.y } };
+  remotePlayers.peers = new Map([['b2', near], ['c3', far]]);
+  remotePlayers.visible = () => [near];
+  const hidden = [];
+  game.renderer.fineInFront = (x, y) => {
+    hidden.push([x, y]);
+    return x === Math.floor(near.player.x);
+  };
+  bubbles.size = 2;
+  harness.frame();
+  const { anchors, form } = bubbles.updates.at(-1);
+  assert.equal(form, 'desktop');
+  assert.deepEqual([...anchors.keys()], ['self', 'b2'], 'only speakers in view');
+  const self = anchors.get('self');
+  assert.equal(self.x, player.x);
+  assert.equal(self.feetY, player.y);
+  assert.equal(self.depth, player.y);
+  assert.equal(self.covered, false);
+  // The 3D character names itself at its own top row, unknown in this harness.
+  assert.equal(self.nameRow, Infinity);
+  const peer = anchors.get('b2');
+  assert.deepEqual({ ...peer }, { x: near.player.x, feetY: near.player.y, depth: near.player.y,
+    nameRow: Math.floor(near.player.y - 20.5) - 2, covered: true });
+  const top = Math.floor(near.player.y - 20.5);
+  assert.deepEqual(hidden, [[Math.floor(near.player.x), top + 1]], 'the head under the nameplate, first match wins');
+});
+
+test('phones give the bubbles their orientation', async () => {
+  const harness = await loadGame(undefined, { phone: true, width: 400, height: 800, href: 'http://localhost/?debug&nogate' });
+  const { bubbles } = harness.game;
+  bubbles.size = 1;
+  harness.frame();
+  assert.equal(bubbles.updates.at(-1).form, 'portrait');
+});
+
+test('until the 3D character loads, the own bubble keeps above the shape-built figure\'s nameplate', async () => {
+  const pending = () => new Promise(() => {});
+  const harness = await loadGame(undefined, { real: { dressFigure: () => [{ y0: -23.4 }],
+    ModelFigure: { load: pending, library: pending } } });
+  const { bubbles, player } = harness.game;
+  bubbles.size = 1;
+  harness.frame();
+  assert.equal(bubbles.updates.at(-1).anchors.get('self').nameRow, Math.floor(player.y - 23.4) - 2);
+});

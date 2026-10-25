@@ -66,6 +66,13 @@ newest ten for 10 seconds each; open, you can scroll back through them all.
 Joins and leaves show as quiet lines. Chat isn't saved, and players who join
 later don't see earlier lines.
 
+What is said, shouted or yelled also floats over the speaker's head for
+5 seconds, as you heard it: clear, blurred, or `*muffled voices*`. Your own
+lines float over your head. Each speaker's last five lines stack in one box,
+the oldest on top; a long stack shows only its newest lines (fewer on
+phones). Whispers, emotes, scene lines and out-of-character chat show only in
+the log. A bubble over someone standing under a tree is drawn fainter.
+
 ## Target
 
 The creature you last landed a blow on, with the sword, an arrow or thrown

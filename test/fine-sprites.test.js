@@ -286,3 +286,22 @@ test('only small letters count as fine scenery, not outlines or solid backing', 
   r.fineAt(5 * FINE + 1, 1 * FINE, glyph('@'), 200, 180, 160, 10, 12, 20);
   assert.equal(r.hasFineGlyph(1 * r.cols + 5), true, 'a tree\'s letter');
 });
+
+test('a sprite stands in front of a cell only where nothing was drawn over its letters', () => {
+  const r = renderer();
+  assert.equal(r.fineInFront(-1, 0), false, 'off the grid');
+  assert.equal(r.fineInFront(0, r.rows), false);
+  assert.equal(r.fineInFront(2, 3), false, 'an empty cell');
+  // A head drawn first, then a crown drawn over it.
+  r.put(2, 3, glyph('O'), 200, 180, 160);
+  r.fineAt(2 * FINE, 3 * FINE, glyph('@'), 40, 160, 60, 5, 10, 5);
+  assert.equal(r.fineInFront(2, 3), true, 'the crown hides the head');
+  // A crown behind, then a head drawn over it.
+  r.fineAt(4 * FINE, 3 * FINE, glyph('@'), 40, 160, 60, 5, 10, 5);
+  r.put(4, 3, glyph('O'), 200, 180, 160);
+  assert.equal(r.fineInFront(4, 3), false, 'the head stands in front');
+  // An actor's solid backing or a sprite's outline is no letter.
+  r.outlineCell(6, 1, 5, 5, 5);
+  assert.equal(r.fineInFront(6, 1), false);
+  assert.equal(r.fineInFront(7, 1), false);
+});

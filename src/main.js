@@ -41,6 +41,7 @@ import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { ChatUi } from './ui/chat.js';
+import { figureTop, SpeechBubbles } from './ui/bubbles.js';
 import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
 import { PhoneMenu } from './ui/phone-menu.js';
@@ -422,9 +423,20 @@ const chat = new ChatUi({ doc: document, win: window, phone: device, client: mul
   },
   colorOf: (member) => colorOf(member.color) });
 debug.chat = chat;
-multiplayer.onChat = (message) => chat.receive(message, multiplayer.players);
+// What players say floats over their heads, above the scene and below the HUD.
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const bubbles = new SpeechBubbles({ doc: document, root: document.getElementById('bubble-root'),
+  reducedMotion: () => reducedMotion.matches });
+debug.bubbles = bubbles;
+multiplayer.onChat = (message) => {
+  chat.receive(message, multiplayer.players);
+  bubbles.receive(message, multiplayer.id);
+};
 multiplayer.onChatNotice = (notice) => chat.notice(notice);
-multiplayer.onRoster = (change) => chat.roster(change);
+multiplayer.onRoster = (change) => {
+  chat.roster(change);
+  bubbles.roster(change);
+};
 multiplayer.onChange = (client) => {
   renderLobby?.(client);
   chat.setAvailable(!!client.room);
@@ -860,6 +872,22 @@ function drawName(top, color = [212, 218, 228]) {
     renderer.putBg(sx + i, sy, 8, 10, 14);
   }
 }
+// Where each speaker's bubble hangs this frame: their feet, the row of their
+// nameplate (two over the figure's top) and whether scenery was drawn over
+// their head. `ownTop` is null while the 3D character shows nothing.
+function bubbleAnchors(view, ownTop, peers) {
+  const anchor = (state, top) => {
+    const known = Number.isFinite(top);
+    return { x: state.x, feetY: state.y, depth: state.y, nameRow: known ? top - 2 : Infinity,
+      covered: known && [1, 2].some((dy) => renderer.fineInFront(Math.floor(state.x) - view.x0, top + dy - view.y0)) };
+  };
+  const anchors = new Map([['self', anchor(player, ownTop)]]);
+  for (const [id, peer] of remotePlayers.peers) {
+    if (peers.includes(peer)) anchors.set(id, anchor(peer.player, Math.floor(peer.player.y + figureTop(peer.figure))));
+  }
+  return anchors;
+}
+
 // A blow on the player from a monster or a wolf: if it lands, the screen
 // shakes and the ground thuds under them.
 function hurtPlayer(e, shake, strength) {
@@ -1503,6 +1531,7 @@ function frame(now) {
     drawTrail(renderer, view, peer.player.trail, peer.trailTime);
     drawNameTag(renderer, view, peer.player, peer.figure, peer.name, colorOf(peer.color));
   }
+  const speakers = bubbles.size ? bubbleAnchors(view, model ? model.top : Math.floor(player.y + figureTop(figure)), peers) : null;
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
@@ -1533,8 +1562,10 @@ function frame(now) {
   hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
   touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
-  hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
+  const hudView = { ...view, cellW: renderer.cellW, cellH: renderer.cellH };
+  hud.update(dt, hudView);
   chat.update(dt);
+  if (speakers) bubbles.update(speakers, hud.projector(hudView), device.phone ? layout.orientation : 'desktop');
   inventoryScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;
