@@ -240,6 +240,21 @@ function makeRock(x, y, stream, seed = x * 17 + y, bakeFn = bake) {
     fineBoulder(rock, seed, bakeFn), { make: 'rock', x, y, draws, seed });
 }
 
+// A small stone standing out of a river, wet and only lightly mossed.
+// The water breaks around it (see the current in terrain/water.js).
+export function makeRiverStone(x, y, stream, seed = x * 19 + y, bakeFn = bake) {
+  const { random: rand, draws } = recording(stream);
+  const rx = 0.9 + rand() * 0.7;
+  const ry = rx * (0.6 + rand() * 0.2);
+  const lavender = rand();
+  const stone = STONE_MID.map((v, i) => v * (0.86 + lavender * 0.16) + [6, 4, -4][i] * (1 - lavender));
+  const rock = boulder(rand, seed, { rx, ry, sides: 6 + Math.floor(rand() * 3), roundness: 0.7, stone,
+    mossCoverage: 0.05 + rand() * 0.1 });
+  const cells = bakeBoulder(rock, seed, bakeFn);
+  return withFine({ kind: 'rock', x, y, footW: rx / ASPECT, footH: 0.8, bounds: cellBounds(cells), cells,
+    wet: true, river: true }, fineBoulder(rock, seed, bakeFn), { make: 'riverStone', x, y, draws, seed });
+}
+
 // A landmark boulder, many times a scattered rock's size: a broad, jagged
 // mass with bedding lines, forked fissures, a mossy crown, a dark undercut
 // and scree at its foot.
@@ -520,6 +535,7 @@ export function rebuildProp(source, fineOnly = false) {
   const draws = source.draws && replaying(source.draws);
   if (source.make === 'tree') return makeTree(source.x, source.y, draws ?? undefined, { ...source.options, fineOnly });
   if (source.make === 'rock') return makeRock(source.x, source.y, draws, source.seed);
+  if (source.make === 'riverStone') return makeRiverStone(source.x, source.y, draws, source.seed);
   if (source.make === 'bigRock') return makeBigRock(source.x, source.y, draws, source.seed);
   if (source.make === 'prop') return createProp(source.kind, source.x, source.y, source.options);
   return null;
