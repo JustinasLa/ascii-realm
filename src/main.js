@@ -11,6 +11,7 @@ import { interaction, performInteraction } from './core/interact.js';
 import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
 import { watchPhone } from './core/phone.js';
 import { installPinchZoom } from './core/pinch.js';
+import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from './core/native.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters } from './entities/monsters.js';
@@ -35,7 +36,8 @@ import { AsciiRenderer } from './render/renderer.js';
 import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
 import { PhoneMenu } from './ui/phone-menu.js';
-import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
+import { PlayGate } from './ui/play-gate.js';
+import { FrameClock, FramePacer, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
 import { Ambience, lightsOf } from './world/ambience-fx.js';
 import { Dust } from './world/dust.js';
@@ -102,12 +104,17 @@ const layout = watchLayout(window, (next, previous) => onOrientation(next, previ
 const phoneDefault = orientation => phoneDefaultCell(orientation, innerWidth, innerHeight, window.devicePixelRatio);
 if (device.phone && !ruinPreview) cellH = zoomTarget = phoneDefault(layout.orientation);
 const quality = new FrameQuality();
+// Phones hold an even frame rate, and draw fewer cells as a last resort.
+const pacer = new FramePacer({ enabled: () => device.phone });
+const clock = new FrameClock();
+// The page never zooms; a pinch only zooms the scene.
+blockPageGestures(document);
 
 const baseChunks = mobile ? 64 : 128;
 
 function resize() {
   const { dpr, cell } = renderSize(window.innerWidth, window.innerHeight,
-    window.devicePixelRatio, cellH, mobile, quality.scale);
+    window.devicePixelRatio, cellH, mobile, quality.scale, device.phone ? pacer.cellCeiling : undefined);
   renderer.resize(window.innerWidth, window.innerHeight, dpr, cell * ASPECT, cell);
   fitChunks?.();
 }
@@ -253,7 +260,7 @@ window.addEventListener('pagehide', (event) => {
   }
 });
 window.addEventListener('pageshow', (event) => {
-  if (event.persisted && sound.engine.context) void sound.engine.unlock();
+  if (event.persisted && sound.engine.context && !gate.waiting) void sound.engine.unlock();
 });
 
 // With ?debug in the URL the game state is reachable from the console, and
@@ -264,7 +271,7 @@ const debug = { player, camera, world, grass, splashes, debris, weather, fog, fi
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
-  audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
+  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0, rate: 60 } };
 if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
@@ -287,6 +294,43 @@ const phoneMenu = new PhoneMenu({
 });
 debug.phoneMenu = phoneMenu;
 debug.device = device;
+
+// Phones start, and come back from being hidden, behind a "Tap to play"
+// card with the whole world paused. The tap unlocks sound, goes full screen
+// where the browser can and keeps the screen awake. ?nogate skips the card
+// for tools and benchmarks.
+const wakeLock = new WakeLock({ nav: navigator, doc: document });
+const gate = new PlayGate({ button: document.getElementById('play-gate'), doc: document,
+  onShow: () => {
+    void sound.engine.suspend();
+    updateWakeLock();
+  },
+  onStart: () => {
+    // Inside the tap: the browser allows sound and full screen only here.
+    void sound.engine.unlock();
+    if (!isStandalone(window)) void enterFullscreen(document, document.documentElement);
+    clock.reset();
+    cancelActions();
+    updateWakeLock();
+    canvas.focus({ preventScroll: true });
+  } });
+// Tools and benchmarks (?nogate) never see the card.
+const gated = () => device.phone && !params.has('nogate');
+function updateWakeLock() {
+  wakeLock.want(device.phone && !gate.waiting && !debug.freeze && !builder.enabled);
+}
+// The menu's Full screen row, where the browser has the Fullscreen API and
+// the game is not already running full screen from the home screen.
+const fullscreenRow = document.getElementById('phone-menu-fullscreen');
+function updateFullscreenRow() {
+  const api = fullscreenApi(document);
+  fullscreenRow.hidden = !api || isStandalone(window);
+  fullscreenRow.textContent = api?.active ? 'Leave full screen' : 'Full screen';
+}
+fullscreenRow.addEventListener('click', () => { void toggleFullscreen(document); });
+for (const type of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(type, updateFullscreenRow);
+updateFullscreenRow();
+debug.native = { gate, wakeLock, pacer, get clock() { return clock; }, get fullscreen() { return fullscreenApi(document)?.active ?? false; } };
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
@@ -500,6 +544,7 @@ canvas.addEventListener('contextmenu', (e) => {
 });
 window.addEventListener('pointerup', (e) => {
   if (e.button === 0) mouseHeld = false;
+  wakeLock.gesture();
 });
 window.addEventListener('blur', cancelActions);
 window.addEventListener('pointercancel', cancelActions);
@@ -513,6 +558,7 @@ const builder = new SceneryBuilder({ world, player, camera, renderer,
   allowed: () => !device.phone,
   onModeChange: () => {
     cancelActions();
+    updateWakeLock();
     hitStop = 0;
     player.vx = 0;
     player.vz = 0;
@@ -541,6 +587,12 @@ function onPhoneChange(phone) {
     builder.panel.open = false;
   }
   if (!phone && phoneMenu.open) phoneMenu.setOpen(false);
+  // Off a phone the pacing's 30 and smaller cell ceiling no longer apply.
+  if (!phone) {
+    pacer.reset();
+    clock.setRate(pacer.rate);
+  }
+  updateWakeLock();
   canvas.setAttribute('aria-label', phone ? 'Game scene.' : SCENE_LABEL);
   const changed = lastPhone !== undefined && phone !== lastPhone;
   lastPhone = phone;
@@ -553,6 +605,7 @@ function onPhoneChange(phone) {
   applyFraming();
   resize();
 }
+if (gated()) gate.show('start');
 onPhoneChange(device.phone);
 
 // Skeletons rise from the ground around the player, goblins come running,
@@ -789,7 +842,6 @@ function woundedFoes(figures) {
 }
 
 let time = 0;
-const clock = new FrameClock();
 let animation = null;
 let contextLost = false;
 
@@ -820,9 +872,19 @@ function suspend() {
   cancelActions();
 }
 
+// Phones come back paused behind the resume card, so nothing strikes the
+// player while they unlock the phone, and the sound waits for the tap too.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) suspend();
-  else schedule();
+  if (document.hidden) {
+    suspend();
+    if (gated()) gate.show('resume');
+  } else {
+    if (gate.waiting) void sound.engine.suspend();
+    schedule();
+  }
+});
+window.addEventListener('pagehide', (event) => {
+  if (event.persisted && gated()) gate.show('resume');
 });
 canvas.addEventListener('webglcontextlost', (e) => {
   e.preventDefault();
@@ -842,12 +904,17 @@ canvas.addEventListener('webglcontextrestored', () => {
 function frame(now) {
   animation = null;
   if (document.hidden || contextLost) return;
-  const dt = clock.step(now);
-  if (dt === null) { schedule(); return; }
+  const step = clock.step(now);
+  if (step === null) { schedule(); return; }
   const started = performance.now();
+  // Behind the play card the whole world holds still: every system below
+  // steps by zero, so time of day, fires, weather, fog, particles, monsters
+  // and the player all wait, while the scene is still drawn.
+  const dt = gate.waiting ? 0 : step;
   time += dt;
   updateZoom(dt);
-  if (debug.freeze || isGameplayBlocked() || player.magicStunned) cancelActions();
+  if (debug.freeze || isGameplayBlocked() || player.magicStunned || gate.waiting) cancelActions();
+  updateWakeLock();
 
   for (let index = 0; index < 9; index++) {
     if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`)) selectHotbar(index);
@@ -953,7 +1020,7 @@ function frame(now) {
   }
   if (!paused) grass.update(world, player, time);
   if (!paused) mushrooms.update(playerDt, player, fromX, fromY);
-  remotePlayers.update(dt, now);
+  if (!gate.waiting) remotePlayers.update(dt, now);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
     if (e.type === 'damage') {
@@ -1237,7 +1304,7 @@ function frame(now) {
   // Props near the view queue their fine bakes after those in view.
   for (const p of props) fineOf(p);
   bakeWhenIdle();
-  if (debug.freeze) sound.pause();
+  if (debug.freeze || gate.waiting) sound.pause();
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
   unbindAudio.updateSong();
   const atmosphere = fog.uniforms(view);
@@ -1258,10 +1325,17 @@ function frame(now) {
   inventoryScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;
-  if (quality.sample(workMs, dt)) resize();
+  // Frames are measured by the real time between them, never the clamped
+  // simulation step, so long frames are not hidden.
+  // A GPU still late at the lowest backing resolution is starved.
+  const starved = quality.scale <= quality.minimum && quality.average > 0.7;
+  const paced = pacer.sample(workMs, clock.rawMs, starved);
+  if (paced.rate) clock.setRate(pacer.rate);
+  if (quality.sample(workMs, clock.rawMs / 1000, clock.period) || paced.cells) resize();
   debug.metrics.frames++;
   debug.metrics.workMs = workMs;
-  debug.metrics.intervalMs = dt * 1000;
+  debug.metrics.intervalMs = clock.rawMs;
+  debug.metrics.rate = pacer.rate;
   schedule();
 }
 

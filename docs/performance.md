@@ -75,7 +75,32 @@ npm run test:browser
 detail and resolution, tests 1×/2×/4×/6× CPU throttling, compares atlas pixels
 and character cells, and checks movement, jumping, torches, and inventory.
 The existing browser suite checks touch layouts, simultaneous touch actions,
-zoom, hidden-tab suspension, and WebGL context recovery.
+zoom, hidden-tab suspension, the phone's play and resume card, full screen
+and wake lock (spied on, as headless Chrome may refuse them), page gestures,
+the web-app manifest, the phone pacing's wiring, and WebGL context recovery.
+It loads the game with `?nogate`, except for the card's own check.
+
+## Phones
+
+Phones pace their frames rather than let them judder. The cap stays at 60
+frames a second while a frame's own work fits in 13 ms (of the 16.7 ms a
+60th allows), drops to an even 30 after 2 seconds above that, and returns to
+60 after 8 seconds below 9 ms. A phone that cannot hold 30 either (work above
+30 ms for 6 seconds) draws at most 12,000 cells instead of 40,000, which
+enlarges the cells; that comes back, before the rate does, after 8 seconds
+below 9 ms. One change happens at a time, nothing is judged in the first 3
+seconds after loading (those frames build the world), and a single long frame
+(over 250 ms, such as a resume) never counts. A graphics card still late at
+the lowest backing resolution also gets the even 30, since fewer frames
+queued behind it arrive more evenly; its own time per frame cannot be
+measured under the cap, so that 30 holds until the page is reloaded. The
+pacing is relearned on every load and never saved. Its constants are `PHONE_PACING` in `src/render/budget.js`.
+
+The GPU check that lowers the backing resolution judges a late frame against
+the current cap, so an even 30 is not mistaken for a GPU bottleneck. Fog,
+glyph detail and halos are never reduced. Frame metrics (`game.metrics`) and
+both checks use the real time between frames, while the simulation step stays
+clamped. Desktops and tablets keep a fixed 60 cap.
 
 The dependency-free CPU scene benchmark remains available with `npm run
 bench`; `node bench/run.mjs path-to-other-checkout` measures another checkout.

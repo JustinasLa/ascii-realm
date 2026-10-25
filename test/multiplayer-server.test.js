@@ -268,7 +268,32 @@ test('HTTP serves the game with correct MIME types and keeps server and private 
     assert.equal(response.status, 404, path);
     await response.text();
   }
+  const manifest = await fetch(`${base}/manifest.webmanifest`);
+  assert.equal(manifest.status, 200);
+  assert.equal(manifest.headers.get('content-type'), 'application/manifest+json');
+  assert.equal((await manifest.json()).display, 'standalone');
+  const icon = await fetch(`${base}/assets/icons/icon-192.png`, { method: 'HEAD' });
+  assert.equal(icon.status, 200);
+  assert.equal(icon.headers.get('content-type'), 'image/png');
   assert.equal((await fetch(`${base}/health`)).status, 200);
   const post = await fetch(base, { method: 'POST' });
   assert.equal(post.status, 405);
+});
+
+test('npm start serves on the given port and stops cleanly on a signal', async () => {
+  const { spawn } = await import('node:child_process');
+  const child = spawn(process.execPath, [new URL('../server/index.js', import.meta.url).pathname],
+    { env: { ...process.env, PORT: '0', HOST: '127.0.0.1' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const line = await new Promise((resolve, reject) => {
+    child.stdout.on('data', chunk => { if (String(chunk).includes('http://localhost:')) resolve(String(chunk)); });
+    child.once('exit', code => reject(new Error(`exited ${code}`)));
+  });
+  const port = Number(line.match(/localhost:(\d+)/)[1]);
+  const manifest = await fetch(`http://127.0.0.1:${port}/manifest.webmanifest`);
+  assert.equal(manifest.status, 200);
+  await manifest.text();
+  const exited = new Promise(resolve => child.once('exit', (code, signal) => resolve({ code, signal })));
+  child.kill('SIGTERM');
+  const { code } = await exited;
+  assert.equal(code, 0);
 });
