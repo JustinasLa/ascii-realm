@@ -17,9 +17,15 @@ test('chat opens only in a lobby with nothing else open, and blocks play until e
   assert.equal(chat.mayOpen(), false, 'solo');
   inLobby(game);
   assert.equal(chat.mayOpen(), true);
+  assert.equal(chat.isCovered(), false);
   game.builder.enabled = true;
   assert.equal(chat.mayOpen(), false, 'the builder keeps its keys');
+  assert.equal(chat.isCovered(), true, 'Escape closes the builder before the chat');
   game.builder.enabled = false;
+  game.spellControls.menu = { isOpen: true };
+  assert.equal(chat.isCovered(), true, 'and the rune wheel');
+  assert.equal(chat.mayOpen(), false);
+  game.spellControls.menu = { isOpen: false };
   game.inventoryScreen.isOpen = true;
   assert.equal(chat.mayOpen(), false);
   game.inventoryScreen.isOpen = false;

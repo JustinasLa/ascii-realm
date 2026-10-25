@@ -406,13 +406,15 @@ const renderLobby = bindMultiplayerControls(multiplayer, {
   onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
   onDone: () => canvas.focus({ preventScroll: true }),
 });
-// Lobby chat. It opens only in a lobby, with nothing else in the way; the
-// builder and the rune wheel are declared further down and are read only
-// once a key or tap arrives.
+// Lobby chat. It opens only in a lobby, with nothing else in the way, and
+// Escape closes a panel opened over it before the chat. The builder and the
+// rune wheel are declared further down and are read only once a key or tap
+// arrives.
+const panelOpen = () => builder.enabled || inventoryScreen.isOpen || phoneMenu.open || !!spellControls.menu?.isOpen;
 const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
   isControlTarget,
-  mayOpen: () => !!multiplayer.room && !gate.waiting && !builder.enabled && !inventoryScreen.isOpen
-    && !phoneMenu.open && !spellControls.menu?.isOpen && !isGameplayBlocked(),
+  mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
+  isCovered: panelOpen,
   onToggle: (open) => {
     blockGameplay();
     cancelActions();

@@ -13,6 +13,11 @@ const SENT_HISTORY = 100;
 // One log line's height in CSS pixels: a reader this close to the bottom is
 // following along, and new lines keep them there.
 const LINE_HEIGHT = 16;
+// Milliseconds after the closing press lifts in which its click, auxclick or
+// contextmenu may still arrive (a touch's click comes a little later).
+const GESTURE_TAIL = 500;
+// What a pressed mouse or finger may still send after its pointerdown.
+const GESTURE_EVENTS = ['mousedown', 'mouseup', 'click', 'auxclick', 'contextmenu'];
 
 // How each channel's line reads: an optional [tag], a lead before the name,
 // the words after it and a close after the message.
@@ -33,8 +38,8 @@ const defaultControl = (target) => ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].inc
 
 export class ChatUi {
   constructor({ doc = document, win = window, phone = { phone: false }, client, scene = null, mayOpen = () => true,
-    onToggle = () => {}, colorOf = () => null, isControlTarget = defaultControl } = {}) {
-    Object.assign(this, { doc, win, phone, client, scene, mayOpen, onToggle, colorOf, isControlTarget });
+    isCovered = () => false, onToggle = () => {}, colorOf = () => null, isControlTarget = defaultControl } = {}) {
+    Object.assign(this, { doc, win, phone, client, scene, mayOpen, isCovered, onToggle, colorOf, isControlTarget });
     const $ = (id) => doc.getElementById(id);
     this.root = $('chat');
     this.log = $('chat-log');
@@ -49,6 +54,8 @@ export class ChatUi {
     this._open = false;
     this.active = DEFAULT_CHANNEL;
     this.hidden = new Set();
+    // The press that closed the bar, until it has finished.
+    this.gesture = null;
     for (const id of SWITCHABLE) {
       const option = doc.createElement('option');
       option.value = id;
@@ -70,19 +77,37 @@ export class ChatUi {
     this.openButton.addEventListener('click', () => this.open());
     win.addEventListener('keydown', (event) => this.key(event));
     // Escape closes the bar wherever focus has wandered, unless a panel
-    // already took the key.
+    // already took the key or one opened over the chat (the builder from its
+    // toolbar): that panel closes first, and chat on the next Escape.
     doc.addEventListener('keydown', (event) => {
       if (!this._open || event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      if (!this.root.contains(doc.activeElement) && this.isCovered()) return;
       event.preventDefault();
+      // The window's handlers come after the document's; none of them may
+      // take this Escape as well.
+      event.stopPropagation();
       this.close();
     });
-    // A click or tap on the scene puts the bar away, and only that: it
-    // doesn't also strike or aim.
+    // A click or tap on the scene puts the bar away, and only that: with any
+    // button or finger, the whole press is chat's, so it never also strikes,
+    // aims, builds or opens the rune wheel.
     scene?.addEventListener('pointerdown', (event) => {
       if (!this._open) return;
+      // No compatibility mousedown or mouseup follows a cancelled pointerdown.
+      event.preventDefault();
       event.stopImmediatePropagation();
+      this.gesture = { id: event.pointerId, endsAt: Infinity };
       this.close();
     });
+    // Listening on the window in the capture phase, ahead of everyone else,
+    // to swallow what the press still sends: a click, an auxclick, a menu.
+    win.addEventListener('pointerdown', () => { this.gesture = null; }, true);
+    const lifted = (event) => {
+      if (this.gesture?.id === event.pointerId) this.gesture.endsAt = event.timeStamp + GESTURE_TAIL;
+    };
+    win.addEventListener('pointerup', lifted, true);
+    win.addEventListener('pointercancel', lifted, true);
+    for (const type of GESTURE_EVENTS) win.addEventListener(type, (event) => this.swallow(event), true);
     win.addEventListener('pagehide', () => this.close({ keepDraft: true }));
     // The on-screen keyboard shrinks the visual viewport; the bar rides on it.
     const viewport = win.visualViewport;
@@ -95,6 +120,19 @@ export class ChatUi {
   }
 
   get isOpen() { return this._open; }
+
+  // Mouse events carry no pointer id; a click from the keyboard has its own.
+  swallow(event) {
+    const { gesture } = this;
+    if (!gesture) return;
+    if (event.timeStamp > gesture.endsAt) {
+      this.gesture = null;
+      return;
+    }
+    if (event.pointerId !== undefined && event.pointerId !== gesture.id) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
 
   // Chat exists only in a lobby.
   setAvailable(available) {

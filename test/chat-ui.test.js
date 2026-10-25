@@ -35,12 +35,16 @@ class El extends EventTarget {
     this.parentNode.children = this.parentNode.children.filter((c) => c !== this);
     this.parentNode = null;
   }
+  contains(node) {
+    for (let at = node; at; at = at.parentNode) if (at === this) return true;
+    return false;
+  }
   focus() { this.doc.activeElement = this; this.doc.focusCalls.push(this.id); }
   blur() { if (this.doc.activeElement === this) this.doc.activeElement = null; }
   click() { this.dispatchEvent(new Event('click')); }
 }
 
-function setup({ phone = false, viewport = null, inLobby = true, mayOpen = () => true, sendOk = true } = {}) {
+function setup({ phone = false, viewport = null, inLobby = true, mayOpen = () => true, isCovered, sendOk = true } = {}) {
   const ids = {};
   const bodyClasses = new Set();
   const rootStyle = {};
@@ -58,6 +62,8 @@ function setup({ phone = false, viewport = null, inLobby = true, mayOpen = () =>
     ids[id].id = id;
   }
   ids['chat-bar'].hidden = true;
+  ids.chat.append(ids['chat-log'], ids['chat-bar']);
+  ids['chat-bar'].append(ids['chat-channel'], ids['chat-input'], ids['chat-send'], ids['chat-close']);
   const win = Object.assign(new EventTarget(), { innerHeight: 800, visualViewport: viewport });
   const sent = [];
   const toggled = [];
@@ -67,7 +73,7 @@ function setup({ phone = false, viewport = null, inLobby = true, mayOpen = () =>
   };
   const toggles = [];
   const scene = new EventTarget();
-  const chat = new ChatUi({ doc, win, phone: { phone }, client, scene, mayOpen, onToggle: (open) => toggles.push(open),
+  const chat = new ChatUi({ doc, win, phone: { phone }, client, scene, mayOpen, isCovered, onToggle: (open) => toggles.push(open),
     colorOf: (member) => [[169, 212, 174], [146, 198, 235]][member.color] });
   chat.setAvailable(inLobby);
   const key = (key, { target = null, ...extra } = {}) => {
@@ -245,23 +251,101 @@ test('a send the connection refused says so', () => {
   assert.ok(ui.ids['chat-log'].children[0].className.includes('chat-error'));
 });
 
-test('a click or tap on the scene closes the bar without also striking', () => {
-  const ui = setup();
-  let struck = 0;
-  ui.chat.open();
-  ui.ids['chat-input'].value = 'half a thought';
-  // The game's own pointer handler is added after the chat's.
-  ui.scene.addEventListener('pointerdown', () => { struck++; });
-  for (const pointerType of ['mouse', 'touch']) {
-    ui.chat.open();
-    ui.scene.dispatchEvent(Object.assign(new Event('pointerdown', { cancelable: true }), { pointerType }));
-    assert.equal(ui.chat.isOpen, false, pointerType);
-    assert.equal(struck, 0, `${pointerType}: the closing tap is only a close`);
+// Dispatches one event along a path of targets, as a page would on the way
+// up, until a listener stops it.
+const bubble = (event, ...path) => {
+  for (const target of path) {
+    target.dispatchEvent(event);
+    if (event.cancelBubble) break;
   }
-  assert.equal(ui.ids['chat-input'].value, '');
-  ui.scene.dispatchEvent(new Event('pointerdown'));
+  return event;
+};
+const pointer = (type, { pointerId, timeStamp = 0, ...extra } = {}) => {
+  const event = Object.assign(new Event(type, { cancelable: true }), extra);
+  // Mouse events have no pointer id; pointer events (and, in browsers, click,
+  // auxclick and contextmenu) do.
+  if (pointerId !== undefined) event.pointerId = pointerId;
+  Object.defineProperty(event, 'timeStamp', { value: timeStamp });
+  return event;
+};
+
+test('a click or tap on the scene closes the bar and is the whole press, with any button or finger', () => {
+  const ui = setup();
+  // The game's own handlers come after the chat's: a strike on the scene,
+  // and the rune wheel, the builder and the menus on the window.
+  let struck = 0;
+  const reached = [];
+  ui.scene.addEventListener('pointerdown', () => { struck++; });
+  for (const type of ['mousedown', 'mouseup', 'click', 'auxclick', 'contextmenu', 'pointerup']) {
+    ui.win.addEventListener(type, (event) => reached.push(type + (event.pointerId ?? '')), true);
+  }
+  let time = 0;
+  // A press as the page sees it: the window first (capture), then the scene,
+  // then whatever the browser still sends for it.
+  const press = ({ button = 0, pointerType = 'mouse', pointerId = 1 } = {}) => {
+    time += 2000;
+    const down = pointer('pointerdown', { pointerId, pointerType, button, timeStamp: time });
+    bubble(down, ui.win, ui.scene);
+    const at = (type, offset, id) => ui.win.dispatchEvent(pointer(type, { pointerId: id, button, timeStamp: time + offset }));
+    const after = [];
+    // A cancelled pointerdown has no compatibility mouse events, but a
+    // browser that sent them anyway would find them taken too.
+    for (const [type, offset, id] of [['mousedown', 1], ['pointerup', 50, pointerId], ['mouseup', 51],
+      ['click', 52, pointerId], ['auxclick', 53, pointerId], ['contextmenu', 54, pointerId], ['click', 300, pointerId]]) {
+      after.push(at(type, offset, id));
+    }
+    return { down, after };
+  };
+  for (const [button, pointerType, pointerId] of [[0, 'mouse', 1], [1, 'mouse', 1], [2, 'mouse', 1], [0, 'touch', 7]]) {
+    const label = `${pointerType} button ${button}`;
+    ui.chat.open();
+    ui.ids['chat-input'].value = 'half a thought';
+    const { down, after } = press({ button, pointerType, pointerId });
+    assert.equal(ui.chat.isOpen, false, label);
+    assert.equal(ui.ids['chat-input'].value, '', label);
+    assert.equal(down.defaultPrevented, true, `${label}: no compatibility mousedown follows`);
+    assert.equal(struck, 0, `${label}: the closing press is only a close`);
+    // Only the lift itself still reaches the game, so nothing is left held.
+    assert.deepEqual(reached, [`pointerup${pointerId}`], label);
+    assert.deepEqual(after, [false, true, false, false, false, false, false], `${label}: nothing else acts on it`);
+    reached.length = 0;
+  }
+  assert.deepEqual(ui.toggles, [true, false, true, false, true, false, true, false]);
+
+  // The next press, with the bar shut, is the game's again.
+  const { down, after } = press();
+  assert.equal(down.defaultPrevented, false);
   assert.equal(struck, 1, 'with the bar shut, the scene gets its clicks');
-  assert.deepEqual(ui.toggles, [true, false, true, false]);
+  assert.ok(after.every(Boolean));
+  assert.deepEqual(reached, ['mousedown', 'pointerup1', 'mouseup', 'click1', 'auxclick1', 'contextmenu1', 'click1']);
+});
+
+test('only the closing press is swallowed: not other pointers, a keyboard click, or anything once it is over', () => {
+  const ui = setup();
+  const reached = [];
+  for (const type of ['mousedown', 'click']) ui.win.addEventListener(type, (event) => reached.push(type), true);
+  const send = (type, options) => ui.win.dispatchEvent(pointer(type, options));
+  // No press in flight: nothing to swallow.
+  assert.equal(send('click', { pointerId: 1, timeStamp: 1 }), true);
+  ui.chat.open();
+  bubble(pointer('pointerdown', { pointerId: 1, timeStamp: 10 }), ui.win, ui.scene);
+  assert.equal(ui.chat.isOpen, false);
+  // A second finger lifting doesn't end the first one's press.
+  ui.win.dispatchEvent(pointer('pointerup', { pointerId: 2, timeStamp: 20 }));
+  assert.equal(ui.chat.gesture.endsAt, Infinity);
+  assert.equal(send('click', { pointerId: -1, timeStamp: 30 }), true, 'Enter on a focused button clicks it');
+  assert.equal(send('mousedown', { timeStamp: 5000 }), false, 'still held');
+  ui.win.dispatchEvent(pointer('pointercancel', { pointerId: 1, timeStamp: 6000 }));
+  assert.equal(send('click', { pointerId: 1, timeStamp: 6500 }), false, 'within the press\'s tail');
+  assert.equal(send('click', { pointerId: 1, timeStamp: 6501 }), true, 'long after');
+  assert.equal(ui.chat.gesture, null);
+  // A new press ends the old one at once.
+  ui.chat.open();
+  bubble(pointer('pointerdown', { pointerId: 1, timeStamp: 7000 }), ui.win, ui.scene);
+  bubble(pointer('pointerdown', { pointerId: 1, timeStamp: 7100 }), ui.win, ui.scene);
+  assert.equal(ui.chat.gesture, null);
+  assert.equal(send('mousedown', { timeStamp: 7101 }), true);
+  assert.deepEqual(reached, ['click', 'click', 'click', 'mousedown']);
 });
 
 test('Escape closes the bar once focus has left it, but not a key another panel took', () => {
@@ -283,9 +367,63 @@ test('Escape closes the bar once focus has left it, but not a key another panel 
   assert.equal(ui.chat.isOpen, true, 'another panel took this Escape');
   escape({ key: 'a' });
   assert.equal(ui.chat.isOpen, true);
-  assert.equal(escape().defaultPrevented, true);
+  const closing = escape();
+  assert.equal(closing.defaultPrevented, true);
+  assert.equal(closing.cancelBubble, true, 'the window\'s panels never see it');
   assert.equal(ui.chat.isOpen, false);
   assert.deepEqual(ui.toggles, [true, false]);
+});
+
+test('Escape closes a panel opened over the chat first, and never both at once', () => {
+  let builder = false;
+  const ui = setup({ isCovered: () => builder });
+  // The builder listens on the window, after the document, and doesn't ask
+  // whether the key was already used; it skips keys typed into a field.
+  let exits = 0;
+  ui.win.addEventListener('keydown', (event) => {
+    if (!builder || event.key !== 'Escape' || event.target?.tagName === 'INPUT') return;
+    event.preventDefault();
+    builder = false;
+    exits++;
+  });
+  const escape = (target) => {
+    const event = Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape' });
+    // The focused element is the target; the event rises to the document
+    // and then the window.
+    Object.defineProperty(event, 'target', { value: target });
+    return bubble(event, ...(target ? [target] : []), ui.doc, ui.win);
+  };
+  const toolbar = new El('button', ui.doc);
+
+  // Chat open with a draft, then the builder opened from its toolbar.
+  ui.chat.open();
+  ui.ids['chat-input'].value = 'half a thought';
+  builder = true;
+  toolbar.focus();
+  escape(toolbar);
+  assert.deepEqual([builder, ui.chat.isOpen, exits], [false, true, 1], 'only the builder closes');
+  assert.equal(ui.ids['chat-input'].value, 'half a thought', 'the draft is kept');
+  escape(toolbar);
+  assert.deepEqual([ui.chat.isOpen, exits], [false, 1], 'then the chat');
+
+  // Typing in the chat makes it the top layer: Escape closes only the chat,
+  // from the input or from another of its controls.
+  for (const control of ['chat-input', 'chat-channel']) {
+    ui.chat.open();
+    builder = true;
+    ui.ids[control].focus();
+    escape(ui.ids[control]);
+    assert.deepEqual([builder, ui.chat.isOpen, exits], [true, false, 1], control);
+    builder = false;
+  }
+  // With focus nowhere, an open builder still goes first.
+  ui.chat.open();
+  builder = true;
+  ui.doc.activeElement = null;
+  escape(null);
+  assert.deepEqual([builder, ui.chat.isOpen, exits], [false, true, 2]);
+  escape(null);
+  assert.equal(ui.chat.isOpen, false);
 });
 
 test('every channel reads as it should, with the speaker\'s tint, and text stays text', () => {
