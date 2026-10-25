@@ -4,7 +4,9 @@ import { Animal, Animals, KINDS, LOUDNESS, MAX_ANIMALS, REGION, RING, footing, f
   ready, regionHabitat, regionOf, wetAt } from '../src/entities/animals.js';
 import { Monster, Monsters, toCells, toMetres } from '../src/entities/monsters.js';
 import { Player } from '../src/entities/player.js';
-import { CHUNK_SIZE, GRASS, SHORE, WATER } from '../src/world/world.js';
+import { playerState } from '../src/multiplayer/protocol.js';
+import { RemotePlayers } from '../src/multiplayer/remote-players.js';
+import { CHUNK_SIZE, GRASS, SHORE, WATER, World } from '../src/world/world.js';
 import { runeScene } from '../test-support/spells.js';
 
 const dt = 1 / 30;
@@ -162,6 +164,29 @@ test('nothing spawns or moves onto land that is not loaded', () => {
   const player = walker(2 * CHUNK_SIZE - toCells(4, 0)[0], 0);
   run(herd, edge, player, 8);
   for (const [x, y] of edge.touched) assert.ok(chunkOf(x, y)[0] < 3, 'only loaded chunks are read');
+});
+
+test('in the real world, footing and movement never generate a chunk', () => {
+  const world = new World(3, { rivers: false });
+  for (let cy = -1; cy <= 1; cy++) for (let cx = 3; cx <= 5; cx++) world.propsOf(cx, cy);
+  let made = 0;
+  const generate = world.generate.bind(world);
+  world.generate = (...args) => {
+    made++;
+    return generate(...args);
+  };
+  // Near a chunk's west edge the walkability query reaches two chunks west.
+  assert.equal(ready(world, 4 * CHUNK_SIZE + 5, 0), false);
+  assert.equal(footing(world, KINDS.deer, 4 * CHUNK_SIZE + 5, 0), false);
+  assert.equal(made, 0);
+  const x = 4 * CHUNK_SIZE + CHUNK_SIZE / 2;
+  assert.equal(ready(world, x, 0), true);
+  const animals = new Animals({ habitat: () => 'water' });
+  animals.spawn('deer', { x, y: 0, count: 3, world });
+  animals.spawn('rabbit', { x, y: 4, count: 2, world });
+  assert.ok(animals.list.length > 0);
+  run(animals, world, walker(x - toCells(3, 0)[0], 0, 3.7), 4);
+  assert.equal(made, 0, 'no chunk was generated');
 });
 
 test('a herd far behind is let go, rests, then returns home as it was', () => {
@@ -349,7 +374,7 @@ test('a deer fleeing across a river wades and is carried downstream; on dry land
     if (animal.waterDepth > 0.05) waded = true;
     if (animal.carry.y > 0) carried = Math.max(carried, animal.carry.y);
     if (world.typeAt(animal.x, animal.y) !== WATER) return;
-    assert.ok(animal.state === 'flee', 'only a fleeing deer wades');
+    assert.ok(animal.inFlight, 'only a deer in flight wades');
   });
   assert.ok(waded, 'it wades the river');
   assert.ok(carried > 0.05, 'the current pushes it downstream');
@@ -360,6 +385,34 @@ test('a deer fleeing across a river wades and is carried downstream; on dry land
   assert.equal(footing(land({ water: () => true, depth: 0.4 }), KINDS.deer, 0, 0, true), false);
   assert.equal(footing(land({ water: () => true, depth: 0.2 }), KINDS.deer, 0, 0, true), true);
   assert.equal(footing(land({ water: () => true, depth: 0.2 }), KINDS.deer, 0, 0, false), false);
+});
+
+test('a deer whose flight ends mid-stream wades on out to the bank, then calms', () => {
+  const [bank] = toCells(4, 0);
+  const river = (x) => Math.abs(x) < bank;
+  const world = land({ water: river });
+  // Placed on dry land, then the stream rises round it.
+  const { animals, animal } = lone('deer');
+  animal.bolt(world, at(animal, 0, -3));
+  animal.duration = 0.2;
+  let waded = false;
+  run(animals, world, walker(1e6, 0), 10, () => {
+    if (animal.state === 'wade') waded = true;
+    if (river(animal.x)) assert.ok(animal.inFlight, `a ${animal.state} deer in the water`);
+  });
+  assert.ok(waded, 'it wades out');
+  assert.ok(!river(animal.x), 'it reaches the bank');
+  assert.ok(animal.calm || animal.state === 'calm');
+  // With no bank in reach it keeps on its way, and looks again when stopped.
+  const wide = lone('deer');
+  wide.world = land({ water: () => true, solid: (x) => x > 3 });
+  wide.animal.heading = Math.PI / 2;
+  wide.animal.away = Math.PI / 2;
+  wide.animal.setState('wade');
+  run(wide.animals, wide.world, walker(1e6, 0), 1);
+  assert.equal(wide.animal.state, 'wade');
+  assert.equal(wide.animal.target, null);
+  assert.ok(wide.animal.x <= 3);
 });
 
 test('a hemmed-in deer stops and looks for another way', () => {
@@ -373,6 +426,25 @@ test('a hemmed-in deer stops and looks for another way', () => {
   post.animal.heading = Math.PI / 2;
   assert.equal(post.animal.step(post.world, 6, 0), true);
   assert.ok(Math.abs(post.animal.y) > 0.5);
+});
+
+test('a friend across the network is judged by the pace they send', () => {
+  const remotes = new RemotePlayers();
+  const join = (id, from, mx, speed) => {
+    const friend = new Player(...Object.values(at(from, mx, 0)));
+    friend.speed = speed;
+    remotes.sync([{ id, name: id, color: 1, state: playerState(friend) }], 'self', 1000);
+    return remotes.peers.get(id);
+  };
+  const running = lone('deer');
+  const runner = join('runner', running.animal, 8.5, 3.7);
+  assert.equal(runner.player.groundSpeed, 0, 'ground covered is not sent');
+  run(running.animals, running.world, walker(1e6, 0), dt, () => {}, { peers: [runner] });
+  assert.equal(running.animal.state, 'flee', 'a running friend bolts deer at 8.5 m');
+  const walking = lone('deer');
+  const strider = join('walker', walking.animal, 8, 1.6);
+  run(walking.animals, walking.world, walker(1e6, 0), dt, () => {}, { peers: [strider] });
+  assert.equal(walking.animal.state, 'alert', 'a walking friend at 8 m is watched');
 });
 
 test('monsters and friends count as threats', () => {
@@ -494,6 +566,14 @@ test('quiet noises, unknown ones and the player hurting pass unheard; placeless 
   animals.hear({ type: 'whirl' });
   animals.update(dt, world, { player });
   assert.equal(animals.list[0].state, 'flee');
+});
+
+test('turned off, wildlife hears nothing and keeps no noises', () => {
+  const off = new Animals({ enabled: false });
+  for (let i = 0; i < 100; i++) off.hear({ type: 'lightning', x: 0, y: 0 });
+  assert.equal(off.noises.length, 0);
+  run(off, land(), walker(0, 0), dt);
+  assert.equal(off.noises.length, 0);
 });
 
 test('no wildlife when it is turned off or capped at zero', () => {

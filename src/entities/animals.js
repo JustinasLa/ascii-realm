@@ -1,5 +1,6 @@
 import { fbm } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
+import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from '../world/deadwood.js';
 import { currentAt, easeCarry, immersion, toCells as flowCells } from '../world/rivers.js';
 import { ASPECT, CHUNK_SIZE, LAND_LIFT, MAX_WATER_DEPTH, SHORE, SHORE_LEVEL, WATER } from '../world/world.js';
 import { standable, toCells, toMetres } from './monsters.js';
@@ -144,12 +145,22 @@ export function herdOf(seed, rx, ry, habitat) {
   return { key: `${rx},${ry}`, kind, home, size, stag, places, seed: Math.floor(random() * 2 ** 31) };
 }
 
+// The world's prop query also reads the chunk to the west of a range, as the
+// last jittered column of a chunk's props can put bases this many cells
+// into the next one.
+const PROP_SPILL = 11;
+
 // Whether every chunk a footing check could touch is already generated, so
-// moving or spawning never generates land.
+// moving or spawning never generates land: the three cells standable()
+// tests, each against every prop whose footprint could reach it, exactly
+// the chunks the world's walkability query reads.
 export function ready(world, x, y) {
-  for (const dx of [-64, 64]) {
-    for (const dy of [-16, 16]) {
-      if (!world.loaded?.(Math.floor((x + dx) / CHUNK_SIZE), Math.floor((y + dy) / CHUNK_SIZE))?.props) return false;
+  if (!world.loaded) return false;
+  const w = Math.max(world.propFootW ?? 0, DEADWOOD_REACH_X);
+  const h = Math.max(world.propFootH ?? 0, DEADWOOD_REACH_Y);
+  for (let cy = Math.floor((y - h) / CHUNK_SIZE); cy <= Math.floor((y + h) / CHUNK_SIZE); cy++) {
+    for (let cx = Math.floor((x - 1 - w - PROP_SPILL) / CHUNK_SIZE); cx <= Math.floor((x + 1 + w) / CHUNK_SIZE); cx++) {
+      if (!world.loaded(cx, cy)?.props) return false;
     }
   }
   return true;
@@ -177,7 +188,8 @@ export class Animal {
     // The speed it wants, and the ground it actually covered, metres a second.
     this.speed = 0;
     this.groundSpeed = 0;
-    // 'idle', 'wander', 'graze', 'alert', 'flee', 'calm' or 'freeze'.
+    // 'idle', 'wander', 'graze', 'alert', 'flee', 'wade' (finishing a
+    // crossing once the flight is over), 'calm' or 'freeze'.
     this.state = 'idle';
     this.stateTime = 0;
     this.random = mulberry32(seed);
@@ -229,11 +241,28 @@ export class Animal {
     return this.state === 'idle' || this.state === 'wander' || this.state === 'graze';
   }
 
+  // Whether it may take to the water: in flight, or wading out after one.
+  get inFlight() {
+    return this.state === 'flee' || this.state === 'wade';
+  }
+
+  // The nearest open, dry ground within six metres, or null.
+  nearestBank(world) {
+    for (let r = 0.5; r <= 6; r += 0.5) {
+      for (let i = 0; i < 16; i++) {
+        const h = this.heading + (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI / 8);
+        const [dx, dy] = toCells(Math.sin(h) * r, Math.cos(h) * r);
+        if (footing(world, this.kind, this.x + dx, this.y + dy)) return { x: this.x + dx, y: this.y + dy };
+      }
+    }
+    return null;
+  }
+
   // Moves by a few cells: refused onto unloaded land, into props, and into
   // water unless it is a deer in flight. Blocked straight ahead it tries
   // side-steps of 35 and 70 degrees, and otherwise stops.
   step(world, dx, dy) {
-    const fleeing = this.state === 'flee';
+    const fleeing = this.inFlight;
     const [mx, mz] = toMetres(dx, dy);
     for (const turn of [0, 0.61, -0.61, 1.22, -1.22]) {
       const c = Math.cos(turn);
@@ -418,8 +447,19 @@ export class Animal {
       const safe = threat ? threat.distance > k.flee.safe : from.distance > k.flee.safe;
       if (this.stateTime >= this.duration || (safe && this.stateTime >= k.flee.min)) {
         this.wary = k.flee.calm;
-        if (k.flee.freeze) this.setState('freeze', between(this.random, k.flee.freeze));
+        if (world.typeAt(this.x, this.y) === WATER) {
+          // Still in the stream: it wades on out to the nearest bank first.
+          this.setState('wade');
+          this.target = this.nearestBank(world);
+        } else if (k.flee.freeze) this.setState('freeze', between(this.random, k.flee.freeze));
         else this.setState('calm', 3.5);
+      }
+    } else if (s === 'wade') {
+      if (world.typeAt(this.x, this.y) !== WATER) this.setState('calm', 3.5);
+      else {
+        face = this.target ? this.offsetTo(this.target.x, this.target.y).bearing : this.away;
+        speed = k.trotSpeed ?? k.walkSpeed;
+        turn = k.turn.flee;
       }
     } else if (s === 'calm') {
       // Out of a gallop to a trot, then a walk, then a stand.
@@ -441,6 +481,9 @@ export class Animal {
       else if (++this.blocked >= 3 && this.state === 'flee') {
         this.heading = this.bestHeading(world, this.away);
         this.blocked = 0;
+      } else if (this.blocked >= 3 && this.state === 'wade') {
+        this.target = this.nearestBank(world);
+        this.blocked = 0;
       } else if (this.state === 'wander') this.setState('idle', between(this.random, k.wander.idle));
     }
     this.separate(world, dt);
@@ -456,7 +499,7 @@ export class Animal {
       if (distance >= this.kind.herd.spacing * 0.8 || distance < 1e-6) continue;
       const push = (this.kind.herd.spacing * 0.8 - distance) * Math.min(1, dt * 2);
       const [dx, dy] = toCells((-mx / distance) * push, (-mz / distance) * push);
-      if (footing(world, this.kind, this.x + dx, this.y + dy, this.state === 'flee')) {
+      if (footing(world, this.kind, this.x + dx, this.y + dy, this.inFlight)) {
         this.x += dx;
         this.y += dy;
       }
@@ -610,6 +653,7 @@ export class Animals {
   // A noise: animals near enough bolt from it, those a little further off
   // look up toward it.
   hear(e) {
+    if (!this.enabled) return;
     let loud = 0;
     if (e.type === 'strike') loud = LOUDNESS.strike;
     else if (e.type === 'slam' || e.type === 'whirl' || e.type === 'land') loud = (e.strength ?? 1) > 0.5 ? LOUDNESS[e.type] : 0;
@@ -654,12 +698,13 @@ export class Animals {
       }
       this.activate(world, player, view);
     }
-    const running = (player.groundSpeed ?? 0) > (player.walkSpeed ?? 2) * 1.3;
-    const threats = [{ kind: 'player', x: player.x, y: player.y, moving: (player.groundSpeed ?? 0) > 0.3, running }];
+    const walker = (p, pace) => ({ kind: 'player', x: p.x, y: p.y, moving: pace > 0.3, running: pace > (p.walkSpeed ?? 2) * 1.3 });
+    const threats = [walker(player, player.groundSpeed ?? 0)];
+    // A friend's ground covered is not sent over the network, only the
+    // pace they move at, so that is what their figure is judged by.
     for (const peer of peers) {
       const p = peer.player ?? peer;
-      const speed = p.groundSpeed ?? p.speed ?? 0;
-      threats.push({ kind: 'player', x: p.x, y: p.y, moving: speed > 0.3, running: speed > 3 });
+      threats.push(walker(p, Math.max(p.groundSpeed ?? 0, p.speed ?? 0)));
     }
     for (const m of monsters) {
       const speed = m.groundSpeed ?? m.speed ?? 0;
