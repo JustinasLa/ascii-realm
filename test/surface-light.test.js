@@ -13,7 +13,9 @@ import {
   AMBIENT, GLOSS_DAMP, GLOSS_DRY, GLOSS_SUBMERGED, GLOSS_WET, glossByte, glossOf, normalByte, normalOf, shadeFactors,
   worldNormal,
 } from '../src/world/surface-light.js';
-import { World } from '../src/world/world.js';
+import * as water from '../src/world/terrain/water.js';
+import { STONE_GLYPH } from '../src/world/terrain/water.js';
+import { CHUNK_SIZE, WATER, World } from '../src/world/world.js';
 
 function renderer(cols = 8, rows = 6) {
   const r = Object.create(AsciiRenderer.prototype);
@@ -189,4 +191,53 @@ test('rocks by the water are damp', () => {
   const near = { kind: 'rock', x: -631.5, y: -150.5, footW: 3, footH: 1 };
   assert.equal(world.byWater(near), true);
   assert.equal(world.byWater({ kind: 'rock', x: world.spawn.x, y: world.spawn.y }), false);
+});
+
+// Shades one water cell into a one-cell buffer the way the ground does, and
+// returns the glyph it ended up showing and the gloss it was given. The
+// buffer is kept from frame to frame, as the screen's is, so a normal left
+// from an earlier frame would show.
+const cell = () => ({ fg: new Uint8ClampedArray(4), bg: new Uint8ClampedArray(4), ov: new Uint8ClampedArray(4),
+  cellLit: new Uint8Array(4) });
+function shadeCell(out, chunk, i, wx, wy, t) {
+  water.shade(out, 0, chunk, i, wx, wy, 1, t);
+  return { g: out.fg[3] | ((out.bg[3] & 15) << 8), gloss: out.cellLit[2] };
+}
+
+test('only a cell whose final glyph is a bed stone gets a normal: foam over a stone loses it, still pools keep it', () => {
+  const world = new World(1);
+  let still = 0, moving = 0, covered = 0;
+  for (let cy = -3; cy <= 0; cy++) for (let cx = -11; cx <= -8; cx++) {
+    const chunk = world.chunk(cx, cy);
+    for (let i = 0; i < CHUNK_SIZE * CHUNK_SIZE; i++) {
+      if (chunk.type[i] !== WATER) continue;
+      const wx = cx * CHUNK_SIZE + (i % CHUNK_SIZE), wy = cy * CHUNK_SIZE + Math.floor(i / CHUNK_SIZE);
+      const anim = water.animated(chunk, i, wx, wy, 1);
+      let stone = false, lost = false;
+      const out = cell();
+      for (const t of anim ? [0, 0.7, 1.9, 3.3, 5.1] : [0]) {
+        const { g, gloss } = shadeCell(out, chunk, i, wx, wy, t);
+        assert.equal(gloss !== 0, !!STONE_GLYPH[g], `cell ${wx},${wy} at ${t}`);
+        if (gloss) stone = true;
+        else if (stone) lost = true;
+      }
+      if (stone && !anim) still++;
+      if (stone && anim) moving++;
+      if (lost) covered++;
+    }
+  }
+  assert.ok(still > 0, 'bed stones in still water are shaded');
+  assert.ok(moving > 0, 'bed stones in moving water are shaded');
+  assert.ok(covered > 0, 'a stone that foam or a wavelet covers loses its normal for that frame');
+});
+
+test('a ground-cache hit keeps the bed normals of the first, uncached draw', () => {
+  const world = new World(1);
+  const view = { x0: -600, y0: -100, cols: 160, rows: 60 };
+  const first = renderer(160, 60), second = renderer(160, 60);
+  drawGround(first, world, view, 0, null, 0);
+  second.cellLit.fill(99);
+  drawGround(second, world, view, 0, null, 0);
+  assert.ok(first.cellLit.some(Boolean));
+  assert.deepEqual(second.cellLit, first.cellLit);
 });
