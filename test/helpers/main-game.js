@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../../src/entities/player.js';
+import { Animals } from '../../src/entities/animals.js';
 import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
 import { isBow, isThrown } from '../../src/entities/loadout.js';
@@ -77,6 +78,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       bladeSamples++;
       return { base: [0, 0], tip: [1, 1] };
     },
+  };
+  // The animals' figures: `ready` is resolved with a stand-in once they
+  // should appear.
+  let figuresLoaded;
+  const figuresReady = new Promise(resolve => { figuresLoaded = resolve; });
+  const animalFigures = {
+    load: () => figuresReady,
+    draw: noop,
+    drawShadow: noop,
   };
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
   const context = {
@@ -174,6 +184,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
+    Animals, AnimalFigures: animalFigures,
     SceneryBuilder: class {
       constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
       setEnabled(value) { this.enabled = value; this.onModeChange(); }
@@ -230,6 +241,12 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     },
     pinch: factor => pinch(factor),
     navigatedTo: () => navigatedTo,
+    // Hands the game a stand-in for the animals' figures.
+    loadAnimalFigures: async (figures) => {
+      figuresLoaded(figures);
+      await Promise.resolve();
+      await Promise.resolve();
+    },
     touch,
     vibrations,
     pointer(type, button = 0, pointerType = 'mouse') {

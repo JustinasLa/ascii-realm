@@ -1,0 +1,28 @@
+Animal models
+=============
+
+All three models are dedicated to the public domain under CC0 1.0 Universal
+(https://creativecommons.org/publicdomain/zero/1.0/). No attribution is
+required; the authors are credited here with thanks.
+
+deer.glb, stag.glb
+  "Deer" and "Stag" from the Ultimate Animated Animals pack by Quaternius
+  (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0.
+  Downloaded as GLB from Poly Pizza:
+    https://poly.pizza/m/T6Cs7tmMHJ (Deer)
+    https://poly.pizza/m/tQdzbZ1Cmw (Stag)
+  Changes: the duplicate "AnimalArmature|" copies of the 13 clips were
+  dropped by loading each file with three.js's GLTFLoader and writing it
+  back with GLTFExporter (binary). Geometry, skin, materials and clips are
+  otherwise as published.
+
+rabbit.glb
+  "Rabbit" by Čestmír Dammer (Kelgar project, www.kelgar.org; idea by Rick
+  Hoppmann and Keppu), CC0, from OpenGameArt:
+    https://opengameart.org/node/51722 (rabbit-FBX.7z)
+  Changes: rabbit.fbx was converted to glTF with three.js's FBXLoader and
+  GLTFExporter. The FBX's zero-opacity material was made opaque; the body
+  keeps its fur texture (rabbit-skinn.png), scaled to 256x256 JPEG; the
+  separate fur-shell mesh, its one-frame clip and the "Dying.001" clip were
+  left out; the "Armature|" prefix was stripped from the clip names (Basic,
+  Guard, Guarding, Jump, Running, Sitting.000, Sitting.001, Dying.000, Dead).
