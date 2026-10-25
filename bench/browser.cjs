@@ -7,6 +7,11 @@ const puppeteer = require(process.env.PUPPETEER_MODULE || 'puppeteer');
 const output = process.env.BENCH_OUTPUT || join(tmpdir(), 'ascii-realm-browser-check');
 fs.mkdirSync(output, { recursive: true });
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// The frame-rate floor for the phone layouts at full CPU speed, and the
+// renderers that draw in software (no GPU), where it cannot apply.
+const MIN_FPS = 50;
+const FPS_SIZES = new Set(['393x852', '852x393']);
+const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Render/i;
 
 (async () => {
   const browser = await puppeteer.launch({ headless: true });
@@ -247,6 +252,18 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
       }));
       results.samples.push({ width, height, rate, ...sample });
       console.log(JSON.stringify({ width, height, rate, ...sample }));
+      // The phone layouts must hold 50 FPS at full CPU speed. A software
+      // renderer measures the CPU drawing pixels, not the game, so it is
+      // exempt, and says so.
+      if (rate === 1 && FPS_SIZES.has(`${width}x${height}`)) {
+        if (SOFTWARE_GL.test(results.gpu)) {
+          const exemption = { width, height, fps: sample.fps, exempt: `software renderer: ${results.gpu}` };
+          results.checks.push({ fpsExemption: exemption });
+          console.log(JSON.stringify({ fpsExemption: exemption }));
+        } else {
+          assert.ok(sample.fps >= MIN_FPS, `${width}x${height} at 1x CPU: ${sample.fps.toFixed(1)} FPS, below ${MIN_FPS}`);
+        }
+      }
     }
     await client.send('Emulation.setCPUThrottlingRate', { rate: 1 });
     await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
