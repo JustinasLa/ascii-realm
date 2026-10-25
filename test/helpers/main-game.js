@@ -154,8 +154,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     },
     // Records how the frame drives the river debris.
     Debris: class {
-      constructor(options) { this.options = options; this.calls = []; this.pieces = []; }
-      update(dt) { this.calls.push(['update', dt]); }
+      constructor(options) { this.options = options; this.calls = []; this.pieces = []; this.events = []; }
+      update(dt, world, view, player, weather, splashes, bodies) { this.calls.push(['update', dt, bodies]); }
       visible() { return this.pieces; }
       draw(r, view, piece) { this.calls.push(['draw', piece]); }
       reflect(r, view, piece) { this.calls.push(['reflect', piece]); }

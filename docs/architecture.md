@@ -26,3 +26,10 @@ intent and simulated by each client. Monsters and combat are simulated locally;
 lobbies do not synchronize enemies or add PvP damage, shared loot or competitive
 movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
 the browser uses its native WebSocket API.
+
+River debris (`world/debris.js`) is local to each player. Each frame, after
+the player and the monsters have moved, it is handed the bodies standing in
+the water, works out how each moved, and settles every meeting of a body and
+a piece, or of two pieces, in short steps shared by all of them. It never
+moves a body: a knock goes into the body's `bump`, which `rivers.js` defines
+next to the current's `carry`, and the body slides by both in its own drift.
