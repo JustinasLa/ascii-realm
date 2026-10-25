@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Animals, REGION, RING } from '../src/entities/animals.js';
-import { BIRD, Bird, Birds, MAX_FLOCKS, flockOf, inView, perch } from '../src/entities/birds.js';
+import { BIRD, Bird, Birds, MAX_FLOCKS, flockOf, inView, perch, spotsAt } from '../src/entities/birds.js';
 import { toCells, toMetres } from '../src/entities/monsters.js';
 import { CHUNK_SIZE, GRASS, SHORE, WATER } from '../src/world/world.js';
 
@@ -273,6 +273,49 @@ test('the flock lands together on open ground 25 to 45 m off, then rests with du
   assert.equal(f.phase, 'ground');
   run(birds, world, still(...Object.values(at(spot, 40, 0))), BIRD.rest);
   assert.equal(birds.keen(f), 1);
+});
+
+test('on a strip of bank between water and shore, with props on it, each bird lands on its own spot', () => {
+  // Open round the flock; from 20 m west, open ground only within 0.8 m of
+  // the line y = 0, water south of it, shore north, and props along it.
+  const [west, across] = [(x) => toMetres(x, 0)[0] < -20, (y) => toMetres(0, y)[1]];
+  const world = land({
+    water: (x, y) => west(x) && across(y) > 0.8,
+    shore: (x, y) => west(x) && across(y) < -0.8,
+    solid: (x) => west(x) && Math.floor(x) % 9 === 0,
+  });
+  const { birds, f } = flock(world);
+  assert.equal(f.members.length, 6);
+  const player = walking(...Object.values(at({ x: 0, y: 0 }, 5, 0)));
+  run(birds, world, player, 12);
+  assert.equal(f.phase, 'ground');
+  assert.ok(f.landing && west(f.landing.x), 'landed away down the bank');
+  for (const b of f.members) {
+    assert.ok(perch(world, b.x, b.y), 'on open ground');
+    for (const o of f.members) if (o !== b) assert.ok(metres(o, b) >= BIRD.flock.spacing - 1e-9, 'spaced');
+  }
+});
+
+test('landing spots are spaced and open, or none if the flock does not fit', () => {
+  const open = land();
+  const spots = spotsAt(open, 100, 50, 6, 0.4);
+  assert.equal(spots.length, 6);
+  assert.deepEqual(spots[0], { x: 100, y: 50 });
+  for (const a of spots) for (const b of spots) if (a !== b) assert.ok(metres(a, b) >= BIRD.flock.spacing);
+  // Room for one bird only: one spot, and a second finds none.
+  const pocket = land({ shore: (x, y) => metres({ x, y }, { x: 100, y: 50 }) > 0.3 });
+  assert.equal(spotsAt(pocket, 100, 50, 1, 0).length, 1);
+  assert.equal(spotsAt(pocket, 100, 50, 2, 0), null);
+  // A landing place the flock does not fit is passed over for one it does.
+  const birds = new Birds({ habitat: () => 'water' });
+  const f = birds.spawn({ x: 0, y: 0, count: 6, world: open });
+  const cramped = land({ shore: (x, y) => {
+    const [mx, mz] = toMetres(x, y);
+    return mz < -20 && Math.abs(mx) < 4 && Math.hypot(mx, mz + 35) > 0.3;
+  } });
+  birds.lift(f, Math.PI, cramped, { x: 0, y: 0 });
+  assert.ok(f.landing && f.spots.length === 6);
+  assert.ok(Math.abs(toMetres(f.landing.x, 0)[0]) > 4, 'not straight away, where only one fits');
 });
 
 test('with nowhere open to land the flock flies off and is let go', () => {

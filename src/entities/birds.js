@@ -58,6 +58,9 @@ const HOP = 0.6;
 const HOP_TIME = 1;
 // The flock comes down from this height to land, metres.
 const APPROACH = 1.2;
+// Spots tried round a landing place for a bird whose own is taken or
+// blocked: a spiral out to about 4 metres.
+const SPOTS = 140;
 // Spawns stay this far outside the view, in cells.
 const VIEW_MARGIN = freeze({ cols: 8, rows: 4 });
 
@@ -78,6 +81,38 @@ export function perch(world, x, y) {
   if (!ready(world, x, y) || !standable(world, x, y)) return false;
   const type = world.typeAt(x, y);
   return type !== WATER && type !== SHORE;
+}
+
+// Each bird's own spot round a landing place: its own place in a spiral
+// out from it, else the nearest of a closer-set spiral of spots out to
+// about 4 metres, taking the first on open ground that keeps the flock's
+// spacing from every spot already given. Null if the flock does not fit
+// there.
+export function spotsAt(world, x, y, count, heading) {
+  const spiral = (k, step) => {
+    const angle = k * 2.4 + heading;
+    const r = step * Math.sqrt(k);
+    const [dx, dy] = toCells(Math.sin(angle) * r, Math.cos(angle) * r);
+    return { x: x + dx, y: y + dy };
+  };
+  const { spacing } = BIRD.flock;
+  const free = (p) => !spots.some((o) => metres(o.x - p.x, o.y - p.y) < spacing);
+  const spots = [];
+  const tried = new Set();
+  for (let i = 0; i < count; i++) {
+    let spot = spiral(i, spacing * 1.4);
+    if (!free(spot) || !perch(world, spot.x, spot.y)) spot = null;
+    for (let k = 0; k < SPOTS && !spot; k++) {
+      if (tried.has(k)) continue;
+      const p = spiral(k, spacing * 0.7);
+      if (!free(p)) continue;
+      tried.add(k);
+      if (perch(world, p.x, p.y)) spot = p;
+    }
+    if (!spot) return null;
+    spots.push(spot);
+  }
+  return spots;
 }
 
 // The flock a region holds, the same every time for a seed and region: its
@@ -414,7 +449,7 @@ export class Birds {
 
   place(key, spots, { seed = 1, heading = 0 } = {}) {
     const flock = { key, home: { x: spots[0][0], y: spots[0][1] }, members: [], phase: 'ground', heading: 0,
-      path: null, landing: null, speed: 0, restUntil: -Infinity, flutterIn: between(this.random, BIRD.feed.flutterEvery) };
+      path: null, landing: null, spots: null, speed: 0, restUntil: -Infinity, flutterIn: between(this.random, BIRD.feed.flutterEvery) };
     spots.forEach(([x, y], i) => {
       const bird = new Bird(x, y, { flock, seed: seed + i * 613, heading: heading + i * 2.4 });
       flock.members.push(bird);
@@ -552,28 +587,30 @@ export class Birds {
   }
 
   // Sets a flock's line of flight and the open ground it makes for, 25 to
-  // 45 metres off and within 60 degrees of straight away; with none in
-  // reach it flies off and away.
+  // 45 metres off and within 60 degrees of straight away, with a spot of
+  // its own there for every bird; with none in reach it flies off and away.
   lift(flock, away, world, at) {
     const f = BIRD.flight;
     flock.phase = 'air';
     flock.heading = wrap(away);
     flock.speed = f.cruise;
-    let best = null;
-    let score = -Infinity;
+    const places = [];
     for (let i = 0; i <= 6; i++) {
       const h = away + ((i - 3) / 3) * (Math.PI / 3);
       for (const r of [f.land[0], (f.land[0] + f.land[1]) / 2, f.land[1]]) {
         const [dx, dy] = toCells(Math.sin(h) * r, Math.cos(h) * r);
-        const x = at.x + dx;
-        const y = at.y + dy;
-        if (!world || !perch(world, x, y)) continue;
-        const s = Math.cos(h - away) - Math.abs(r - 35) * 0.002;
-        if (s > score) {
-          score = s;
-          best = { x, y };
-        }
+        places.push({ x: at.x + dx, y: at.y + dy, score: Math.cos(h - away) - Math.abs(r - 35) * 0.002 });
       }
+    }
+    places.sort((a, b) => b.score - a.score);
+    let best = null;
+    flock.spots = null;
+    for (const { x, y } of world ? places : []) {
+      if (!perch(world, x, y)) continue;
+      flock.spots = spotsAt(world, x, y, flock.members.length, flock.heading);
+      if (!flock.spots) continue;
+      best = { x, y };
+      break;
     }
     flock.landing = best;
     const [dx, dy] = toCells(Math.sin(away) * 90, Math.cos(away) * 90);
@@ -592,8 +629,7 @@ export class Birds {
     if (flock.landing && left < 6) {
       flock.phase = 'landing';
       flock.members.forEach((b, i) => {
-        if (b.state !== 'fly') return;
-        b.land(this.spotFor(flock, i, world));
+        if (b.state === 'fly') b.land(flock.spots[i]);
       });
     }
     if (flock.members.every((b) => b.state === 'feed' || b.state === 'alert')) {
@@ -601,16 +637,6 @@ export class Birds {
       flock.restUntil = this.time + BIRD.rest;
       flock.flutterIn = between(this.random, BIRD.feed.flutterEvery);
     }
-  }
-
-  // A bird's own place round the landing spot, spaced from its mates.
-  spotFor(flock, i, world) {
-    const { x, y } = flock.landing;
-    if (!i) return { x, y };
-    const angle = i * 2.4 + flock.heading;
-    const r = Math.min(2, BIRD.flock.spacing * 1.4 * Math.sqrt(i));
-    const [dx, dy] = toCells(Math.sin(angle) * r, Math.cos(angle) * r);
-    return perch(world, x + dx, y + dy) ? { x: x + dx, y: y + dy } : { x, y };
   }
 
   // Every so often one bird of a feeding flock flutters to a new spot by

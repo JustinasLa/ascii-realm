@@ -289,12 +289,13 @@ rest), at most 2 flocks and 8 birds at once.
   second. Each plays its takeoff, leaves the ground part way through it and
   climbs at 2.4 m/s away from the threat.
 - **Flight.** The flock picks open, dry ground 25 to 45 m off, within 60
-  degrees of straight away, and flies there at about 8 m/s and 4 to 7 m up,
-  each bird keeping its own place, apart from, along with and toward its
-  neighbours. Birds flap while climbing or slow and glide at cruise, their
-  bodies pitching with the climb. Near the spot they come down, each to its
-  own place within 2 m, touching down as their landing animation does, and
-  feed again. For 20 s after landing the flock's senses are halved. With no
+  degrees of straight away, with room for every bird at least 0.5 m from the
+  next, and flies there at about 8 m/s and 4 to 7 m up, each bird keeping its
+  own place, apart from, along with and toward its neighbours. Birds flap
+  while climbing or slow and glide at cruise, their bodies pitching with the
+  climb. Near the spot they come down, each to its own place, usually within
+  2 m (further along a narrow bank or round props), touching down as their
+  landing animation does, and feed again. For 20 s after landing the flock's senses are halved. With no
   open ground in reach it flies on and away, and is let go once far off; it
   is back at home after the rest.
 - A flying bird is drawn over trees and grass, mirrored in the lakes it
