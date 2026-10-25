@@ -185,8 +185,11 @@ export class Bird {
   }
 
   // Leaves the ground, heading away from the threat on the flock's line.
+  // Caught coming down from a flutter, it stops sinking and beats up from
+  // where it is.
   takeoff(heading) {
     this.setState('takeoff');
+    this.va = Math.max(0, this.va);
     this.play('takeoff', BIRD.takeoffRate);
     this.heading = heading + (this.random() - 0.5) * 0.7;
     this.takeoffIn = null;
@@ -277,7 +280,7 @@ export class Bird {
       this.va = f.climb;
       this.speed = Math.min(f.cruise * 0.7, this.speed + dt * 4);
     }
-    this.alt += this.va * dt;
+    this.alt = Math.max(0, this.alt + this.va * dt);
     this.turnTowards(flock.heading, f.turn, dt);
     this.vx = Math.sin(this.heading) * this.speed;
     this.vz = Math.cos(this.heading) * this.speed;

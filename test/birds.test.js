@@ -363,6 +363,33 @@ test('a flutter rises on the takeoff and comes down on the landing clip', () => 
   assert.ok(metres(b, to) < 1e-6);
 });
 
+test('a threat caught mid-flutter on the way down puts the bird straight up, never under the ground', () => {
+  const world = land();
+  const b = new Bird(0, 0);
+  b.flutter(at({ x: 0, y: 0 }, 2, 0));
+  const fl = { heading: 1, members: [b] };
+  while (!(b.va < -0.5)) b.update(dt, world, fl);
+  assert.ok(b.alt > 0 && b.state === 'flutter');
+  b.takeoffIn = 0;
+  b.update(dt, world, fl);
+  assert.equal(b.state, 'takeoff');
+  assert.ok(b.va >= 0, 'no longer sinking');
+  let low = Infinity;
+  for (let t = 0; t < 1.5 && b.state === 'takeoff'; t += dt) {
+    b.update(dt, world, fl);
+    low = Math.min(low, b.alt);
+    assert.ok(b.va >= 0);
+  }
+  assert.ok(low >= 0, `${low}`);
+  assert.equal(b.state, 'fly');
+  // Even sent off sinking, it never goes below the ground.
+  const sink = new Bird(0, 0);
+  sink.takeoff(0);
+  sink.va = -5;
+  sink.update(dt, world, fl);
+  assert.equal(sink.alt, 0);
+});
+
 test('regions of chunks: the region grid is the animals\' own', () => {
   assert.equal(REGION.cols, CHUNK_SIZE * 8);
 });
