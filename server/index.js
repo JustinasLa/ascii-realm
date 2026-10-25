@@ -12,7 +12,7 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
   '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.wav': 'audio/wav', '.json': 'application/json',
   '.webmanifest': 'application/manifest+json' };
 
-export function createGameServer({ root = ROOT, reconnectMs, maxRooms, maxPerAddress, roomsPerMinute } = {}) {
+export function createGameServer({ root = ROOT, reconnectMs, maxRooms, maxPerAddress, roomsPerMinute, heartbeatMs } = {}) {
   const server = createServer(async (request, response) => {
     if (!['GET', 'HEAD'].includes(request.method)) {
       response.writeHead(405, { Allow: 'GET, HEAD' }).end();
@@ -48,7 +48,7 @@ export function createGameServer({ root = ROOT, reconnectMs, maxRooms, maxPerAdd
     } catch { response.writeHead(404).end('Not found'); }
   });
   const wss = new WebSocketServer({ server, path: '/multiplayer', maxPayload: 8192, perMessageDeflate: false });
-  const lobbies = attachLobbies(wss, { reconnectMs, maxRooms, maxPerAddress, roomsPerMinute });
+  const lobbies = attachLobbies(wss, { reconnectMs, maxRooms, maxPerAddress, roomsPerMinute, heartbeatMs });
   return { server, wss, rooms: lobbies.rooms,
     listen(port = 8000, host = '0.0.0.0') {
       return new Promise((resolveListen, reject) => {

@@ -12,7 +12,10 @@ Open **Multiplayer**, enter your name and click **Create lobby**. Share the code
 shown in the panel. Friends open the same website, enter the code and click
 **Join lobby**. **Copy invite** shares a link that joins that lobby. Joining a
 lobby on another world seed reloads the page into that world. **Leave lobby**
-returns to solo exploration.
+returns to solo exploration. In a lobby, `Enter` opens the chat.
+
+Lobby servers and pages must speak the same protocol version; after an update,
+a page left open from an older version is asked to refresh before it can join.
 
 The server listens on all interfaces so other devices on your network can open
 `http://<your-computer's-LAN-IP>:8000`. Set `PORT` or `HOST` to change the binding.

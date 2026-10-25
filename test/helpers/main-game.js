@@ -22,6 +22,7 @@ import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assis
 import { pickStruck, TargetTracker, targetId } from '../../src/core/target.js';
 import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
+import { metresBetween } from '../../src/multiplayer/chat.js';
 
 const noop = () => {};
 
@@ -151,6 +152,28 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       constructor(options) { Object.assign(this, options); this.open = false; }
       setOpen(open) { this.open = open; this.onToggle(open); }
     },
+    // The chat's open state and its rules for opening; the real one is
+    // tested on its own.
+    ChatUi: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.closes = []; this.updates = 0; }
+      open() {
+        if (this.isOpen || !this.mayOpen()) return;
+        this.isOpen = true;
+        this.onToggle(true);
+      }
+      close(options = {}) {
+        this.closes.push(options);
+        if (!this.isOpen) return;
+        this.isOpen = false;
+        this.onToggle(false);
+      }
+      setAvailable(available) { this.available = available; }
+      receive(message, roster) { this.received = [message, roster]; }
+      notice(notice) { this.noticed = notice; }
+      roster(change) { this.rostered = change; }
+      update() { this.updates++; }
+    },
+    metresBetween,
     Grass: inert(),
     MAX_TREE_HALF_WIDTH: 40, MAX_TREE_HEIGHT: 160, MAX_LEAF_DRIFT: 8,
     propInView: () => true, drawLeaves: noop,
@@ -310,6 +333,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       document.dispatchEvent(new Event('visibilitychange'));
     },
     navigatedTo: () => navigatedTo,
+    // Whether gameplay input is blocked by a panel, the inventory or chat.
+    blocked: () => blocked,
     // Hands the game a stand-in for the animals' figures.
     loadAnimalFigures: async (figures) => {
       figuresLoaded(figures);

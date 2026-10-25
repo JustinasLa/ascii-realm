@@ -17,6 +17,17 @@
   <body>
     <canvas id="screen" tabindex="0" aria-label="Game scene. Press B to build scenery."></canvas>
     <div id="hud-root"></div>
+    <section id="chat" data-game-ui hidden aria-label="Chat">
+      <ol id="chat-log" role="log" aria-live="polite" aria-relevant="additions"></ol>
+      <form id="chat-bar" hidden autocomplete="off">
+        <select id="chat-channel" aria-label="Channel"></select>
+        <input id="chat-input" type="text" maxlength="256" enterkeyhint="send" autocapitalize="sentences"
+          autocorrect="on" spellcheck="true" aria-label="Chat message" placeholder="Say something…" />
+        <button id="chat-send" type="submit">Send</button>
+        <button id="chat-close" type="button" aria-label="Close chat">×</button>
+      </form>
+    </section>
+    <button type="button" id="chat-open" hidden aria-label="Chat" aria-controls="chat-bar"><span aria-hidden="true">CHAT</span></button>
     <div id="inventory-root"></div>
     <div id="touch-controls" aria-label="Game controls">
       <div id="move-pad" aria-label="Drag to walk. Push to the edge to run." role="group">
@@ -179,6 +190,7 @@
         <dt>M / N</dt><dd>Mute / next song</dd>
         <dt>Scroll</dt><dd>Zoom</dd>
         <dt>B</dt><dd>Scenery builder</dd>
+        <dt>Enter / /</dt><dd>Chat in a lobby (/help lists channels)</dd>
       </dl>
       <p class="controls-note">In inventory: arrows navigate, G switches pane, E equips, Enter uses, U unequips, and 1–9 assigns a quick slot.</p>
     </details>

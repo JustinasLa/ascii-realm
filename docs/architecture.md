@@ -25,7 +25,13 @@ The server owns lobby membership, IDs, colours and world seeds; each player
 simulates their own movement and sends bounded pose snapshots at 20 Hz.
 Other players interpolate snapshots 100 ms behind and are drawn as the
 shape-built outlaw in their own gear. Rune casts are relayed as allowlisted cast
-intent and simulated by each client. Monsters, wildlife and combat are simulated locally;
+intent and simulated by each client. Chat (`server/chat.js`, rules in
+`multiplayer/chat.js`) is relayed by the server, which cleans the text again,
+limits each player's rate, and works out who hears a line from the players'
+last reported positions. Each listener gets their own copy, muffled by
+distance with a seed per message and listener. The speaker gets their words
+back clean, and the server only sends notice codes, which the page turns into
+text. Chat is not stored. Monsters, wildlife and combat are simulated locally;
 lobbies do not synchronize enemies or add PvP damage, shared loot or competitive
 movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
 the browser uses its native WebSocket API.

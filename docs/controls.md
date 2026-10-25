@@ -32,6 +32,39 @@
 | `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
 | `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
+| `Enter` / `/`, in a lobby | Open the chat bar (`/` starts a command); `Enter` sends, `Escape` cancels, `Up` / `Down` recall what you sent |
+
+## Chat
+
+In a lobby, press `Enter` to talk. Plain text goes to your channel, which is
+local speech (**Say**) until you pick another in the bar's list or with
+`/channel`. `/<command> <message>` sends one line on another channel:
+
+| Command | Channel | Reaches |
+| --- | --- | --- |
+| `/rp` | Say: `Name: "message"` | 15 m |
+| `/shout` | Shout | 24 m |
+| `/yell`, `/y` | Yell | 48 m |
+| `/whisper`, `/wh` | Whisper | 2 m |
+| `/looc` | Local out-of-character chat: `[LOOC] Name: message` | 20 m |
+| `/ooc` | Out-of-character chat: `[OOC] Name: message` | the whole lobby |
+| `/me` | Emote: `* Name waves` | 20 m |
+| `/scene` | Scene description: `[Scene] Name: *message*` | 20 m |
+
+Speech (Say, Shout, Yell, Whisper) is heard clearly up to 60 % of its reach
+and blurs beyond that: words break into `th...`, lose sounds and trail off,
+until a listener near the edge hears only `*muffled voices*`. You always see
+your own words as you said them. If nobody else heard a line, the log says
+"No one can hear you in this channel."
+
+`/channel` shows your channel and `/channel <name>` switches it.
+`/channeltoggle ooc` or `/channeltoggle looc` hides or shows that channel.
+`/help` lists the commands. Messages are up to 256 characters of plain text
+(accents and emoji are dropped); after a burst of ten, you can send about one a
+second. The log keeps the last 100 lines. While the bar is closed it shows the
+newest ten for 10 seconds each; open, you can scroll back through them all.
+Joins and leaves show as quiet lines. Chat isn't saved, and players who join
+later don't see earlier lines.
 
 ## Target
 
@@ -103,7 +136,10 @@ reset when a touch is cancelled or the page is backgrounded.
 Phones show only the stick, the thumb cluster, a slim HP/MP strip on the top
 edge and a small **=** menu button in the top-right corner. The menu opens a
 full-screen sheet with **Inventory**, **Multiplayer** and **Audio**; **Close**
-returns to a clean screen. A phone here means touch as the primary input with no
+returns to a clean screen. In a lobby a **CHAT** button sits under the menu
+button: it opens the chat bar above the keyboard and hides the touch controls
+until you send or tap the scene. The newest three chat lines (two in landscape)
+show above the thumb clusters. A phone here means touch as the primary input with no
 hover and a short side of 600px or less.
 
 Phones lay out for the way they are held. In portrait the stick and the thumb
