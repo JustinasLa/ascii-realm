@@ -375,6 +375,15 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   kbd, .key-hint, .inventory-help,
   #scenery-builder, #weather-panel, #help-controls, #grass-preview { display: none !important; }
 
+  /* Portrait is the base: the stick and the thumb cluster sit in the lower
+     corners, clear of rounded corners and the home indicator. The layers
+     follow the dynamic viewport, so a browser bar never covers them. */
+  @supports (height: 100dvh) {
+    #touch-controls, #hud-root { inset: 0 0 auto 0; height: 100dvh; }
+  }
+  #move-pad { left: max(16px, calc(env(safe-area-inset-left) + 8px)); bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px)); width: 108px; height: 108px; }
+  .actions { right: max(16px, calc(env(safe-area-inset-right) + 8px)); bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px)); }
+
   /* Health and mana as a slim strip on the top edge. */
   .hud-frames { top: max(6px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); width: min(46vw, 200px); max-height: none; overflow: visible; gap: 4px; pointer-events: none; }
   .hud-status { display: grid; gap: 2px; padding: 3px 6px; }
@@ -408,7 +417,13 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
   .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
 }
+/* Landscape phones: the stick and the cluster at the side edges, mid-to-low,
+   leaving the middle of the screen clear (src/core/layout.js holds the
+   orientation query). */
 @media (pointer: coarse) and (hover: none) and (max-height: 600px) and (orientation: landscape) {
+  #move-pad, .actions { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 6vh); }
+  #move-pad { left: max(16px, calc(env(safe-area-inset-left) + 12px)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 6dvh); }
+  .actions { right: max(16px, calc(env(safe-area-inset-right) + 12px)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 6dvh); }
   .hud-frames { width: min(40vw, 320px); }
   .hud-status { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; }
 }

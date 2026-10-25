@@ -20,6 +20,7 @@
 // fine sprite is laid over the sprite's small cells there.
 
 import { NOISE, NOISE_SIZE } from '../world/fog-banks.js';
+import { deviceGrid } from '../core/layout.js';
 import { ASPECT } from '../world/world.js';
 import { FINE } from './cells.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
@@ -430,24 +431,17 @@ export class AsciiRenderer {
   // when the grid actually changes size, so zooming smoothly is cheap.
   resize(cssW, cssH, dpr, cellW, cellH) {
     const gl = this.gl;
-    const w = Math.round(cssW * dpr);
-    const h = Math.round(cssH * dpr);
+    const { width: w, height: h, cellW: deviceW, cellH: deviceH, cols, rows } =
+      deviceGrid(cssW, cssH, dpr, cellW, cellH);
     if (w !== this.canvas.width || h !== this.canvas.height) {
       this.canvas.width = w;
       this.canvas.height = h;
       gl.viewport(0, 0, w, h);
     }
     this.dpr = dpr;
-    const deviceW = cellW * dpr;
-    const deviceH = cellH * dpr;
-    // Browser zoom can lower DPR below one. Enlarge both dimensions together
-    // when enforcing the minimum so the world keeps its aspect ratio.
-    const scale = Math.max(1, 2 / deviceW, 3 / deviceH);
-    this.cellW = deviceW * scale;
-    this.cellH = deviceH * scale;
+    this.cellW = deviceW;
+    this.cellH = deviceH;
     // One spare row and column so sub-cell scrolling never exposes a gap.
-    const cols = Math.ceil(w / this.cellW) + 1;
-    const rows = Math.ceil(h / this.cellH) + 1;
     if (cols === this.cols && rows === this.rows) return;
     this.allocate(cols, rows);
 

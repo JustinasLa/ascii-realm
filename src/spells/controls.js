@@ -28,11 +28,11 @@ const tag = (name, className, text) => {
 // cast it with the CAST button, so `castKey` names that instead.
 export class SpellControls {
   constructor(casting, { surface, canOpen = () => true, onBind = () => {}, onFocus = () => {},
-    restore = true, storage, castKey = () => 'R' }) {
+    restore = true, storage, castKey = () => 'R', isPhone = () => false }) {
     if (storage === undefined) {
       try { storage = globalThis.localStorage; } catch { storage = null; }
     }
-    Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage, castKey });
+    Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage, castKey, isPhone });
     this.menu = new RadialMenu();
     this.buildWheel();
     this.listen();
@@ -103,6 +103,15 @@ export class SpellControls {
   open(x, y, held, source, pointerId = null) {
     if (!this.menu.open(held)) return false;
     Object.assign(this, { source, pointerId });
+    this.place(x, y);
+    this.wheel.hidden = false;
+    document.body.classList.add('spell-wheel-open');
+    this.drawWheel();
+    return true;
+  }
+
+  // Sizes the wheel to the screen and centres it near (x, y), pointing there.
+  place(x, y) {
     const vw = innerWidth, vh = innerHeight;
     // Keep clear of the rune bar and hotbar when the screen is tall enough.
     this.scale = Math.min(1, (vw - 16) / (BOX * 2), (vh - 16) / (BOX * 2));
@@ -113,11 +122,7 @@ export class SpellControls {
     this.ring.style.left = `${this.cx}px`;
     this.ring.style.top = `${this.cy}px`;
     this.ring.style.transform = `translate(-50%, -50%) scale(${this.scale})`;
-    this.wheel.hidden = false;
-    document.body.classList.add('spell-wheel-open');
     this.menu.point((x - this.cx) / this.scale, (y - this.cy) / this.scale);
-    this.drawWheel();
-    return true;
   }
 
   // Holding CAST opens the wheel mid-screen on that finger, which then
@@ -351,6 +356,14 @@ export class SpellControls {
       if (e.key === 'Escape' && this.menu.isOpen) { stop(e); this.close(); this.onFocus(); }
     }, true);
     window.addEventListener('blur', () => { if (this.menu.isOpen) this.close(); });
-    window.addEventListener('resize', () => { if (this.menu.isOpen) this.close(); });
+    // A phone turning keeps a wheel held on CAST, moved to the new centre;
+    // every other wheel closes when the window changes size.
+    window.addEventListener('resize', () => {
+      if (!this.menu.isOpen) return;
+      if (this.source === 'touch' && this.isPhone()) {
+        this.place(innerWidth / 2, innerHeight / 2);
+        this.drawWheel();
+      } else this.close();
+    });
   }
 }

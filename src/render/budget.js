@@ -1,3 +1,4 @@
+import { gridSize } from '../core/layout.js';
 import { ASPECT } from '../world/world.js';
 
 // CSS cell size and backing pixels are independent budgets. A DPR-3 phone
@@ -15,7 +16,8 @@ export function renderSize(width, height, dpr, requestedCell, mobile, pixelScale
   const limit = mobile ? CELL_CEILING.mobile : CELL_CEILING.desktop;
   let cell = Math.max(requestedCell, Math.sqrt(width * height / (ASPECT * limit)));
   // Include the scrolling border in the CPU budget, including very wide views.
-  while ((Math.ceil(width / (cell * ASPECT)) + 1) * (Math.ceil(height / cell) + 1) > limit) cell *= 1.01;
+  const cells = () => { const { cols, rows } = gridSize(width, height, cell); return cols * rows; };
+  while (cells() > limit) cell *= 1.01;
   // Never drop below the renderer's smallest legible glyph (2x3 device
   // pixels), which it would otherwise meet by enlarging cells, undoing zoom.
   const legible = Math.min(dpr || 1, Math.max(ratio, 2 / (cell * ASPECT), 3 / cell));
