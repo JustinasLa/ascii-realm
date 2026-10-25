@@ -2,7 +2,7 @@
 
 Deer and rabbits live on the land round the player. They graze, stroll and
 watch, and they run from the player, friends and monsters, and from loud
-noises.
+noises. They can be hunted for hide, meat and bone.
 
 ## Where they live
 
@@ -85,7 +85,8 @@ twice as far away look toward it.
 |---|---|
 | A sword cut | 20 m |
 | A slam, spin or heavy landing | 30 m |
-| A monster hurt or slain | 20 m |
+| A monster or animal hurt or slain | 20 m |
+| An arrow or spear landing | 4 m |
 | A rune being cast | 30 m |
 | A rune's impact | 40 m |
 | Lightning, from the sky or a rune | 60 m |
@@ -94,11 +95,69 @@ twice as far away look toward it.
 An animal never hears farther than its own range (30 m for deer, 18 m for
 rabbits).
 
+## Hunting
+
+Sword cuts, arrows, thrown spears and javelins all wound animals. Spells
+scare them but don't wound them yet.
+
+| | Deer (hind or stag) | Rabbit |
+|---|---|---|
+| Health | 40 | 3 |
+| Drops | Deer Hide 1–2 (80 %), Raw Venison 1–2 (90 %), Bone 1 (50 %) | Raw Rabbit 1–2 (20 %) |
+| Body lies for | 20 s, then sinks over 2.5 s | 8 s, then sinks over 1.5 s |
+
+**Hits.** A sword cut hits an animal in the weapon's reach in front of the
+player (all round for a spin), as it does monsters, and does the same damage.
+An arrow, spear or javelin strikes the first animal whose body it passes,
+up to the top of its back and head (1.6 m for deer, 0.45 m for rabbits). Its damage
+grows with the draw, from 35 % of the weapon's damage at the weakest to all
+of it at full draw: the longbow does 8 to 22. Two full-draw arrows bring down a
+deer, and any arrow brings down a rabbit. An arrow that strikes is used up.
+A thrown spear or javelin drops at the animal's feet, to be picked up again.
+On touch screens, STRIKE turns toward the nearest animal ahead as well as
+toward monsters, for the sword and for the bow's aim.
+
+After a hit an animal is hurt for 0.5 s. In that time another blow lands
+only if it is harder than the last, and then only by the difference.
+
+**Wounded.** A struck deer flinches: it stands for 0.35 s in the hit
+reaction for the side the blow came from, turning toward it, then bolts away
+from whoever struck it. The herd follows, as for any bolt. A deer already in flight
+keeps running, for at least 4 s more. A struck rabbit bolts at once. The
+body flashes white for a moment on each hit, and the damage shows as a number.
+A wounded animal isn't slowed.
+
+**Misses.** An arrow or spear landing within 4 m of an animal makes it
+bolt; one landing within 8 m makes it look up.
+
+**Death.** At 0 health the animal falls, playing its own death animation
+once and holding the last pose (a rabbit then lies in its dead pose). The
+rest of the herd runs from the killer. If the leader falls, the next member
+leads. Bodies don't move, aren't frightened, don't push the fog and don't
+take a place under the caps. They lie for a while and then sink into the
+ground like fallen monsters.
+
+**Drops** are rolled when the animal dies and laid at once, each stack on its
+own spot of dry, open ground 1.2 to 3 m from where the animal stood, clear of
+the fallen body, and reachable from it. A body in water drops its stacks on
+the nearest bank within 3 m, or else beside the hunter. Stacks never land in water. The player picks them up by
+walking over them, or with TAKE on touch screens, after half a second. A full
+bag leaves them lying. Stacks are lost after 5 minutes. At most 48 lie about
+at once, and past that the oldest go first. Raw meat has no use yet.
+
+**Smaller herds.** Each region counts its kills for the session. When its
+herd comes back, it is short of those it lost, and without a stag if the stag
+was killed. A region whose whole herd was killed stays empty. Kills and drops
+aren't saved.
+
+Hunt drops are kept apart from other loose items on the ground. When loose
+items get a shared store, the drops can move into it.
+
 ## Looks
 
 Deer, stags and rabbits are rigged models that play their own animations
-(standing, looking, grazing, walking, galloping and running, and for rabbits
-sitting and guarding). Like the player and the monsters, they are rendered
+(standing, looking, grazing, walking, galloping and running, flinching and
+falling, and for rabbits sitting, guarding and lying dead). Like the player and the monsters, they are rendered
 from the game's camera and turned into character cells with an outlined
 silhouette. Animals are drawn a little dimmer than monsters, so the player
 stays the brightest thing on screen. A gait's animation speeds up with the
@@ -118,10 +177,13 @@ listed in [credits](credits.md).
 With `?debug`, `game.animals` lists the animals (`list`) and herds
 (`herds`). `game.animals.spawn('deer' | 'rabbit', { x, y, count, variant })`
 places a group at once, wherever asked, and keeps it however far the player
-goes. `game.animals.calm()` settles every animal.
+goes. `game.animals.calm()` settles every animal. `game.animals.hurt(i, damage)`
+deals a blow (lethal by default) to the animal at index `i`, and
+`game.huntDrops.all()` lists the stacks lying about.
 
 ## Multiplayer
 
 Wildlife is simulated by each player's game, like monsters. Everyone in a
 lobby shares the seed, so herds start in the same places, but their
-movement isn't synchronised.
+movement isn't synchronised. Hunting is local too: a kill and its drops
+happen only in the hunter's game.
