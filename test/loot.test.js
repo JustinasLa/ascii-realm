@@ -3,7 +3,9 @@ import test from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
 import { HuntDrops, MAX_STACKS } from '../src/entities/hunt-drops.js';
 import { ITEMS } from '../src/inventory/items.js';
-import { layLoot, lootSpots, LOOT, LOOT_CREDIT, LootCredit, nearestDry, rollLoot, TIER_CHANCE, TIERS } from '../src/world/loot.js';
+import { GATHER_PAY, layLoot, logsOf, lootSpots, LOOT, LOOT_CREDIT, LootCredit, nearestDry, rollLoot, rollPay, TIER_CHANCE, TIERS }
+  from '../src/world/loot.js';
+import { Harvesting } from '../src/world/harvesting.js';
 import { WATER } from '../src/world/world.js';
 
 // Rolls a kind many times and counts how often each item came, and in what counts.
@@ -34,19 +36,74 @@ test('a skeleton always leaves 1–2 bones, arrows 60 % of the time and a hood 1
   assert.equal(ITEMS.outlawHood.equipmentSlot, 'helm');
 });
 
-test('goblins and elves leave one iron ingot, trolls four, each a fifth of the time', () => {
+test('goblins and elves leave an ingot or a denar, trolls four of either, one or the other, never both', () => {
   assert.equal(TIER_CHANCE, 0.2);
   for (const [kind, count] of [['goblin', 1], ['elf', 1], ['troll', 4]]) {
-    const { seen, n } = tally(kind);
-    assert.deepEqual(Object.keys(seen), ['ironIngot'], kind);
-    near(seen.ironIngot.kills / n, 0.2);
-    assert.deepEqual(Object.keys(seen.ironIngot.counts), [String(count)], kind);
+    const random = mulberry32(11);
+    const n = 20000;
+    const kills = { ironIngot: 0, denars: 0 };
+    for (let i = 0; i < n; i++) {
+      const loot = rollLoot(kind, random);
+      assert.ok(loot.length <= 1, 'one item at most');
+      for (const { id, count: c } of loot) {
+        kills[id]++;
+        assert.equal(c, id === 'denars' ? count * 100 : count, `${kind} ${id}`);
+      }
+    }
+    near(kills.ironIngot / n, 0.16);
+    near(kills.denars / n, 0.04, 0.008);
+  }
+  assert.ok(!LOOT.skeleton.some((e) => e.table || e.id === 'denars'), 'skeletons pay nothing');
+});
+
+test('a tier picks by weight, the last item taking a roll at the very top', () => {
+  const rolls = (...values) => () => values.shift();
+  assert.deepEqual(rollLoot('goblin', rolls(0, 0.79)), [{ id: 'ironIngot', count: 1 }]);
+  assert.deepEqual(rollLoot('goblin', rolls(0, 0.81)), [{ id: 'denars', count: 100 }]);
+  assert.deepEqual(rollLoot('goblin', rolls(0, 1)), [{ id: 'denars', count: 100 }]);
+  for (const entries of Object.values(TIERS)) for (const e of entries) assert.ok(e.weight > 0);
+  assert.deepEqual(TIERS.medium.map((e) => e.count), [2, 200]);
+});
+
+test('felling pays now and then: 5 % a log for 0.50–1.00d, as many logs as felling gives', () => {
+  assert.deepEqual(GATHER_PAY.tree, { chance: 0.05, cents: [50, 100] });
+  const random = mulberry32(5);
+  let hits = 0;
+  const n = 20000;
+  for (let i = 0; i < n; i++) {
+    for (const { id, count } of rollPay('tree', 3, random)) {
+      hits++;
+      assert.equal(id, 'denars');
+      assert.ok(Number.isInteger(count) && count >= 50 && count <= 100, count);
+    }
+  }
+  near(hits / (3 * n), 0.05, 0.005);
+  assert.deepEqual(rollPay('rock', 3, () => 0), []);
+  assert.equal(rollPay('tree', 1, () => 0).length, 1);
+  assert.deepEqual(rollPay('tree', 2, () => 0.99), []);
+  assert.ok(Array.isArray(rollPay('tree', 1)), 'Math.random by default');
+  // The count matches what felling really gives.
+  for (const growth of ['sapling', 'mature']) {
+    const tree = { kind: 'tree', x: 1, y: 1, growth, hits: 0 };
+    const world = { propsIn: () => [tree], isWalkable: () => true, gathered: new Set(), typeAt: () => 1 };
+    const harvesting = new Harvesting(world, null, { wild: false });
+    harvesting.gathering = true;
+    harvesting.drop = () => {};
+    harvesting.reachable = () => true;
+    harvesting.resourcesIn = () => [];
+    let felled = null;
+    for (let i = 0; i < 10 && !felled; i++) {
+      felled = harvesting.react({ type: 'strike', swing: 'cut', x: 1, y: 1, chop: 99, heading: 0 }, { x: 1, y: 1, heading: 0 })
+        .find((r) => r.status === 'harvested');
+    }
+    assert.ok(felled, growth);
+    assert.equal(logsOf(tree), felled.rewards[0].count, growth);
   }
 });
 
 test('every item in the tables exists, unknown kinds leave nothing and rolls repeat for a seed', () => {
   for (const entries of Object.values(LOOT)) for (const e of entries) if (e.id) assert.ok(ITEMS[e.id], e.id);
-  for (const tier of Object.values(TIERS)) assert.ok(ITEMS[tier.id], tier.id);
+  for (const tier of Object.values(TIERS)) for (const e of tier) assert.ok(ITEMS[e.id], e.id);
   assert.equal(ITEMS.ironIngot.name, 'Iron Ingot');
   assert.deepEqual(rollLoot('dragon', () => 0), []);
   const a = mulberry32(3);
@@ -55,6 +112,7 @@ test('every item in the tables exists, unknown kinds leave nothing and rolls rep
   // Equal items merge; unknown items are passed over.
   const tables = { x: [{ id: 'bone', chance: 1, count: [1, 1] }, { id: 'bone', chance: 1, count: [2, 2] },
     { id: 'nothing', chance: 1, count: [1, 1] }, { table: 'medium', chance: 1 }] };
+  // (One roll of 0 also picks the tier's first item, the iron.)
   assert.deepEqual(rollLoot('x', () => 0, tables), [{ id: 'bone', count: 3 }, { id: 'ironIngot', count: 2 }]);
   assert.ok(rollLoot('skeleton').some((d) => d.id === 'bone'), 'Math.random by default');
 });

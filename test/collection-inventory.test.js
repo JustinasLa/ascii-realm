@@ -30,7 +30,9 @@ test('every collectible has immutable ground rendering and inventory metadata', 
     assert.match(item.groundGlyph, /^[\x21-\x7e]$/);
     assert.equal(item.colour.length, 3);
     assert.ok(item.colour.every((channel) => Number.isInteger(channel) && channel >= 0 && channel <= 255));
-    assert.ok(Number.isFinite(item.weight) && item.weight > 0);
+    // Coin goes to the pouch, not the bag, and weighs nothing.
+    if (item.tags.includes('currency')) assert.equal(item.weight, 0, id);
+    else assert.ok(Number.isFinite(item.weight) && item.weight > 0);
     assert.ok(Number.isSafeInteger(item.stackLimit) && item.stackLimit > 0);
     assert.ok(item.tags.length > 0 && item.tags.every((tag) => typeof tag === 'string'));
     assert.ok(Object.isFrozen(item) && Object.isFrozen(item.colour) && Object.isFrozen(item.tags));

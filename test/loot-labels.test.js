@@ -67,3 +67,15 @@ test('a stack the bag has no room for shows its label dimmed', () => {
   // A name cut to 24 characters; an unknown item shows its id.
   assert.equal(lootLabels([stack('mystery', 1, 10, 10)], player, full, project)[0].text, 'mystery');
 });
+
+test('coin is named by its value in its own gold, and never makes a label full', () => {
+  const inventory = new Inventory({ starter: false });
+  const [coin] = lootLabels([stack('denars', 73, 10, 10)], player, inventory, project);
+  assert.equal(coin.text, '0.73d');
+  assert.deepEqual(coin.colour, [179, 145, 34]);
+  inventory.slots = inventory.slots.map(() => ({ id: 'longbow', count: 1 }));
+  assert.equal(lootLabels([stack('denars', 73, 10, 10)], player, inventory, project)[0].full, false, 'coins alone');
+  const [mixed] = lootLabels([stack('denars', 100, 10, 10), stack('bone', 1, 11, 10)], player, inventory, project);
+  assert.equal(mixed.text, '1.00d, Bone x1');
+  assert.equal(mixed.full, true, 'the bone has no room');
+});
