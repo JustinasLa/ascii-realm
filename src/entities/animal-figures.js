@@ -114,6 +114,12 @@ class Rig {
       action.setEffectiveWeight(0);
       this.actions[key] = action;
     }
+    // The fall and the hit-reacts play once and hold their last pose.
+    for (const key of ['death', 'dead', 'hitL', 'hitR']) {
+      if (!this.actions[key]) continue;
+      this.actions[key].setLoop(THREE.LoopOnce, 1);
+      this.actions[key].clampWhenFinished = true;
+    }
     this.reset();
   }
 
@@ -125,6 +131,9 @@ class Rig {
     }
     this.weights = Object.fromEntries(Object.keys(this.actions).map((k) => [k, 0]));
     this.state = null;
+    this.flinch = null;
+    this.flash = 0;
+    this.ground = 0;
   }
 
   // The clip weights for what the animal is doing: standing, grazing with
@@ -135,7 +144,26 @@ class Rig {
     const a = this.actions;
     const moving = s.groundSpeed > 0.05 && s.speed > 0;
     const deer = s.kind.id === 'deer';
-    if (moving) {
+    if (s.state === 'dead') {
+      // The fall, played once from its start; a rabbit's then settles into
+      // its lying pose.
+      if (this.state !== 'dead') {
+        a.death.reset();
+        a.death.timeScale = 1.15;
+        a.death.play();
+        a.dead?.reset().play();
+      }
+      const fallen = a.dead && a.death.time >= a.death.getClip().duration - 1e-3;
+      w[fallen ? 'dead' : 'death'] = 1;
+    } else if (s.flinch && a.hitL) {
+      // A fresh blow starts the hit-react on the side it came from.
+      const key = s.flinch.side === 'L' ? 'hitL' : 'hitR';
+      if (this.flinch !== s.flinch) {
+        a[key].reset().play();
+        this.flinch = s.flinch;
+      }
+      w[key] = 1;
+    } else if (moving) {
       const speed = s.speedScale > 0 ? s.groundSpeed / s.speedScale : 0;
       // The gait's rate follows the speed, so the feet stay planted.
       const [lo, hi] = s.kind.rates;
@@ -156,27 +184,34 @@ class Rig {
 
   update(dt, s) {
     const w = this.pose(s);
+    // A fall is sudden, everything else blends.
+    const ease = s.state === 'dead' && this.state !== 'dead' ? 1 : 1 - Math.exp(-dt * 14);
     this.state = s.state;
-    const ease = 1 - Math.exp(-dt * 14);
     for (const key in w) {
       this.weights[key] += (w[key] - this.weights[key]) * ease;
       this.actions[key].setEffectiveWeight(this.weights[key]);
     }
     this.mixer.update(dt);
     this.model.rotation.y = s.heading;
-    this.model.position.y = 0;
-    this.model.updateMatrixWorld(true);
-    const v = new THREE.Vector3();
-    let lowest = Infinity;
-    for (const tip of this.tips) lowest = Math.min(lowest, tip.getWorldPosition(v).y);
+    // Standing, its feet are kept on the ground; fallen, it lies where the
+    // clip puts it, at the height it stood, sinking away at last.
+    if (s.state !== 'dead') {
+      this.model.position.y = 0;
+      this.model.updateMatrixWorld(true);
+      const v = new THREE.Vector3();
+      let lowest = Infinity;
+      for (const tip of this.tips) lowest = Math.min(lowest, tip.getWorldPosition(v).y);
+      this.ground = -lowest;
+    }
     this.waterDepth = s.waterDepth ?? 0;
-    this.model.position.y = -lowest - this.waterDepth;
+    this.model.position.y = this.ground - this.waterDepth - (s.sunk ?? 0) * 0.6 * s.kind.height;
     this.model.updateMatrixWorld(true);
+    this.flash = s.hurt < 0.14 ? 1 - s.hurt / 0.14 : 0;
   }
 
   // Where each wading leg meets the water's surface, for splash rings.
   waterContacts() {
-    if (this.waterDepth <= 0.001) return [];
+    if (this.waterDepth <= 0.001 || this.state === 'dead') return [];
     const contacts = [];
     for (const leg of this.legs) {
       const joints = leg.map((b) => b.getWorldPosition(new THREE.Vector3()));
@@ -372,7 +407,7 @@ export class AnimalFigures {
     for (const { s, slot } of drawn) {
       const rig = this.rigs.get(s);
       const contacts = rig.waterContacts().map((c) => ({ x: s.x + c.x * SCALE / ASPECT, y: s.y + c.z * SCALE * TILT }));
-      this.drawn.push({ animal: s, contacts, depth: s.y, shadow: rig.look.shadow, ...this.cellsOf(slot, s, view) });
+      this.drawn.push({ animal: s, contacts, depth: s.y, shadow: rig.look.shadow, ...this.cellsOf(slot, s, view, rig.flash) });
     }
     return this.drawn;
   }
@@ -412,8 +447,8 @@ export class AnimalFigures {
   }
 
   // The slot's pixels as cells: outline glyphs round the edge, lit by a
-  // soft rim, and a density ramp inside.
-  cellsOf(slot, s, view) {
+  // soft rim, and a density ramp inside. A fresh hit flashes the body.
+  cellsOf(slot, s, view, flash = 0) {
     const { cx0, cy0 } = slot;
     const w = this.readWidth;
     const h = slot.rows * SY;
@@ -446,6 +481,11 @@ export class AnimalFigures {
         r /= hits;
         g /= hits;
         b /= hits;
+        if (flash > 0) {
+          r += (255 - r) * flash;
+          g += (235 - g) * flash;
+          b += (220 - b) * flash;
+        }
         const sx = cx0 + cx - view.x0;
         const sy = cy0 + cy - view.y0;
         if (hits < N - 4) {

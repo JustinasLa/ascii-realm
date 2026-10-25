@@ -313,3 +313,81 @@ test('the animal models are credited, CC0, and light enough', () => {
   const total = Object.values(LOOKS).reduce((sum, l) => sum + statSync(new URL(`../${l.url}`, import.meta.url)).size, 0);
   assert.ok(total < 4 * 1024 * 1024, `${total} bytes`);
 });
+
+test('a fallen animal plays its fall once and holds it; a rabbit then lies in its dead pose', () => {
+  const f = figures();
+  const d = hind();
+  f.update(dt, [d]);
+  const rig = f.rigs.get(d);
+  for (const key of ['death', 'hitL', 'hitR']) {
+    assert.equal(rig.actions[key].loop, THREE.LoopOnce, key);
+    assert.equal(rig.actions[key].clampWhenFinished, true);
+  }
+  d.takeHit(999, 0, -5);
+  f.update(dt, [d]);
+  assert.equal(rig.weights.death, 1, 'the fall is sudden');
+  assert.equal(rig.actions.death.timeScale, 1.15);
+  const duration = rig.actions.death.getClip().duration;
+  for (let i = 0; i < (duration / 1.15 + 0.5) / dt; i++) f.update(dt, [d]);
+  assert.ok(rig.actions.death.time >= duration - 1e-3, 'held at its last frame');
+  assert.ok(rig.weights.death > 0.99);
+  assert.deepEqual(rig.waterContacts(), [], 'a body in water makes no splashes');
+  const r = rabbit();
+  f.update(dt, [r]);
+  const bunny = f.rigs.get(r);
+  assert.equal(bunny.actions.dead.loop, THREE.LoopOnce);
+  r.takeHit(999, 0, -5);
+  f.update(dt, [r]);
+  assert.equal(bunny.weights.death, 1);
+  const fall = bunny.actions.death.getClip().duration;
+  for (let i = 0; i < (fall / 1.15 + 1) / dt; i++) f.update(dt, [r]);
+  assert.ok(bunny.weights.dead > 0.9, 'then lies in its dead pose');
+});
+
+test('a struck deer plays the hit-react on the side of the blow, again for each blow', () => {
+  const f = figures();
+  const d = hind();
+  d.heading = 0;
+  f.update(dt, [d]);
+  const rig = f.rigs.get(d);
+  d.takeHit(5, 3, 0);
+  assert.equal(d.flinch.side, 'L');
+  for (let i = 0; i < 10; i++) f.update(dt, [d]);
+  assert.ok(rig.weights.hitL > 0.8 && rig.weights.hitR < 0.05);
+  const first = rig.actions.hitL.time;
+  d.flinch = { side: 'L', left: 0.35 };
+  f.update(dt, [d]);
+  assert.ok(rig.actions.hitL.time < first, 'a new blow starts it over');
+  d.flinch = { side: 'R', left: 0.35 };
+  for (let i = 0; i < 10; i++) f.update(dt, [d]);
+  assert.ok(rig.weights.hitR > 0.8);
+  // A rabbit has no hit-react and only flashes.
+  const r = rabbit();
+  r.flinch = { side: 'L', left: 0.2 };
+  f.update(dt, [r]);
+  assert.equal(f.rigs.get(r).weights.hitL, undefined);
+});
+
+test('a fresh hit flashes the body white, gone by 0.14 s; a sunk body lies lower', () => {
+  const f = new AnimalFigures(gltfs, { renderer: fakeGPU() });
+  const d = hind();
+  const view = { x0: -200, y0: -100, cols: 400, rows: 200 };
+  f.update(dt, [d]);
+  const plain = f.rasterise(view, [d], d)[0].cells;
+  d.hurt = 0;
+  f.update(0, [d]);
+  assert.equal(f.rigs.get(d).flash, 1);
+  const lit = f.rasterise(view, [d], d)[0].cells;
+  const mean = (cells) => cells.reduce((n, c) => n + c.r + c.gg + c.b, 0) / cells.length;
+  assert.ok(mean(lit) > mean(plain) + 60, 'brighter while it flashes');
+  d.hurt = 0.14;
+  f.update(0, [d]);
+  assert.equal(f.rigs.get(d).flash, 0);
+  d.takeHit(999, 0, -5);
+  f.update(dt, [d]);
+  const rig = f.rigs.get(d);
+  const lying = rig.model.position.y;
+  d.sunk = 1;
+  f.update(dt, [d]);
+  assert.ok(Math.abs(rig.model.position.y - (lying - 0.6 * KINDS.deer.height)) < 1e-9);
+});

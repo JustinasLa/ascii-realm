@@ -18,12 +18,14 @@ import { KINDS, Monsters } from './entities/monsters.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
 import { Animals } from './entities/animals.js';
 import { AnimalFigures } from './entities/animal-figures.js';
+import { HuntDrops } from './entities/hunt-drops.js';
 import { isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
 import { Spellcasting } from './spells/casting.js';
 import { loadSpells } from './spells/catalog.js';
 import { SpellControls } from './spells/controls.js';
 import { SCALE, TILT } from './entities/rig.js';
+import { Collection } from './inventory/collection.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { MultiplayerClient } from './multiplayer/client.js';
@@ -51,7 +53,7 @@ import { Mushrooms } from './world/mushrooms.js';
 import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
-import { drawResource } from './world/item-draw.js';
+import { drawItem, drawResource } from './world/item-draw.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
 import { Projectiles } from './world/projectiles.js';
 import { drawProp, propDepthSlices, propInView } from './world/props.js';
@@ -625,6 +627,15 @@ const monsters = new Monsters({ seed,
 const animals = new Animals({ seed, counts: { deer: countOf('deer', 8), rabbit: countOf('rabbits', 6) },
   enabled: params.get('animals') !== '0' });
 debug.animals = animals;
+// What hunted animals leave lying, and the collection that picks it up.
+const huntDrops = new HuntDrops();
+const huntCollection = new Collection(world, inventory, huntDrops.items);
+debug.huntDrops = huntDrops;
+debug.collection ??= huntCollection;
+// Rows a lying stack is drawn ahead of its own, over the grass in front.
+const HUNT_DROP_LIFT = 3;
+// Touch aim assist turns toward monsters and animals alike.
+const assistFoes = () => [...monsters.list, ...animals.list];
 // Short vibrations on touch screens when a blow lands and when hurt.
 const haptics = createHaptics({ nav: navigator, enabled: () => coarse.matches && !document.hidden });
 debug.haptics = haptics;
@@ -727,7 +738,7 @@ function fogWalkers(view, missiles) {
   const near = (m) => Math.hypot((m.x - player.x) * ASPECT, m.y - player.y);
   const foes = monsters.living.sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
   for (const m of foes) walkers.push({ id: m, x: m.x, y: m.y, size: figureScale(m.kind.id) });
-  const wild = [...animals.list].sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
+  const wild = animals.list.filter((a) => a.alive).sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
   for (const a of wild) walkers.push({ id: a, x: a.x, y: a.y, size: a.kind.height / 1.8 });
   return walkers;
 }
@@ -956,7 +967,7 @@ function frame(now) {
     // A click swings at the cursor; J swings the way the body faces; STRIKE
     // turns to the nearest foe ahead.
     if (attack && armed && !ranged) {
-      player.attack(keyAttack ? null : clicked ? cursorHeading(true) : strikeAssist(player, monsters.list)?.heading ?? null);
+      player.attack(keyAttack ? null : clicked ? cursorHeading(true) : strikeAssist(player, assistFoes())?.heading ?? null);
     }
     if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
@@ -966,7 +977,10 @@ function frame(now) {
     if (touchInteract && !isGameplayBlocked() && !player.magicStunned) {
       const done = performInteraction(interactables());
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
-      if (done?.kind === 'pickup' && done.result.message) hud.notify(done.result.message, 'pickup');
+      // What the drop store's collection takes is told once, with its sound,
+      // as its pickup events are spent below.
+      const told = done?.result?.ok && debug.collection === huntCollection;
+      if (done?.kind === 'pickup' && done.result.message && !told) hud.notify(done.result.message, 'pickup');
     }
     if (cast && !isGameplayBlocked() && !player.magicStunned) {
       syncSpellPeers();
@@ -998,9 +1012,9 @@ function frame(now) {
   // A draw from STRIKE aims at the nearest foe ahead, checked again on release.
   const touchAim = rangedSource === 'touch';
   const rangedFoe = touchAim && (player.ranged.aiming || release)
-    ? assistTarget(player, monsters.list, { range: weapon.projectileRange ?? 8 })?.foe ?? null : null;
+    ? assistTarget(player, assistFoes(), { range: weapon.projectileRange ?? 8 })?.foe ?? null : null;
   player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw, rangedFoe) : null;
-  if (release?.action === 'jab') player.attack(touchAim ? strikeAssist(player, monsters.list)?.heading ?? null : cursorHeading(true));
+  if (release?.action === 'jab') player.attack(touchAim ? strikeAssist(player, assistFoes())?.heading ?? null : cursorHeading(true));
   else if (release) fireRanged(release, weapon, rangedFoe);
   if (player.ranged.held === 0) rangedSource = null;
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
@@ -1031,8 +1045,10 @@ function frame(now) {
     // Each cut can fell a tree a blow at a time or mow tall grass.
     if (e.type === 'strike' && !paused) {
       for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
-      const hit = monsters.strike(e, player, Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0)));
-      if (hit.length) {
+      const damage = Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0));
+      const hit = monsters.strike(e, player, damage);
+      const prey = animals.strike(e, player, damage);
+      if (hit.length || prey.length) {
         hitStop = Math.max(hitStop, 0.06);
         haptics.hit();
       }
@@ -1074,8 +1090,17 @@ function frame(now) {
   if (respawned) fallInBattle();
   else if (!paused && time - lastHurt > 6) player.heal(5 * playerDt);
   if (!paused) {
+    // Where each shaft was, so its path this frame can be tested against
+    // the animals' bodies; one that strikes makes no sound of landing, and
+    // one that misses startles those it lands near.
+    const shafts = new Map(projectiles.list.map((p) => [p, { x: p.x, y: p.y, h: p.h }]));
     projectiles.update(dt, world);
-    for (const impact of projectiles.events) sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
+    const struck = animals.shots(projectiles, shafts, player);
+    for (const impact of projectiles.events) {
+      if (struck.has(impact.id)) continue;
+      sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
+      animals.landed(impact.x, impact.y);
+    }
     projectiles.events.length = 0;
     // Walking over a landed arrow or spear picks it up again.
     if (player.air === 0 && !respawned) {
@@ -1091,6 +1116,14 @@ function frame(now) {
       }
     }
   }
+  // Hide, meat and bone are drawn in from close by.
+  huntCollection.update(paused ? 0 : dt, player, { blocked: paused || isGameplayBlocked() || respawned });
+  for (const ev of huntCollection.events) {
+    sound.play({ ...ev, type: 'pickup' });
+    hud.notify(`Picked up ${ITEMS[ev.id].name}${ev.count > 1 ? ` x${ev.count}` : ''}.`, 'pickup');
+  }
+  huntCollection.events.length = 0;
+  huntDrops.expire(huntCollection.currentTime);
   dust.update(dt);
   splashes.update(dt);
   if (!debug.freeze) {
@@ -1149,7 +1182,19 @@ function frame(now) {
     animals.update(playerDt, world, { player, peers, monsters: monsters.living, view });
     animalFigures?.update(playerDt, animals.list);
   }
+  for (const e of animals.events) {
+    if (e.type === 'hurt') {
+      hud.damage(e.amount, e.x, e.y);
+      sound.play({ type: 'slam', x: e.x, y: e.y, strength: 0.25 });
+    } else if (e.type === 'death') {
+      dust.burst(world, e.x, e.y, 10, 6);
+      sound.play({ type: 'land', x: e.x, y: e.y, strength: 0.5 });
+    }
+    animals.hear(e);
+  }
   animals.events.length = 0;
+  for (const drop of animals.drops) huntDrops.lay(drop, world, (a, b) => huntCollection.pathClear(a, b));
+  animals.drops.length = 0;
 
   // Props up to a screen above the view can still be reflected into it, and
   // the tallest trees reach into it from far below.
@@ -1234,6 +1279,11 @@ function frame(now) {
   }
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
+  }
+  for (const item of huntDrops.in(view.x0 - 2, view.y0 - view.rows, view.x0 + view.cols + 2, view.y0 + view.rows + 2)) {
+    reflections.push({ y: item.y, draw: () => drawItem(renderer, view, item, time, mirror) });
+    // Drawn after the grass a few rows in front, so tall blades never hide it.
+    drawables.push({ y: item.y + HUNT_DROP_LIFT, draw: () => drawItem(renderer, view, item, time) });
   }
   for (const piece of debris.visible(view)) {
     reflections.push({ y: piece.y, draw: () => debris.reflect(renderer, view, piece, mirror) });

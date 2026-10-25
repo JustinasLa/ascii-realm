@@ -4,6 +4,7 @@ import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from '../world/deadwood.js';
 import { currentAt, easeCarry, immersion, toCells as flowCells } from '../world/rivers.js';
 import { ASPECT, CHUNK_SIZE, LAND_LIFT, MAX_WATER_DEPTH, SHORE, SHORE_LEVEL, WATER } from '../world/world.js';
 import { standable, toCells, toMetres } from './monsters.js';
+import { SCALE } from './rig.js';
 
 // Wildlife: deer herds and rabbit groups that belong to the land. The world
 // is cut into regions; from the seed each region holds a deer herd, a rabbit
@@ -20,8 +21,19 @@ const freeze = (o) => Object.freeze(o);
 export const KINDS = freeze({
   deer: freeze({
     id: 'deer', name: 'Deer', role: 'prey', locomotion: 'ground',
-    // Hit points, used once animals can be hunted.
     health: 40,
+    // Seconds after a hit when only a harder blow lands, and then only by
+    // what it adds; seconds it stands in its flinch before it bolts; the
+    // top of the body, metres, that arrows are tested against.
+    hurtWindow: 0.5, flinch: 0.35, hitHeight: 1.6,
+    // Seconds the body lies after death, then takes to sink away.
+    linger: 20, sink: 2.5,
+    // Rolled once on its death: the chance of each, then how many.
+    drops: freeze([
+      freeze({ id: 'deerHide', chance: 0.8, count: freeze([1, 2]) }),
+      freeze({ id: 'rawVenison', chance: 0.9, count: freeze([1, 2]) }),
+      freeze({ id: 'bone', chance: 0.5, count: freeze([1, 1]) }),
+    ]),
     // Height at the withers, metres; the stag leads a herd and stands taller.
     height: 1.0, stagHeight: 1.15, radius: 0.55,
     // Metres a second, matched to the clips' own ground speeds so the hooves
@@ -47,6 +59,8 @@ export const KINDS = freeze({
   rabbit: freeze({
     id: 'rabbit', name: 'Rabbit', role: 'prey', locomotion: 'ground',
     health: 3, height: 0.3, radius: 0.18,
+    hurtWindow: 0.5, flinch: 0, hitHeight: 0.45, linger: 8, sink: 1.5,
+    drops: freeze([freeze({ id: 'rawRabbit', chance: 0.2, count: freeze([1, 2]) })]),
     // It gets about in short lopes, and runs flat out when it flees, its
     // legs a blur at four bounds a second.
     walkSpeed: 1.2, fleeSpeed: 4.0,
@@ -78,12 +92,27 @@ export const MAX_ANIMALS = 10;
 // Spawns stay this far outside the view, in cells.
 const VIEW_MARGIN = { cols: 8, rows: 4 };
 // How loud each noise is: the distance, metres, it can be heard at.
-export const LOUDNESS = freeze({ strike: 20, slam: 30, whirl: 30, land: 30, death: 20, hurt: 20, cast: 30, impact: 40,
+export const LOUDNESS = freeze({ shot: 4, strike: 20, slam: 30, whirl: 30, land: 30, death: 20, hurt: 20, cast: 30, impact: 40,
   lightning: 60, step: 10 });
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const between = (random, [a, b]) => a + random() * (b - a);
 const metres = (dx, dy) => Math.hypot(...toMetres(dx, dy));
+
+// An arrow, spear or javelin does this share of its damage at the weakest
+// draw, rising to all of it at full draw.
+export const ARROW_FLOOR = 0.35;
+const SHAFTS = new Set(['arrow', 'spear', 'javelin']);
+
+// What a kind leaves on its death: each entry by its chance, in a count
+// between its bounds.
+export function rollDrops(kind, random) {
+  const out = [];
+  for (const { id, chance, count: [lo, hi] } of kind.drops ?? []) {
+    if (random() < chance) out.push({ id, count: lo + Math.floor(random() * (hi - lo + 1)) });
+  }
+  return out;
+}
 
 // The forest field the trees are placed by: trees grow above 0.44.
 export const forestAt = (seed, x, y) => fbm(x * ASPECT * 0.01, y * 0.01, seed + 500, 3);
@@ -198,6 +227,8 @@ export class Animal {
     // What it is watching or running from.
     this.threat = null;
     this.fleeFor = 0;
+    // Into a flight, the seconds before reaching safety may end it.
+    this.safeAfter = 0;
     this.nextTurn = 0;
     this.away = 0;
     this.blocked = 0;
@@ -215,7 +246,32 @@ export class Animal {
     this.speedScale = 1;
     this.carry = { x: 0, y: 0 };
     this.stride = 0;
+    // Seconds since the last hit, for a flash of the body; the window in
+    // which a further hit only lands by what it adds to the last.
+    this.hurt = Infinity;
+    this.hurtFor = 0;
+    this.lastHit = 0;
+    // A hit-react it stands in, { side: 'L' | 'R', left }, and whether its
+    // coming bolt was set by a blow rather than passed on by a mate.
+    this.flinch = null;
+    this.struck = false;
+    // Whether its coming bolt is from the one who felled a mate, which no
+    // noise turns it from.
+    this.alarmed = false;
+    this.deadTime = 0;
+    // How far the body has sunk into the ground, 0 to 1.
+    this.sunk = 0;
+    this.killer = null;
     this.events = [];
+  }
+
+  get alive() {
+    return this.state !== 'dead';
+  }
+
+  // Ready to be removed once its body has sunk away.
+  get gone() {
+    return this.state === 'dead' && this.sunk >= 1;
   }
 
   setState(state, duration = 0) {
@@ -318,13 +374,17 @@ export class Animal {
       herd.flightFor = k.flee.min;
     }
     this.setState('flee', between(this.random, [k.flee.min, k.flee.max]));
+    this.safeAfter = k.flee.min;
     this.boltIn = null;
+    this.flinch = null;
+    this.struck = false;
+    this.alarmed = false;
     this.nextTurn = k.flee.zigzag ? between(this.random, k.flee.zigzag) : Infinity;
     this.blocked = 0;
     this.events.push({ type: 'bolt', x: this.x, y: this.y, strength: 1 });
     // The alarm runs through the herd.
     for (const mate of herd?.members ?? []) {
-      if (mate === this || mate.state === 'flee' || mate.boltIn !== null) continue;
+      if (mate === this || !mate.alive || mate.state === 'flee' || mate.boltIn !== null) continue;
       if (metres(mate.x - this.x, mate.y - this.y) > k.contagion.radius) continue;
       mate.boltIn = between(mate.random, k.contagion.delay);
       mate.threat = { x: from.x, y: from.y };
@@ -366,10 +426,63 @@ export class Animal {
     this.threat = { x: at.x, y: at.y };
   }
 
+  // A blow from a point. Inside the hurt window only a harder blow lands,
+  // and then only by what it adds to the last. A deer flinches, then bolts
+  // from it; a rabbit bolts at once; one already in flight runs on.
+  // Returns whether it struck home.
+  takeHit(damage, fromX, fromY) {
+    const k = this.kind;
+    if (!this.alive || !(damage > 0)) return false;
+    let amount = damage;
+    if (this.hurtFor > 0) {
+      if (damage <= this.lastHit) return false;
+      amount = damage - this.lastHit;
+    }
+    this.hurtFor = k.hurtWindow;
+    this.lastHit = damage;
+    this.health = Math.max(0, this.health - amount);
+    this.hurt = 0;
+    this.events.push({ type: 'hurt', amount, x: this.x, y: this.y, strength: Math.min(1, amount / 25) });
+    const from = { x: fromX, y: fromY };
+    if (this.health <= 0) {
+      this.setState('dead');
+      this.speed = 0;
+      this.groundSpeed = 0;
+      this.deadTime = 0;
+      this.boltIn = null;
+      this.flinch = null;
+      this.struck = false;
+      this.killer = from;
+      this.events.push({ type: 'death', x: this.x, y: this.y, strength: 1 });
+      return true;
+    }
+    this.threat = from;
+    if (this.state === 'flee') {
+      // Hurt in flight, it runs on for longer, however far off the hunter.
+      this.duration = Math.max(this.duration, this.stateTime + k.flee.min);
+      this.safeAfter = this.stateTime + k.flee.min;
+      return true;
+    }
+    if (!this.struck) {
+      const side = Math.sin(this.offsetTo(fromX, fromY).bearing - this.heading) > 0 ? 'L' : 'R';
+      this.flinch = k.flinch > 0 ? { side, left: k.flinch } : null;
+      this.boltIn = k.flinch;
+      this.struck = true;
+    }
+    return true;
+  }
+
   // One step of thought and movement. `threat` is the nearest thing it
   // fears ({ x, y, distance, running }) or null.
   update(dt, world, threat = null) {
     const k = this.kind;
+    this.hurt += dt;
+    this.hurtFor = Math.max(0, this.hurtFor - dt);
+    if (this.state === 'dead') {
+      this.deadTime += dt;
+      if (this.deadTime > k.linger) this.sunk = Math.min(1, (this.deadTime - k.linger) / k.sink);
+      return;
+    }
     // Its land let go of behind the player, it stands as it is: reading the
     // ground there would make the chunk again.
     if (!ready(world, this.x, this.y)) {
@@ -459,7 +572,7 @@ export class Animal {
       speed = k.fleeSpeed;
       turn = k.turn.flee;
       const safe = threat ? threat.distance > k.flee.safe : from.distance > k.flee.safe;
-      if (this.stateTime >= this.duration || (safe && this.stateTime >= k.flee.min)) {
+      if (this.stateTime >= this.duration || (safe && this.stateTime >= this.safeAfter)) {
         this.wary = k.flee.calm;
         if (world.typeAt(this.x, this.y) === WATER) {
           // Still in the stream: it wades on out to the nearest bank first.
@@ -481,6 +594,14 @@ export class Animal {
       if (this.stateTime >= this.duration) this.setState('idle', between(this.random, k.wander.idle));
     } else if (s === 'freeze' && this.stateTime >= this.duration) this.setState('idle', between(this.random, k.wander.idle));
 
+    // Struck, it stands in its flinch, turning a little toward the blow.
+    if (this.flinch) {
+      this.flinch.left -= dt;
+      speed = 0;
+      face = this.offsetTo(this.threat.x, this.threat.y).bearing;
+      turn = k.turn.calm;
+      if (this.flinch.left <= 0) this.flinch = null;
+    }
     if (face !== null) this.turnTowards(face, turn, dt);
     const depth = world.waterDepthAt(this.x, this.y);
     this.waterDepth += (depth - this.waterDepth) * (1 - Math.exp(-dt * 10));
@@ -508,7 +629,7 @@ export class Animal {
   // Herd mates keep a little room between them.
   separate(world, dt) {
     for (const mate of this.herd?.members ?? []) {
-      if (mate === this) continue;
+      if (mate === this || !mate.alive) continue;
       const { mx, mz, distance } = this.offsetTo(mate.x, mate.y);
       if (distance >= this.kind.herd.spacing * 0.8 || distance < 1e-6) continue;
       const push = (this.kind.herd.spacing * 0.8 - distance) * Math.min(1, dt * 2);
@@ -557,6 +678,12 @@ export class Animals {
     this.noises = [];
     this.debugHerds = 0;
     this.focus = null;
+    // Each region's kills this session, { count, stag }: its herd comes
+    // back that much smaller.
+    this.culled = new Map();
+    // What each of the fallen left, { x, y, killer, kind, items: [{ id,
+    // count }] }, spent by the game each frame like the events.
+    this.drops = [];
   }
 
   // A region's group, rolled once and kept (the newest 64).
@@ -569,13 +696,15 @@ export class Animals {
     return roll;
   }
 
+  // How many of a kind are alive; the fallen don't count.
   count(kind) {
-    return this.list.filter((a) => a.kind.id === kind).length;
+    return this.list.filter((a) => a.alive && a.kind.id === kind).length;
   }
 
   // Whether a group of a kind and size fits under the caps.
   fits(kind, size) {
-    return this.count(kind) + size <= (this.counts[kind] ?? 0) && this.list.length + size <= MAX_ANIMALS;
+    return this.count(kind) + size <= (this.counts[kind] ?? 0)
+      && this.list.filter((a) => a.alive).length + size <= MAX_ANIMALS;
   }
 
   // Puts a herd into the world, its first member leading.
@@ -613,8 +742,12 @@ export class Animals {
   // Lets every alarm go, for a quiet scene.
   calm() {
     for (const a of this.list) {
+      if (!a.alive) continue;
       a.setState('idle', between(a.random, a.kind.wander.idle));
       a.boltIn = null;
+      a.flinch = null;
+      a.struck = false;
+      a.alarmed = false;
       a.wary = 0;
     }
     for (const herd of this.herds.values()) herd.flightFor = 0;
@@ -643,11 +776,16 @@ export class Animals {
         if (this.herds.has(key)) continue;
         if (this.time - (this.released.get(key) ?? -Infinity) < RING.cooldown) continue;
         const roll = this.rollOf(world, rx, ry);
-        if (!roll || !this.fits(roll.kind.id, roll.size)) continue;
+        if (!roll) continue;
+        // A herd hunted this session comes back short of those it lost.
+        const culled = this.culled.get(key);
+        const size = roll.size - (culled?.count ?? 0);
+        if (size <= 0 || !this.fits(roll.kind.id, size)) continue;
         const d = metres(roll.home.x - player.x, roll.home.y - player.y);
         if (d < RING.near || d > RING.far || Animals.inView(view, roll.home.x, roll.home.y)) continue;
         const spots = [];
         for (const tries of roll.places) {
+          if (spots.length >= size) break;
           for (const [mx, mz] of tries) {
             const [dx, dy] = toCells(mx, mz);
             const x = roll.home.x + dx;
@@ -658,8 +796,9 @@ export class Animals {
             break;
           }
         }
-        if (spots.length < roll.size) continue;
-        this.place(key, roll.kind, spots, { stag: roll.stag, seed: roll.seed, heading: (roll.seed % 628) / 100 });
+        if (spots.length < size) continue;
+        this.place(key, roll.kind, spots, { stag: roll.stag && !culled?.stag, seed: roll.seed,
+          heading: (roll.seed % 628) / 100 });
       }
     }
   }
@@ -671,7 +810,7 @@ export class Animals {
     let loud = 0;
     if (e.type === 'strike') loud = LOUDNESS.strike;
     else if (e.type === 'slam' || e.type === 'whirl' || e.type === 'land') loud = (e.strength ?? 1) > 0.5 ? LOUDNESS[e.type] : 0;
-    else if ((e.type === 'death' || e.type === 'hurt') && e.monster) loud = LOUDNESS[e.type];
+    else if ((e.type === 'death' || e.type === 'hurt') && (e.monster || e.animal)) loud = LOUDNESS[e.type];
     else if (e.type === 'spell') loud = e.stage === 'cast' ? LOUDNESS.cast : e.stage === 'impact' ? LOUDNESS.impact : 0;
     else if (e.type === 'lightning') loud = LOUDNESS.lightning;
     else if (e.type === 'step') loud = (e.strength ?? 0) > 0.6 ? LOUDNESS.step : 0;
@@ -679,6 +818,111 @@ export class Animals {
     const at = Number.isFinite(e.x) && Number.isFinite(e.y) ? { x: e.x, y: e.y } : this.focus;
     if (!at) return;
     this.noises.push({ at, loud });
+  }
+
+  // A blow on an animal from a point; a killing blow leaves its drops,
+  // marks its region and sends its herd off. Returns whether it landed.
+  hit(animal, damage, fromX, fromY) {
+    const alive = animal.alive;
+    if (!animal.takeHit(damage, fromX, fromY)) return false;
+    if (alive && !animal.alive) this.fell(animal);
+    return true;
+  }
+
+  fell(animal) {
+    const items = rollDrops(animal.kind, this.random);
+    if (items.length) this.drops.push({ x: animal.x, y: animal.y, killer: animal.killer, kind: animal.kind.id, items });
+    const herd = animal.herd;
+    if (!herd) return;
+    if (!herd.key.startsWith('debug:')) {
+      const culled = this.culled.get(herd.key) ?? { count: 0, stag: false };
+      this.culled.set(herd.key, { count: culled.count + 1, stag: culled.stag || animal.variant === 'stag' });
+    }
+    if (herd.leader === animal) herd.leader = herd.members.find((a) => a.alive) ?? null;
+    // The rest of the herd runs from the killer, the alarm rippling through.
+    for (const mate of herd.members) {
+      if (!mate.alive || mate.state === 'flee' || mate.boltIn !== null) continue;
+      if (metres(mate.x - animal.x, mate.y - animal.y) > animal.kind.contagion.radius) continue;
+      mate.boltIn = between(mate.random, animal.kind.contagion.delay);
+      mate.threat = { ...animal.killer };
+      mate.alarmed = true;
+    }
+  }
+
+  // A sword cut from the player (a 'strike' event) hits every animal in
+  // reach in front of them, or all round for a spinning slash, as it does
+  // monsters. Returns the animals hit.
+  strike(event, player, damage) {
+    const reach = player.feel?.reach ?? 0.95;
+    const all = event.swing === 'spin';
+    const hit = [];
+    for (const a of [...this.list]) {
+      if (!a.alive) continue;
+      const [mx, mz] = toMetres(a.x - player.x, a.y - player.y);
+      const distance = Math.hypot(mx, mz);
+      if (distance > reach + a.kind.radius) continue;
+      const off = Math.abs(wrap(Math.atan2(mx, mz) - player.heading));
+      if (!all && distance > 0.5 && off > 1.25) continue;
+      if (this.hit(a, damage, player.x, player.y)) hit.push(a);
+    }
+    return hit;
+  }
+
+  // Checks each arrow, spear and javelin's path this frame (from where it
+  // was in `before`) against the animals' bodies: the first animal it
+  // passes within a body's width of, at a height the body stands at, is
+  // struck. The harder the draw, the harder the hit. An arrow that strikes
+  // is spent; a spear or javelin falls at the animal's feet. Returns the
+  // ids of the shafts that struck.
+  shots(projectiles, before, shooter = null) {
+    const struck = new Set();
+    for (const [p, from] of before) {
+      if (!SHAFTS.has(p.kind)) continue;
+      let best = null;
+      for (const a of this.list) {
+        if (!a.alive) continue;
+        const [ax, az] = toMetres(from.x - a.x, from.y - a.y);
+        const [bx, bz] = toMetres(p.x - a.x, p.y - a.y);
+        const dx = bx - ax;
+        const dz = bz - az;
+        const length2 = dx * dx + dz * dz;
+        const t = length2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + az * dz) / length2)) : 0;
+        const near = Math.hypot(ax + dx * t, az + dz * t);
+        const height = (from.h + (p.h - from.h) * t) / SCALE;
+        const stag = a.variant === 'stag' ? 1.1 : 1;
+        if (near > a.kind.radius * stag || height < -0.2 || height > a.kind.hitHeight * stag) continue;
+        if (!best || t < best.t) best = { a, t };
+      }
+      if (!best) continue;
+      const damage = Math.round((p.damage ?? 0) * (ARROW_FLOOR + (1 - ARROW_FLOOR) * Math.max(0, Math.min(1, p.strength ?? 1))));
+      const at = shooter ?? from;
+      if (!this.hit(best.a, damage, at.x, at.y)) continue;
+      struck.add(p.id);
+      projectiles.list = projectiles.list.filter((q) => q !== p);
+      projectiles.landed = projectiles.landed.filter((q) => q !== p);
+      if (p.kind === 'arrow') continue;
+      // A thrown weapon drops where the animal stood, to be taken up again.
+      const ux = p.vx * ASPECT;
+      const uy = p.vy - p.vh;
+      const length = Math.hypot(ux, uy) || 1;
+      Object.assign(p, { x: best.a.x, y: best.a.y, h: 0, depth: best.a.y, prop: null, impacted: true, life: 0,
+        trail: [], orientation: { x: ux / length, y: uy / length } });
+      projectiles.landed.push(p);
+    }
+    return struck;
+  }
+
+  // A shaft landing near animals startles them: those within a few metres
+  // bolt from it, those a little further off look up.
+  landed(x, y) {
+    if (this.enabled) this.noises.push({ at: { x, y }, loud: LOUDNESS.shot });
+  }
+
+  // Debug: a blow on one animal (or the one at an index), lethal by default.
+  hurt(which, damage = 999, from = null) {
+    const a = typeof which === 'number' ? this.list[which] : which;
+    if (!a) return false;
+    return this.hit(a, damage, from?.x ?? a.x, from?.y ?? a.y - 1);
   }
 
   // The things an animal of a kind fears, nearest first.
@@ -726,6 +970,9 @@ export class Animals {
     }
     for (const { at, loud } of this.noises) {
       for (const a of this.list) {
+        // The fallen hear nothing; one struck runs on its own blow's clock,
+        // and one a fall alarmed runs from the killer, not the body's cry.
+        if (!a.alive || a.struck || a.alarmed) continue;
         const r = Math.min(loud, a.kind.senses.noise);
         const d = metres(at.x - a.x, at.y - a.y);
         if (d < r) {
@@ -736,9 +983,17 @@ export class Animals {
     this.noises.length = 0;
     for (const herd of this.herds.values()) herd.flightFor -= dt;
     for (const a of this.list) {
-      a.update(dt, world, this.nearestThreat(a, threats));
+      a.update(dt, world, a.alive ? this.nearestThreat(a, threats) : null);
       for (const e of a.events) this.events.push({ ...e, animal: a });
       a.events.length = 0;
+    }
+    // Bodies that have sunk away are cleared, and herds with nobody left.
+    if (this.list.some((a) => a.gone)) {
+      this.list = this.list.filter((a) => !a.gone);
+      for (const [key, herd] of this.herds) {
+        herd.members = herd.members.filter((a) => !a.gone);
+        if (!herd.members.length) this.herds.delete(key);
+      }
     }
   }
 }
