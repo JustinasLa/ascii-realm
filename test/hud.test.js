@@ -322,3 +322,24 @@ test('the prompt, extra frame notes, name and party frames show what they are gi
   assert.equal(members.length, 0);
   assert.equal(tab.hidden, true);
 });
+
+test('an unchanged target leaves the frame\'s DOM untouched', (t) => {
+  const { document, hud } = mount(t);
+  const frame = byClass(document.body, 'hud-target')[0];
+  hud.setTarget({ id: 'monster:3', name: 'Goblin', health: 22.4, maxHealth: 35, note: 'enraged', slain: false });
+  hud.update(0, view);
+  const writes = [];
+  for (const node of [frame, ...allElements(frame, () => true)]) {
+    const setAttribute = node.setAttribute.bind(node);
+    node.setAttribute = (name, value) => {
+      writes.push(name);
+      setAttribute(name, value);
+    };
+  }
+  for (let i = 0; i < 3; i++) {
+    hud.setTarget({ id: 'monster:3', name: 'Goblin', health: 22.4, maxHealth: 35, note: 'enraged', slain: false });
+    hud.update(0, view);
+  }
+  assert.deepEqual(writes, []);
+  assert.equal(byClass(frame, 'hud-target-health')[0].getAttribute('aria-valuetext'), 'Goblin, 22.4 of 35');
+});

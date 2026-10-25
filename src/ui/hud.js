@@ -163,8 +163,9 @@ export class Hud {
     this.update(0);
   }
 
-  // `round` turns the current value into the number shown.
-  updateVital(vital, value, maximum, round = Math.round) {
+  // `round` turns the current value into the number shown; `label` leads
+  // the spoken value.
+  updateVital(vital, value, maximum, round = Math.round, label = '') {
     const available = Number.isFinite(value) && Number.isFinite(maximum) && maximum > 0;
     const max = available ? maximum : 1;
     const current = available ? clamp(value, 0, max) : 0;
@@ -173,7 +174,7 @@ export class Hud {
     text(vital.value, available ? `${round(current)}/${Math.round(max)}` : '--/--');
     attribute(vital.node, 'aria-valuemax', number(max));
     attribute(vital.node, 'aria-valuenow', number(current));
-    attribute(vital.node, 'aria-valuetext', available ? `${number(current)} of ${number(max)}` : 'Unavailable');
+    attribute(vital.node, 'aria-valuetext', `${label}${available ? `${number(current)} of ${number(max)}` : 'Unavailable'}`);
   }
 
   updateHotbar() {
@@ -244,9 +245,8 @@ export class Hud {
     text(this.targetNote, view.note || '');
     this.targetFrame.classList.toggle('slain', Boolean(view.slain));
     // A foe on its last sliver of health never reads 0 until it falls.
-    this.updateVital(this.targetHealth, view.health, view.maxHealth, view.slain ? Math.round : Math.ceil);
-    const value = this.targetHealth.node.getAttribute('aria-valuetext');
-    attribute(this.targetHealth.node, 'aria-valuetext', `${name}${view.slain ? ', slain' : ''}, ${value}`);
+    this.updateVital(this.targetHealth, view.health, view.maxHealth, view.slain ? Math.round : Math.ceil,
+      `${name}${view.slain ? ', slain' : ''}, `);
   }
 
   // Wounded enemies to show a health bar over, in the segmented style of the
