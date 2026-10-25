@@ -30,6 +30,16 @@ lobbies do not synchronize enemies or add PvP damage, shared loot or competitive
 movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
 the browser uses its native WebSocket API.
 
+Warm light (`drawFireLight` in `world/fire.js`, used by torches, fires and
+spells) rakes across stone by the way it faces (`world/surface-light.js`).
+The renderer keeps a normal, gloss and water clarity per cell (`cellLit`,
+written by the water shader for riverbed stone glyphs and copied with the
+cached ground) and per small cell (`fineLit`, written by `fineAt` from a
+rock's fine bake). Anything else drawn over a stone clears it, so it is lit
+evenly. Shading is done in the world's frame with the light at its own
+height over the ground; a rock not yet fine-baked is lit evenly. `?debug&pintime=<s>`
+freezes the world and holds the render clock, for pixel comparisons.
+
 River debris (`world/debris.js`) is local to each player. Each frame, after
 the player and the monsters have moved, it is handed the bodies standing in
 the water, works out how each moved, and settles every meeting of a body and

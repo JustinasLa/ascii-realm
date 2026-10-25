@@ -18,6 +18,8 @@ export const STONE = 4;
 export const ASPECT = 6 / 10;
 
 const CHUNK = 64;
+// How near water a rock stands to be damp, in cells.
+const DAMP_REACH = 3;
 // Blows needed to fell a tree.
 export const TREE_HITS = 3;
 // Rows of bare ground kept in front of a rock so grass cannot hide its face.
@@ -593,6 +595,7 @@ export class World {
         if (this.burntTrees.has(prop.id)) prop.burnt = true;
         const burning = this.burningTrees.get(prop.id);
         if (burning) prop.burning = burning;
+        if (prop.kind === 'rock' && !prop.wet && this.byWater(prop)) prop.damp = true;
         // Grass is only cleared the first time; it stays bare after eviction.
         if (!this.coveredChunks.has(chunkKey(cx, cy))) this.coverGrass(prop, 1);
       });
@@ -617,6 +620,19 @@ export class World {
   // The local surface layer determines which loose stones are scattered here.
   rockTypeAt(x, y) {
     return rockTypeAt(this, x, y);
+  }
+
+  // Whether water lies within DAMP_REACH cells of a prop's foot: a rock
+  // there is damp, and glints a little in torchlight.
+  byWater(prop) {
+    const w = (prop.footW ?? 0) + DAMP_REACH;
+    const h = (prop.footH ?? 0) + DAMP_REACH;
+    for (let a = 0; a < 16; a++) {
+      const x = prop.x + Math.cos(a * Math.PI / 8) * w;
+      const y = prop.y + Math.sin(a * Math.PI / 8) * h;
+      if (this.typeAt(Math.floor(x), Math.floor(y)) === WATER) return true;
+    }
+    return false;
   }
 
   // Whether a prop's footing reaches into river water.

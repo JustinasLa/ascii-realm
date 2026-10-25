@@ -25,6 +25,7 @@ import { ASPECT } from '../world/world.js';
 import { FINE } from './cells.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
 import { FOG, FOG_PILED, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
+import { GLINT, normalOf, shadeFactors } from '../world/surface-light.js';
 
 // An rgb triple as a GLSL vec3 literal.
 // How much of a cell's ground colour shows behind its glyph.
@@ -472,10 +473,19 @@ export class AsciiRenderer {
     this.motionUsed = false;
     // Terrain type under each cell, so later passes know where water is.
     this.mask = new Uint8Array(cols * rows);
+    // How a cell's stone faces the light, for warm light to rake across
+    // it (see world/surface-light.js): normal x and y, gloss (0 for no
+    // normal: lit evenly) and how clearly light reaches it through water.
+    this.cellLit = new Uint8Array(cols * rows * 4);
+    this.litFactors = { diffuse: 0, spec: 0 };
     this.fineCols = cols * FINE;
     this.fineRows = rows * FINE;
     this.fine = new Uint8ClampedArray(this.fineCols * this.fineRows * 4);
     this.fineBg = new Uint8ClampedArray(this.fineCols * this.fineRows * 4);
+    // The same for each small cell: normal x and y, gloss, and its height
+    // over the ground the sprite stands on, in small cells. Only read
+    // where a sprite is drawn; every write of a small cell sets its gloss.
+    this.fineLit = new Uint8Array(this.fineCols * this.fineRows * 4);
     // Cells holding any small cell of a sprite, so plain cells skip them.
     this.fineMark = new Uint8Array(cols * rows);
     this.fineUsed = false;
@@ -513,6 +523,8 @@ export class AsciiRenderer {
     this.fg[i + 3] = glyphIndex & 255;
     this.bg[i + 3] = glyphIndex >> 8;
     this.ov[i + 3] = 0;
+    // Whatever is drawn over a stone is no stone: it takes light evenly.
+    if (this.cellLit) this.cellLit[i + 2] = 0;
     if (this.motionUsed) {
       this.motion[i] = this.motion[i + 1] = 0;
       this.motion[i + 2] = (this.motionPass * 2) & 255;
@@ -620,12 +632,52 @@ export class AsciiRenderer {
     }
   }
 
+  // Warm light on the small cells of a cell, raking across the stone ones
+  // by the way they face (see world/surface-light.js): k is the light's
+  // strength there, (lx, gy) its point on the ground in cells and rows and
+  // h its height in rows. Small cells without a normal take it evenly, as
+  // lightFine gives it; a stone's backdrop only takes its share of the
+  // even light, so a glint lands on the letter and never fills the cell.
+  lightFineLit(cell, k, lx, gy, h, cr, cg, cb, ground = 0.2) {
+    const cx = cell % this.cols;
+    const cy = (cell - cx) / this.cols;
+    const { fine, fineBg, fineLit } = this;
+    const lit = this.litFactors;
+    for (let j = 0; j < FINE; j++) {
+      const fy = cy * FINE + j;
+      let at = (fy * this.fineCols + cx * FINE) * 4;
+      for (let i = 0; i < FINE; i++, at += 4) {
+        if (fineBg[at + 3] < FINE_SET) continue;
+        const gloss = fineLit[at + 2];
+        let d = 1, s = 0;
+        if (gloss) {
+          // The small cell's place: its ground row lies below it by its
+          // height over the ground.
+          const lift = fineLit[at + 3] / FINE;
+          shadeFactors(normalOf(fineLit[at]), normalOf(fineLit[at + 1]),
+            (lx - (cx + (i + 0.5) / FINE)) * ASPECT, gy - ((fy + 0.5) / FINE + lift), h - lift, gloss, lit);
+          d = lit.diffuse;
+          s = lit.spec * k;
+        }
+        fine[at] += cr * k * d + GLINT[0] * s;
+        fine[at + 1] += cg * k * d + GLINT[1] * s;
+        fine[at + 2] += cb * k * d + GLINT[2] * s;
+        fineBg[at] += cr * k * d * ground;
+        fineBg[at + 1] += cg * k * d * ground;
+        fineBg[at + 2] += cb * k * d * ground;
+      }
+    }
+  }
+
   // Draws a glyph into one small cell of the fine grid, given in small
   // cells (FINE to a cell). With a backdrop colour the small cell is solid
   // and blots out the ground behind it; without one, a glyph laid over a
   // solid small cell keeps that backdrop. A solid small cell rings itself
   // with an outline of nothing of the given strength (see FINE_HALO).
-  fineAt(fx, fy, glyphIndex, r, g, b, br, bgG, bb, halo = FINE_HALO) {
+  // A stone's small cells also say how they face the light: their normal,
+  // byte gloss and height over the ground in small cells (see fineLit);
+  // anything else is drawn with gloss 0 and takes light evenly.
+  fineAt(fx, fy, glyphIndex, r, g, b, br, bgG, bb, halo = FINE_HALO, nx = 0, ny = 0, gloss = 0, lift = 0) {
     if (fx < 0 || fy < 0 || fx >= this.fineCols || fy >= this.fineRows) return;
     const i = (fy * this.fineCols + fx) * 4;
     const glyphOnly = glyphIndex & GLYPH_MASK;
@@ -644,6 +696,12 @@ export class AsciiRenderer {
     this.fine[i + 2] = b;
     this.fine[i + 3] = glyphOnly & 255;
     this.fineBg[i + 3] = flags;
+    if (this.fineLit) this.fineLit[i + 2] = gloss;
+    if (gloss) {
+      this.fineLit[i] = nx;
+      this.fineLit[i + 1] = ny;
+      this.fineLit[i + 3] = lift;
+    }
     this.fineMark[((fy / FINE) | 0) * this.cols + ((fx / FINE) | 0)] = 1;
     this.fineUsed = true;
   }
@@ -701,6 +759,7 @@ export class AsciiRenderer {
     this.fg[i + 3] = glyphIndex & 255;
     this.bg[i + 3] = (glyphIndex & GLYPH_MASK) >> 8;
     this.ov[i + 3] = 0;
+    if (this.cellLit) this.cellLit[i + 2] = 0;
     if (this.motionUsed) {
       this.motion[i] = this.motion[i + 1] = 0;
       this.motion[i + 2] = (this.motionPass * 2) & 255;

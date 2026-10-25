@@ -18,7 +18,9 @@ function groundOf(chunk, seed) {
   let cached = terrain.get(chunk);
   if (cached?.version === version) return cached;
   const n = CHUNK_SIZE * CHUNK_SIZE * 4;
-  const out = { fg: new Uint8ClampedArray(n), bg: new Uint8ClampedArray(n), ov: new Uint8ClampedArray(n) };
+  // cellLit: how riverbed stones face the light (see surface-light.js).
+  const out = { fg: new Uint8ClampedArray(n), bg: new Uint8ClampedArray(n), ov: new Uint8ClampedArray(n),
+    cellLit: new Uint8Array(n) };
   const animated = [];
   for (let y = 0; y < CHUNK_SIZE; y++) {
     const row = [];
@@ -69,6 +71,7 @@ export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false
           r.bg[o + 1] = NIGHT[1];
           r.bg[o + 2] = NIGHT[2];
           r.bg[o + 3] = 0;
+          if (r.cellLit) r.cellLit[o + 2] = 0;
           r.mask[sy * r.cols + sx + i] = GRASS;
         }
         sx += count;
@@ -80,6 +83,7 @@ export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false
       r.fg.set(cached.fg.subarray(src * 4, (src + count) * 4), dest * 4);
       r.bg.set(cached.bg.subarray(src * 4, (src + count) * 4), dest * 4);
       r.ov.set(cached.ov.subarray(src * 4, (src + count) * 4), dest * 4);
+      r.cellLit?.set(cached.cellLit.subarray(src * 4, (src + count) * 4), dest * 4);
       r.mask.set(chunk.type.subarray(src, src + count), dest);
       for (const x of cached.animated[ly]) {
         if (x < lx || x >= lx + count) continue;
