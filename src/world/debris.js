@@ -78,6 +78,7 @@ const FOAM = family('water.foam.');
 const VEE = family('water.vee.');
 const CREST = [146, 172, 220];
 const UNDER = [26, 40, 70];
+const WATER_INK = [0, 0, 0];
 
 // The slow rise and fall of a floating piece: it rises to its shallowest
 // draft at `speed`, then sinks at half that to its deepest, and keeps going
@@ -589,12 +590,19 @@ export class Debris {
     return Math.min(1, piece.draft + piece.sinking * (1 - piece.draft));
   }
 
+  // Whether a cell of a piece shows at its fade. Fading in or out, a piece
+  // comes and goes cell by cell, the same cells first each time, so at no
+  // fade nothing of it is drawn and the water behind shows through.
+  shows(piece, x, y, salt = 0) {
+    return hash2(x, y, piece.id * 7 + salt) < piece.fade;
+  }
+
   // A piece in small letters on the fine grid: what is above the water on
   // a dark backdrop with its outline of nothing, growing from none at the
   // waterline; what is under it dim and seen through the water.
   draw(r, view, piece) {
     const baked = this.bakeFor(piece);
-    if (!baked) return;
+    if (!baked || piece.fade <= 0) return;
     const draft = this.drawDraft(piece);
     const sinkRows = draft * piece.model.top * SCALE;
     const fade = piece.fade;
@@ -602,7 +610,7 @@ export class Debris {
       const bx = Math.floor(piece.x) - view.x0;
       const by = Math.floor(piece.y + sinkRows) - view.y0;
       for (const c of baked.cells) {
-        if ((c.h ?? 1) < draft) continue;
+        if ((c.h ?? 1) < draft || !this.shows(piece, c.dx, c.dy)) continue;
         putCell(r, bx + c.dx, by + c.dy, c.g, c.r * fade, c.gg * fade, c.b * fade, by, c.br, c.bgG, c.bb);
       }
       return;
@@ -613,18 +621,32 @@ export class Debris {
     for (const c of baked.fine) {
       const h = c.h ?? lastH;
       lastH = h;
+      if (!this.shows(piece, c.dx, c.dy)) continue;
+      const fx = fx0 + c.dx, fy = fy0 + c.dy;
       if (h < draft) {
-        // Under the surface: dim, toward the water's colour, no backdrop.
+        // Under the surface: dim, toward the colour of the water above it,
+        // more so as it fades, and no backdrop.
         const w = 0.35 * fade;
-        r.fineAt(fx0 + c.dx, fy0 + c.dy, c.g, c.r * w + UNDER[0] * (1 - w), c.gg * w + UNDER[1] * (1 - w),
-          c.b * w + UNDER[2] * (1 - w), undefined, undefined, undefined, 0);
+        const under = this.waterColour(r, fx, fy);
+        r.fineAt(fx, fy, c.g, c.r * w + under[0] * (1 - w), c.gg * w + under[1] * (1 - w),
+          c.b * w + under[2] * (1 - w), undefined, undefined, undefined, 0);
         continue;
       }
       const halo = Math.round(15 * Math.max(0, Math.min(1, (h - draft) / 0.5)) * fade);
-      r.fineAt(fx0 + c.dx, fy0 + c.dy, c.g, c.r * fade, c.gg * fade, c.b * fade,
+      r.fineAt(fx, fy, c.g, c.r * fade, c.gg * fade, c.b * fade,
         c.br === undefined ? undefined : c.br * fade, c.bgG === undefined ? undefined : c.bgG * fade,
         c.bb === undefined ? undefined : c.bb * fade, halo);
     }
+  }
+
+  // The colour of the water's own letter in the cell under a small cell.
+  waterColour(r, fx, fy) {
+    const x = Math.floor(fx / FINE), y = Math.floor(fy / FINE);
+    if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) return UNDER;
+    const i = (y * r.cols + x) * 4;
+    if (!r.fg[i + 3]) return UNDER;
+    WATER_INK[0] = r.fg[i]; WATER_INK[1] = r.fg[i + 1]; WATER_INK[2] = r.fg[i + 2];
+    return WATER_INK;
   }
 
   // Its mirror image in the water, each cell about its own waterline.
@@ -640,7 +662,7 @@ export class Debris {
       const h = c.h ?? lastH;
       const depth = c.depth ?? lastDepth;
       lastH = h; lastDepth = depth;
-      if (h < draft) continue;
+      if (h < draft || !this.shows(piece, c.dx, c.dy, 1)) continue;
       mirror(r, bx + c.dx, Math.floor(y + sink + c.dy), c.g, c.r * piece.fade, c.gg * piece.fade, c.b * piece.fade,
         Math.floor(y + depth));
     }
@@ -675,8 +697,8 @@ export class Debris {
           const upstream = rel > 1e-3 && (o.x * rx + o.y * ry) < 0 ? 1.6 : 1;
           if (hash2(wx, wy, tick + piece.id * 31) >= Math.min(0.85, weight * 0.5 * upstream)) continue;
           const k = 0.55 + 0.3 * Math.min(1, rel * 3);
-          r.layerAt(cell, FOAM[Math.floor(hash2(wx, wy, piece.id) * FOAM.length)], CREST[0] * k * piece.fade,
-            CREST[1] * k * piece.fade, CREST[2] * k * piece.fade);
+          r.layerAt(cell, FOAM[Math.floor(hash2(wx, wy, piece.id) * FOAM.length)], CREST[0] * k, CREST[1] * k,
+            CREST[2] * k);
         }
       }
       if (rel > 0.08) this.drawWake(r, view, piece, rx / rel, ry / rel, rel, time);
@@ -700,8 +722,8 @@ export class Debris {
         if (sx < 0 || sy < 0 || sx >= r.cols || sy >= r.rows) continue;
         const cell = sy * r.cols + sx;
         if (r.mask[cell] !== WATER || FLOATING[r.glyphAt(cell)]) continue;
-        if (((i + Math.floor(time * 6)) & 3) === 3) continue;
-        const k = (0.75 - 0.4 * i / steps) * Math.min(1, rel * 4) * piece.fade;
+        if (((i + Math.floor(time * 6)) & 3) === 3 || !this.shows(piece, i, s, 2)) continue;
+        const k = (0.75 - 0.4 * i / steps) * Math.min(1, rel * 4);
         const g = VEE[screenOrientation(dx - dy * s * 0.36, dy + dx * s * 0.36)];
         r.layerAt(cell, g, CREST[0] * k, CREST[1] * k, CREST[2] * k);
       }

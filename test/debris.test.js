@@ -575,6 +575,65 @@ test('a piece is drawn in small letters on a dark backdrop above the water, dim 
   d.reflect(r, v, p, () => assert.fail('nothing baked'));
 });
 
+test('a piece fading out leaves the water as it was, cell by cell, and at no fade draws nothing', () => {
+  const world = channel({ half: 0.8, speed: 0.6 });
+  const d = new Debris({ random: mulberry32(1), world });
+  const v = view(-30, -15, 60, 30);
+  const p = d.spawn('log', { x: 0, y: 0, angle: 0 });
+  // Half sunk, so it has letters both above and below the water, and held
+  // still, so the water runs past it and throws foam and a wake.
+  p.draft = 0.5;
+  p.vx = p.vy = 0;
+  // The water's own letters, which a faded piece must leave untouched.
+  const water = () => {
+    const r = renderer();
+    for (let i = 0; i < r.cols * r.rows; i++) r.putAt(i, 1, 40, 60, 110);
+    return r;
+  };
+  const frame = (fade) => {
+    p.fade = fade;
+    const r = water();
+    const before = { fg: r.fg.slice(), fine: r.fineBg.slice() };
+    d.draw(r, v, p);
+    let mirrored = 0;
+    d.reflect(r, v, p, () => mirrored++);
+    const fine = fineCells(r).set;
+    d.drawSurface(r, v, 0.5);
+    let glyphs = 0;
+    for (let i = 0; i < r.fg.length; i++) if (r.fg[i] !== before.fg[i]) glyphs++;
+    let halo = 0;
+    for (let i = 3; i < r.fineBg.length; i += 4) if (r.fineBg[i] !== before.fine[i]) halo++;
+    return { fine, mirrored, glyphs, halo };
+  };
+  const full = frame(1), half = frame(0.5), none = frame(0);
+  assert.ok(full.fine > 20 && full.mirrored > 5 && full.glyphs > 0);
+  assert.deepEqual(none, { fine: 0, mirrored: 0, glyphs: 0, halo: 0 });
+  // Halfway, about half of it shows, and nothing of it that the whole
+  // piece does not show.
+  assert.ok(half.fine > full.fine * 0.3 && half.fine < full.fine * 0.7, `${half.fine} of ${full.fine}`);
+  assert.ok(half.mirrored < full.mirrored);
+  // Under the water, a fading letter takes the colour of the water's own.
+  p.fade = 0.2;
+  const r = water();
+  d.draw(r, v, p);
+  let under = 0;
+  for (let i = 0; i < r.fine.length; i += 4) {
+    if (!(r.fineBg[i + 3] & 16) || (r.fineBg[i + 3] & 32)) continue;
+    under++;
+    assert.ok(Math.abs(r.fine[i] - 40) < 20 && Math.abs(r.fine[i + 2] - 110) < 20, `${r.fine[i]},${r.fine[i + 2]}`);
+  }
+  assert.ok(under > 0);
+  // Without a fine grid, too.
+  const coarse = water();
+  coarse.fine = null;
+  p.fade = 0;
+  const was = coarse.fg.slice();
+  d.draw(coarse, v, p);
+  assert.deepEqual(coarse.fg, was);
+  // A small cell off the screen, or over no letter, is tinted like the night water.
+  assert.deepEqual(d.waterColour(renderer(), -1, 0), d.waterColour(renderer(), 4, 4));
+});
+
 test('foam hugs a piece and a snagged one throws a V-wake downstream', () => {
   const world = channel({ half: 0.8, speed: 0.6 });
   const d = new Debris({ random: mulberry32(2), world });
