@@ -448,6 +448,42 @@ test('a deer whose flight ends mid-stream wades on out to the bank, then calms',
   assert.ok(wide.animal.x <= 3);
 });
 
+test('a deer held mid-stream past its jumpiness keeps wading out when a walker is near', () => {
+  const [bank] = toCells(4, 0);
+  let blocked = true;
+  const river = (x) => Math.abs(x) < bank;
+  const world = land({ water: river, solid: (x) => blocked && Math.abs(x) > 2 });
+  const { animals, animal } = lone('deer');
+  animal.heading = Math.PI / 2;
+  animal.away = Math.PI / 2;
+  animal.setState('wade');
+  animal.wary = KINDS.deer.flee.calm;
+  // A walker keeps 7 m off: too far to bolt from, near enough to watch.
+  const player = walker(0, 0, 1.4);
+  const keepOff = () => Object.assign(player, at(animal, 0, -7));
+  keepOff();
+  let looked = false;
+  const each = () => {
+    keepOff();
+    if (animal.looking) looked = true;
+    if (river(animal.x)) assert.equal(animal.state, 'wade', `a ${animal.state} deer in the water`);
+  };
+  run(animals, world, player, 14, each);
+  assert.ok(river(animal.x), 'the crossing was held');
+  assert.equal(animal.wary, 0);
+  assert.ok(looked, 'it keeps an eye on the walker');
+  blocked = false;
+  run(animals, world, player, 6, each);
+  assert.ok(!river(animal.x), 'it reaches the bank');
+  // Calmed by hand while in the water, it still wades out.
+  const still = lone('deer');
+  still.world = land({ water: river });
+  still.animals.calm();
+  still.animals.update(dt, still.world, { player: walker(1e6, 0) });
+  assert.equal(still.animal.state, 'wade');
+  assert.ok(still.animal.target);
+});
+
 test('a hemmed-in deer stops and looks for another way', () => {
   const box = (x, y) => Math.abs(x) > 12 || Math.abs(y) > 4;
   const { animals, animal, world } = lone('deer', land({ solid: box }));

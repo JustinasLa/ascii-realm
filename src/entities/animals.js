@@ -388,8 +388,10 @@ export class Animal {
       const notice = this.wary > 0 ? k.senses.notice / 2 : k.senses.notice;
       if (d < k.senses.bolt || (threat.running && d < k.senses.boltRunning)) this.bolt(world, threat);
       else if (this.state !== 'freeze' && (threat.moving ? d < notice : d < notice / 2)) {
-        // Only one coming closer keeps it watching.
-        if (this.state !== 'alert' || d < this.alertAt - 0.3) {
+        // Still in the stream it keeps on for the bank, an eye on the threat;
+        // only one coming closer keeps it watching.
+        if (this.state === 'wade') this.looking = true;
+        else if (this.state !== 'alert' || d < this.alertAt - 0.3) {
           this.alert(threat);
           this.stateTime = 0;
           this.alertAt = d;
@@ -405,6 +407,11 @@ export class Animal {
       && metres(leader.x - this.x, leader.y - this.y) > k.herd.cohesion) {
       this.target = this.pickTarget(world);
       if (this.target) this.setState('wander', 12);
+    }
+    // Whatever else it was doing, a deer standing in water wades out first.
+    if (!this.inFlight && k.water !== 'never' && world.typeAt(this.x, this.y) === WATER) {
+      this.setState('wade');
+      this.target = this.nearestBank(world);
     }
     const s = this.state;
     if (s === 'idle') {
