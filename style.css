@@ -446,7 +446,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 100px); width: calc(100vw - 24px); }
 }
 @media (max-width: 520px) {
-  #chat { bottom: calc(max(128px, calc(env(safe-area-inset-bottom) + 128px)) + 140px); }
+  #chat { bottom: calc(max(128px, calc(env(safe-area-inset-bottom) + 128px)) + 148px); }
 }
 /* Touch screens that aren't phones keep the stick, so the log sits above
    the raised quick slots. */
