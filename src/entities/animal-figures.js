@@ -4,9 +4,10 @@ import { glyph } from '../render/glyphs.js';
 import { ASPECT, WATER } from '../world/world.js';
 import { KINDS } from './animals.js';
 import { ModelFigure, outline } from './model.js';
+import { engaged } from './predators.js';
 import { SCALE, TILT } from './rig.js';
 
-// Deer and rabbits drawn the way the player and monsters are: rigged models
+// Deer, rabbits and wolves drawn the way the player and monsters are: rigged models
 // playing their own authored clips, rendered from the game's camera into
 // slots of one offscreen image, read back in one go and turned into cells.
 // Each model is scaled at load so its withers stand at the kind's height,
@@ -20,10 +21,14 @@ const ROWS = 36;
 const MAX_COLS = 120;
 const MAX_ROWS = 60;
 const PAD = 2;
-// At most this many are drawn, nearest the player first.
+// At most this many are drawn: wolves on the hunt near the player first,
+// then anything in flight, then the nearest.
 export const MAX_DRAWN = 6;
 export const MAX_DRAWN_PHONE = 4;
 const COS = Math.sqrt(1 - TILT * TILT);
+
+// Wolves this near the player, metres, are drawn before anything else.
+const PRIORITY = 25;
 
 const RAMP = [...' .:-=+*#%@'].map(glyph);
 // A softer rim and gain than the monsters': animals are part of the land,
@@ -46,6 +51,15 @@ export const LOOKS = {
     }) },
   stag: { url: 'assets/animals/stag.glb', kind: 'deer', withers: 'Neck1', head: 'Head', hips: 'Body',
     foot: 'FrontLowerLeg.L_end', flesh: 0.22, shadow: [0.75, 0.27],
+    legs: ['FrontUpperLeg.L', 'FrontUpperLeg.R', 'BackUpperLeg.L', 'BackUpperLeg.R'].map((upper) => {
+      const lower = upper.replace('Upper', 'Lower');
+      return [upper, lower, `${lower}_end`];
+    }) },
+  // The wolf's head-low clip moves only its neck, head and ears, so it can
+  // lay over the walk without touching the legs.
+  wolf: { url: 'assets/animals/wolf.glb', kind: 'wolf', withers: 'Neck1', head: 'Head', hips: 'Body',
+    foot: 'FrontLowerLeg.L_end', flesh: 0.16, shadow: [0.6, 0.2],
+    masks: { headLow: ['Neck1', 'Neck2', 'Neck3', 'Head', 'Ear1L', 'Ear2L', 'Ear3L', 'Ear4L', 'Ear1R', 'Ear2R', 'Ear3R', 'Ear4R'] },
     legs: ['FrontUpperLeg.L', 'FrontUpperLeg.R', 'BackUpperLeg.L', 'BackUpperLeg.R'].map((upper) => {
       const lower = upper.replace('Upper', 'Lower');
       return [upper, lower, `${lower}_end`];
@@ -114,8 +128,8 @@ class Rig {
       action.setEffectiveWeight(0);
       this.actions[key] = action;
     }
-    // The fall and the hit-reacts play once and hold their last pose.
-    for (const key of ['death', 'dead', 'hitL', 'hitR']) {
+    // The fall, the hit-reacts and the bite play once and hold their last pose.
+    for (const key of ['death', 'dead', 'hitL', 'hitR', 'attack']) {
       if (!this.actions[key]) continue;
       this.actions[key].setLoop(THREE.LoopOnce, 1);
       this.actions[key].clampWhenFinished = true;
@@ -132,18 +146,19 @@ class Rig {
     this.weights = Object.fromEntries(Object.keys(this.actions).map((k) => [k, 0]));
     this.state = null;
     this.flinch = null;
+    this.swing = null;
     this.flash = 0;
     this.ground = 0;
   }
 
   // The clip weights for what the animal is doing: standing, grazing with
-  // its head now down and now up, watching, or on the move at a gait whose
-  // rate keeps its feet planted.
+  // its head now down and now up, watching, biting, or on the move at a
+  // gait whose rate keeps its feet planted (a stalking wolf's head held low).
   pose(s) {
     const w = Object.fromEntries(Object.keys(this.actions).map((key) => [key, 0]));
     const a = this.actions;
     const moving = s.groundSpeed > 0.05 && s.speed > 0;
-    const deer = s.kind.id === 'deer';
+    const looks = Boolean(a.look);
     if (s.state === 'dead') {
       // The fall, played once from its start; a rabbit's then settles into
       // its lying pose.
@@ -163,7 +178,17 @@ class Rig {
         this.flinch = s.flinch;
       }
       w[key] = 1;
-    } else if (moving) {
+    } else if (s.state === 'attack' && a.attack) {
+      // Each bite plays the clip from its start, timed to the bite.
+      if (this.swing !== s.swing) {
+        a.attack.reset().play();
+        a.attack.timeScale = a.attack.getClip().duration / s.kind.attack.swingTime;
+        this.swing = s.swing;
+      }
+      w.attack = 1;
+    } else if (s.state === 'feed') w.graze = 1;
+    else if (s.state === 'snarl') w.look = 1;
+    else if (moving) {
       const speed = s.speedScale > 0 ? s.groundSpeed / s.speedScale : 0;
       // The gait's rate follows the speed, so the feet stay planted.
       const [lo, hi] = s.kind.rates;
@@ -175,9 +200,13 @@ class Rig {
       }
       w.run = run;
       a.run.timeScale = rate(speed / this.runSpeed);
-    } else if (s.state === 'graze') w[s.headUp ? (deer ? 'look' : 'alertLoop') : 'graze'] = 1;
-    else if (s.state === 'alert' || s.state === 'freeze') w[deer ? 'look' : 'alertLoop'] = 1;
-    else if (deer) w[s.looking ? 'look' : 'idle'] = 1;
+      if (s.state === 'stalk') w.headLow = 0.45;
+    } else if (s.state === 'stalk') {
+      w.idle = 1;
+      w.headLow = 0.45;
+    } else if (s.state === 'graze') w[s.headUp ? (looks ? 'look' : 'alertLoop') : 'graze'] = 1;
+    else if (s.state === 'alert' || s.state === 'freeze') w[looks ? 'look' : 'alertLoop'] = 1;
+    else if (looks) w[s.looking ? 'look' : 'idle'] = 1;
     else w.groom = 1;
     return w;
   }
@@ -307,7 +336,10 @@ export class AnimalFigures {
       this.clips[name] = Object.fromEntries(Object.entries(kind.clips).map(([key, clipName]) => {
         const clip = gltf.animations.find((c) => c.name === clipName);
         if (!clip) throw new Error(`Missing clip ${clipName}`);
-        return [key, clip];
+        const mask = look.masks?.[key];
+        if (!mask) return [key, clip];
+        const keep = clip.tracks.filter((t) => mask.includes(t.name.split('.')[0]));
+        return [key, new THREE.AnimationClip(`${clipName}:masked`, clip.duration, keep)];
       }));
     }
     this.phone = phone;
@@ -374,7 +406,10 @@ export class AnimalFigures {
       const slot = this.slotOf(s, view);
       if (slot) inView.push({ s, slot });
     }
-    inView.sort((a, b) => Math.hypot(a.s.x - near.x, a.s.y - near.y) - Math.hypot(b.s.x - near.x, b.s.y - near.y));
+    const far = (s) => Math.hypot(((s.x - near.x) * ASPECT) / SCALE, (s.y - near.y) / (SCALE * TILT));
+    const rank = (s) => (engaged(s) && far(s) <= PRIORITY ? 0 : s.state === 'flee' ? 1 : 2);
+    inView.sort((a, b) => rank(a.s) - rank(b.s)
+      || Math.hypot(a.s.x - near.x, a.s.y - near.y) - Math.hypot(b.s.x - near.x, b.s.y - near.y));
     const drawn = inView.slice(0, this.phone() ? MAX_DRAWN_PHONE : MAX_DRAWN);
     this.drawn = [];
     if (!drawn.length) return this.drawn;

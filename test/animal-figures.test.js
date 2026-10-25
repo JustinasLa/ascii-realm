@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { register } from 'node:module';
 import { test } from 'node:test';
-import { Animal, KINDS } from '../src/entities/animals.js';
+import { Animal, Animals, KINDS } from '../src/entities/animals.js';
 import { WATER } from '../src/world/world.js';
 
 const dataURL = (source) => `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`;
@@ -390,4 +390,170 @@ test('a fresh hit flashes the body white, gone by 0.14 s; a sunk body lies lower
   d.sunk = 1;
   f.update(dt, [d]);
   assert.ok(Math.abs(rig.model.position.y - (lying - 0.6 * KINDS.deer.height)) < 1e-9);
+});
+
+const wolf = () => new Animal(KINDS.wolf, 0, 0);
+
+test('the wolf plays its own clips, stands at its shoulder height and faces its heading', () => {
+  for (const clip of Object.values(KINDS.wolf.clips)) assert.ok(gltfs.wolf.animations.some((c) => c.name === clip), clip);
+  assert.ok(!gltfs.wolf.animations.some((c) => c.name.includes('|')), 'no duplicate clips');
+  const f = figures();
+  const scene = f.sources.wolf;
+  scene.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(scene, true);
+  const height = (scene.getObjectByName('Neck1').getWorldPosition(new THREE.Vector3()).y - box.min.y) * f.fits.wolf.scale;
+  assert.ok(Math.abs(height - KINDS.wolf.height) < KINDS.wolf.height * 0.05, `${height}`);
+  const a = wolf();
+  f.update(dt, [a]);
+  const rig = f.rigs.get(a);
+  for (const heading of [0, Math.PI / 2]) {
+    a.heading = heading;
+    f.update(dt, [a]);
+    const head = rig.bones.Head.getWorldPosition(new THREE.Vector3());
+    const hips = rig.bones.Body.getWorldPosition(new THREE.Vector3());
+    const bearing = Math.atan2(head.x - hips.x, head.z - hips.z);
+    assert.ok(Math.abs(Math.atan2(Math.sin(bearing - heading), Math.cos(bearing - heading))) < 0.35, `${bearing}`);
+  }
+});
+
+test('the wolf\'s gaits keep its paws planted, and its run outpaces a deer and the player', () => {
+  const f = figures();
+  const a = wolf();
+  f.update(dt, [a]);
+  const rig = f.rigs.get(a);
+  const k = KINDS.wolf;
+  const [lo, hi] = k.rates;
+  for (const speed of [k.stalkSpeed, k.walkSpeed]) {
+    const rate = speed / rig.walkSpeed;
+    assert.ok(rate >= lo && rate <= hi, `walks ${speed} at ${rate}`);
+  }
+  for (const speed of [k.trotSpeed, k.runSpeed]) {
+    const rate = speed / rig.runSpeed;
+    assert.ok(rate >= lo && rate <= hi, `gallops ${speed} at ${rate}`);
+  }
+  assert.ok(k.runSpeed >= Math.max(KINDS.deer.fleeSpeed, 1.2 * 5.3));
+  // A trotting wolf is all gallop, at the clip's rate for its speed.
+  Object.assign(a, { state: 'trot', speed: k.trotSpeed, groundSpeed: k.trotSpeed });
+  for (let i = 0; i < 40; i++) f.update(dt, [a]);
+  assert.ok(rig.weights.run > 0.95);
+  assert.ok(Math.abs(rig.actions.run.timeScale - k.trotSpeed / rig.runSpeed) < 1e-9);
+});
+
+test('the wolf\'s jaws close at its bite\'s wind-up; the bite plays once from its start for each lunge', () => {
+  const f = figures();
+  const a = wolf();
+  f.update(dt, [a]);
+  const rig = f.rigs.get(a);
+  const action = rig.actions.attack;
+  assert.equal(action.loop, THREE.LoopOnce);
+  assert.equal(action.clampWhenFinished, true);
+  // The moment the muzzle reaches furthest forward, at the bite's pace.
+  const clip = action.getClip();
+  for (const other of Object.values(rig.actions)) other.setEffectiveWeight(0);
+  action.setEffectiveWeight(1);
+  let best = -Infinity;
+  let at = 0;
+  for (let i = 0; i <= 120; i++) {
+    action.time = (i / 120) * clip.duration;
+    rig.mixer.update(0);
+    rig.inner.rotation.y = -f.fits.wolf.yaw;
+    rig.model.rotation.y = 0;
+    rig.model.updateMatrixWorld(true);
+    const z = rig.bones.Head_end.getWorldPosition(new THREE.Vector3()).z;
+    if (z > best) {
+      best = z;
+      at = action.time;
+    }
+  }
+  const rate = clip.duration / KINDS.wolf.attack.swingTime;
+  assert.ok(Math.abs(at / rate - KINDS.wolf.attack.windUp) < 0.06, `jaws at ${at / rate}`);
+  // Each lunge starts the clip over.
+  a.state = 'attack';
+  a.swing = 1;
+  for (let i = 0; i < 20; i++) f.update(dt, [a]);
+  assert.ok(rig.weights.attack > 0.9);
+  assert.ok(Math.abs(action.timeScale - rate) < 1e-9);
+  const first = action.time;
+  a.swing = 2;
+  f.update(dt, [a]);
+  assert.ok(action.time < first, 'a new lunge starts it over');
+});
+
+test('a stalking wolf walks with its head low, its legs untouched by the head-low clip', () => {
+  const f = figures();
+  const a = wolf();
+  f.update(dt, [a]);
+  const rig = f.rigs.get(a);
+  const tracks = rig.actions.headLow.getClip().tracks.map((t) => t.name.split('.')[0]);
+  assert.ok(tracks.length > 0 && tracks.every((n) => LOOKS.wolf.masks.headLow.includes(n)));
+  const legs = () => rig.tips.map((tip) => tip.getWorldPosition(new THREE.Vector3()));
+  const head = () => rig.bones.Head.getWorldPosition(new THREE.Vector3());
+  const pose = (low) => {
+    for (const other of Object.values(rig.actions)) other.setEffectiveWeight(0);
+    rig.actions.walk.setEffectiveWeight(1);
+    rig.actions.walk.time = 0.3;
+    rig.actions.headLow.setEffectiveWeight(low);
+    rig.actions.headLow.time = 1;
+    rig.mixer.update(0);
+    rig.model.updateMatrixWorld(true);
+    return { legs: legs(), head: head() };
+  };
+  const plain = pose(0);
+  const low = pose(0.45);
+  for (let i = 0; i < 4; i++) assert.ok(plain.legs[i].distanceTo(low.legs[i]) < 1e-6, `leg ${i}`);
+  assert.ok(low.head.y < plain.head.y - 0.005, 'the head is lower');
+  // Moving at the stalk it walks with the blend; standing, it idles with it.
+  Object.assign(a, { state: 'stalk', speed: 0.8, groundSpeed: 0.8 });
+  for (let i = 0; i < 40; i++) f.update(dt, [a]);
+  assert.ok(rig.weights.walk > 0.95 && Math.abs(rig.weights.headLow - 0.45) < 0.02);
+  Object.assign(a, { speed: 0, groundSpeed: 0 });
+  for (let i = 0; i < 40; i++) f.update(dt, [a]);
+  assert.ok(rig.weights.idle > 0.95 && rig.weights.headLow > 0.4);
+});
+
+test('a wolf feeds with the eating clip, snarls on its ring place, and looks about at rest', () => {
+  const f = figures();
+  const top = (set) => {
+    const a = wolf();
+    Object.assign(a, set);
+    for (let i = 0; i < 40; i++) f.update(dt, [a]);
+    return Object.entries(f.rigs.get(a).weights).sort((x, y) => y[1] - x[1])[0][0];
+  };
+  assert.equal(top({ state: 'feed' }), 'graze');
+  assert.equal(top({ state: 'snarl' }), 'look');
+  assert.equal(top({ state: 'idle' }), 'idle');
+  assert.equal(top({ state: 'idle', looking: true }), 'look');
+  assert.equal(top({ state: 'retreat', speed: 6.4, groundSpeed: 6.4 }), 'run');
+});
+
+test('a wolf on the hunt is drawn before nearer grazing deer and fleeing ones before calm', () => {
+  const gpu = fakeGPU();
+  const f = new AnimalFigures(gltfs, { renderer: gpu });
+  const herd = Array.from({ length: 6 }, (_, i) => new Animal(KINDS.deer, i * 5, 0, { variant: 'hind' }));
+  const animals = new Animals({ counts: { wolf: 4 } });
+  const pack = animals.spawn('wolf', { x: 60, y: 0, count: 1 });
+  const hunter = pack.members[0];
+  pack.pack.phase = 'hunt';
+  const all = [...herd, hunter];
+  f.update(dt, all);
+  const view = { x0: -200, y0: -100, cols: 400, rows: 200 };
+  const drawn = f.rasterise(view, all, { x: 0, y: 0 }).map((d) => d.animal);
+  assert.equal(drawn[0], hunter);
+  assert.equal(drawn.length, 6);
+  // Out of the priority range, it is just another animal.
+  hunter.x = 1200;
+  f.update(dt, all);
+  assert.ok(!f.rasterise(view, all, { x: 0, y: 0 }).some((d) => d.animal === hunter));
+  hunter.x = 60;
+  pack.pack.phase = 'roam';
+  herd[5].state = 'flee';
+  f.update(dt, all);
+  const order = f.rasterise(view, all, { x: 0, y: 0 }).map((d) => d.animal);
+  assert.equal(order[0], herd[5]);
+});
+
+test('the wolf model is credited and light', () => {
+  const text = readFileSync(new URL('../assets/animals/LICENSE.txt', import.meta.url), 'utf8');
+  assert.match(text, /wolf\.glb/);
+  assert.ok(statSync(new URL('../assets/animals/wolf.glb', import.meta.url)).size < 1.2 * 1024 * 1024);
 });

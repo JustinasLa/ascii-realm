@@ -521,6 +521,19 @@ const definitions = [
     weight: 0.15,
     stackLimit: 40,
   },
+  {
+    id: 'wolfPelt',
+    name: 'Wolf Pelt',
+    shortName: 'Pelt',
+    glyph: '&',
+    groundGlyph: '&',
+    colour: [150, 150, 142],
+    tags: ['resource', 'hide', 'animal'],
+    description: 'The thick grey pelt of a wolf.',
+    stats: { material: 'Hide', type: 'Resource' },
+    weight: 0.9,
+    stackLimit: 20,
+  },
 ];
 
 export const ITEMS = Object.freeze(Object.fromEntries(definitions.map((item) => [

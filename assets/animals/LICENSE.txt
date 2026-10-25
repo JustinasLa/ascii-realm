@@ -1,7 +1,7 @@
 Animal models
 =============
 
-All three models are dedicated to the public domain under CC0 1.0 Universal
+All four models are dedicated to the public domain under CC0 1.0 Universal
 (https://creativecommons.org/publicdomain/zero/1.0/). No attribution is
 required; the authors are credited here with thanks.
 
@@ -15,6 +15,16 @@ deer.glb, stag.glb
   dropped by loading each file with three.js's GLTFLoader and writing it
   back with GLTFExporter (binary). Geometry, skin, materials and clips are
   otherwise as published.
+
+wolf.glb
+  "Wolf" from the Ultimate Animated Animals pack by Quaternius
+  (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0, as
+  stated on its Poly Pizza page when downloaded on 2026-10-25:
+    https://poly.pizza/m/P1gU3Qkr9r
+  Changes: the duplicate "AnimalArmature|" copies of the 12 clips were
+  dropped the same way as for the deer and stag (GLTFLoader, then
+  GLTFExporter, binary). Geometry, skin, materials and clips are otherwise
+  as published.
 
 rabbit.glb
   "Rabbit" by Čestmír Dammer (Kelgar project, www.kelgar.org; idea by Rick

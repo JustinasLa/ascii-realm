@@ -621,10 +621,11 @@ const countOf = (name, fallback) => {
 const monsters = new Monsters({ seed,
   counts: { skeleton: countOf('skeletons', 2), goblin: countOf('goblins', 1), troll: countOf('trolls', 1),
     elf: countOf('elves', 1) } });
-// Deer herds and rabbits live on the land round the player. ?deer=N and
-// ?rabbits=N cap how many of each may be about; ?animals=0 leaves the land
-// without them.
-const animals = new Animals({ seed, counts: { deer: countOf('deer', 8), rabbit: countOf('rabbits', 6) },
+// Deer herds, rabbits and wolf packs live on the land round the player.
+// ?deer=N, ?rabbits=N and ?wolves=N cap how many of each may be about;
+// ?animals=0 leaves the land without them.
+const animals = new Animals({ seed,
+  counts: { deer: countOf('deer', 8), rabbit: countOf('rabbits', 6), wolf: countOf('wolves', 4) },
   enabled: params.get('animals') !== '0' });
 debug.animals = animals;
 // What hunted animals leave lying, and the collection that picks it up.
@@ -753,6 +754,16 @@ function drawName(top, color = [212, 218, 228]) {
     renderer.putBg(sx + i, sy, 8, 10, 14);
   }
 }
+// A blow on the player from a monster or a wolf: if it lands, the screen
+// shakes and the ground thuds under them.
+function hurtPlayer(e, shake, strength) {
+  if (player.takeDamage(e.amount) <= 0) return;
+  lastHurt = time;
+  camera.shake(shake);
+  sound.play({ type: 'slam', x: player.x, y: player.y, strength });
+  dust.burst(world, player.x, player.y, 4, 4);
+}
+
 // What the monsters do: their blows on the player, the player's on them,
 // and their coming and falling. Each kind has its own voice.
 function monsterEvent(e) {
@@ -762,12 +773,7 @@ function monsterEvent(e) {
   const voice = kind?.sounds[e.type];
   switch (e.type) {
     case 'hit-player':
-      if (player.takeDamage(e.amount) > 0) {
-        lastHurt = time;
-        camera.shake(e.arrow ? 0.15 : 0.35);
-        sound.play({ type: 'slam', x: player.x, y: player.y, strength: e.arrow ? 0.25 : 0.45 });
-        dust.burst(world, player.x, player.y, 4, 4);
-      }
+      hurtPlayer(e, e.arrow ? 0.15 : 0.35, e.arrow ? 0.25 : 0.45);
       break;
     case 'shoot':
       sound.play({ ...e, type: voice });
@@ -842,6 +848,7 @@ function fallInBattle() {
   camera.x = player.x;
   camera.y = player.y - 11;
   monsters.clear();
+  animals.disengage();
   hud.notify('You were struck down. You wake where you began.', 'info');
 }
 
@@ -1189,7 +1196,11 @@ function frame(now) {
     } else if (e.type === 'death') {
       dust.burst(world, e.x, e.y, 10, 6);
       sound.play({ type: 'land', x: e.x, y: e.y, strength: 0.5 });
-    }
+      // A wolf is a foe brought down, like a monster.
+      if (e.animal.predator) hud.notify(`${e.animal.kind.name} slain`, 'pickup');
+    } else if (e.type === 'hit-player') hurtPlayer(e, 0.3, 0.4);
+    else if (e.type === 'swing') sound.play({ type: 'swing', x: e.x, y: e.y, strength: 0.5 });
+    else if (e.type === 'bite') sound.play({ type: 'slam', x: e.x, y: e.y, strength: 0.2 });
     animals.hear(e);
   }
   animals.events.length = 0;
