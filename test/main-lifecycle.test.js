@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { phoneDefaultCell } from '../src/core/layout.js';
 import { loadGame } from './helpers/main-game.js';
 
 test('damage outside monster attacks delays passive healing for six seconds', async () => {
@@ -242,4 +243,34 @@ test('only a real change of phone mode moves the zoom, and never in the ruin pre
   assert.equal(game.layout.bias, 0);
   for (let i = 0; i < 120; i++) frame();
   assert.equal(cellHeight(), 8, 'leaving phone mode glides back');
+});
+
+test('a phone re-fits its default as browser bars resize the screen, but keeps a pinch', async () => {
+  const { cellHeight, resizeTo, rotate, frame, pinch, game } = await loadGame(undefined,
+    { phone: true, width: 915, height: 356, dpr: 2.625 });
+  assert.equal(cellHeight(), 6);
+  resizeTo(915, 412);
+  const fitted = phoneDefaultCell('landscape', 915, 412, 2.625);
+  assert.ok(fitted > 6, `hiding the bar raises the default to ${fitted}`);
+  assert.equal(cellHeight(), fitted);
+  resizeTo(915, 356);
+  assert.equal(cellHeight(), 6, 'showing it again lowers it back');
+  pinch(1.25);
+  for (let i = 0; i < 120; i++) frame();
+  resizeTo(915, 412);
+  assert.equal(cellHeight(), 7.5, 'a pinch stays the player\'s choice');
+  rotate();
+  assert.equal(cellHeight(), phoneDefaultCell('portrait', 412, 915, 2.625), 'portrait was not pinched');
+  resizeTo(412, 860);
+  assert.equal(cellHeight(), phoneDefaultCell('portrait', 412, 860, 2.625), 'and follows its own resizes');
+  game.layout.zoomSlots.set('landscape', null);
+});
+
+test('resizing a tablet or the ruin preview keeps its zoom', async () => {
+  const tablet = await loadGame(undefined, { coarse: true, width: 1024, height: 768 });
+  tablet.resizeTo(1024, 700);
+  assert.equal(tablet.cellHeight(), 8);
+  const ruins = await loadGame(undefined, { href: 'http://localhost/?debug&scene=ruins', phone: true, width: 915, height: 356 });
+  ruins.resizeTo(915, 412);
+  assert.equal(ruins.cellHeight(), 6);
 });

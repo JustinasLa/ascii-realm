@@ -95,7 +95,9 @@ const device = watchPhone(window, (phone) => onPhoneChange(phone));
 // Phones lay out for portrait or landscape (style.css follows the same
 // query), each with its own default zoom and camera framing.
 const layout = watchLayout(window, (next, previous) => onOrientation(next, previous));
-if (device.phone && !ruinPreview) cellH = zoomTarget = phoneDefaultCell(layout.orientation, innerWidth, innerHeight);
+// The default zoom for this phone screen, in either orientation.
+const phoneDefault = orientation => phoneDefaultCell(orientation, innerWidth, innerHeight, window.devicePixelRatio);
+if (device.phone && !ruinPreview) cellH = zoomTarget = phoneDefault(layout.orientation);
 const quality = new FrameQuality();
 
 const baseChunks = mobile ? 64 : 128;
@@ -108,7 +110,14 @@ function resize() {
 }
 // Set once the world exists: sizes its chunk cache to the view.
 let fitChunks = null;
-window.addEventListener('resize', resize);
+// A phone's screen also changes size without turning, as its browser bars
+// slide away: the default follows it so the view stays in the cell budget,
+// unless the player has pinched a zoom of their own in this orientation.
+function onWindowResize() {
+  if (device.phone && !ruinPreview && !pinched) cellH = zoomTarget = phoneDefault(layout.orientation);
+  resize();
+}
+window.addEventListener('resize', onWindowResize);
 resize();
 
 // Zoom is multiplicative so each notch feels the same at any scale.
@@ -196,7 +205,7 @@ function onOrientation(next, previous) {
   if (!ruinPreview) {
     const slot = zoomSlots.get(next);
     pinched = slot !== null;
-    cellH = zoomTarget = slot ?? phoneDefaultCell(next, innerWidth, innerHeight);
+    cellH = zoomTarget = slot ?? phoneDefault(next);
   }
   applyFraming();
   resize();
@@ -529,7 +538,7 @@ function onPhoneChange(phone) {
   if (!changed) return;
   if (!ruinPreview) {
     pinched = false;
-    if (phone) cellH = zoomTarget = phoneDefaultCell(layout.orientation, innerWidth, innerHeight);
+    if (phone) cellH = zoomTarget = phoneDefault(layout.orientation);
     else zoomTarget = 8;
   }
   applyFraming();

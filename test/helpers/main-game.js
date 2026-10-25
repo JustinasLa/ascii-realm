@@ -28,7 +28,7 @@ const inert = () => class {
 };
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
-  width = 800, height = 600 } = {}) {
+  width = 800, height = 600, dpr = undefined } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -50,7 +50,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const landscapeQuery = Object.assign(new EventTarget(), { matches: width > height });
   const queries = { [PHONE_QUERY]: phoneQuery, [LANDSCAPE_QUERY]: landscapeQuery };
   const window = Object.assign(new EventTarget(), { innerWidth: width, innerHeight: height,
-    matchMedia: text => queries[text] });
+    devicePixelRatio: dpr, matchMedia: text => queries[text] });
   let pinch = null;
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
@@ -210,6 +210,13 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       window.innerHeight = context.innerHeight;
       landscapeQuery.matches = context.innerWidth > context.innerHeight;
       landscapeQuery.dispatchEvent(new Event('change'));
+      window.dispatchEvent(new Event('resize'));
+    },
+    // Resizes the window without turning it, as a sliding browser bar does.
+    resizeTo(w, h) {
+      [context.innerWidth, context.innerHeight] = [w, h];
+      window.innerWidth = w;
+      window.innerHeight = h;
       window.dispatchEvent(new Event('resize'));
     },
     pinch: factor => pinch(factor),
