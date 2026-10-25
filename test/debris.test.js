@@ -497,7 +497,15 @@ test('one heading is baked a frame, and until then the nearest baked one is draw
   const d = new Debris({ random: mulberry32(1), world });
   const v = view();
   const pieces = ['log', 'branch', 'mat'].map((k, i) => d.spawn(k, { x: i * 10, y: 0, angle: 0 }));
-  for (const p of pieces) assert.equal(p.bakes.size, 1);
+  // Set adrift in one frame, only the first is baked; the others wait
+  // their turn and draw nothing meanwhile.
+  assert.deepEqual(pieces.map((p) => p.bakes.size), [1, 0, 0]);
+  assert.equal(d.bakeFor(pieces[1]), null);
+  d.update(0, world, v, { x: 0, y: 900 });
+  assert.ok(d.bakeFor(pieces[1]));
+  assert.equal(d.bakeFor(pieces[2]), null);
+  d.update(0, world, v, { x: 0, y: 900 });
+  assert.ok(d.bakeFor(pieces[2]));
   for (const p of pieces) p.angle = 1.3;
   d.update(0, world, v, { x: 0, y: 900 });
   const baked = pieces.map((p) => d.bakeFor(p));
@@ -508,6 +516,13 @@ test('one heading is baked a frame, and until then the nearest baked one is draw
   d.update(0, world, v, { x: 0, y: 900 });
   d.bakeFor(pieces[1]);
   assert.equal(pieces[1].bakes.size, 2);
+  // A piece set adrift by the spawner shares the frame's one bake with a
+  // piece turning to a new heading.
+  d.update(0, world, v, { x: 0, y: 900 });
+  const late = d.spawn('mat', { x: 40, y: 0, angle: 0 });
+  assert.equal(late.bakes.size, 1);
+  assert.equal(d.bakeFor(pieces[2]), pieces[2].bakes.get(0));
+  assert.equal(pieces[2].bakes.size, 1);
   // A cleared cache draws nothing.
   pieces[2].bakes.clear();
   d.bakesLeft = 0;

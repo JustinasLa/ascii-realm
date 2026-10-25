@@ -232,7 +232,9 @@ export class Debris {
     };
     if (inView) piece.appear = piece.fade = 0;
     piece.model = pieceModel(piece, this.season);
-    this.bake(piece, orientationBucket(piece), true);
+    // Its first heading is baked within the frame's budget like any other;
+    // till then there is nothing of it to draw.
+    this.bake(piece, orientationBucket(piece));
     this.list.push(piece);
     return piece;
   }
@@ -248,12 +250,11 @@ export class Debris {
     return 'mat';
   }
 
-  // Bakes one heading of a piece, if this frame still has a bake to spare
-  // (or `now`).
-  bake(piece, bucket, now = false) {
+  // Bakes one heading of a piece, if this frame still has a bake to spare.
+  bake(piece, bucket) {
     if (piece.bakes.has(bucket)) return true;
-    if (!now && this.bakesLeft <= 0) return false;
-    if (!now) this.bakesLeft--;
+    if (this.bakesLeft <= 0) return false;
+    this.bakesLeft--;
     piece.bakes.set(bucket, bakePiece(piece.model, bucketAngle(piece, bucket)));
     return true;
   }
