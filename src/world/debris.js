@@ -435,7 +435,7 @@ export class Debris {
       } else live.push(piece);
     }
     if (!live.length) return;
-    const near = wading.filter((w) => live.some((p) => this.within(p, w)));
+    const near = wading.filter((w) => live.some((p) => this.within(p, w, dt)));
     let fastest = 0;
     for (const p of live) fastest = Math.max(fastest, Math.hypot(p.vx, p.vy) + 1);
     for (const w of near) fastest = Math.max(fastest, Math.hypot(w.vx, w.vy) + 1);
@@ -459,12 +459,16 @@ export class Debris {
     for (const piece of live) if (!piece.gone) this.settle(piece, dt);
   }
 
-  // Whether a body's way this frame passes anywhere near a piece.
-  within(piece, w) {
-    const reach = toCells(piece.length / 2 + piece.radius + w.wade.radius + 0.1, piece.length / 2 + piece.radius +
-      w.wade.radius + 0.1);
-    return Math.max(w.x0, w.x1) > piece.x - reach.cols - 2 && Math.min(w.x0, w.x1) < piece.x + reach.cols + 2 &&
-      Math.max(w.y0, w.y1) > piece.y - reach.rows - 2 && Math.min(w.y0, w.y1) < piece.y + reach.rows + 2;
+  // Whether a body's way this frame passes anywhere near a piece's: from
+  // where the piece lies to where its drift would take it by the frame's end.
+  within(piece, w, dt) {
+    const r = piece.length / 2 + piece.radius + w.wade.radius + 0.1;
+    const reach = toCells(r, r);
+    const go = toCells(piece.vx * dt, piece.vy * dt);
+    const x0 = Math.min(piece.x, piece.x + go.cols), x1 = Math.max(piece.x, piece.x + go.cols);
+    const y0 = Math.min(piece.y, piece.y + go.rows), y1 = Math.max(piece.y, piece.y + go.rows);
+    return Math.max(w.x0, w.x1) > x0 - reach.cols - 2 && Math.min(w.x0, w.x1) < x1 + reach.cols + 2 &&
+      Math.max(w.y0, w.y1) > y0 - reach.rows - 2 && Math.min(w.y0, w.y1) < y1 + reach.rows + 2;
   }
 
   // A piece's bob, age and fade over a frame.

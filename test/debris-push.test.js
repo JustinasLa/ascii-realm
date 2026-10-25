@@ -249,6 +249,21 @@ test('a jump clears the feet of a piece, and landing on it shoves it', () => {
   assert.ok(d.lastShove, 'landed in it');
 });
 
+test('a piece shoved fast past a standing body within one long frame still meets it', () => {
+  const world = lake();
+  const d = new Debris({ random: () => 0.5, world });
+  const p = piece(d, 'mat', { angle: 0, length: 0.25, radius: 0.08 });
+  p.vx = 12;
+  // Well clear of where the mat lies at the start of the frame, but on its way.
+  const at = cells(0.7, 0);
+  const b = body(at.x, at.y);
+  d.wading([b], 0.05, world);
+  d.advance([p], 0.05, world, view(), d.wading([b], 0.05, world));
+  assert.equal(d.lastShove?.body, b, 'met');
+  assert.ok(ground(p, b.x, b.y).x > 0, 'and stopped short of it, not through it');
+  assert.ok(b.bump.x > 0, 'knocked on');
+});
+
 test('a body on dry land, a rising or dead monster, or a fallen player never shoves', () => {
   const world = channel({ half: 1, grass: (x) => x < -1 });
   for (const make of [() => body(-2.5, 0), () => ({ ...body(), state: 'rise' }), () => ({ ...body(), state: 'dead' }),
