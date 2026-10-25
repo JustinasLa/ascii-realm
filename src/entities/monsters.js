@@ -1,5 +1,6 @@
 import { mulberry32 } from '../core/rng.js';
 import { Projectiles } from '../world/projectiles.js';
+import { currentAt, easeCarry, immersion, toCells as flowCells } from '../world/rivers.js';
 import { ASPECT, MAX_WATER_DEPTH, WATER } from '../world/world.js';
 import { SCALE, TILT } from './rig.js';
 
@@ -262,6 +263,9 @@ export class Monster {
     // it, as for the player.
     this.waterDepth = 0;
     this.speedScale = 1;
+    // How fast a river's current carries it, metres a second (x east, y
+    // south), as for the player.
+    this.carry = { x: 0, y: 0 };
     // Ground covered since the last footfall.
     this.stride = 0;
     this.events = [];
@@ -320,7 +324,11 @@ export class Monster {
       if (this.deadTime > k.linger) this.sunk = Math.min(1, (this.deadTime - k.linger) / k.sink);
       return;
     }
-    if (this.magicStunned) { this.speed = 0; return; }
+    if (this.magicStunned) {
+      this.speed = 0;
+      if (this.state !== 'rise') this.drift(dt, world, depth);
+      return;
+    }
     const prey = target && target.alive !== false ? this.offsetTo(target.x, target.y) : null;
     if (prey && this.lastPrey && dt > 0) {
       const k2 = 1 - Math.exp(-dt * 6);
@@ -451,6 +459,20 @@ export class Monster {
       this.stride -= length;
       this.events.push({ type: 'step', x: this.x, y: this.y, strength: Math.min(1, this.groundSpeed / 5) });
     }
+    if (this.state !== 'rise') this.drift(dt, world, depth);
+  }
+
+  // Wading, it is carried downstream by a river's current like the
+  // player. It only slides: no detours, and it never counts as walking.
+  drift(dt, world, depth) {
+    easeCarry(this.carry, currentAt(world, this.x, this.y, immersion(depth)), dt);
+    if (!this.carry.x && !this.carry.y) return;
+    const { cols, rows } = flowCells(this.carry.x * dt, this.carry.y * dt);
+    if (standable(world, this.x + cols, this.y + rows)) {
+      this.x += cols;
+      this.y += rows;
+    } else if (standable(world, this.x + cols, this.y)) this.x += cols;
+    else if (standable(world, this.x, this.y + rows)) this.y += rows;
   }
 
   // An archer keeps its distance: closing in from too far, backing away from

@@ -11,10 +11,11 @@ world is generated as you walk, and up to eight friends can share it.
 
 ## Features
 
-- **Glowcap mushrooms** — pale caps and teal stems growing in clusters. Walking nearby makes them wobble fluidly and release spores that float upward. Press `E` (or tap Spores) for a larger rising burst.
+- **Glowcap mushrooms** — pale caps and teal stems growing in clusters. Walking nearby makes them wobble fluidly and release spores that float upward. Press `E` (or tap SPORES, which appears nearby on touch screens) for a larger rising burst.
 - **Infinite seeded world** — lakes, shorelines, meadows, dirt paths and rocky outcrops generate in chunks as you walk; `?seed=42` picks another world.
 - **Living meadows and forests** — wind-swept grass that keeps your footprints, and eight tree species with seasonal palettes, falling leaves and fallen logs.
 - **Water and reflections** — wade knee-deep through any lake while the outlaw, trees and stars reflect and break apart on the swell.
+- **Rivers** — seeded streams wind downhill into the lakes, their foam streaks racing downstream and their current carrying anyone who wades in.
 - **A motion-captured outlaw** — real walk, run, jump and trick animations, an idle that looks around, breath in the cold, and footprints in dirt and sand.
 - **Sword play** — click to cut towards the cursor: draw, guard, a three-hit combo, a running lunge, a plunge from the air and a charged spin; cuts fell trees and mow tall grass.
 - **Rune casting** — 44 rune spells across fire, ice, life and water, picked from a hold-to-open rune wheel (middle mouse) and cast at the cursor with `R` or a right click, each with its own ASCII animation and recorded foley, paid for with slowly refilling mana.
@@ -25,7 +26,7 @@ world is generated as you walk, and up to eight friends can share it.
 - **Sound and music** — recorded footsteps and water, weather and wildlife ambience, and 42 original songs chosen by season and weather.
 - **Multiplayer lobbies** — share a six-character code to explore the same world together and see each other's movement, swings and rune casts.
 - **Scenery builder** — paint terrain and place props, with undo, local saves and JSON export.
-- **Phones too** — a touch stick with jump, strike, draw and cast buttons, and rendering that scales itself to hold 60 fps.
+- **Phones too** — a decluttered touch layout for portrait or landscape that re-lays out as you turn the phone, with a stick, a thumb attack cluster with aim assist, and pinch zoom, and rendering that scales itself to hold 60 fps.
 
 ## Your first night
 
@@ -81,7 +82,7 @@ npm run test:coverage
 ```
 
 The script fails, with a non-zero exit, when total coverage across all files
-drops below its floors: 93% of lines, 94% of branches and 66% of functions.
+drops below its floors: 95% of lines, 94% of branches and 68% of functions.
 The floors live in the `test:coverage` script in `package.json`. They only
 ever go up: when coverage rises, raise them to the new totals rounded down to
 a whole percent, and never lower them to make a change pass.

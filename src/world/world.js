@@ -1,9 +1,10 @@
 import { fbm, valueNoise } from '../core/noise.js';
-import { hash2 } from '../core/rng.js';
+import { hash2, mulberry32 } from '../core/rng.js';
 import { rockTypeAt } from './geology.js';
-import { blocks, generateProps } from './props.js';
+import { blocks, generateProps, makeRiverStone } from './props.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
+import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
 import { createSpawnRuins } from './spawn-ruins.js';
 
 export const WATER = 0;
@@ -24,12 +25,13 @@ const ROCK_APRON = 4;
 export const WATER_LEVEL = 0.4;
 // All lakes are fordable: even their lowest beds are only knee deep.
 export const MAX_WATER_DEPTH = 0.42;
-const SHORE_LEVEL = 0.415;
+export const SHORE_LEVEL = 0.415;
 // Raises the whole landscape, so only about a twelfth of it lies under water.
-const LAND_LIFT = 0.09;
+export const LAND_LIFT = 0.09;
 const LAKE_SHELF = 1.6;
 const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78];
 const cellKey = (x, y) => `${x},${y}`;
+const LINE_AT = { x: 0, y: 0, speed: 0, tau: 0 };
 const chunkKey = (cx, cy) => `${cx},${cy}`;
 const smoothRange = (a, b, x) => {
   const u = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -40,7 +42,8 @@ export class World {
   constructor(seed = 1, options = {}) {
     // A bare number is the chunk cache size.
     // `flora` brings back the wild flowers, ferns and cattails among the grass.
-    const { season = 'summer', maxChunks = 128, flora = false, meadow = false, spawnRuins = false } = typeof options === 'number' ? { maxChunks: options } : options;
+    // `rivers: false` leaves the land without rivers.
+    const { season = 'summer', maxChunks = 128, flora = false, meadow = false, spawnRuins = false, rivers = true } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
     this.flora = flora;
     this.meadow = meadow;
@@ -74,14 +77,18 @@ export class World {
     this.propRenderH = 50;
     this.propFootW = 10;
     this.propFootH = 2;
+    // Spawn is found on the land as it lies before rivers and ruins, so it
+    // is the same whether or not they are there; both then keep clear of it.
+    this.rivers = null;
     this.spawn = this.findSpawn();
+    this.rivers = new RiverNetwork(seed, this.spawn, { enabled: rivers });
     if (spawnRuins) {
       this.spawnRuins = createSpawnRuins(seed, this.spawn);
-      // Spawn discovery uses the untouched landscape. Rebuild those few
-      // terrain chunks with the starter site's dry ground as their baseline.
-      this.chunks.clear();
       for (const prop of this.spawnRuins.props) this.measureProp(prop);
     }
+    // Rebuild the few chunks spawn discovery made with their rivers and
+    // the starter site's dry ground as their baseline.
+    this.chunks.clear();
   }
 
   chunk(cx, cy) {
@@ -119,7 +126,8 @@ export class World {
   generate(cx, cy) {
     const n = CHUNK * CHUNK;
     const type = new Uint8Array(n);
-    const elev = new Float32Array(n);
+    // Elevation is worked in full precision until the grass has grown.
+    const height = new Float64Array(n);
     const shade = new Float32Array(n);
     const rnd = new Float32Array(n);
     const grassHeight = new Float32Array(n);
@@ -153,14 +161,32 @@ export class World {
         }
 
         type[i] = t;
-        elev[i] = e;
+        height[i] = e;
         shade[i] = fbm(nx * 0.05, y * 0.05, s + 31, 3);
         rnd[i] = hash2(x, y, s + 5);
+      }
+    }
+    // Rivers cut their channels, banks and damp valleys into the land before
+    // the grass grows, so lush bank grass and reeds follow them.
+    const preRiverType = this.rivers?.reaches(cx, cy) ? type.slice() : null;
+    const facing = preRiverType ? new Float32Array(n) : null;
+    const flow = preRiverType ? this.rivers.carve(cx, cy, type, height, facing) : null;
+    for (let ly = 0; ly < CHUNK; ly++) {
+      for (let lx = 0; lx < CHUNK; lx++) {
+        const x = cx * CHUNK + lx;
+        const y = cy * CHUNK + ly;
+        const nx = x * ASPECT;
+        const i = ly * CHUNK + lx;
+        const t = type[i];
+        const e = height[i];
         if (t === GRASS || t === SHORE) {
           // Fractional heights are dithered per root when drawn, so even the
           // cell grid has no hard height bands.
           const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
-          const wet = 1 - smoothRange(0.41, 0.45, e);
+          // A river's near bank, in front of it on screen, grows no taller
+          // than the open meadow, so its grass does not hide the water.
+          const open = facing ? 1 - facing[i] : 1;
+          const wet = (1 - smoothRange(0.41, 0.45, e)) * open;
           const lush = smoothRange(0.35, 0.68, meadow);
           let reed = false;
           if (t === GRASS) {
@@ -169,7 +195,7 @@ export class World {
             const target = fieldHeight + (4.7 - fieldHeight) * bank;
             grassHeight[i] = target;
             grassDensity[i] = this.meadow ? 0.34 + lush * 0.08 : 0.255 + lush * 0.025;
-          } else if (meadow > 0.43) {
+          } else if (meadow > 0.43 && open > 0.5) {
             // Reeds fringe the lakes.
             grassHeight[i] = 3.3 + lush * 1.3;
             grassDensity[i] = 0.15 + lush * 0.06;
@@ -181,10 +207,14 @@ export class World {
         }
       }
     }
+    const elev = Float32Array.from(height);
     const baseType = type.slice();
     const baseElev = elev.slice();
     const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
-      baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0 };
+      baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
+      flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null,
+      // The water shader times a river's foam by its water's own lines.
+      rivers: flow ? this.rivers : null };
     // Ground rendering reads these arrays directly, so overrides must live in
     // the chunk as well as in the editor's portable scene description.
     for (let ly = 0; ly < CHUNK; ly++) {
@@ -387,6 +417,76 @@ export class World {
     return Math.min(MAX_WATER_DEPTH, Math.max(0, (WATER_LEVEL - c.elev[i]) / 0.065) * MAX_WATER_DEPTH);
   }
 
+  // The river current at a point, in `out` so callers allocate nothing:
+  // its unit direction on the ground (east, south), its surface speed in
+  // metres a second and the seconds the water took to get here down its own
+  // line through the river, all at the point itself; how deep the water is;
+  // which river it is and where across it the point lies (-1 to 1, + on the
+  // left bank); the outward set of the water on a bend; the river's
+  // half-width in metres; and how sharply it bends. Still everywhere but on river water, including river
+  // cells painted over with other ground.
+  flowAt(x, y, out = {}) {
+    out.x = 0; out.y = 0; out.speed = 0; out.river = 0; out.across = 0; out.secondary = 0;
+    out.halfWidth = 0; out.bend = 0; out.tau = 0;
+    out.depth = this.waterDepthAt(x, y);
+    if (!out.depth && this.typeAt(x, y) !== WATER) return out;
+    const fx = x - 0.5;
+    const fy = y - 0.5;
+    const x0 = Math.floor(fx);
+    const y0 = Math.floor(fy);
+    let near = 0;
+    let across = 0, secondary = 0, half = 0, bend = 0, weight = 0;
+    for (let k = 0; k < 4; k++) {
+      const cx = x0 + (k & 1);
+      const cy = y0 + (k >> 1);
+      const w = (1 - Math.abs(fx - cx)) * (1 - Math.abs(fy - cy));
+      if (w <= 0) continue;
+      const { c, i } = this.locate(cx, cy);
+      const f = c.flow;
+      // Banks carry the river's layout too, so the blend runs right up to
+      // the edge; only river water counts as being in the current.
+      if (!f?.width[i]) continue;
+      if (f.river[i] && c.type[i] === WATER && w > near) { near = w; out.river = f.river[i]; }
+      across += f.across[i] / ACROSS * w;
+      secondary += f.secondary[i] / 127 * w;
+      half += f.width[i] / WIDTH * w;
+      bend += f.bend[i] / 255 * w;
+      weight += w;
+    }
+    if (!out.river) return out;
+    // The way the water runs, how fast, and the time it took come from its
+    // own line through the river at the point itself, so whatever the
+    // current carries keeps exactly to that clock.
+    this.rivers.lineAt(x, y, LINE_AT);
+    out.x = LINE_AT.x;
+    out.y = LINE_AT.y;
+    out.tau = LINE_AT.tau;
+    out.speed = LINE_AT.speed;
+    out.across = across / weight;
+    out.secondary = secondary / weight;
+    out.bend = bend / weight;
+    out.halfWidth = groundHalfWidth(out.x, out.y, half / weight);
+    return out;
+  }
+
+  // The nearest river to a cell within `radius` layout units, or null:
+  // a point on its middle line, for debugging and tests.
+  nearestRiver(x, y, radius = 600) {
+    return this.rivers?.near(x, y, radius)[0] ?? null;
+  }
+
+  // The terrain the seeded land had before rivers were cut into it.
+  preRiverTypeAt(x, y) {
+    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
+    return (c.preRiverType ?? c.baseType)[i];
+  }
+
+  // Whether a cell is river water in the seeded land.
+  riverAt(x, y) {
+    const { c, i } = this.locate(Math.floor(x), Math.floor(y));
+    return !!c.flow?.river[i] || (!!c.preRiverType && c.baseType[i] === WATER && c.preRiverType[i] !== WATER);
+  }
+
   // Scorched grass belongs to the terrain, so it survives leaving the view.
   // Only affected chunks allocate a burn map; overlapping fires deepen it.
   burnGrass(x, y) {
@@ -465,10 +565,20 @@ export class World {
         seed: this.seed,
         season: this.season,
         spawn: this.spawn,
-        typeAt: (x, y) => this.originalTypeAt(x, y),
+        // Generated on the land as it was before rivers cut it, so the
+        // numbered ids of props away from a river never change.
+        typeAt: (x, y) => this.preRiverTypeAt(x, y),
       };
       c.props = generateProps(original, cx, cy, CHUNK);
       c.props.forEach((prop, i) => { prop.id = `p:${cx}:${cy}:${i}`; });
+      if (this.rivers?.reaches(cx, cy) || c.preRiverType) {
+        c.props = c.props.filter(prop => !this.inRiver(prop));
+        this.rivers.stonesIn(cx, cy).forEach((stone, k) => {
+          const prop = makeRiverStone(stone.x, stone.y, mulberry32(stone.seed), stone.seed);
+          prop.id = `v:${cx}:${cy}:${k}`;
+          c.props.push(prop);
+        });
+      }
       if (this.spawnRuins) {
         c.props = c.props.filter(prop => !this.spawnRuins.exclude(prop));
         c.props.push(...this.spawnRuins.props.filter(prop =>
@@ -507,6 +617,20 @@ export class World {
   // The local surface layer determines which loose stones are scattered here.
   rockTypeAt(x, y) {
     return rockTypeAt(this, x, y);
+  }
+
+  // Whether a prop's footing reaches into river water.
+  inRiver(prop) {
+    const w = prop.footW ?? 0;
+    const h = prop.footH ?? 0;
+    for (let y = Math.floor(prop.y - h); y <= Math.floor(prop.y + h); y++) {
+      for (let x = Math.floor(prop.x - w); x <= Math.floor(prop.x + w); x++) {
+        const dx = w ? (x + 0.5 - prop.x) / w : 0;
+        const dy = h ? (y + 0.5 - prop.y) / h : 0;
+        if (dx * dx + dy * dy <= 1.2 && this.riverAt(x, y)) return true;
+      }
+    }
+    return false;
   }
 
   // Every prop whose base lies in the chunks touching the given cell range.

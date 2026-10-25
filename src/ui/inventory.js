@@ -41,9 +41,18 @@ function statName(key) {
   return key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (char) => char.toUpperCase());
 }
 
+// What an empty slot says. Phones have no keyboard, so they name the button.
+export function emptySlotHint(carried, phone = false) {
+  if (carried) return 'Drag another item into this slot to move or swap it.';
+  return phone ? 'Select compatible gear in your bag, then tap Equip.'
+    : 'Select compatible gear in your bag, then press E to equip it.';
+}
+
 /** A live inventory panel. Opening it blocks controls, while the world keeps moving. */
 export class InventoryScreen {
-  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael' }) {
+  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false }) {
+    // Phones have no keyboard, so their hints name taps instead of keys.
+    this.phone = phone;
     // Drops a bag stack into the world; returns { ok, message }.
     this.onDrop = typeof onDrop === 'function' ? onDrop : null;
     this.inventory = inventory;
@@ -490,7 +499,7 @@ export class InventoryScreen {
     const vitals = this.player.vitals;
     const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
       this.inventory.hotbar, this.inventory.capacity, this.selection,
-      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina]);
+      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone()]);
     if (signature === this._signature) return;
     this._signature = signature;
     this.portrait.update(this.player);
@@ -542,9 +551,7 @@ export class InventoryScreen {
     hidden(this.itemPreview, !item);
     setText(this.itemType, item ? item.use ? 'Consumable' : item.equipmentSlot ? 'Equipment' : 'Material' : '');
     setText(this.itemName, item ? item.name : carried ? 'Empty slot' : `${SLOT_NAMES[this.selection.slot]} slot`);
-    setText(this.description, item?.description || (carried
-      ? 'Drag another item into this slot to move or swap it.'
-      : 'Select compatible gear in your bag, then press E to equip it.'));
+    setText(this.description, item?.description || emptySlotHint(carried, this.phone()));
     const statsSignature = JSON.stringify(item?.stats || {});
     if (statsSignature !== this._statsSignature) {
       this._statsSignature = statsSignature;

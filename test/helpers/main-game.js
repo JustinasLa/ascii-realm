@@ -8,6 +8,11 @@ import { isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { FrameClock, FrameQuality, renderSize } from '../../src/render/budget.js';
 import { ASPECT, GRASS, WATER } from '../../src/world/world.js';
+import { PHONE_QUERY, watchPhone } from '../../src/core/phone.js';
+import { FRAME_BIAS, LANDSCAPE_QUERY, phoneDefaultCell, watchLayout, ZoomSlots } from '../../src/core/layout.js';
+import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assist.js';
+import { createHaptics } from '../../src/core/haptics.js';
+import { interaction, performInteraction } from '../../src/core/interact.js';
 
 const noop = () => {};
 
@@ -22,7 +27,8 @@ const inert = () => class {
   }
 };
 
-export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug' } = {}) {
+export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
+  width = 800, height = 600, dpr = undefined } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -30,16 +36,33 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const startupErrors = [];
   let preparedSpellCount = 0;
   let populatedSpellControls = 0;
+  const attributes = new Map([['aria-label', 'Game scene. Press B to build scenery.']]);
   const canvas = Object.assign(new EventTarget(), { classList: { add: noop, remove: noop, toggle: noop },
     focus: noop,
+    getAttribute: name => attributes.get(name) ?? null,
+    setAttribute: (name, value) => attributes.set(name, String(value)),
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 600 }) });
-  const window = Object.assign(new EventTarget(), { innerWidth: 800, innerHeight: 600 });
+  // The phone media query: flip `phoneQuery.matches` and dispatch `change`.
+  const phoneQuery = Object.assign(new EventTarget(), { matches: phone });
+  // The touch-screen query: flip `coarseQuery.matches` to plug in a mouse.
+  const coarseQuery = { matches: coarse, addEventListener: noop, removeEventListener: noop };
+  // The orientation query: `rotate()` swaps the size and dispatches `change`.
+  const landscapeQuery = Object.assign(new EventTarget(), { matches: width > height });
+  const queries = { [PHONE_QUERY]: phoneQuery, [LANDSCAPE_QUERY]: landscapeQuery };
+  const window = Object.assign(new EventTarget(), { innerWidth: width, innerHeight: height,
+    devicePixelRatio: dpr, matchMedia: text => queries[text] });
+  let pinch = null;
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
   let now = 0;
   let bladeSamples = 0;
   let modelUpdates = 0;
   let cellHeight;
+  // The touch controls: the CAST hold hook and what the contextual button shows.
+  const touch = { castHold: null, castDrop: null, interactions: [],
+    setCastHold(open, drop) { this.castHold = open; this.castDrop = drop; },
+    interact: { update: (target) => touch.interactions.push(target) } };
+  const vibrations = [];
   const model = {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
     update: () => { modelUpdates++; },
@@ -56,13 +79,21 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     },
   };
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
-  runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), {
+  const context = {
     console: { ...console, error: (...args) => startupErrors.push(args) }, URL, URLSearchParams, window,
     sessionStorage: { setItem: noop },
     document: { getElementById: id => id === 'screen' ? canvas : hint, hidden: false, addEventListener: noop,
       createElement: () => ({ classList: { add: noop, remove: noop }, hidden: false, textContent: '' }) },
-    matchMedia: () => ({ matches: false }), innerWidth: 800, innerHeight: 600,
-    cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: noop,
+    matchMedia: () => coarseQuery, innerWidth: width, innerHeight: height,
+    navigator: { vibrate: ms => vibrations.push(ms) },
+    cancelAnimationFrame: noop, FrameClock, FrameQuality, renderSize, installTouchControls: () => touch,
+    assistTarget, castAssist, strikeAssist, createHaptics, interaction, performInteraction,
+    watchPhone, installPinchZoom: (_surface, zoomBy) => { pinch = zoomBy; },
+    FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots,
+    PhoneMenu: class {
+      constructor(options) { Object.assign(this, options); this.open = false; }
+      setOpen(open) { this.open = open; this.onToggle(open); }
+    },
     Grass: inert(),
     MAX_TREE_HALF_WIDTH: 40, MAX_TREE_HEIGHT: 160, MAX_LEAF_DRIFT: 8,
     propInView: () => true, drawLeaves: noop,
@@ -81,8 +112,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       nearby() { return null; }
     },
     Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
-    Spellcasting: class extends inert() { constructor() { super(); this.effects = { draw: noop }; } },
-    SpellControls: class extends inert() { populate() { populatedSpellControls++; } },
+    Spellcasting: class extends inert() { constructor(options) { super(); this.options = options; this.effects = { draw: noop }; } },
+    SpellControls: class extends inert() {
+      constructor(casting, options) { super(); this.options = options; }
+      populate() { populatedSpellControls++; }
+    },
     loadSpells: async () => [{ id: 'test-rune', name: 'Test rune' }],
     prepareSpellSounds: (_engine, spells) => { preparedSpellCount = spells.length; },
     moveAxis: () => move,
@@ -98,7 +132,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       trim() {}
     },
     Camera: class {
-      constructor(x, y) { this.x = x; this.y = y; }
+      constructor(x, y) { this.x = x; this.y = y; this.bias = 0; }
+      centreY(view) { return this.y - this.bias * view.rows; }
       follow() {}
       shake() {}
       view() { return { x0: 0, y0: 0, rows: 60, cols: 80 }; }
@@ -107,7 +142,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Dust: class { update() {} draw() {} burst() {} sparks() {} breath() {} },
     Footprints: class { draw() {} },
     Ambience: class { update() {} drawMist() {} draw() {} }, lightsOf: () => [],
-    Fires: inert(),
+    Fires: class extends inert() { nearest() { return null; } },
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
     Fog: inert(), MAX_WALKERS: 20, figureScale: () => 1,
@@ -131,8 +166,9 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
     SceneryBuilder: class {
-      constructor(options) { this.enabled = false; Object.assign(this, options); }
+      constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
       setEnabled(value) { this.enabled = value; this.onModeChange(); }
+      forceExit() { this.enabled = false; this.onModeChange(); }
       updateCamera() {}
       drawPreview() {}
     },
@@ -150,7 +186,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     },
     RemotePlayers: class { sync() {} update() {} visible() { return []; } },
     bindMultiplayerControls: noop,
-  });
+  };
+  runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), context);
   await Promise.resolve();
   await Promise.resolve();
   assert.deepEqual(startupErrors, [], 'the real main module initializes without caught errors');
@@ -159,7 +196,33 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   assert.equal(window.game.casting.spells.get('test-rune').name, 'Test rune');
   return {
     game: window.game,
+    canvas,
+    setPhone(matches) {
+      phoneQuery.matches = matches;
+      phoneQuery.dispatchEvent(Object.assign(new Event('change'), { matches }));
+    },
+    setCoarse(matches) { coarseQuery.matches = matches; },
+    // Turns the phone: swaps the window's sides and fires the orientation
+    // query and a resize, as a browser does.
+    rotate() {
+      [context.innerWidth, context.innerHeight] = [context.innerHeight, context.innerWidth];
+      window.innerWidth = context.innerWidth;
+      window.innerHeight = context.innerHeight;
+      landscapeQuery.matches = context.innerWidth > context.innerHeight;
+      landscapeQuery.dispatchEvent(new Event('change'));
+      window.dispatchEvent(new Event('resize'));
+    },
+    // Resizes the window without turning it, as a sliding browser bar does.
+    resizeTo(w, h) {
+      [context.innerWidth, context.innerHeight] = [w, h];
+      window.innerWidth = w;
+      window.innerHeight = h;
+      window.dispatchEvent(new Event('resize'));
+    },
+    pinch: factor => pinch(factor),
     navigatedTo: () => navigatedTo,
+    touch,
+    vibrations,
     pointer(type, button = 0, pointerType = 'mouse') {
       (type === 'pointerdown' ? canvas : window).dispatchEvent(Object.assign(new Event(type), { button, pointerType }));
     },

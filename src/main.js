@@ -5,6 +5,12 @@ import { GameAudio } from './audio/audio.js';
 import { prepareSpellSounds } from './audio/spells.js';
 import { bindAudioControls } from './audio/controls.js';
 import { installTouchControls } from './core/touch.js';
+import { assistTarget, castAssist, strikeAssist } from './core/aim-assist.js';
+import { createHaptics } from './core/haptics.js';
+import { interaction, performInteraction } from './core/interact.js';
+import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
+import { watchPhone } from './core/phone.js';
+import { installPinchZoom } from './core/pinch.js';
 import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters } from './entities/monsters.js';
@@ -26,6 +32,7 @@ import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
+import { PhoneMenu } from './ui/phone-menu.js';
 import { FrameClock, FrameQuality, renderSize } from './render/budget.js';
 import { Camera } from './world/camera.js';
 import { Ambience, lightsOf } from './world/ambience-fx.js';
@@ -78,7 +85,19 @@ try {
   status.hidden = false;
   throw error;
 }
-const mobile = matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) <= 600;
+// Touch screens, phones and tablets alike, show the on-screen controls.
+const coarse = matchMedia('(pointer: coarse)');
+// A performance flag for the render budget, deliberately broader than the
+// phone layout check below.
+const mobile = coarse.matches || Math.min(innerWidth, innerHeight) <= 600;
+// Phones get the stripped-down layout (style.css) and no scenery builder.
+const device = watchPhone(window, (phone) => onPhoneChange(phone));
+// Phones lay out for portrait or landscape (style.css follows the same
+// query), each with its own default zoom and camera framing.
+const layout = watchLayout(window, (next, previous) => onOrientation(next, previous));
+// The default zoom for this phone screen, in either orientation.
+const phoneDefault = orientation => phoneDefaultCell(orientation, innerWidth, innerHeight, window.devicePixelRatio);
+if (device.phone && !ruinPreview) cellH = zoomTarget = phoneDefault(layout.orientation);
 const quality = new FrameQuality();
 
 const baseChunks = mobile ? 64 : 128;
@@ -91,7 +110,14 @@ function resize() {
 }
 // Set once the world exists: sizes its chunk cache to the view.
 let fitChunks = null;
-window.addEventListener('resize', resize);
+// A phone's screen also changes size without turning, as its browser bars
+// slide away: the default follows it so the view stays in the cell budget,
+// unless the player has pinched a zoom of their own in this orientation.
+function onWindowResize() {
+  if (device.phone && !ruinPreview && !pinched) cellH = zoomTarget = phoneDefault(layout.orientation);
+  resize();
+}
+window.addEventListener('resize', onWindowResize);
 resize();
 
 // Zoom is multiplicative so each notch feels the same at any scale.
@@ -105,7 +131,14 @@ function zoomBy(factor) {
   }
   zoomTarget = Math.max(MIN_CELL, Math.min(MAX_CELL, zoomTarget * factor));
 }
-installTouchControls(zoomBy);
+const touch = installTouchControls(zoomBy, { isPhone: () => device.phone });
+// A pinched zoom is remembered per orientation until the page is reloaded.
+const zoomSlots = new ZoomSlots({ portrait: null, landscape: null });
+let pinched = false;
+installPinchZoom(canvas, (factor) => {
+  pinched = true;
+  zoomBy(factor);
+});
 
 function updateZoom(dt) {
   if (cellH === zoomTarget) return;
@@ -159,6 +192,24 @@ const harvesting = new Harvesting(world, null, { wild: false });
 const mushrooms = new Mushrooms(world);
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
+// Portrait phones show more of the world ahead; everything else is centred.
+function applyFraming() {
+  camera.bias = device.phone ? FRAME_BIAS[layout.orientation] : 0;
+}
+applyFraming();
+// A turned phone keeps the pinched zoom it left and returns to the one it
+// had, and snaps to it at once, as the controls re-lay out in CSS.
+function onOrientation(next, previous) {
+  if (!device.phone) return;
+  if (pinched) zoomSlots.set(previous, zoomTarget);
+  if (!ruinPreview) {
+    const slot = zoomSlots.get(next);
+    pinched = slot !== null;
+    cellH = zoomTarget = slot ?? phoneDefault(next);
+  }
+  applyFraming();
+  resize();
+}
 const fireflies = new Fireflies();
 const ambience = new Ambience();
 const dust = new Dust();
@@ -202,11 +253,31 @@ const fog = new Fog();
 const fogSpells = new SpellFogStirs();
 const debug = { player, camera, world, grass, splashes, weather, fog, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
-  harvesting, mushrooms,
+  harvesting, mushrooms, touch,
+  layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
   audio: sound.engine, sound, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0 } };
 if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
+
+// On phones the corner menu opens the panel dock as a full-screen sheet.
+// It is built before the inventory so its keys are handled first.
+const phoneMenu = new PhoneMenu({
+  button: document.getElementById('phone-menu'),
+  dock: document.getElementById('panel-dock'),
+  closeButton: document.getElementById('phone-menu-close'),
+  inventoryButton: document.getElementById('phone-menu-inventory'),
+  outside: ['touch-controls', 'hud-root', 'screen'].map((id) => document.getElementById(id)),
+  canvas,
+  phone: device,
+  onToggle: (open) => {
+    setGameplayBlocked(open || inventoryScreen.isOpen);
+    cancelActions();
+  },
+  onInventory: () => inventoryScreen.setOpen(true),
+});
+debug.phoneMenu = phoneMenu;
+debug.device = device;
 
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
@@ -222,6 +293,7 @@ const inventoryScreen = new InventoryScreen({
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
+  phone: () => device.phone,
 });
 debug.hud = hud;
 debug.inventoryScreen = inventoryScreen;
@@ -295,11 +367,12 @@ function cursorHeading(fromHips = false) {
   return Math.hypot(mx, mz) > 0.05 ? Math.atan2(mx, mz) : null;
 }
 
-// Where a shot or throw would land: the cursor, or a point straight ahead
-// within the weapon's range when aiming from the keyboard.
-function aimPoint(weapon, draw) {
+// Where a shot or throw would land: the foe touch aim assist picked, the
+// cursor, or a point straight ahead within the weapon's range when aiming
+// from the keyboard.
+function aimPoint(weapon, draw, foe = null) {
   const range = (weapon.projectileRange ?? 8) * (0.4 + 0.6 * draw);
-  const cursor = cursorCell();
+  const cursor = foe ?? cursorCell();
   let mx = cursor ? (cursor.x - player.x) * ASPECT / SCALE : Math.sin(player.heading) * range;
   let mz = cursor ? (cursor.y - player.y) / (SCALE * TILT) : Math.cos(player.heading) * range;
   const distance = Math.hypot(mx, mz);
@@ -311,7 +384,7 @@ function aimPoint(weapon, draw) {
 }
 
 // Lets fly an arrow, or throws the spear or javelin in hand.
-function fireRanged(release, weapon) {
+function fireRanged(release, weapon, foe = null) {
   const kind = isBow(weapon) ? 'arrow' : weapon.type;
   const arrows = inventory.slots.findIndex((stack) => stack?.id === 'arrow');
   if (kind === 'arrow' && arrows < 0) {
@@ -319,7 +392,7 @@ function fireRanged(release, weapon) {
     return;
   }
   const shot = projectiles.launch({
-    x: player.x, y: player.y, h: SCALE * 1.1, aimTarget: aimPoint(weapon, release.draw),
+    x: player.x, y: player.y, h: SCALE * 1.1, aimTarget: aimPoint(weapon, release.draw, foe),
     projectile: { kind }, weapon: weapon.id, material: weapon.material,
     strength: release.draw, damage: weapon.damage,
   });
@@ -389,6 +462,9 @@ function fireNotice(message) {
 let clicked = false;
 let mouseHeld = false;
 let rightClicked = false;
+// Who started drawing the bow or spear: the release comes on the frame the
+// finger lifts, when STRIKE no longer reads as held.
+let rangedSource = null;
 // Losing control of the scene cancels a charge; it is not a weapon release.
 function cancelActions() {
   clearInput();
@@ -396,6 +472,7 @@ function cancelActions() {
   rightClicked = false;
   mouseHeld = false;
   player.ranged.reset();
+  rangedSource = null;
   player.aimTarget = null;
   player.combat.charge = 0;
   player.combat.queued = null;
@@ -424,6 +501,7 @@ window.addEventListener('focusin', (event) => {
 let hitStop = 0;
 
 const builder = new SceneryBuilder({ world, player, camera, renderer,
+  allowed: () => !device.phone,
   onModeChange: () => {
     cancelActions();
     hitStop = 0;
@@ -440,7 +518,33 @@ const builder = new SceneryBuilder({ world, player, camera, renderer,
   },
 });
 debug.builder = builder;
-if (params.has('builder')) builder.setEnabled(true);
+if (params.has('builder') && !device.phone) builder.setEnabled(true);
+
+const SCENE_LABEL = canvas.getAttribute('aria-label');
+// A device can become a phone or stop being one while playing, for example
+// when a mouse is plugged in; the layout follows in CSS at once. The zoom
+// and framing follow only on a real change, never at start-up, which has
+// already chosen them.
+let lastPhone;
+function onPhoneChange(phone) {
+  if (phone && builder.enabled) {
+    builder.forceExit();
+    builder.panel.open = false;
+  }
+  if (!phone && phoneMenu.open) phoneMenu.setOpen(false);
+  canvas.setAttribute('aria-label', phone ? 'Game scene.' : SCENE_LABEL);
+  const changed = lastPhone !== undefined && phone !== lastPhone;
+  lastPhone = phone;
+  if (!changed) return;
+  if (!ruinPreview) {
+    pinched = false;
+    if (phone) cellH = zoomTarget = phoneDefault(layout.orientation);
+    else zoomTarget = 8;
+  }
+  applyFraming();
+  resize();
+}
+onPhoneChange(device.phone);
 
 // Skeletons rise from the ground around the player, goblins come running,
 // now and then a troll lumbers in and an elf takes aim from afar, all to
@@ -453,6 +557,9 @@ const countOf = (name, fallback) => {
 const monsters = new Monsters({ seed,
   counts: { skeleton: countOf('skeletons', 2), goblin: countOf('goblins', 1), troll: countOf('trolls', 1),
     elf: countOf('elves', 1) } });
+// Short vibrations on touch screens when a blow lands and when hurt.
+const haptics = createHaptics({ nav: navigator, enabled: () => coarse.matches && !document.hidden });
+debug.haptics = haptics;
 const spellPeers = new Map();
 const syncSpellPeers = () => {
   player.spellId = multiplayer.id ?? 'self';
@@ -467,17 +574,27 @@ const syncSpellPeers = () => {
 const casting = new Spellcasting({ player, world, monsters, peers: () => [...spellPeers.values()],
   notify: message => hud.notify(message), onSound: e => sound.play(e), onCast: e => multiplayer.sendCast(e),
   // Rune lightning (e.g. Mitlan's Lightning) answers with the storm's own thunder.
-  onLightning: ({ x, y, strength }) => sound.play({ type: 'lightning', x, y, strength }) });
+  onLightning: ({ x, y, strength }) => sound.play({ type: 'lightning', x, y, strength }),
+  onDamage: (target, amount, ctx) => { if (ctx?.caster === player && target !== player && amount > 0) haptics.hit(); } });
 debug.casting = casting;
 hud.attachMana(casting);
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
 window.addEventListener('pagehide', () => casting.clearPresentation());
-// Holding the middle mouse button opens the rune wheel; the chosen rune is
-// bound to R. ?spell=ID binds one up front instead of the last one chosen.
-const spellControls = new SpellControls(casting, { surface: canvas, touchButton: document.getElementById('touch-runes'),
+// Holding the middle mouse button, or CAST on touch screens, opens the rune
+// wheel; the chosen rune is bound to R, or to the CAST button on touch
+// screens. ?spell=ID binds one up front instead of the last one chosen.
+const castKey = () => coarse.matches ? 'CAST' : 'R';
+const spellControls = new SpellControls(casting, { surface: canvas,
   canOpen: () => !builder.enabled && !debug.freeze && !isGameplayBlocked(),
-  onBind: spell => hud.notify(`${spell.name} bound to R`, 'spell'),
-  onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell') });
+  onBind: spell => hud.notify(castKey() === 'R' ? `${spell.name} bound to R` : `${spell.name} ready: tap ${castKey()}`, 'spell'),
+  onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell'), castKey,
+  isPhone: () => device.phone });
+debug.spellControls = spellControls;
+touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap),
+  (pointerId) => spellControls.dropTouch(pointerId));
+// What the contextual touch button can reach. Ground items appear once the
+// game keeps a collection of them.
+const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null });
 loadSpells().then(spells => {
   void prepareSpellSounds(sound.engine, spells);
   casting.spells = new Map(spells.map(s => [s.id, s]));
@@ -721,31 +838,46 @@ function frame(now) {
   const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
   const jump = wasTapped('Space');
   const keyAttack = wasTapped('KeyJ');
-  const attack = keyAttack || clicked;
+  // The touch buttons press codes no keyboard sends; only they get aim assist.
+  const touchStrike = wasTapped('TouchStrike');
+  const touchCast = wasTapped('TouchCast');
+  const touchInteract = wasTapped('TouchInteract');
+  const attack = keyAttack || clicked || touchStrike;
   const sword = wasTapped('KeyF');
   const torchKey = wasTapped('KeyT');
   const toss = wasTapped('KeyG');
   const campfire = wasTapped('KeyC');
   const interact = wasTapped('KeyE');
-  const cast = wasTapped('KeyR') || rightClicked;
+  const keyCast = wasTapped('KeyR') || rightClicked;
+  const cast = keyCast || touchCast;
   rightClicked = false;
   if (!builder.enabled && !debug.freeze) {
     if (jump) player.jump();
-    // A click swings at the cursor; J swings the way the body faces.
-    if (attack && armed && !ranged) player.attack(clicked && !keyAttack ? cursorHeading(true) : null);
+    // A click swings at the cursor; J swings the way the body faces; STRIKE
+    // turns to the nearest foe ahead.
+    if (attack && armed && !ranged) {
+      player.attack(keyAttack ? null : clicked ? cursorHeading(true) : strikeAssist(player, monsters.list)?.heading ?? null);
+    }
     if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
     if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
     if (interact && !isGameplayBlocked() && !player.magicStunned) mushrooms.interact(player);
+    if (touchInteract && !isGameplayBlocked() && !player.magicStunned) {
+      const done = performInteraction(interactables());
+      if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
+      if (done?.kind === 'pickup' && done.result.message) hud.notify(done.result.message, 'pickup');
+    }
     if (cast && !isGameplayBlocked() && !player.magicStunned) {
       syncSpellPeers();
-      const aim = aimPoint({ projectileRange: 40 }, 1);
+      // A tap on CAST sends an attack spell at the nearest foe ahead.
+      const foe = touchCast && !keyCast ? castAssist(player, monsters.list, casting.spells.get(casting.selected))?.foe : null;
+      const aim = foe ? { x: foe.x, y: foe.y } : aimPoint({ projectileRange: 40 }, 1);
       const heading = Math.atan2((aim.x - player.x) * ASPECT / SCALE, (aim.y - player.y) / (SCALE * TILT));
       const result = casting.cast(casting.selected, { aim, heading });
       if (!result.ok) hud.notify(result.reason);
       // The caster turns to send the spell the way it was aimed.
-      else if (cursorCell()) player.face(heading, 0.35);
+      else if (foe || cursorCell()) player.face(heading, 0.35);
     }
   }
   if (time > fireNoticeUntil) fireStatus.classList.remove('visible');
@@ -753,7 +885,7 @@ function frame(now) {
   const stoppedDt = Math.min(dt, hitStop);
   hitStop -= stoppedDt;
   const playerDt = dt - stoppedDt + stoppedDt * 0.05;
-  const held = isDown('KeyJ') || mouseHeld;
+  const held = isDown('KeyJ', 'TouchStrike') || mouseHeld;
   const fromX = player.x, fromY = player.y, fromAir = player.air;
   const paused = debug.freeze || builder.enabled || playerDt === 0;
   casting.setPresentationPaused(paused || document.hidden);
@@ -762,9 +894,15 @@ function frame(now) {
   const rangedBlocked = paused || isGameplayBlocked() || player.magicStunned;
   if (rangedBlocked) player.ranged.reset();
   const release = rangedBlocked ? null : player.ranged.update(dt, ranged && held, weapon);
-  player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw) : null;
-  if (release?.action === 'jab') player.attack(cursorHeading(true));
-  else if (release) fireRanged(release, weapon);
+  if (player.ranged.held > 0) rangedSource ??= isDown('TouchStrike') ? 'touch' : 'other';
+  // A draw from STRIKE aims at the nearest foe ahead, checked again on release.
+  const touchAim = rangedSource === 'touch';
+  const rangedFoe = touchAim && (player.ranged.aiming || release)
+    ? assistTarget(player, monsters.list, { range: weapon.projectileRange ?? 8 })?.foe ?? null : null;
+  player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw, rangedFoe) : null;
+  if (release?.action === 'jab') player.attack(touchAim ? strikeAssist(player, monsters.list)?.heading ?? null : cursorHeading(true));
+  else if (release) fireRanged(release, weapon, rangedFoe);
+  if (player.ranged.held === 0) rangedSource = null;
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {
     if (!paused) model.update(playerDt, player);
@@ -788,12 +926,16 @@ function frame(now) {
     if (e.type === 'damage') {
       lastHurt = time;
       hud.damage(e.amount, e.x, e.y);
+      haptics.hurt();
     }
     // Each cut can fell a tree a blow at a time or mow tall grass.
     if (e.type === 'strike' && !paused) {
       for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
       const hit = monsters.strike(e, player, Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0)));
-      if (hit.length) hitStop = Math.max(hitStop, 0.06);
+      if (hit.length) {
+        hitStop = Math.max(hitStop, 0.06);
+        haptics.hit();
+      }
     }
     if (!debug.freeze) fires.react(world, e, player);
     sound.play(e);
@@ -1031,7 +1173,7 @@ function frame(now) {
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
-  fireflies.update(dt, time, world, camera.x, camera.y, view.cols / 2, view.rows / 2);
+  fireflies.update(dt, time, world, camera.x, camera.centreY(view), view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   ambience.draw(renderer, view, time);
   weather.draw(renderer, view);
@@ -1055,6 +1197,7 @@ function frame(now) {
   const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
   hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
+  touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
   inventoryScreen.update();
   spellControls.update();

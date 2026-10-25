@@ -14,7 +14,7 @@ short version see the [README](../README.md).
   twenty seconds. The wheel shows each rune's mana cost and damage or
   healing, and binding a rune names it in a notice. Mana shows as the MP bar
   in the status frame.
-  On touch screens, hold RUNES to open the wheel and tap CAST. Mana
+  On touch screens, hold CAST to open the wheel and tap CAST to cast. Mana
   refills slowly a second after the last cast. Projectiles, waves, zones, shields, heals,
   status effects, summons and channels share one simulation that strikes the
   monsters in the world. Every rune has its own ASCII animation for casting,
@@ -44,6 +44,12 @@ short version see the [README](../README.md).
 - **Infinite seeded world.** Lakes, shoreline, meadows, dirt paths and rocky
   outcrops from layered noise, generated in 64×64 chunks as you walk. Add
   `?seed=42` to the URL for a different world.
+- **Rivers.** Streams rise on high ground and run downhill until they reach
+  a lake or settle in a small pond, from a couple of rows wide at the spring
+  to about a dozen further down. Each has a deep middle, shallows, a sandy
+  bank and a damp valley floor, and the odd stone stands out of its wider
+  reaches. Rivers never cross the starting ruins or the ground around them.
+  Grass on the bank facing you stays low so it does not hide the water.
 - **Living grass.** Two- and three-row path verges blend into fuller meadows
   and lakeshore reeds, with blades up to five cells high.
   Fine blades, leafy tufts, curved grass, seed heads and dry gold patches give
@@ -76,6 +82,15 @@ short version see the [README](../README.md).
   rises from your ankles to at most your knees, slows your stride, and hides
   the submerged boots. Each footfall throws up droplets and spreading rings;
   jumps, landings and sword impacts make larger splashes.
+  Rivers run: pale foam streaks travel downstream at the water's own speed,
+  faster in the narrows and slower on bends and by the banks, with riffles
+  over fast shallows, froth heaped on the outer bank of a bend, and a V-shaped
+  wake and a slowly turning eddy behind each midstream stone. Leaves float
+  down with the current, splash rings and spray are carried along, and lakes
+  stay calm. Standing or wading in a river, you and any monster are gently
+  carried downstream, about a quarter of a walking pace in the middle of an
+  ordinary reach, more in the deep narrows; you can always wade upstream, and
+  a jump lifts you clear of the push.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.
@@ -117,9 +132,10 @@ short version see the [README](../README.md).
   again and assign it to other quick slots. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
-- **Sword and scenery.** The short sword is the available weapon. Draw or
-  sheathe it, chain cuts into a combo, lunge from a run, plunge from a jump or
-  hold and release for a spinning slash. Three sword blows fell a tree,
+- **Sword and scenery.** The short sword is the available weapon. It is drawn
+  on the first strike and put away after a quiet spell standing still (`F`
+  draws or sheathes it on a keyboard). Chain cuts into a combo, lunge from a
+  run, plunge from a jump or hold and release for a spinning slash. Three sword blows fell a tree,
   leaving a stump, and cuts mow tall grass. Felled trees and cut plants stay
   that way for the session, even after the land has been unloaded and generated
   again. Gathering, loose pickups and item drops are disabled; cutting plants
@@ -146,7 +162,7 @@ short version see the [README](../README.md).
   with a splash.
 - **Audio.** Recorded grass brushing and soft footfalls, procedural footsteps on other
   surfaces and movement effects,
-  slowly breathing wind and grass rustle, quiet lakes, distant birds and bugs,
+  slowly breathing wind and grass rustle, quiet lakes, babbling rivers, distant birds and bugs,
   wildlife calls and rare firefly noise glints,
   with 42 original, mysterious RPG songs in 21 day/night pairs, using drifting
   choir, bowed tones, low drones, distant bells and a synthesized room reverb.
@@ -217,10 +233,20 @@ short version see the [README](../README.md).
   not every moment; two cuts bring it down. One at a time; `?elves=N` sets how
   many.
   Wounded monsters show a segmented health bar over their heads.
-- **Phone controls and performance.** A touch stick for walking/running, separate
-  jump, sword and cast buttons, and zoom controls in portrait or landscape. They
-  appear only when touch is the primary input, so touchscreen laptops and narrow
-  desktop windows keep the keyboard and mouse layout. Rendering
+- **Phone controls and performance.** A touch stick for walking/running and a
+  thumb cluster in the opposite corner (a large STRIKE with JUMP, CAST and a
+  contextual INTERACT around it); touch strikes and
+  casts turn to the nearest enemy ahead, and phones vibrate briefly on a hit or
+  a wound. They appear only
+  when touch is the primary input, so touchscreen laptops and narrow desktop
+  windows keep the keyboard and mouse layout. Phones (touch with no hover and a
+  short side of 600px or less) show nothing else but a slim health and mana strip
+  and a corner menu holding Inventory, Multiplayer and Audio; pinch the scene to
+  zoom. Phones lay out for portrait (controls in the bottom corners, the view
+  framed to show more ahead) or landscape (controls at the side edges, the
+  middle clear), each with its own zoom, and re-lay out at once when turned
+  without letting go of held controls. Controls keep clear of notches, the home
+  indicator and sliding browser bars. Tablets keep the full layout with the − / + zoom buttons. Rendering
   targets 60 fps, caps backing resolution, and lowers that resolution under
   sustained load without changing your zoom. Zoom stops at the furthest scale
   that still draws grass blades, swaying trees and reflections; a very wide

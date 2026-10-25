@@ -23,18 +23,19 @@ const tag = (name, className, text) => {
   return node;
 };
 
-// Holding the middle mouse button (or RUNES on touch) opens the rune wheel: a school first, then
-// one of its runes, which stays bound to R until another is chosen.
+// Holding the middle mouse button (or holding CAST on touch) opens the rune wheel: a school
+// first, then one of its runes, which stays bound to R until another is chosen. Touch screens
+// cast it with the CAST button, so `castKey` names that instead.
 export class SpellControls {
-  constructor(casting, { surface, touchButton, canOpen = () => true, onBind = () => {}, onFocus = () => {},
-    restore = true, storage }) {
+  constructor(casting, { surface, canOpen = () => true, onBind = () => {}, onFocus = () => {},
+    restore = true, storage, castKey = () => 'R', isPhone = () => false }) {
     if (storage === undefined) {
       try { storage = globalThis.localStorage; } catch { storage = null; }
     }
-    Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage });
+    Object.assign(this, { casting, surface, canOpen, onBind, onFocus, restore, storage, castKey, isPhone });
     this.menu = new RadialMenu();
     this.buildWheel();
-    this.listen(touchButton);
+    this.listen();
     this.populate();
   }
 
@@ -74,7 +75,9 @@ export class SpellControls {
 
   update() {
     if (this.menu.isOpen && !this.canOpen()) this.close();
+    // paint() redraws only when its key, the cast button's name included, has changed.
     if (this.menu.isOpen && this.menu.stage === 'items') this.tickWheel();
+    else this.paint();
   }
 
   // --- The wheel ---------------------------------------------------------
@@ -100,6 +103,15 @@ export class SpellControls {
   open(x, y, held, source, pointerId = null) {
     if (!this.menu.open(held)) return false;
     Object.assign(this, { source, pointerId });
+    this.place(x, y);
+    this.wheel.hidden = false;
+    document.body.classList.add('spell-wheel-open');
+    this.drawWheel();
+    return true;
+  }
+
+  // Sizes the wheel to the screen and centres it near (x, y), pointing there.
+  place(x, y) {
     const vw = innerWidth, vh = innerHeight;
     // Keep clear of the rune bar and hotbar when the screen is tall enough.
     this.scale = Math.min(1, (vw - 16) / (BOX * 2), (vh - 16) / (BOX * 2));
@@ -110,11 +122,24 @@ export class SpellControls {
     this.ring.style.left = `${this.cx}px`;
     this.ring.style.top = `${this.cy}px`;
     this.ring.style.transform = `translate(-50%, -50%) scale(${this.scale})`;
-    this.wheel.hidden = false;
-    document.body.classList.add('spell-wheel-open');
     this.menu.point((x - this.cx) / this.scale, (y - this.cy) / this.scale);
-    this.drawWheel();
-    return true;
+  }
+
+  // Holding CAST opens the wheel mid-screen on that finger, which then
+  // points, lifts and taps as the mouse does with the middle button held.
+  // `isTap(e)` tells a lift that still counts as a tap on CAST: that closes
+  // the wheel without choosing, whatever the finger passed over meanwhile.
+  openTouch(pointerId, isTap = () => false) {
+    if (this.menu.isOpen || !this.canOpen()) return false;
+    this.isTap = isTap;
+    return this.open(innerWidth / 2, innerHeight / 2, true, 'touch', pointerId);
+  }
+
+  // CAST lost its finger: the wheel it opened goes away with it.
+  dropTouch(pointerId) {
+    if (!this.menu.isOpen || this.source !== 'touch' || pointerId !== this.pointerId) return;
+    this.close();
+    this.onFocus();
   }
 
   close() {
@@ -165,13 +190,14 @@ export class SpellControls {
     this.paint();
   }
 
-  // Hover, the bound rune and the hub follow the pointer; the art is redrawn
-  // only when one of them changes.
+  // Hover, the bound rune and the hub follow the pointer, and the cast hint
+  // follows the cast button's name; the art is redrawn only when one of them changes.
   paint() {
     const menu = this.menu;
     if (!menu.isOpen || !this.spots) return;
     const bound = this.casting.selected;
-    const key = JSON.stringify([menu.stage, menu.group?.id, menu.entries.length, menu.hover, bound, this.waiting, this.scale]);
+    const key = JSON.stringify([menu.stage, menu.group?.id, menu.entries.length, menu.hover, bound, this.waiting, this.scale,
+      this.castKey()]);
     if (this.artKey === key) return;
     this.artKey = key;
     this.render(bound);
@@ -184,7 +210,8 @@ export class SpellControls {
     if (menu.stage === 'groups') {
       const spell = this.casting.spells.get(bound);
       if (hovered) return [[[hovered.sigil, hovered.color, true]], ...name(hovered.name, ink), [[`${hovered.kind} runes`, muted]]];
-      return [...name('Runes', ink), [[spell ? 'Bound to [R]' : 'Choose a school', muted]],
+      const key = this.castKey(), hint = key === 'R' ? 'Bound to [R]' : `Tap ${key} to cast`;
+      return [...name('Runes', ink), [[spell ? hint : 'Choose a school', muted]],
         ...(spell ? wrap(spell.name, HUB_WIDTH).map(line => [[line, quiet]]) : [])];
     }
     const color = menu.group.color;
@@ -202,9 +229,11 @@ export class SpellControls {
     }
     const isBound = entry.id === bound, waiting = this.waiting[i];
     const color = hover ? tint : waiting ? quiet : isBound ? tint : muted;
+    // A button name tags the bound rune on a line of its own: [CAST] would crowd the narrow sectors.
+    const key = this.castKey(), tag = [['[', quiet], [key, ink], [']', quiet]], own = isBound && key.length > 1;
     return [...wrap(entry.name, width).map(line => [[line, color, true]]),
-      [[this.stats(entry)[0], hover ? muted : quiet], ...(isBound ? [[' [', quiet], ['R', ink], [']', quiet]] : [])],
-      ...(waiting ? [[['low mana', quiet]]] : [])];
+      [[this.stats(entry)[0], hover ? muted : quiet], ...(isBound && !own ? [[' ', quiet], ...tag] : [])],
+      ...(own ? [tag] : []), ...(waiting ? [[['low mana', quiet]]] : [])];
   }
 
   render(bound) {
@@ -275,7 +304,7 @@ export class SpellControls {
     this.paint();
   }
 
-  listen(touchButton) {
+  listen() {
     const stop = e => { e.stopImmediatePropagation(); e.preventDefault(); };
     window.addEventListener('mousedown', e => {
       if (e.button === 1) {
@@ -313,7 +342,8 @@ export class SpellControls {
     const lift = e => {
       if (!this.menu.isOpen || e.pointerId !== this.pointerId) return;
       this.pointerId = null;
-      this.apply(e.type === 'pointercancel' ? this.menu.close() : this.menu.release());
+      const tap = this.isTap(e);
+      this.apply(e.type === 'pointercancel' || tap ? this.menu.close() : this.menu.release());
     };
     window.addEventListener('pointerup', lift, true);
     window.addEventListener('pointercancel', lift, true);
@@ -326,11 +356,14 @@ export class SpellControls {
       if (e.key === 'Escape' && this.menu.isOpen) { stop(e); this.close(); this.onFocus(); }
     }, true);
     window.addEventListener('blur', () => { if (this.menu.isOpen) this.close(); });
-    window.addEventListener('resize', () => { if (this.menu.isOpen) this.close(); });
-    touchButton?.addEventListener('pointerdown', e => {
-      if (this.menu.isOpen || !this.canOpen()) return;
-      e.preventDefault();
-      if (this.open(innerWidth / 2, innerHeight / 2, true, 'touch', e.pointerId)) touchButton.setPointerCapture(e.pointerId);
+    // A phone turning keeps a wheel held on CAST, moved to the new centre;
+    // every other wheel closes when the window changes size.
+    window.addEventListener('resize', () => {
+      if (!this.menu.isOpen) return;
+      if (this.source === 'touch' && this.isPhone()) {
+        this.place(innerWidth / 2, innerHeight / 2);
+        this.drawWheel();
+      } else this.close();
     });
   }
 }

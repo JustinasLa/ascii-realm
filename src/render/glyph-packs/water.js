@@ -307,3 +307,27 @@ export const WATER = [
   { name: 'water.drop.2', draw: (ctx) => line(ctx, [15, 14, 15, 34], 4, 1) },
   { name: 'water.drop.3', draw: (ctx) => { line(ctx, [15, 6, 15, 40], 3.6, 0.8); dot(ctx, 15, 8, 3.2, 1); } },
 ];
+
+// River current, packed after every other pack so existing glyphs keep
+// their numbers. Foam streaks drawn along the flow in four directions on
+// screen (along the rows, rising to the right, down the screen, falling to
+// the right), light to heavy; riffles of broken chop over fast shallows;
+// the curl of an eddy behind a stone; and the arms of the V a stone leaves
+// in the water downstream.
+export const RIVER = [
+  ...[0, 1, 2, 3].flatMap((o) => variants(`water.streak.${o}`, 3, (ctx, w, h, k) => {
+    const a = [0, -Math.PI / 4, Math.PI / 2, Math.PI / 4][o];
+    const r = 22 + k * 6;
+    line(ctx, [15 - Math.cos(a) * r, 25 - Math.sin(a) * r, 15 + Math.cos(a) * r, 25 + Math.sin(a) * r], 2.6 + k * 1.4, 0.6 + k * 0.2);
+  })),
+  ...variants('water.riffle', 4, (ctx, w, h, i) => {
+    const rand = rng(1700 + i);
+    const y = 18 + rand() * 14;
+    curve(ctx, 2, y + 3, 15, y - 6 - rand() * 4, 28, y + 3, 3.6, 0.9);
+  }),
+  ...variants('water.eddy', 3, (ctx, w, h, i) => arc(ctx, 15, 25, 9, 12, [0.6, -1.2, 1.9][i], [5.6, 1.2, 4.4][i], 3.6, 0.9)),
+  ...variants('water.vee', 4, (ctx, w, h, o) => {
+    const a = [0, -Math.PI / 4, Math.PI / 2, Math.PI / 4][o];
+    line(ctx, [15 - Math.cos(a) * 26, 25 - Math.sin(a) * 26, 15 + Math.cos(a) * 26, 25 + Math.sin(a) * 26], 3.4, 0.95);
+  }),
+];

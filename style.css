@@ -232,6 +232,8 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
    They follow the primary pointer, so touchscreen laptops and narrow desktop
    windows keep the mouse and keyboard layout. */
 #touch-controls { display: none; }
+/* The phone menu and its sheet rows exist only in the phone layout below. */
+#phone-menu, .phone-sheet-head, #panel-dock > .phone-sheet-row { display: none; }
 @media (pointer: coarse) {
   #touch-controls { display: block; position: fixed; z-index: 12; inset: 0; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #touch-controls button, #move-pad { pointer-events: auto; touch-action: none; color: var(--ink); background: var(--surface); border: 1px solid var(--frame); }
@@ -241,8 +243,17 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   #move-stick { width: 36px; height: 36px; border: 1px solid var(--frame); background: #c3ccc624; pointer-events: none; }
   #move-pad.running { background: #202824eb; }
   .move-label { position: absolute; bottom: 7px; color: var(--muted); font-size: 9px; pointer-events: none; }
-  .actions { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); display: grid; grid-template-columns: 50px 50px; gap: 4px; }
-  #touch-controls .strike { grid-column: span 2; min-height: 52px; }
+  /* The thumb cluster: a large STRIKE in the corner, JUMP to its left, CAST
+     above it and the contextual INTERACT on the diagonal between them. */
+  .actions { position: absolute; right: max(12px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); width: 144px; height: 144px; pointer-events: none; }
+  .actions > button { position: absolute; width: 52px; height: 52px; }
+  #touch-controls .actions > .strike { right: 0; bottom: 0; width: 76px; height: 76px; font-size: 12px; font-weight: 700; }
+  .actions > .jump { right: 92px; bottom: 12px; }
+  .actions > .cast { right: 12px; bottom: 92px; }
+  .actions > .interact { right: 92px; bottom: 92px; }
+  /* Held CAST: a dashed inner frame says the rune wheel is coming. */
+  #touch-controls .cast.holding { outline: 1px dashed var(--solid); outline-offset: -6px; }
+  #touch-controls [hidden] { display: none !important; }
   .zoom-controls { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: flex; gap: 4px; }
   #touch-controls .zoom-controls button { font-size: 18px; }
   #panel-dock { top: calc(max(12px, env(safe-area-inset-top)) + 52px); max-height: calc(100dvh - 208px); }
@@ -320,8 +331,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 @media (max-height: 540px) and (min-width: 681px) {
   .hud-hotbar-wrap { bottom: 10px; }
   #move-pad { width: 88px; height: 88px; }
-  .actions { grid-template-columns: 44px 44px; }
-  #touch-controls .strike { min-height: 44px; }
   #panel-dock { max-height: calc(100dvh - 174px); }
   .hud-prompt { bottom: 112px; }
   #fire-status { bottom: 146px; }
@@ -340,8 +349,6 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
   #panel-dock { top: 12px; max-height: calc(100dvh - 172px); }
   .zoom-controls { top: auto; bottom: 112px; }
   #move-pad { width: 88px; height: 88px; }
-  .actions { grid-template-columns: 44px 44px; }
-  #touch-controls .strike { min-height: 44px; }
   .hud-prompt { bottom: 164px; }
   #fire-status { bottom: 198px; }
 }
@@ -356,3 +363,67 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .spell-wheel-ring { position: absolute; transform-origin: 50% 50%; animation: spell-wheel-in 110ms ease-out; }
 @keyframes spell-wheel-in { from { opacity: 0; } }
 .spell-wheel-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Phones: a coarse pointer with no hover and a short side of 600px or less
+   (src/core/phone.js holds the same query). Only the stick, the action
+   buttons, a slim vitals strip and a corner menu stay on screen. Tablets,
+   touchscreen laptops and narrow desktop windows never match. */
+@media (pointer: coarse) and (hover: none) and (max-width: 600px), (pointer: coarse) and (hover: none) and (max-height: 600px) {
+  #panel-dock, .zoom-controls,
+  .hud-hotbar-wrap, .hud-party, .hud-party-tab, .hud-name, .hud-frame-note,
+  .hud-prompt, #fire-status, #builder-banner, #builder-cursor,
+  kbd, .key-hint, .inventory-help,
+  #scenery-builder, #weather-panel, #help-controls, #grass-preview { display: none !important; }
+
+  /* Portrait is the base: the stick and the thumb cluster sit in the lower
+     corners, clear of rounded corners and the home indicator. The layers
+     follow the dynamic viewport, so a browser bar never covers them. */
+  @supports (height: 100dvh) {
+    #touch-controls, #hud-root { inset: 0 0 auto 0; height: 100dvh; }
+  }
+  #move-pad { left: max(16px, calc(env(safe-area-inset-left) + 8px)); bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px)); width: 108px; height: 108px; }
+  .actions { right: max(16px, calc(env(safe-area-inset-right) + 8px)); bottom: max(16px, calc(env(safe-area-inset-bottom) + 8px)); }
+
+  /* Health and mana as a slim strip on the top edge. */
+  .hud-frames { top: max(6px, env(safe-area-inset-top)); left: max(8px, env(safe-area-inset-left)); width: min(46vw, 200px); max-height: none; overflow: visible; gap: 4px; pointer-events: none; }
+  .hud-status { display: grid; gap: 2px; padding: 3px 6px; }
+  .hud-vital { grid-template-columns: 16px 1fr; gap: 4px; margin-top: 0; }
+  .hud-vital-label { font-size: 9px; line-height: 10px; }
+  .hud-vital-value { display: none; }
+  .hud-vital-bar { height: 5px; }
+  .hud-toast { padding: 2px 6px; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+  .hud-toast:nth-last-child(n+3) { display: none; }
+
+  /* A small framed square in the top-right corner with a 44px hit area. */
+  #phone-menu { position: fixed; z-index: 13; top: max(4px, env(safe-area-inset-top)); right: max(4px, env(safe-area-inset-right)); display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: var(--ink); background: transparent; border: 0; border-radius: 0; font-size: 13px; line-height: 1; opacity: 0.8; touch-action: manipulation; }
+  #phone-menu::before { content: ""; position: absolute; inset: 7px; background: var(--surface); border: 1px solid var(--frame); }
+  #phone-menu > span { position: relative; }
+  #phone-menu:active::before { background: var(--hover); }
+  :is(.inventory-open, .phone-menu-open, .spell-wheel-open) #phone-menu { display: none; }
+
+  /* The menu re-uses the panel dock as a full-screen sheet. */
+  body.phone-menu-open #panel-dock { display: flex !important; inset: 0; top: 0; right: 0; left: 0; bottom: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; align-items: stretch; gap: 6px; padding: 0 max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: rgba(6, 9, 10, 0.97); overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; }
+  body.phone-menu-open #panel-dock > details, body.phone-menu-open #panel-dock > details[open] { width: 100%; }
+  body.phone-menu-open #panel-dock > details > summary, #panel-dock > .phone-sheet-row { display: flex; align-items: center; min-height: 48px; padding: 0 12px; font-size: 12px; }
+  #panel-dock > .phone-sheet-row { display: flex; flex: 0 0 auto; width: 100%; color: var(--ink); background: var(--surface); border: 1px solid var(--frame); text-align: left; pointer-events: auto; }
+  #panel-dock > .phone-sheet-row::before { content: "+ "; color: var(--quiet); }
+  body.phone-menu-open #panel-dock > details > summary::before, #panel-dock > .phone-sheet-row::before { white-space: pre; }
+  .phone-sheet-head { position: sticky; top: 0; z-index: 1; display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; padding: max(8px, env(safe-area-inset-top)) 0 6px; background: var(--solid); border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+  #panel-dock .phone-sheet-head button { min-width: 64px; min-height: 44px; border-color: var(--frame); font-size: 12px; }
+  body.phone-menu-open #touch-controls { visibility: hidden; }
+  body.phone-menu-open .hud { opacity: 0.2; }
+
+  /* The inventory is a full-screen sheet too. */
+  .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
+  .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
+}
+/* Landscape phones: the stick and the cluster at the side edges, mid-to-low,
+   leaving the middle of the screen clear (src/core/layout.js holds the
+   orientation query). */
+@media (pointer: coarse) and (hover: none) and (max-height: 600px) and (orientation: landscape) {
+  #move-pad, .actions { bottom: calc(max(12px, env(safe-area-inset-bottom)) + 6vh); }
+  #move-pad { left: max(16px, calc(env(safe-area-inset-left) + 12px)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 6dvh); }
+  .actions { right: max(16px, calc(env(safe-area-inset-right) + 12px)); bottom: calc(max(12px, env(safe-area-inset-bottom)) + 6dvh); }
+  .hud-frames { width: min(40vw, 320px); }
+  .hud-status { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 10px; }
+}

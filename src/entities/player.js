@@ -1,3 +1,4 @@
+import { currentAt, easeCarry, immersion } from '../world/rivers.js';
 import { ASPECT, MAX_WATER_DEPTH } from '../world/world.js';
 import { Cape } from './cape.js';
 import { Combat } from './combat.js';
@@ -141,6 +142,9 @@ export class Player {
     // neither the body nor its walking speed jumps between terrain cells.
     this.waterDepth = 0;
     this.speedScale = 1;
+    // How fast a river's current carries the body, metres a second on the
+    // ground (x east, y south).
+    this.carry = { x: 0, y: 0 };
     // Seconds spent standing still, and where the head is turned.
     this.idle = 0;
     this.look = 0;
@@ -496,6 +500,10 @@ export class Player {
       this.surge *= Math.exp(-6 * dt);
     }
 
+    // A river carries a wading body gently downstream, as flowing water
+    // does. It is not walking, so the legs and footfalls ignore it.
+    this.drift(dt, world, depth);
+
     // Pitch forward a little when setting off or speeding up. Slowing down
     // does not rock the body back: it just settles upright.
     const speedNow = this.skid > 0 ? this.skidSpeed : metres / Math.max(dt, 1e-3);
@@ -743,6 +751,16 @@ export class Player {
   // Lets the cape fall still, e.g. after the pose was changed by hand.
   settleCape() {
     this.cape.settle(...this.capeMount());
+  }
+
+  // The current eases the carry toward its own pace, scaled by how deep
+  // the feet are in it (a jump clears them), and slides the body with it.
+  drift(dt, world, depth) {
+    const target = currentAt(world, this.x, this.y, immersion(depth, this.air), 1.2);
+    easeCarry(this.carry, target, dt, this.air > 0);
+    if (!this.carry.x && !this.carry.y) return;
+    this.tryMove(world, this.carry.x * toCols * dt, 0);
+    this.tryMove(world, 0, this.carry.y * toRows * dt);
   }
 
   // Moves along one axis at a time so the player slides around solid props.

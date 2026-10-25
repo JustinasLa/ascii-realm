@@ -17,23 +17,24 @@
         <span id="move-stick"></span>
         <span class="move-label">MOVE / RUN</span>
       </div>
-      <div class="actions">
-        <button type="button" data-key="KeyF" aria-label="Draw or sheathe sword">DRAW</button>
-        <button type="button" data-key="Space" aria-label="Jump">JUMP</button>
-        <button type="button" data-key="KeyJ" class="strike" aria-label="Strike">STRIKE</button>
-        <button type="button" data-key="KeyE" aria-label="Interact with nearby mushroom to release spores">SPORES</button>
-        <button type="button" data-key="KeyR" aria-label="Cast selected rune spell">CAST</button>
-        <button type="button" id="touch-runes" aria-label="Hold to open the rune wheel">RUNES</button>
+      <div class="actions" role="group" aria-label="Actions">
+        <button type="button" data-key="TouchStrike" class="strike" aria-label="Strike">STRIKE</button>
+        <button type="button" data-key="Space" class="jump" aria-label="Jump">JUMP</button>
+        <button type="button" id="touch-cast" class="cast" aria-label="Cast the bound rune. Hold to choose a rune.">CAST</button>
+        <button type="button" id="touch-interact" data-key="TouchInteract" class="interact" aria-label="Release spores from the glowcap" hidden>SPORES</button>
       </div>
       <div class="zoom-controls" aria-label="Zoom">
         <button type="button" data-zoom="0.8695652174" aria-label="Zoom out">−</button>
         <button type="button" data-zoom="1.15" aria-label="Zoom in">+</button>
       </div>
     </div>
+    <button type="button" id="phone-menu" aria-label="Menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="panel-dock"><span aria-hidden="true">=</span></button>
     <p id="status" role="status" hidden></p>
     <div id="builder-banner" hidden>SCENERY BUILDER <span>Press B to play</span></div>
     <div id="builder-cursor" aria-hidden="true" hidden></div>
     <div id="panel-dock" role="navigation" aria-label="Game panels">
+    <div class="phone-sheet-head"><span>Menu</span><button type="button" id="phone-menu-close">Close</button></div>
+    <button type="button" id="phone-menu-inventory" class="phone-sheet-row" aria-haspopup="dialog">Inventory</button>
     <details id="scenery-builder">
       <summary>Scenery builder <kbd>B</kbd></summary>
       <div class="builder-panel">
@@ -125,7 +126,7 @@
     </details>
     <details id="audio-controls">
       <summary>Audio</summary>
-      <button id="audio-mute" type="button" aria-pressed="false">Mute (M)</button>
+      <button id="audio-mute" type="button" aria-pressed="false">Mute<span class="key-hint"> (M)</span></button>
       <label>Master <input type="range" min="0" max="100" data-volume="master" aria-label="Master volume" /><output></output></label>
       <label>Music <input type="range" min="0" max="100" data-volume="music" aria-label="Music volume" /><output></output></label>
       <label>Effects <input type="range" min="0" max="100" data-volume="sfx" aria-label="Effects volume" /><output></output></label>
@@ -134,7 +135,7 @@
       <label>Weather <input type="range" min="0" max="100" data-volume="weather" aria-label="Weather volume" /><output></output></label>
       <p id="audio-status" role="status">Press a key or click to enable sound</p>
       <p>Now playing: <span id="audio-song"></span></p>
-      <button id="audio-skip" type="button">Skip song (N)</button>
+      <button id="audio-skip" type="button">Skip song <span class="key-hint">(N)</span></button>
       <button id="grass-preview" type="button">Preview grass footsteps</button>
     </details>
     <details id="weather-panel">
