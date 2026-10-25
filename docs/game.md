@@ -13,7 +13,7 @@ short version see the [README](../README.md).
   at once while there is mana for it. The wheel shows each rune's mana cost and damage or
   healing, and binding a rune names it in a notice. Mana shows as the MP bar
   in the status frame.
-  On touch screens, hold RUNES to open the wheel and tap CAST. Mana
+  On touch screens, hold CAST to open the wheel and tap CAST to cast. Mana
   refills slowly a second after the last cast. Projectiles, waves, zones, shields, heals,
   status effects, summons and channels share one simulation that strikes the
   monsters in the world. Every rune has its own ASCII animation for casting,
@@ -131,9 +131,10 @@ short version see the [README](../README.md).
   again and assign it to other quick slots. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
-- **Sword and scenery.** The short sword is the available weapon. Draw or
-  sheathe it, chain cuts into a combo, lunge from a run, plunge from a jump or
-  hold and release for a spinning slash. Three sword blows fell a tree,
+- **Sword and scenery.** The short sword is the available weapon. It is drawn
+  on the first strike and put away after a quiet spell standing still (`F`
+  draws or sheathes it on a keyboard). Chain cuts into a combo, lunge from a
+  run, plunge from a jump or hold and release for a spinning slash. Three sword blows fell a tree,
   leaving a stump, and cuts mow tall grass. Felled trees and cut plants stay
   that way for the session, even after the land has been unloaded and generated
   again. Gathering, loose pickups and item drops are disabled; cutting plants
@@ -231,8 +232,11 @@ short version see the [README](../README.md).
   not every moment; two cuts bring it down. One at a time; `?elves=N` sets how
   many.
   Wounded monsters show a segmented health bar over their heads.
-- **Phone controls and performance.** A touch stick for walking/running and
-  separate jump, sword and cast buttons in portrait or landscape. They appear only
+- **Phone controls and performance.** A touch stick for walking/running and a
+  thumb cluster in the opposite corner (a large STRIKE with JUMP, CAST and a
+  contextual INTERACT around it) in portrait or landscape; touch strikes and
+  casts turn to the nearest enemy ahead, and phones vibrate briefly on a hit or
+  a wound. They appear only
   when touch is the primary input, so touchscreen laptops and narrow desktop
   windows keep the keyboard and mouse layout. Phones (touch with no hover and a
   short side of 600px or less) show nothing else but a slim health and mana strip

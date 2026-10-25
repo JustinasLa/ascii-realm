@@ -320,7 +320,7 @@ function riverChunk({ speed = 0.6, bend = 0, secondary = 0, stones = [], depth =
     f.river[i] = 7;
     f.speed[i] = Math.round(speed * 255);
     f.across[i] = Math.round(q * 80);
-    f.width[i] = 12.5 * 60 > 255 ? 255 : 12.5 * 60;
+    f.width[i] = Math.min(255, Math.round(12.5 * 40));
     f.bend[i] = Math.round(bend * 255);
     f.secondary[i] = Math.round(secondary * 127);
     f.tau[i] = (col / 21.67) / speed;

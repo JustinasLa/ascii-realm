@@ -1,5 +1,15 @@
 import { input } from './input.js';
+import { InteractButton } from './interact.js';
 
+// A press on CAST shorter than this casts the bound rune; a longer one opens
+// the rune wheel on the same finger instead, and never casts.
+export const CAST_HOLD_MS = 300;
+// The button shows that the wheel is coming after this long.
+export const CAST_HINT_MS = 150;
+
+// The stick, the thumb cluster (STRIKE, JUMP, CAST and the contextual
+// INTERACT) and the tablet zoom buttons. STRIKE, CAST and INTERACT press
+// input codes no keyboard sends, so the game can tell them from J, R and E.
 export function installTouchControls(zoomBy) {
   const root = document.getElementById('touch-controls');
   const pad = document.getElementById('move-pad');
@@ -71,6 +81,7 @@ export function installTouchControls(zoomBy) {
     window.addEventListener('resize', clear);
     document.addEventListener('visibilitychange', () => { if (document.hidden) clear(); });
   }
+  const cast = castButton(document.getElementById('touch-cast'));
   for (const button of root.querySelectorAll('[data-zoom]')) {
     button.addEventListener('click', () => zoomBy(Number(button.dataset.zoom)));
   }
@@ -79,4 +90,59 @@ export function installTouchControls(zoomBy) {
   window.addEventListener('resize', reset);
   document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
   root.addEventListener('contextmenu', (e) => e.preventDefault());
+  return { setCastHold: cast.setHold, interact: new InteractButton(document.getElementById('touch-interact')) };
+}
+
+// CAST: a tap casts on release; holding it hands the finger to the rune
+// wheel through `hold(pointerId, isTap)`. Whether a press was a tap is read
+// from the events' own times, so a busy frame that delays the lift (and lets
+// the wheel open) still casts a quick tap; `isTap` lets the wheel close on
+// that lift without choosing anything. Losing the finger after the wheel has
+// it calls `drop(pointerId)`, which puts the wheel away.
+function castButton(button) {
+  let hold = () => false;
+  let drop = () => {};
+  let pointer = null;
+  let downAt = 0;
+  let timer = null;
+  let hint = null;
+  const isTap = (e) => e.timeStamp - downAt < CAST_HOLD_MS;
+  const reset = () => {
+    clearTimeout(timer);
+    clearTimeout(hint);
+    timer = hint = pointer = null;
+    button.classList.remove('pressed', 'holding');
+  };
+  button.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || pointer !== null) return;
+    e.preventDefault();
+    pointer = e.pointerId;
+    downAt = e.timeStamp;
+    button.classList.add('pressed');
+    button.setPointerCapture(pointer);
+    hint = setTimeout(() => button.classList.add('holding'), CAST_HINT_MS);
+    timer = setTimeout(() => {
+      timer = null;
+      hold(pointer, isTap);
+    }, CAST_HOLD_MS);
+  });
+  button.addEventListener('pointerup', (e) => {
+    if (e.pointerId !== pointer) return;
+    if (isTap(e)) input.tapped.add('TouchCast');
+    reset();
+  });
+  // Forgetting the finger after the hold gave it to the wheel puts the
+  // wheel away too, or nothing would be left to close it.
+  const forget = () => {
+    if (pointer !== null && timer === null) drop(pointer);
+    reset();
+  };
+  for (const type of ['pointercancel', 'lostpointercapture']) {
+    button.addEventListener(type, (e) => { if (e.pointerId === pointer) forget(); });
+  }
+  button.addEventListener('click', (e) => { if (e.detail === 0) input.tapped.add('TouchCast'); });
+  window.addEventListener('blur', forget);
+  window.addEventListener('resize', forget);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) forget(); });
+  return { setHold: (open, cancel = () => {}) => { hold = open; drop = cancel; } };
 }

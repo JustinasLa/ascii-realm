@@ -35,20 +35,37 @@
 
 ## Touch
 
-On a phone, drag the left pad to walk and push it to the outer edge to run.
-Use **JUMP**, **STRIKE**, **DRAW**, **SPORES** and **CAST** with your other thumb; repeated
-strikes chain a combo, and spells cast on touch follow your facing. Hold
-**RUNES**, slide to a school and lift, then tap a rune to bind it to **CAST**.
+On a touch screen, drag the left pad to walk and push it to the outer edge to
+run. The other thumb has a cluster in the bottom-right corner:
+
+- **STRIKE**, the large square in the corner, draws the sword on the first
+  strike, chains a combo when tapped again and charges a spin when held. The
+  sword is put away by itself after a few quiet seconds standing still. With a
+  bow or spear, hold STRIKE to draw and lift to shoot or throw.
+- **JUMP** sits to its left.
+- **CAST** sits above it. Tap it to cast the bound rune; hold it to open the
+  rune wheel on the same finger, slide to a school and lift, then tap a rune
+  to bind it to **CAST**. While the wheel is open, a stick already held keeps
+  steering, but a new touch goes to the wheel.
+- **INTERACT** appears on the diagonal between them only when something is in
+  reach: **SPORES** by a ready glowcap, **DOUSE** by a fire (it never builds
+  one) and **TAKE** by a ground item, and it is hidden otherwise.
+
+Strikes, shots and attack runes from these buttons turn to the nearest enemy
+within 30° either side of your facing, within the weapon's reach plus a stride,
+the bow's or spear's range, or the rune's flight range; with no enemy there
+they follow your facing. Heals and wards never turn toward an enemy. Phones
+that support it give a short vibration when a blow lands and when you are hurt.
 Pinch the scene with two fingers to zoom. Controls support multiple fingers and
 reset when a touch is cancelled or the page is backgrounded.
 
-Phones show only the stick, the action buttons, a slim HP/MP strip on the top
+Phones show only the stick, the thumb cluster, a slim HP/MP strip on the top
 edge and a small **=** menu button in the top-right corner. The menu opens a
 full-screen sheet with **Inventory**, **Multiplayer** and **Audio**; **Close**
 returns to a clean screen. A phone here means touch as the primary input with no
 hover and a short side of 600px or less.
 
-Tablets keep the full layout: the panels, the quick slots and the upper
+Tablets get the same thumb cluster and keep the full layout: the panels, the quick slots and the upper
 **− / +** zoom buttons, which work alongside pinch. Touch controls appear only
 when touch is the primary input, so touchscreen laptops and narrow desktop
 windows keep the keyboard and mouse layout. The scenery builder needs a desktop

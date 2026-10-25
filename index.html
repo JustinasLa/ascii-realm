@@ -17,13 +17,11 @@
         <span id="move-stick"></span>
         <span class="move-label">MOVE / RUN</span>
       </div>
-      <div class="actions">
-        <button type="button" data-key="KeyF" aria-label="Draw or sheathe sword">DRAW</button>
-        <button type="button" data-key="Space" aria-label="Jump">JUMP</button>
-        <button type="button" data-key="KeyJ" class="strike" aria-label="Strike">STRIKE</button>
-        <button type="button" data-key="KeyE" aria-label="Interact with nearby mushroom to release spores">SPORES</button>
-        <button type="button" data-key="KeyR" aria-label="Cast selected rune spell">CAST</button>
-        <button type="button" id="touch-runes" aria-label="Hold to open the rune wheel">RUNES</button>
+      <div class="actions" role="group" aria-label="Actions">
+        <button type="button" data-key="TouchStrike" class="strike" aria-label="Strike">STRIKE</button>
+        <button type="button" data-key="Space" class="jump" aria-label="Jump">JUMP</button>
+        <button type="button" id="touch-cast" class="cast" aria-label="Cast the bound rune. Hold to choose a rune.">CAST</button>
+        <button type="button" id="touch-interact" data-key="TouchInteract" class="interact" aria-label="Release spores from the glowcap" hidden>SPORES</button>
       </div>
       <div class="zoom-controls" aria-label="Zoom">
         <button type="button" data-zoom="0.8695652174" aria-label="Zoom out">−</button>

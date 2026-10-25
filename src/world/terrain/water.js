@@ -20,7 +20,7 @@ import { fbm, valueNoise, valueNoiseRow } from '../../core/noise.js';
 import { hash2 } from '../../core/rng.js';
 import { GLYPH_COUNT, dg, family } from '../../render/glyphs.js';
 import { FOAM } from '../../render/palette.js';
-import { ACROSS, crossSpeed, readFlow, screenOrientation, toCells } from '../rivers.js';
+import { ACROSS, WIDTH, crossSpeed, readFlow, screenOrientation, toCells } from '../rivers.js';
 import { ASPECT, WATER, WATER_LEVEL } from '../world.js';
 import { emit } from './cell.js';
 
@@ -251,7 +251,7 @@ function riverStatics(s, chunk, seed) {
     const wx = chunk.cx * N + (i & 63);
     const wy = chunk.cy * N + (i >> 6);
     const q = f.across[i] / ACROSS;
-    const half = f.width[i] / 60;
+    const half = f.width[i] / WIDTH;
     const bend = f.bend[i] / 255;
     // Lanes of foam lie along the current. Each keeps the pace of the water
     // down its middle line, so a streak holds together as it travels.
