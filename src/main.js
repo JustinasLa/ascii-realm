@@ -6,6 +6,7 @@ import { prepareSpellSounds } from './audio/spells.js';
 import { bindAudioControls } from './audio/controls.js';
 import { installTouchControls } from './core/touch.js';
 import { assistTarget, castAssist, strikeAssist } from './core/aim-assist.js';
+import { pickStruck, TargetTracker, targetId } from './core/target.js';
 import { createHaptics } from './core/haptics.js';
 import { interaction, performInteraction } from './core/interact.js';
 import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
@@ -636,6 +637,23 @@ debug.collection ??= huntCollection;
 const HUNT_DROP_LIFT = 3;
 // Touch aim assist turns toward monsters and animals alike.
 const assistFoes = () => [...monsters.list, ...animals.list];
+// The creature the player last landed a blow on, for the HUD's target frame;
+// `strikeFoe` is the one the aim assist last turned a cut toward, and
+// `spellHits` gathers what the player's runes struck this frame, one batch per
+// impact (the hits sharing one spell context), marked in landing order before
+// any later blow so the last to land wins.
+const target = new TargetTracker();
+debug.target = target;
+let strikeFoe = null;
+const spellHits = [];
+const markSpellHits = () => {
+  for (const { hits } of spellHits.splice(0)) target.mark(pickStruck(hits, player), time);
+};
+const markTarget = (hits, preferred = null) => {
+  markSpellHits();
+  target.mark(pickStruck(hits, player, preferred), time);
+};
+const targetPresent = (id) => monsters.list.some((e) => targetId(e) === id) || animals.list.some((e) => targetId(e) === id);
 // Short vibrations on touch screens when a blow lands and when hurt.
 const haptics = createHaptics({ nav: navigator, enabled: () => coarse.matches && !document.hidden });
 debug.haptics = haptics;
@@ -661,7 +679,13 @@ const casting = new Spellcasting({ player, world, monsters, peers: () => [...spe
     sound.play({ type: 'lightning', x, y, strength });
     animals.hear({ type: 'lightning', x, y, strength });
   },
-  onDamage: (target, amount, ctx) => { if (ctx?.caster === player && target !== player && amount > 0) haptics.hit(); } });
+  onDamage: (struck, amount, ctx) => {
+    if (ctx?.caster !== player || struck === player || !(amount > 0)) return;
+    haptics.hit();
+    if (!struck.kind?.name) return;
+    if (spellHits.at(-1)?.ctx === ctx) spellHits.at(-1).hits.push(struck);
+    else spellHits.push({ ctx, hits: [struck] });
+  } });
 debug.casting = casting;
 debug.monsters = monsters;
 
@@ -848,6 +872,7 @@ function fallInBattle() {
   camera.x = player.x;
   camera.y = player.y - 11;
   monsters.clear();
+  target.clear();
   hud.notify('You were struck down. You wake where you began.', 'info');
 }
 
@@ -855,7 +880,7 @@ function fallInBattle() {
 function woundedFoes(figures) {
   return figures.filter(({ monster: m, top }) => m.alive && m.health < m.maxHealth && top !== null)
     .map(({ monster: m, top }) => ({ id: m.id, name: m.kind.name, health: m.health, maxHealth: m.maxHealth,
-      x: m.x, y: top - 1 }));
+      x: m.x, y: top - 1, target: m === target.entity }));
 }
 
 let time = 0;
@@ -973,7 +998,8 @@ function frame(now) {
     // A click swings at the cursor; J swings the way the body faces; STRIKE
     // turns to the nearest foe ahead.
     if (attack && armed && !ranged) {
-      player.attack(keyAttack ? null : clicked ? cursorHeading(true) : strikeAssist(player, assistFoes())?.heading ?? null);
+      const aim = keyAttack || clicked ? null : strikeAssist(player, assistFoes());
+      if (player.attack(keyAttack ? null : clicked ? cursorHeading(true) : aim?.heading ?? null)) strikeFoe = aim?.foe ?? null;
     }
     if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
@@ -1020,7 +1046,10 @@ function frame(now) {
   const rangedFoe = touchAim && (player.ranged.aiming || release)
     ? assistTarget(player, assistFoes(), { range: weapon.projectileRange ?? 8 })?.foe ?? null : null;
   player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw, rangedFoe) : null;
-  if (release?.action === 'jab') player.attack(touchAim ? strikeAssist(player, assistFoes())?.heading ?? null : cursorHeading(true));
+  if (release?.action === 'jab') {
+    const aim = touchAim ? strikeAssist(player, assistFoes()) : null;
+    if (player.attack(touchAim ? aim?.heading ?? null : cursorHeading(true))) strikeFoe = aim?.foe ?? null;
+  }
   else if (release) fireRanged(release, weapon, rangedFoe);
   if (player.ranged.held === 0) rangedSource = null;
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
@@ -1057,6 +1086,7 @@ function frame(now) {
       if (hit.length || prey.length) {
         hitStop = Math.max(hitStop, 0.06);
         haptics.hit();
+        markTarget([...hit, ...prey], strikeFoe);
       }
     }
     if (!debug.freeze) fires.react(world, e, player);
@@ -1101,7 +1131,9 @@ function frame(now) {
     // one that misses startles those it lands near.
     const shafts = new Map(projectiles.list.map((p) => [p, { x: p.x, y: p.y, h: p.h }]));
     projectiles.update(dt, world);
+    const unhurt = shafts.size ? new Map(animals.list.map((a) => [a, a.health])) : null;
     const struck = animals.shots(projectiles, shafts, player);
+    if (struck.size) markTarget(animals.list.filter((a) => a.health < unhurt.get(a)));
     for (const impact of projectiles.events) {
       if (struck.has(impact.id)) continue;
       sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
@@ -1376,6 +1408,8 @@ function frame(now) {
       maxHealth: player.vitals.maxHealth,
       note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
         (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
+  markSpellHits();
+  hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
   const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
   hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
