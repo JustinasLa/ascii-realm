@@ -32,6 +32,7 @@ import { Collection } from './inventory/collection.js';
 import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
+import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
 import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
@@ -39,6 +40,7 @@ import { RemotePlayers } from './multiplayer/remote-players.js';
 import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
+import { ChatUi } from './ui/chat.js';
 import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
 import { PhoneMenu } from './ui/phone-menu.js';
@@ -295,11 +297,12 @@ const phoneMenu = new PhoneMenu({
   dock: document.getElementById('panel-dock'),
   closeButton: document.getElementById('phone-menu-close'),
   inventoryButton: document.getElementById('phone-menu-inventory'),
-  outside: ['touch-controls', 'hud-root', 'screen'].map((id) => document.getElementById(id)),
+  outside: ['touch-controls', 'hud-root', 'screen', 'chat', 'chat-open'].map((id) => document.getElementById(id)),
   canvas,
   phone: device,
   onToggle: (open) => {
-    setGameplayBlocked(open || inventoryScreen.isOpen);
+    if (open) chat.close();
+    blockGameplay();
     cancelActions();
   },
   onInventory: () => inventoryScreen.setOpen(true),
@@ -315,6 +318,7 @@ const wakeLock = new WakeLock({ nav: navigator, doc: document });
 const gate = new PlayGate({ button: document.getElementById('play-gate'), doc: document,
   onShow: () => {
     void sound.engine.suspend();
+    chat.close({ keepDraft: true });
     updateWakeLock();
   },
   onStart: () => {
@@ -353,13 +357,18 @@ const hud = new Hud({
 const inventoryScreen = new InventoryScreen({
   inventory, player, name,
   onToggle: (open) => {
-    setGameplayBlocked(open);
+    if (open) chat.close();
+    blockGameplay();
     cancelActions();
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
   phone: () => device.phone,
 });
+// Play stops while any of these is open, and resumes only once all are shut.
+function blockGameplay() {
+  setGameplayBlocked(phoneMenu.open || inventoryScreen.isOpen || chat.isOpen);
+}
 debug.hud = hud;
 debug.wallet = wallet;
 debug.inventoryScreen = inventoryScreen;
@@ -392,11 +401,34 @@ const multiplayer = new MultiplayerClient({
 });
 debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
-bindMultiplayerControls(multiplayer, {
+const renderLobby = bindMultiplayerControls(multiplayer, {
   name, seed: () => seed,
   onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
   onDone: () => canvas.focus({ preventScroll: true }),
 });
+// Lobby chat. It opens only in a lobby, with nothing else in the way, and
+// Escape closes a panel opened over it before the chat. The builder and the
+// rune wheel are declared further down and are read only once a key or tap
+// arrives.
+const panelOpen = () => builder.enabled || inventoryScreen.isOpen || phoneMenu.open || !!spellControls.menu?.isOpen;
+const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
+  isControlTarget,
+  mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
+  isCovered: panelOpen,
+  onToggle: (open) => {
+    blockGameplay();
+    cancelActions();
+    if (!open) canvas.focus({ preventScroll: true });
+  },
+  colorOf: (member) => colorOf(member.color) });
+debug.chat = chat;
+multiplayer.onChat = (message) => chat.receive(message, multiplayer.players);
+multiplayer.onChatNotice = (notice) => chat.notice(notice);
+multiplayer.onRoster = (change) => chat.roster(change);
+multiplayer.onChange = (client) => {
+  renderLobby?.(client);
+  chat.setAvailable(!!client.room);
+};
 window.addEventListener('pagehide', () => multiplayer.leave(false));
 window.addEventListener('pageshow', (event) => { if (event.persisted) multiplayer.leave(); });
 const colorOf = (index) => PLAYER_COLORS[index % PLAYER_COLORS.length];
@@ -600,6 +632,7 @@ function onPhoneChange(phone) {
     builder.panel.open = false;
   }
   if (!phone && phoneMenu.open) phoneMenu.setOpen(false);
+  chat.close({ keepDraft: true });
   // Off a phone the pacing's 30 and smaller cell ceiling no longer apply.
   if (!phone) {
     pacer.reset();
@@ -1491,8 +1524,7 @@ function frame(now) {
   hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)
     .map((member) => ({ id: member.id, name: member.name, health: member.state.health,
       maxHealth: player.vitals.maxHealth,
-      note: `${Math.round(Math.hypot((member.state.x - player.x) * ASPECT / SCALE,
-        (member.state.y - player.y) / (SCALE * TILT)))}m` })) : []);
+      note: `${Math.round(metresBetween(member.state, player))}m` })) : []);
   markSpellHits();
   hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
@@ -1502,6 +1534,7 @@ function frame(now) {
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
   touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
   hud.update(dt, { ...view, cellW: renderer.cellW, cellH: renderer.cellH });
+  chat.update(dt);
   inventoryScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;

@@ -25,7 +25,7 @@ world is generated as you walk, and up to eight friends can share it.
 - **Weather and seasons** — 17 weather presets with rain, snow, hail, fog and lightning that lights the ground and can start fires.
 - **Satchel and quick slots** — a status frame, nine quick slots, a 24-slot satchel with a carrying limit, and an equipment view drawn in the outlaw's own glyphs.
 - **Sound and music** — recorded footsteps and water, weather and wildlife ambience, and 42 original songs chosen by season and weather.
-- **Multiplayer lobbies** — share a six-character code to explore the same world together and see each other's movement, swings and rune casts.
+- **Multiplayer lobbies** — share a six-character code to explore the same world together and see each other's movement, swings and rune casts, and talk in ranged chat.
 - **Scenery builder** — paint terrain and place props, with undo, local saves and JSON export.
 - **Phones too** — a decluttered touch layout for portrait or landscape that re-lays out as you turn the phone, with a stick, a thumb attack cluster with aim assist, and pinch zoom. It installs to the home screen, plays full screen, keeps the screen awake, pauses when you switch away, and paces its frames to hold a steady 60 or 30 fps.
 
