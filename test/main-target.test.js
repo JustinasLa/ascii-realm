@@ -140,3 +140,25 @@ test('a target that leaves the world, or a fall in battle, clears the frame', as
   frame();
   assert.equal(game.target.entity, null);
 });
+
+test('a second STRIKE the swing turns away keeps the foe the first one aimed at', async () => {
+  const { game, tap, frame } = await start({ coarse: true });
+  const near = monsterAt(game, 2, 1, 20 * DEG);
+  const ahead = monsterAt(game, 3, 1.4, 0);
+  game.monsters.strike = (event) => event.type === 'strike' ? [ahead, near] : [];
+  tap('TouchStrike');
+  frame(0.02);
+  assert.equal(game.target.entity, null, 'the cut has not landed yet');
+  // Pressed again mid-swing with the near foe out of reach of the assist:
+  // the swing turns the press away and still cuts at the near one.
+  const attack = game.player.attack;
+  game.player.attack = () => false;
+  const { x, y } = near;
+  near.x = game.player.x + 100;
+  tap('TouchStrike');
+  frame(0.02);
+  Object.assign(near, { x, y });
+  game.player.attack = attack;
+  for (let i = 0; i < 40 && !game.target.entity; i++) frame(0.02);
+  assert.equal(game.target.entity, near);
+});

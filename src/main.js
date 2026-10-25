@@ -983,8 +983,7 @@ function frame(now) {
     // turns to the nearest foe ahead.
     if (attack && armed && !ranged) {
       const aim = keyAttack || clicked ? null : strikeAssist(player, assistFoes());
-      strikeFoe = aim?.foe ?? null;
-      player.attack(keyAttack ? null : clicked ? cursorHeading(true) : aim?.heading ?? null);
+      if (player.attack(keyAttack ? null : clicked ? cursorHeading(true) : aim?.heading ?? null)) strikeFoe = aim?.foe ?? null;
     }
     if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
@@ -1033,8 +1032,7 @@ function frame(now) {
   player.aimTarget = player.ranged.aiming ? aimPoint(weapon, player.ranged.draw, rangedFoe) : null;
   if (release?.action === 'jab') {
     const aim = touchAim ? strikeAssist(player, assistFoes()) : null;
-    strikeFoe = aim?.foe ?? null;
-    player.attack(touchAim ? aim?.heading ?? null : cursorHeading(true));
+    if (player.attack(touchAim ? aim?.heading ?? null : cursorHeading(true))) strikeFoe = aim?.foe ?? null;
   }
   else if (release) fireRanged(release, weapon, rangedFoe);
   if (player.ranged.held === 0) rangedSource = null;
