@@ -479,8 +479,9 @@ export class AnimalFigures {
     this.ground = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.02)];
     this.surface = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)];
     this.drawn = [];
-    // The small creatures drawn last frame, the view they were drawn in, and
-    // a count of frames, so each rig knows when it was last posed.
+    // The small creatures ranked to be drawn last frame, the view they were
+    // drawn in, and a count of frames, so each rig knows when it was last
+    // posed.
     this.shown = new Set();
     this.view = null;
     this.frameNo = 0;
@@ -506,7 +507,7 @@ export class AnimalFigures {
   }
 
   // Poses every live animal; rigs of animals let go are kept for the next.
-  // Birds and fish are posed only if drawn last frame (on a desktop, also
+  // Birds and fish are posed only if ranked last frame (on a desktop, also
   // if within two metres of the view), at most as many as may be drawn;
   // the rest live on unseen and unposed.
   update(dt, animals, small = []) {
@@ -551,7 +552,6 @@ export class AnimalFigures {
       || Math.hypot(a.s.x - near.x, a.s.y - near.y) - Math.hypot(b.s.x - near.x, b.s.y - near.y));
     const drawn = inView.slice(0, this.phone() ? MAX_DRAWN_PHONE : MAX_DRAWN);
     const smalls = this.rankSmall(view, small, near);
-    this.shown = new Set(smalls.map((d) => d.s));
     this.drawn = [];
     if (!drawn.length && !smalls.length) return this.drawn;
     let width = 0;
@@ -614,7 +614,9 @@ export class AnimalFigures {
   // first, then darting fish, then the nearest, up to the small cap; each
   // posed now if it was not this frame, from its own clock. Those poses come
   // out of the same cap: with none left, the next one already posed is drawn
-  // instead, and the newcomer waits a frame.
+  // instead, and the newcomer waits a frame. The ones that rank within the
+  // cap, drawn or not, are those posed next frame, so a newcomer is never
+  // kept out longer than that by those drawn before it.
   rankSmall(view, small, near) {
     const inView = [];
     for (const s of small) {
@@ -625,6 +627,7 @@ export class AnimalFigures {
     const rank = (s) => ((s.state === 'takeoff' || s.state === 'fly') && far(s) <= 20 ? 0 : s.state === 'dart' ? 1 : 2);
     inView.sort((a, b) => rank(a.s) - rank(b.s) || far(a.s) - far(b.s));
     const cap = this.phone() ? MAX_SMALL_PHONE : MAX_SMALL;
+    this.shown = new Set(inView.slice(0, cap).map((d) => d.s));
     const drawn = [];
     for (const d of inView) {
       if (drawn.length >= cap) break;

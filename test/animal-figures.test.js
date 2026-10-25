@@ -712,6 +712,27 @@ test('birds and fish ride a shelf of their own in the same single readback, capp
   assert.equal(lone.rasterise(view, [], { x: 0, y: 0 }, [pigeon('feed', { x: 5000 })]).length, 0);
 });
 
+test('a newcomer outranking those already drawn waits one frame for its pose, not for ever', () => {
+  for (const phone of [false, true]) {
+    const f = new AnimalFigures(gltfs, { renderer: fakeGPU(), phone: () => phone });
+    const cap = phone ? MAX_SMALL_PHONE : MAX_SMALL;
+    const view = { x0: -300, y0: -150, cols: 600, rows: 300 };
+    const flock = Array.from({ length: cap }, (_, i) => pigeon('feed', { x: i * 12 - 60, y: -20 }));
+    f.update(dt, [], flock);
+    f.rasterise(view, [], { x: 0, y: 0 }, flock);
+    const flyer = pigeon('fly', { x: 30, y: 10, alt: 2, clip: 'glide' });
+    const all = [...flock, flyer];
+    const frames = [];
+    for (let i = 0; i < 4; i++) {
+      f.update(dt, [], all);
+      const out = f.rasterise(view, [], { x: 0, y: 0 }, all);
+      assert.equal(out.length, cap);
+      frames.push(out.some((d) => d.animal === flyer));
+    }
+    assert.deepEqual(frames, [false, true, true, true], phone ? 'phone' : 'desktop');
+  }
+});
+
 test('birds rising or flying near come first, then darting fish, then the nearest', () => {
   const f = new AnimalFigures(gltfs, { renderer: fakeGPU() });
   const view = { x0: -300, y0: -150, cols: 600, rows: 300 };
