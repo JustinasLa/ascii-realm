@@ -600,3 +600,13 @@ test('hide in reach is drawn into the bag after its short delay; a full bag leav
   assert.deepEqual(drops.all(), [hide]);
   assert.equal(CHUNK_SIZE > 0, true);
 });
+
+test('a wolf drops a pelt four times in five and a bone half the time, all real items', () => {
+  const random = mulberry32(77);
+  const tally = { wolfPelt: 0, bone: 0 };
+  for (let i = 0; i < 20000; i++) for (const { id, count } of rollDrops(KINDS.wolf, random)) tally[id] += count > 0 ? 1 : 0;
+  assert.ok(Math.abs(tally.wolfPelt / 20000 - 0.8) < 0.015, `${tally.wolfPelt}`);
+  assert.ok(Math.abs(tally.bone / 20000 - 0.5) < 0.015, `${tally.bone}`);
+  for (const id of Object.keys(tally)) assert.ok(ITEMS[id], id);
+  assert.equal(ITEMS.wolfPelt.name, 'Wolf Pelt');
+});

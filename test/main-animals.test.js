@@ -48,9 +48,11 @@ test('?animals=0 leaves the land empty and never loads the figures', async () =>
   assert.equal(game.animalFigures, undefined);
 });
 
-test('?deer and ?rabbits cap each kind', async () => {
-  const { game } = await loadGame({ x: 0, y: 0 }, { href: 'http://localhost/?debug&deer=2&rabbits=0' });
-  assert.deepEqual(game.animals.counts, { deer: 2, rabbit: 0 });
+test('?deer, ?rabbits and ?wolves cap each kind', async () => {
+  const { game } = await loadGame({ x: 0, y: 0 }, { href: 'http://localhost/?debug&deer=2&rabbits=0&wolves=1' });
+  assert.deepEqual(game.animals.counts, { deer: 2, rabbit: 0, wolf: 1 });
+  const plain = await loadGame({ x: 0, y: 0 });
+  assert.equal(plain.game.animals.counts.wolf, 4);
 });
 
 // A deer `metres` from the player at `angle` off their facing, alone.
@@ -165,4 +167,64 @@ test('touch STRIKE turns to an animal ahead, with a sword or a bow', async () =>
   bow.release('TouchStrike');
   for (let i = 0; i < 40; i++) bow.frame();
   assert.ok(deer.health < 40, 'the assisted arrow struck it');
+});
+
+const quiet = 'http://localhost/?debug&skeletons=0&goblins=0&trolls=0&elves=0';
+
+// A pack of `count` wolves `metres` in front of the player.
+function packAt(game, metres, count) {
+  game.world.loaded = () => ({ props: [] });
+  const [dx, dy] = toCells(0, metres);
+  return game.animals.spawn('wolf', { x: game.player.x + dx, y: game.player.y + dy, count });
+}
+
+test('a wolf pack beside the player bites them, shaking the screen, through hundreds of frames', async () => {
+  const { game, frame } = await loadGame(undefined, { href: quiet });
+  const sounds = [];
+  const play = game.sound.play.bind(game.sound);
+  game.sound.play = (e) => {
+    sounds.push(e.type);
+    return play(e);
+  };
+  packAt(game, 3, 3);
+  const before = game.player.vitals.health;
+  for (let i = 0; i < 300; i++) frame();
+  assert.ok(game.player.vitals.health < before, `${game.player.vitals.health}`);
+  assert.ok(sounds.includes('swing'), 'a lunge is heard');
+  // A bite on prey thuds softly.
+  game.animals.events.push({ type: 'bite', x: game.player.x, y: game.player.y, animal: game.animals.list[0] });
+  frame();
+  assert.ok(sounds.filter((t) => t === 'slam').length > 0);
+});
+
+test('two sword cuts bring down a wolf, with its notice and its pelt', async () => {
+  const { game, frame } = await loadGame(undefined, { href: quiet });
+  const notes = [];
+  game.hud.notify = (text, kind) => notes.push([text, kind]);
+  const herd = packAt(game, 1, 1);
+  const wolf = herd.members[0];
+  // It stands still, its hurt window passing as usual.
+  wolf.update = function (dt) {
+    this.hurtFor = Math.max(0, this.hurtFor - dt);
+  };
+  game.animals.random = () => 0;
+  game.player.heading = 0;
+  game.player.events.push({ type: 'strike', swing: 'cut', x: game.player.x, y: game.player.y, strength: 1 });
+  frame();
+  for (let i = 0; i < 40; i++) frame();
+  game.player.events.push({ type: 'strike', swing: 'cut', x: game.player.x, y: game.player.y, strength: 1 });
+  frame();
+  assert.equal(wolf.alive, false);
+  assert.ok(notes.some(([text, kind]) => text === 'Wolf slain' && kind === 'pickup'));
+  assert.deepEqual(game.huntDrops.all().map((s) => s.id).sort(), ['bone', 'wolfPelt']);
+});
+
+test('struck down by wolves, the player wakes at the start and the pack goes home', async () => {
+  const { game, frame } = await loadGame(undefined, { href: quiet });
+  const herd = packAt(game, 3, 3);
+  herd.key = 'pack:0,0';
+  game.player.vitals.health = 8;
+  for (let i = 0; i < 600 && game.animals.count('wolf'); i++) frame();
+  assert.equal(game.animals.count('wolf'), 0);
+  assert.equal(game.player.vitals.health, game.player.vitals.maxHealth);
 });
