@@ -39,18 +39,16 @@ const ITEM_ART = {
   healingDraught: { base: 'props.item.flask', c: [168, 186, 196], layer: 'props.item.liquid' },
   staminaTonic: { base: 'props.item.flask', c: [168, 186, 196], layer: 'props.item.liquid' },
   bandage: { base: 'props.item.roll' },
-  // A small heap of gold coin with a glint.
-  denars: { base: 'pebble', c: [179, 145, 34], layer: 'props.item.glints', layerC: [236, 214, 140] },
 };
-// Coin worth less than a denar lies as silver.
-const SILVER = { ...ITEM_ART.denars, c: [168, 172, 180], layerC: [230, 232, 238] };
+// Coin lies as its own glyph, never a pebble (pebbles read as fog's `o`):
+// gold, or silver when worth less than a denar.
+const SILVER = [198, 202, 210];
 
 // The base and layer glyphs and colours for one loose item, kept per item.
 const arts = new WeakMap();
 function itemArt(item, definition) {
-  const silver = item.id === DENARS && coinOf(item.count).cents < 100;
-  const art = silver ? SILVER : Object.hasOwn(ITEM_ART, item.id) ? ITEM_ART[item.id] : null;
-  const colour = definition.colour;
+  const art = Object.hasOwn(ITEM_ART, item.id) ? ITEM_ART[item.id] : null;
+  const colour = item.id === DENARS && coinOf(item.count).cents < 100 ? SILVER : definition.colour;
   if (!art) {
     const body = typeof definition.groundGlyph === 'number' ? definition.groundGlyph : glyph(definition.groundGlyph);
     return { base: body, c: colour, layer: null };

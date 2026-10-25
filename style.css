@@ -479,9 +479,9 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-target { width: min(220px, calc(100vw - max(8px, env(safe-area-inset-left)) - min(40vw, 320px) - max(4px, env(safe-area-inset-right)) - 60px)); }
 }
 /* Portrait phones too narrow for a 120px target strip beside the vitals
-   (100vw - 46vw - 72px < 120px) put it on a second row under them, and the
-   notices below move down to make room. */
+   (100vw - 46vw - 72px < 120px) put it on a second row under them (and
+   the pouch line), and the notices below move down to make room. */
 @media (pointer: coarse) and (hover: none) and (max-width: 355px) and (orientation: portrait) {
-  .hud-target { top: calc(max(6px, env(safe-area-inset-top)) + 34px); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(46vw, 200px); }
+  .hud-target { top: calc(max(6px, env(safe-area-inset-top)) + 46px); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(46vw, 200px); }
   .hud:has(.hud-target:not([hidden])) .hud-toasts { margin-top: 30px; }
 }
