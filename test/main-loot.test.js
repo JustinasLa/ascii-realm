@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { KINDS, Monster, Monsters, toCells, toMetres } from '../src/entities/monsters.js';
+import { mulberry32 } from '../src/core/rng.js';
+import { TIER_CHANCE } from '../src/world/loot.js';
 import { loadGame } from './helpers/main-game.js';
 
 // A game on open, loaded land, its notices kept.
@@ -113,10 +115,18 @@ test('only the player\'s own spells earn loot, by the health they really took', 
   frame();
   assert.equal(b.alive, false);
   assert.ok(game.huntDrops.all().some((s) => s.id === 'bone'));
-  for (const s of game.huntDrops.all()) game.huntDrops.forget(s);
+});
+
+test('a troll earns its loot by the health the player\'s spell really took, through its death', async () => {
+  const { game, frame } = await start();
+  const peer = { x: game.player.x, y: game.player.y, spellPlayer: true };
+  // The loot roll is seeded: spend the failing rolls so the next one gives
+  // the troll's iron, then let only the deaths roll.
+  const next = mulberry32((1 * 104729) ^ 0x1007);
+  while (next() >= TIER_CHANCE) assert.deepEqual(game.loot.roll('troll'), []);
 
   // A troll's hide shrugs off a rune said to deal 5, losing 0.2: that earns
-  // nothing; one that really takes 2 does.
+  // nothing, though the roll would have paid; one that really takes 2 does.
   const troll = monsterAhead(game, 'troll', 1.5);
   spell(game, troll, 5, game.player, 0.2);
   spell(game, troll, troll.health + 10, peer);
@@ -127,8 +137,7 @@ test('only the player\'s own spells earn loot, by the health they really took', 
   spell(game, second, 5, game.player, 2);
   spell(game, second, second.health + 10, peer);
   frame();
+  assert.equal(second.alive, false);
+  assert.deepEqual(game.huntDrops.all().map((s) => [s.id, s.count]), [['ironIngot', 4]]);
   assert.equal(game.loot.credit.claim(second), false, 'claimed by its death');
-  // With the roll forced, the troll's tier gives four ingots.
-  assert.deepEqual(game.loot.drop(second, [{ id: 'ironIngot', count: 4 }]).map((s) => [s.id, s.count]), [['ironIngot', 4]]);
-  for (let i = 0; i < 40; i++) assert.ok(game.loot.roll('troll').every((d) => d.id === 'ironIngot' && d.count === 4));
 });
