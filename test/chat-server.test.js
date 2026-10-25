@@ -1,24 +1,49 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { WebSocket } from 'ws';
 import { Player } from '../src/entities/player.js';
 import { SCALE, TILT } from '../src/entities/rig.js';
 import { chatSeed, MAX_CHAT_LENGTH, muffle, clarityAt } from '../src/multiplayer/chat.js';
 import { playerState } from '../src/multiplayer/protocol.js';
+import { createGameServer } from '../server/index.js';
 import { create, join, peer, setup } from './helpers/lobby.js';
 
 const u = (...codes) => String.fromCharCode(...codes);
 // World rows per metre down the screen.
 const ROWS_PER_METRE = SCALE * TILT;
 
-// Ash creates a lobby and Bryn joins it; both stand at known places.
-async function pair(t, options) {
-  const { port, game } = await setup(t, options);
-  const ash = await create(port, 42, 'Ash');
-  const bryn = await join(port, ash.lobby.code, 'Bryn');
-  return { port, game, ash, bryn, code: ash.lobby.code };
+// One lobby serves every test: building a lobby's world is the slow part,
+// and many at once crowd the machine for the other test files. Its host
+// stands far off with the out-of-character channels hidden, so it never
+// hears or counts as a listener.
+let lobby;
+before(async () => {
+  const game = createGameServer();
+  const { port } = await game.listen(0, '127.0.0.1');
+  const host = await create(port, 42, 'Host');
+  host.client.send({ type: 'state', state: playerState(new Player(0, 100000)) });
+  for (const channel of ['ooc', 'looc']) {
+    host.client.send({ type: 'chat-toggle', channel });
+    await host.client.next('chat-notice');
+  }
+  lobby = { game, port, code: host.lobby.code, host };
+});
+after(() => lobby.game.close());
+
+// Ash and Bryn join the shared lobby for one test and leave after it; any
+// peer passed to `track` leaves too.
+async function pair(t) {
+  const { game, port, code } = lobby;
+  const peers = [];
+  const track = (who) => { peers.push(who); return who; };
+  t.after(async () => {
+    for (const who of peers) if (who.client.ws.readyState === WebSocket.OPEN) await who.client.leave();
+  });
+  const ash = track(await join(port, code, 'Ash'));
+  const bryn = track(await join(port, code, 'Bryn'));
+  return { port, game, ash, bryn, code, track };
 }
 
 // Moves a peer and waits until the server has its new place.
@@ -48,6 +73,7 @@ test('a line said nearby reaches both players, cleaned, from the speaker', async
 
 test('range decides who hears; speech fades and blurs towards its edge', async (t) => {
   const { ash, bryn, code, game } = await pair(t);
+  const firstSeq = game.rooms.get(code).chatSeq;
   await place(ash, bryn, 0, 0);
   await place(bryn, ash, 0, 30 * ROWS_PER_METRE);
   chat(ash, 'rp', 'can you hear');
@@ -83,7 +109,7 @@ test('range decides who hears; speech fades and blurs towards its edge', async (
   await place(bryn, ash, 0, 1 * ROWS_PER_METRE);
   chat(ash, 'whisper', 'psst');
   assert.equal((await bryn.client.next('chat', (m) => m.channel === 'whisper')).text, 'psst');
-  assert.equal(game.rooms.get(code).chatSeq, 7);
+  assert.equal(game.rooms.get(code).chatSeq - firstSeq, 7);
 });
 
 test('the lobby-wide channel ignores distance; local speech does not', async (t) => {
@@ -116,7 +142,7 @@ test('a full-length line muffled at any distance is still delivered within the l
 });
 
 test('a hidden channel is neither heard nor sent, and stays hidden through a reconnect', async (t) => {
-  const { port, ash, bryn, code } = await pair(t);
+  const { port, ash, bryn, code, track } = await pair(t);
   bryn.client.send({ type: 'chat-toggle', channel: 'ooc' });
   assert.deepEqual(await bryn.client.next('chat-notice'), { type: 'chat-notice', code: 'toggled', channel: 'ooc', hidden: true });
   chat(ash, 'ooc', 'hello?');
@@ -134,7 +160,7 @@ test('a hidden channel is neither heard nor sent, and stays hidden through a rec
   const closed = once(bryn.client.ws, 'close');
   bryn.client.ws.close();
   await closed;
-  const back = await join(port, code, 'Bryn', bryn.lobby.token);
+  const back = track(await join(port, code, 'Bryn', bryn.lobby.token));
   assert.equal(back.lobby.resumed, true);
   chat(ash, 'ooc', 'still muted?');
   await ash.client.next('chat', (m) => m.text === 'still muted?');
@@ -172,7 +198,7 @@ test('bad channels, long or empty text and chat before joining are refused', asy
 });
 
 test('a burst of ten is relayed, the eleventh refused, and the budget refills and survives a reconnect', async (t) => {
-  const { port, ash, bryn, code } = await pair(t);
+  const { port, ash, bryn, code, track } = await pair(t);
   for (let i = 0; i < 11; i++) chat(ash, 'ooc', `line ${i}`);
   for (let i = 0; i < 10; i++) assert.equal((await bryn.client.next('chat')).text, `line ${i}`);
   assert.equal((await ash.client.next('chat-notice', (m) => m.code === 'rate')).code, 'rate');
@@ -187,7 +213,7 @@ test('a burst of ten is relayed, the eleventh refused, and the budget refills an
   const closed = once(bryn.client.ws, 'close');
   bryn.client.ws.close();
   await closed;
-  const back = await join(port, code, 'Bryn', bryn.lobby.token);
+  const back = track(await join(port, code, 'Bryn', bryn.lobby.token));
   chat(back, 'ooc', 'b10');
   assert.equal((await back.client.next('chat-notice', (m) => m.code === 'rate')).code, 'rate');
   // A toggle counts against the same budget.
