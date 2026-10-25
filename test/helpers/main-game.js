@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { runInNewContext } from 'node:vm';
 import { Player } from '../../src/entities/player.js';
 import { Animals } from '../../src/entities/animals.js';
+import { Birds } from '../../src/entities/birds.js';
+import { Fishes } from '../../src/entities/fish.js';
 import { HuntDrops } from '../../src/entities/hunt-drops.js';
 import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/loot.js';
 import { Wallet } from '../../src/inventory/wallet.js';
@@ -134,6 +136,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     load: () => figuresReady,
     draw: noop,
     drawShadow: noop,
+    drawSubmerged: noop,
   };
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
   const context = {
@@ -227,11 +230,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     buildAtlas: noop, glyph: noop, drawGround: noop, drawSkyReflection: noop,
     drawShadow: noop, drawProp: noop, fineOf: noop, fineBakesPending: () => false, bakeFine: noop, startFineWorkers: noop,
     reflector: noop, dressFigure: noop,
-    drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop,
+    drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop, putOutlinedCell: noop,
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
-    Animals, AnimalFigures: animalFigures,
+    Animals, Birds, Fishes, AnimalFigures: animalFigures,
     SceneryBuilder: class {
       constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
       setEnabled(value) { this.enabled = value; this.onModeChange(); }

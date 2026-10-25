@@ -18,6 +18,8 @@ import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters } from './entities/monsters.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
 import { Animals } from './entities/animals.js';
+import { Birds } from './entities/birds.js';
+import { Fishes } from './entities/fish.js';
 import { AnimalFigures } from './entities/animal-figures.js';
 import { HuntDrops } from './entities/hunt-drops.js';
 import { isBow, isThrown } from './entities/loadout.js';
@@ -249,7 +251,7 @@ if (ruinPreview) {
 }
 sound.weather.onLightning = event => {
   const bolt = weather.strike(world, camera.view(renderer), event);
-  if (bolt) animals.hear({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+  if (bolt) hearWild({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
   return bolt;
 };
 let summonLightning = false;
@@ -637,6 +639,22 @@ const animals = new Animals({ seed,
   counts: { deer: countOf('deer', 8), rabbit: countOf('rabbits', 6), wolf: countOf('wolves', 4) },
   enabled: params.get('animals') !== '0' });
 debug.animals = animals;
+// Flocks of pigeons and schools of fish, ?birds=N and ?fish=N at most of
+// each; ?animals=0 leaves them out too.
+const birds = new Birds({ seed, cap: countOf('birds', 8), enabled: animals.enabled });
+const fishes = new Fishes({ seed, cap: countOf('fish', 8), enabled: animals.enabled });
+// Their debug handles place groups on the game's own world.
+const onWorld = (manager) => new Proxy(manager, {
+  get: (m, key) => (key === 'spawn' ? (options = {}) => m.spawn({ world, ...options }) : Reflect.get(m, key)),
+});
+debug.birds = onWorld(birds);
+debug.fish = onWorld(fishes);
+// Every noise reaches the animals, the birds and the fish alike.
+const hearWild = (e) => {
+  animals.hear(e);
+  birds.hear(e);
+  fishes.hear(e);
+};
 // What hunted animals leave lying, and the collection that picks it up.
 const huntDrops = new HuntDrops();
 const huntCollection = new Collection(world, inventory, huntDrops.items, null, wallet);
@@ -658,6 +676,8 @@ function payGather(tree) {
 }
 // Rows a lying stack is drawn ahead of its own, over the grass in front.
 const HUNT_DROP_LIFT = 3;
+// Rows a bird on the ground is drawn ahead of its own.
+const BIRD_LIFT = 3;
 // Touch aim assist turns toward monsters and animals alike.
 const assistFoes = () => [...monsters.list, ...animals.list];
 // The creature the player last landed a blow on, for the HUD's target frame;
@@ -695,12 +715,12 @@ const casting = new Spellcasting({ player, world, monsters, peers: () => [...spe
   notify: message => hud.notify(message), onCast: e => multiplayer.sendCast(e),
   onSound: e => {
     sound.play(e);
-    animals.hear(e);
+    hearWild(e);
   },
   // Rune lightning (e.g. Mitlan's Lightning) answers with the storm's own thunder.
   onLightning: ({ x, y, strength }) => {
     sound.play({ type: 'lightning', x, y, strength });
-    animals.hear({ type: 'lightning', x, y, strength });
+    hearWild({ type: 'lightning', x, y, strength });
   },
   onDamage: (struck, amount, ctx) => {
     if (struck.takeHit) lootCredit.observe(struck, ctx?.caster === player);
@@ -820,7 +840,7 @@ function hurtPlayer(e, shake, strength) {
 // What the monsters do: their blows on the player, the player's on them,
 // and their coming and falling. Each kind has its own voice.
 function monsterEvent(e) {
-  animals.hear(e);
+  hearWild(e);
   // An arrow can outlive the archer who loosed it.
   const kind = e.monster?.kind;
   const voice = kind?.sounds[e.type];
@@ -1126,7 +1146,7 @@ function frame(now) {
       }
     }
     if (!debug.freeze) fires.react(world, e, player);
-    animals.hear(e);
+    hearWild(e);
     sound.play(e);
     splashes.react(world, e);
     if (e.type === 'step') {
@@ -1174,6 +1194,8 @@ function frame(now) {
       if (struck.has(impact.id)) continue;
       sound.play({ type: 'land', x: impact.x, y: impact.y, strength: 0.25 });
       animals.landed(impact.x, impact.y);
+      birds.landed(impact.x, impact.y);
+      fishes.landed(impact.x, impact.y);
     }
     projectiles.events.length = 0;
     // Walking over a landed arrow or spear picks it up again.
@@ -1228,7 +1250,7 @@ function frame(now) {
     const bolt = weather.summon(world, view, player);
     if (bolt) {
       sound.play({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
-      animals.hear({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
+      hearWild({ type: 'lightning', x: bolt.x, y: bolt.y, strength: bolt.strength });
     }
     summonLightning = false;
   }
@@ -1259,8 +1281,16 @@ function frame(now) {
   // Wildlife shies from the player, friends and monsters alike.
   if (!paused) {
     animals.update(playerDt, world, { player, peers, monsters: monsters.living, view });
-    animalFigures?.update(playerDt, animals.list);
+    birds.update(playerDt, world, { player, peers, monsters: monsters.living,
+      predators: animals.list.filter((a) => a.alive && a.predator), view });
+    fishes.update(playerDt, world, { player, peers, view });
+    animalFigures?.update(playerDt, animals.list, [...birds.list, ...fishes.list]);
   }
+  // A darting fish now and then breaks the surface in a small ring.
+  for (const e of fishes.events) if (e.ring) splashes.ring(e.x, e.y, 0.35, 0, true);
+  fishes.events.length = 0;
+  // Take-offs are kept for a wing-clatter sound to listen for.
+  birds.events.length = 0;
   for (const e of animals.events) {
     if (e.type === 'hurt') {
       hud.damage(e.amount, e.x, e.y);
@@ -1273,7 +1303,7 @@ function frame(now) {
     } else if (e.type === 'hit-player') hurtPlayer(e, 0.3, 0.4);
     else if (e.type === 'swing') sound.play({ type: 'swing', x: e.x, y: e.y, strength: 0.5 });
     else if (e.type === 'bite') sound.play({ type: 'slam', x: e.x, y: e.y, strength: 0.2 });
-    animals.hear(e);
+    hearWild(e);
   }
   animals.events.length = 0;
   for (const drop of animals.drops) huntDrops.lay(drop, world, (a, b) => huntCollection.pathClear(a, b));
@@ -1298,8 +1328,11 @@ function frame(now) {
   for (const { monster } of monsterCells) {
     if (monster.alive) drawShadow(renderer, view, monster.x, monster.y, 0);
   }
-  const animalCells = animalFigures ? animalFigures.rasterise(view, animals.list, player) : [];
-  for (const figure of animalCells) AnimalFigures.drawShadow(renderer, view, figure);
+  const wildCells = animalFigures ? animalFigures.rasterise(view, animals.list, player, [...birds.list, ...fishes.list]) : [];
+  const animalCells = wildCells.filter((f) => !f.small);
+  const fishCells = wildCells.filter((f) => f.submerged);
+  const birdCells = wildCells.filter((f) => f.small && !f.submerged);
+  for (const figure of [...animalCells, ...birdCells]) AnimalFigures.drawShadow(renderer, view, figure);
 
   // Match the reveal region to this pose, including a jump or sword swing.
   let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
@@ -1391,6 +1424,14 @@ function frame(now) {
     reflections.push({ y: figure.animal.y, draw: () => AnimalFigures.draw(renderer, figure, mirror) });
     drawables.push({ y: figure.depth, draw: () => AnimalFigures.draw(renderer, figure, putOutlinedCell) });
   }
+  // A bird on the ground is shorter than the grass, so like a lying stack
+  // it is drawn a few rows ahead of its own, over the blades in front; one
+  // in the air is drawn over everything below it. Both are mirrored in the
+  // lakes they stand by or cross.
+  for (const figure of birdCells) {
+    reflections.push({ y: figure.animal.y, draw: () => AnimalFigures.draw(renderer, figure, mirror) });
+    if (!figure.air) drawables.push({ y: figure.depth + BIRD_LIFT, draw: () => AnimalFigures.draw(renderer, figure, putOutlinedCell) });
+  }
   // Friends are drawn as the shape-built outlaw in their own gear.
   for (const peer of peers) {
     reflections.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure, mirror) });
@@ -1398,6 +1439,8 @@ function frame(now) {
   }
   reflections.sort((a, b) => a.y - b.y);
   drawables.sort((a, b) => a.y - b.y);
+  // Fish swim under the water: everything on its surface draws over them.
+  for (const figure of fishCells) AnimalFigures.drawSubmerged(renderer, figure);
   grass.drawReflections(renderer, world, view, time, mirror, reflections);
 
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
@@ -1414,6 +1457,7 @@ function frame(now) {
   torches.light(renderer, view, time, visibleTorches);
   weather.drawAtmosphere(renderer, view, time);
 
+  for (const figure of birdCells) if (figure.air) AnimalFigures.draw(renderer, figure, putOutlinedCell);
   projectiles.drawFlying(renderer, view);
   monsters.arrows.drawFlying(renderer, view);
   casting.effects.draw(renderer, view, casting.projectiles);
