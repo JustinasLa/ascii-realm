@@ -326,7 +326,7 @@ export class Monster {
     }
     if (this.magicStunned) {
       this.speed = 0;
-      this.drift(dt, world, depth);
+      if (this.state !== 'rise') this.drift(dt, world, depth);
       return;
     }
     const prey = target && target.alive !== false ? this.offsetTo(target.x, target.y) : null;

@@ -136,8 +136,10 @@ test('monsters wading in a river drift with it; dead and rising ones do not', ()
   dead.state = 'dead';
   const rising = new Monster(x, y, { kind: KINDS.skeleton });
   assert.equal(rising.state, 'rise');
+  const stunnedRising = new Monster(x, y, { kind: KINDS.skeleton });
+  stunnedRising.magicStunned = true;
   for (let i = 0; i < 120; i++) {
-    for (const m of [idle, stunned, dead]) m.update(dt, world, null, [], () => 0.5);
+    for (const m of [idle, stunned, dead, stunnedRising]) m.update(dt, world, null, [], () => 0.5);
     // Still climbing out of the ground for the first half second.
     if (i < 30) rising.update(dt, world, null, [], () => 0.5);
   }
@@ -148,6 +150,8 @@ test('monsters wading in a river drift with it; dead and rising ones do not', ()
   }
   assert.deepEqual([dead.x, dead.y], [x, y]);
   assert.deepEqual([rising.x, rising.y], [x, y]);
+  assert.equal(stunnedRising.state, 'rise');
+  assert.deepEqual([stunnedRising.x, stunnedRising.y], [x, y], 'stunned while rising, it stays put');
   // Against a wall of rock it slides along or stays put, never through.
   const walled = new World(1);
   const ahead = toCells(flow.x * 0.2, flow.y * 0.2);
