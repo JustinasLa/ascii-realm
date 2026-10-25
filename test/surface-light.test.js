@@ -4,7 +4,7 @@ import { mulberry32 } from '../src/core/rng.js';
 import { FINE } from '../src/render/cells.js';
 import { glyph } from '../src/render/glyphs.js';
 import { AsciiRenderer } from '../src/render/renderer.js';
-import { drawFireLight } from '../src/world/fire.js';
+import { drawFireLight, firePulse } from '../src/world/fire.js';
 import { bakeFine, fineOf, fineBuffers, packFine } from '../src/world/fine-bakes.js';
 import { drawGround } from '../src/world/ground.js';
 import { fineRecipe } from '../src/world/prop-art.js';
@@ -15,7 +15,7 @@ import {
 } from '../src/world/surface-light.js';
 import * as water from '../src/world/terrain/water.js';
 import { STONE_GLYPH } from '../src/world/terrain/water.js';
-import { CHUNK_SIZE, WATER, World } from '../src/world/world.js';
+import { ASPECT, CHUNK_SIZE, WATER, World } from '../src/world/world.js';
 
 function renderer(cols = 8, rows = 6) {
   const r = Object.create(AsciiRenderer.prototype);
@@ -72,18 +72,55 @@ test('screen normals turn into the world frame with faces kept above the ground'
   assert.ok(worldNormal(0, 0, 0).every((v) => v === 0));
 });
 
-test('drawFireLight leaves everything without a normal as it always was', () => {
+// drawFireLight as it was before stones faced the light, kept here as the
+// oracle for everything that has no normal.
+function baselineFireLight(r, view, time, source, radius, height = 2) {
+  const bx = source.x - view.x0;
+  const by = source.y - height - view.y0;
+  const pulse = firePulse(source, time);
+  const y0 = Math.max(0, Math.floor(by - radius));
+  const y1 = Math.min(r.rows - 1, Math.ceil(by + radius));
+  const r2 = radius * radius, fine = r.fineMark;
+  for (let y = y0; y <= y1; y++) {
+    const dy2 = (y - by) * (y - by);
+    if (dy2 >= r2) continue;
+    const half = Math.sqrt(r2 - dy2) / ASPECT;
+    const x0 = Math.max(0, Math.floor(bx - half)), x1 = Math.min(r.cols - 1, Math.ceil(bx + half));
+    for (let x = x0; x <= x1; x++) {
+      const dx = (x - bx) * ASPECT;
+      const distance = Math.sqrt(dx * dx + dy2);
+      if (distance >= radius) continue;
+      const k = pulse * (1 - distance / radius) ** 2;
+      const o = (y * r.cols + x) * 4;
+      r.fg[o] += 156 * k;
+      r.fg[o + 1] += 72 * k;
+      r.fg[o + 2] += 12 * k;
+      r.ov[o] += 156 * k;
+      r.ov[o + 1] += 72 * k;
+      r.ov[o + 2] += 12 * k;
+      if (fine?.[o >> 2]) r.lightFine(o >> 2, 156 * k, 72 * k, 12 * k);
+      r.bg[o] += 34 * k;
+      r.bg[o + 1] += 16 * k;
+      r.bg[o + 2] += 4 * k;
+    }
+  }
+}
+
+test('drawFireLight lights everything without a normal exactly as the old loop did', () => {
   const old = renderer(30, 20), now = renderer(30, 20);
   for (const r of [old, now]) {
     r.fineAt(20, 10, glyph('@'), 50, 50, 50, 5, 5, 5);
-    r.fg.fill(20);
+    r.fineAt(26, 14, glyph('#'), 30, 60, 90, 2, 4, 6);
+    for (let i = 0; i < r.fg.length; i++) r.fg[i] = (i * 37) % 200;
+    r.ov.fill(11);
+    r.bg.fill(3);
   }
-  delete old.fineLit;
-  delete old.cellLit;
-  const source = { x: 12, y: 10, intensity: 1, seed: 3 };
-  drawFireLight(old, { x0: 0, y0: 0 }, 1, source, 8, 2);
-  drawFireLight(now, { x0: 0, y0: 0 }, 1, source, 8, 2);
+  for (const [source, radius, height] of [[{ x: 12, y: 10, intensity: 1, seed: 3 }, 8, 2], [{ x: 4, y: 3, intensity: 0.6, seed: 9 }, 14, 0]]) {
+    baselineFireLight(old, { x0: 0, y0: 0 }, 1.3, source, radius, height);
+    drawFireLight(now, { x0: 0, y0: 0 }, 1.3, source, radius, height);
+  }
   assert.deepEqual(now.fg, old.fg);
+  assert.deepEqual(now.ov, old.ov);
   assert.deepEqual(now.bg, old.bg);
   assert.deepEqual(now.fine, old.fine);
   assert.deepEqual(now.fineBg, old.fineBg);
