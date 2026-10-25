@@ -91,6 +91,22 @@ short version see the [README](../README.md).
   carried downstream, about a quarter of a walking pace in the middle of an
   ordinary reach, more in the deep narrows; you can always wade upstream, and
   a jump lifts you clear of the push.
+  Now and then, roughly every 20 to 60 seconds while you are near running
+  water (twice as often during and for three minutes after a heavy storm),
+  something comes down the river: a fallen log, a leafy branch (bare in
+  winter), a mat of leaves (twigs and straw in winter), a clump of reeds with
+  cattail heads, or rarely a broken crate board or barrel stave. It appears
+  upstream, off the screen where it can, and drifts at the water's own pace,
+  turning to lie along the current and swinging wide on bends. It bobs slowly,
+  bumps and slides along the banks and midstream stones with a small ring of
+  ripples, sometimes snags for a few seconds on the outer bank of a bend or
+  on a stone until the water swings it free, and throws foam and a V-shaped
+  wake when the water runs past it. Carried into a lake it slows, soaks up
+  and sinks. Only a few pieces are afloat at once (four, six after a storm),
+  and nothing too long for a reach comes down it, so the narrowest brooks
+  carry only leaves and reeds, or nothing. Debris is drawn in small letters
+  with its reflection, hurts nobody, and is never saved: each player sees
+  their own.
 - **Reflections.** The wanderer, trees and boulders are mirrored about their own
   base, so the reflection only appears where it would actually reach the water,
   then sways and breaks into slivers with the swell.

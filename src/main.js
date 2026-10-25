@@ -55,6 +55,7 @@ import { bakeFine, fineBakesPending, fineOf, startFineWorkers } from './world/fi
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
 import { Splashes } from './world/splashes.js';
+import { Debris } from './world/debris.js';
 import { Torches } from './world/torch.js';
 import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
@@ -216,6 +217,8 @@ const dust = new Dust();
 const footprints = new Footprints();
 const grass = new Grass();
 const splashes = new Splashes();
+// Driftwood and flotsam on the rivers: local and never saved.
+const debris = new Debris({ season: world.season, world });
 const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
 const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
@@ -251,7 +254,7 @@ window.addEventListener('pageshow', (event) => {
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const fog = new Fog();
 const fogSpells = new SpellFogStirs();
-const debug = { player, camera, world, grass, splashes, weather, fog, fires, torches, renderer, quality, inventory,
+const debug = { player, camera, world, grass, splashes, debris, weather, fog, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
@@ -1008,6 +1011,7 @@ function frame(now) {
 
   const view = camera.view(renderer);
   weather.update(dt, time, world, view, sound.weather);
+  if (!paused) debris.update(dt, world, view, player, weather, splashes);
   const spellFog = fogSpells.collect(casting);
   fog.update(dt, weather, fogWalkers(view, spellFog.walkers), spellFog, view);
   if (wasTapped('KeyL') || summonLightning) {
@@ -1122,6 +1126,10 @@ function frame(now) {
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
+  for (const piece of debris.visible(view)) {
+    reflections.push({ y: piece.y, draw: () => debris.reflect(renderer, view, piece, mirror) });
+    drawables.push({ y: piece.y, draw: () => debris.draw(renderer, view, piece) });
+  }
   const carried = visibleTorches.filter((torch) => torch.carried);
   reflections.push({ y: player.y, draw: () => {
     if (model) model.draw(renderer, mirror);
@@ -1149,6 +1157,7 @@ function frame(now) {
   const contacts = model ? model.waterContacts().map((p) => ({ x: player.x + p.x, y: player.y + p.y })) : [];
   for (const figure of monsterCells) contacts.push(...figure.contacts);
   splashes.drawSurface(renderer, view, time);
+  debris.drawSurface(renderer, view, time);
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
