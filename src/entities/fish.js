@@ -27,9 +27,10 @@ export const FISH = freeze({
   // Metres: the player near, running, or wading; a noise; a shaft landing.
   senses: freeze({ flee: 4, fleeRunning: 7, wade: 6, noise: 12, shot: 4 }),
   // A dart's speed, metres a second, and seconds; the spread, radians,
-  // between the school's lines; the chance it breaks the surface; the
-  // seconds it holds still after.
-  dart: freeze({ speed: freeze([2.6, 3.6]), time: freeze([0.35, 0.7]), spread: 1.2, ring: 0.3, regroup: freeze([3, 6]) }),
+  // between the school's lines at most, and the widest any line strays from
+  // straight away, so none darts back toward the threat; the chance it
+  // breaks the surface; the seconds it holds still after.
+  dart: freeze({ speed: freeze([2.6, 3.6]), time: freeze([0.35, 0.7]), spread: 1.2, fan: 1.25, ring: 0.3, regroup: freeze([3, 6]) }),
   // The chance of a school in a region with enough lake.
   chance: 0.7,
   clips: freeze({ swim: 'Armature|Swim' }),
@@ -410,13 +411,16 @@ export class Fishes {
   }
 
   // Sends the whole school darting apart from a point, each fish on its own
-  // line spread round the way away.
+  // line fanned round its way away: the bigger the school, the closer its
+  // lines, so the outermost still head away.
   scatter(school, from) {
     school.scaredUntil = school.time + SCARED;
     const n = school.members.length;
+    const { spread, fan } = FISH.dart;
+    const step = n > 1 ? Math.min(spread, (2 * fan) / (n - 1)) : 0;
     school.members.forEach((f, i) => {
       const away = f.offsetTo(from.x, from.y).bearing + Math.PI;
-      f.dart(away + (i - (n - 1) / 2) * FISH.dart.spread + (f.random() - 0.5) * 0.3);
+      f.dart(away + (i - (n - 1) / 2) * step + (f.random() - 0.5) * 0.16);
     });
   }
 

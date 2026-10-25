@@ -154,6 +154,30 @@ test('the player near makes every fish dart apart; they settle and follow again'
   assert.ok(s.members.filter((f) => f !== s.leader).every((f) => f.state === 'follow'));
 });
 
+test('in a school of any size, every fish darts away from the threat, none back toward it', () => {
+  for (let size = FISH.school.size[0]; size <= FISH.school.size[1]; size++) {
+    for (const [mx, mz] of [[3.5, 0], [0, -3], [-2, 2]]) {
+      const { fishes, s } = school(lake(), size);
+      assert.equal(s.members.length, size);
+      const threat = at({ x: s.leader.x, y: s.leader.y }, mx, mz);
+      fishes.scatter(s, threat);
+      const offs = s.members.map((f) => {
+        const away = f.offsetTo(threat.x, threat.y).bearing + Math.PI;
+        const off = Math.atan2(Math.sin(f.heading - away), Math.cos(f.heading - away));
+        assert.ok(Math.abs(off) < (80 * Math.PI) / 180, `${size} fish: ${((off * 180) / Math.PI).toFixed(0)} degrees off away`);
+        return off;
+      }).sort((a, b) => a - b);
+      for (let i = 1; i < offs.length; i++) assert.ok(offs[i] - offs[i - 1] > 0.4, 'each on its own line');
+    }
+  }
+  // A lone fish darts straight away.
+  const fishes = new Fishes();
+  const lone = fishes.spawn({ x: LAKE.x, y: LAKE.y, count: 1, world: lake() });
+  fishes.scatter(lone, at(LAKE, 0, 3));
+  const away = lone.leader.offsetTo(...Object.values(at(LAKE, 0, 3))).bearing + Math.PI;
+  assert.ok(Math.abs(Math.atan2(Math.sin(lone.leader.heading - away), Math.cos(lone.leader.heading - away))) < 0.1);
+});
+
 test('wading in scares them from 5 m; standing dry on the bank at 5 m does not', () => {
   const dry = school();
   const centre = { x: dry.s.leader.x, y: dry.s.leader.y };
