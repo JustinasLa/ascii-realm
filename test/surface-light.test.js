@@ -241,3 +241,15 @@ test('a ground-cache hit keeps the bed normals of the first, uncached draw', () 
   assert.ok(first.cellLit.some(Boolean));
   assert.deepEqual(second.cellLit, first.cellLit);
 });
+
+test('a builder rock added beside water is damp, one added on dry land is not', () => {
+  const world = new World(1);
+  const near = createProp('rock', -631.5, -150.5, { seed: 4 });
+  near.id = 'near';
+  world.addProp(near);
+  assert.equal(near.damp, true);
+  const dry = createProp('rock', world.spawn.x, world.spawn.y, { seed: 4 });
+  dry.id = 'dry';
+  world.addProp(dry);
+  assert.equal(dry.damp, undefined);
+});

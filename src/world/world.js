@@ -312,6 +312,8 @@ export class World {
   addProp(prop) {
     if (this.addedProps.has(prop.id)) this.deleteProp(prop.id);
     this.addedProps.set(prop.id, prop);
+    // A builder's rock beside water is damp, as a generated one is.
+    if (prop.kind === 'rock' && !prop.wet && this.byWater(prop)) prop.damp = true;
     this.coverGrass(prop, 1);
     this.measureProp(prop);
     const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
