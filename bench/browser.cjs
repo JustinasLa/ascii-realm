@@ -103,7 +103,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
         buttons: [...document.querySelectorAll('#touch-controls .actions > button, #phone-menu')]
           .filter(e => e.checkVisibility()).map(e => e.getBoundingClientRect().toJSON()),
         cells: r.cols * r.rows, cell: r.cellH / r.dpr, orientation: game.layout.orientation, bias: game.layout.bias,
-        expected: game.layout.phoneDefaultCell(game.layout.orientation, innerWidth, innerHeight),
+        expected: game.layout.phoneDefaultCell(game.layout.orientation, innerWidth, innerHeight, devicePixelRatio),
         targetY: (game.camera.y - v.y0 - v.offY / r.cellH) * r.cellH / r.canvas.height };
     });
     const inside = (c, { w, h, insets }, name) => assert.ok(c.left >= insets.left && c.top >= insets.top

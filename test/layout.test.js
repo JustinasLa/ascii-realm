@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { FRAME_BIAS, gridSize, LANDSCAPE_QUERY, orientationOf, PHONE_CELL_BUDGET, PHONE_ZOOM, phoneDefaultCell,
+import { deviceGrid, FRAME_BIAS, gridSize, LANDSCAPE_QUERY, orientationOf, PHONE_CELL_BUDGET, PHONE_ZOOM, phoneDefaultCell,
   watchLayout, ZoomSlots } from '../src/core/layout.js';
 import { Camera } from '../src/world/camera.js';
 import { PHONE_QUERY } from '../src/core/phone.js';
+import { renderSize } from '../src/render/budget.js';
+import { ASPECT } from '../src/world/world.js';
 
 test('wider than tall is landscape; square counts as portrait', () => {
   assert.equal(orientationOf({ width: 852, height: 393 }), 'landscape');
@@ -23,15 +25,57 @@ test('phones default to their orientation zoom, raised only to stay within the c
   assert.equal(phoneDefaultCell('landscape', 667, 375), 6);
   const big = phoneDefaultCell('landscape', 915, 412);
   assert.ok(big > 6 && big < 6.5, `Pixel 8 landscape ${big}`);
-  for (const [w, h] of [[915, 412], [932, 430], [412, 915], [852, 393]]) {
+  for (const [w, h, dpr] of [[915, 412, 1], [932, 430, 3], [412, 915, 2.625], [852, 393, 3], [918, 409, 1.25]]) {
     const o = orientationOf({ width: w, height: h });
-    const cell = phoneDefaultCell(o, w, h);
-    // The renderer's own grid, with the device-pixel rounding it may add.
-    const { cols, rows } = gridSize(w + 0.5, h + 0.5, cell);
-    assert.ok(cols * rows <= PHONE_CELL_BUDGET, `${w}x${h}: ${cols * rows}`);
-    const { cols: c2, rows: r2 } = gridSize(w + 0.5, h + 0.5, cell - 0.05);
+    const cell = phoneDefaultCell(o, w, h, dpr);
+    assert.equal(cell, Math.round(cell * 100) / 100, `${w}x${h} is returned in hundredths, as checked`);
+    const { cols, rows } = deviceGrid(w, h, dpr, cell * ASPECT, cell);
+    assert.ok(cols * rows <= PHONE_CELL_BUDGET, `${w}x${h}@${dpr}: ${cols * rows}`);
+    const less = cell - 0.01;
+    const { cols: c2, rows: r2 } = gridSize(w + 0.5 / Math.min(dpr, 3.34 / less), h + 0.5 / Math.min(dpr, 3.34 / less), less);
     assert.ok(cell === PHONE_ZOOM[o] || c2 * r2 > PHONE_CELL_BUDGET, `${w}x${h} is raised no further than needed`);
   }
+});
+
+test('the budget holds on the device-pixel grid at 918x409 and DPR 1.25', () => {
+  // Rounding the cell to hundredths after the check once gave 6.35 px here,
+  // and the renderer's grid of 16,038 cells.
+  const cell = phoneDefaultCell('landscape', 918, 409, 1.25);
+  const { cols, rows } = deviceGrid(918, 409, 1.25, cell * ASPECT, cell);
+  assert.ok(cols * rows <= PHONE_CELL_BUDGET, `${cell} px: ${cols * rows} cells`);
+  assert.ok(gridSize(918, 409, 6.35).cols * gridSize(918, 409, 6.35).rows <= PHONE_CELL_BUDGET,
+    'the CSS grid alone would not have caught it');
+  const { cols: c635, rows: r635 } = deviceGrid(918, 409, 1.25, 6.35 * ASPECT, 6.35);
+  assert.ok(c635 * r635 > PHONE_CELL_BUDGET);
+});
+
+test('every phone default fits the budget on the grid the renderer allocates', () => {
+  // Every size and pixel ratio phones report, at every resolution the frame
+  // budget may drop to: the renderer's own device-pixel grid stays in budget.
+  const scales = [1, 0.8, 0.64, 0.512, 0.4096, 0.32768, 0.3];
+  let worst = 0;
+  for (let w = 320; w <= 960; w += 3) {
+    for (let h = 300; h <= 960; h += 23) {
+      for (const dpr of [1, 1.25, 1.5, 1.75, 2, 2.25, 2.625, 2.75, 3, 3.5, 4]) {
+        const cell = phoneDefaultCell(orientationOf({ width: w, height: h }), w, h, dpr);
+        for (const scale of scales) {
+          const size = renderSize(w, h, dpr, cell, true, scale);
+          const { cols, rows } = deviceGrid(w, h, size.dpr, size.cell * ASPECT, size.cell);
+          worst = Math.max(worst, cols * rows);
+          if (cols * rows > PHONE_CELL_BUDGET) assert.fail(`${w}x${h}@${dpr}x${scale}: ${cols * rows}`);
+        }
+      }
+    }
+  }
+  assert.ok(worst > PHONE_CELL_BUDGET * 0.99, `the budget is used, not wasted (${worst})`);
+});
+
+test('the device grid rounds the canvas and keeps glyphs legible', () => {
+  assert.deepEqual(deviceGrid(918, 409, 1.25, 3.81, 6.35),
+    { width: 1148, height: 511, cellW: 3.81 * 1.25, cellH: 6.35 * 1.25, cols: 243, rows: 66 });
+  const tiny = deviceGrid(100, 60, 0.5, 2, 3);
+  assert.deepEqual([tiny.cellW, tiny.cellH], [2, 3], 'cells below 2x3 device pixels grow, keeping their shape');
+  assert.equal(phoneDefaultCell('portrait', 393, 852, 0), PHONE_ZOOM.portrait, 'an unknown ratio counts as one');
 });
 
 test('zoom slots remember a value per orientation', () => {

@@ -22,19 +22,47 @@ export function gridSize(width, height, cellH, cellW = cellH * ASPECT) {
   return { cols: Math.ceil(width / cellW) + 1, rows: Math.ceil(height / cellH) + 1 };
 }
 
-// The renderer rounds the canvas to device pixels, which can add up to half
-// a CSS pixel on each side; the budget check allows for it.
-const ROUNDING = 0.5;
-const STEP = 0.05;
+// The grid the renderer actually allocates for a CSS size, a device pixel
+// ratio and a CSS cell size: it rounds the canvas to whole device pixels and
+// enlarges cells below the smallest legible glyph (2x3 device pixels).
+export function deviceGrid(cssW, cssH, dpr, cellW, cellH) {
+  const w = Math.round(cssW * dpr);
+  const h = Math.round(cssH * dpr);
+  const deviceW = cellW * dpr;
+  const deviceH = cellH * dpr;
+  // Browser zoom can lower DPR below one. Enlarge both dimensions together
+  // when enforcing the minimum so the world keeps its aspect ratio.
+  const scale = Math.max(1, 2 / deviceW, 3 / deviceH);
+  const cell = { cellW: deviceW * scale, cellH: deviceH * scale };
+  return { width: w, height: h, ...cell, ...gridSize(w, h, cell.cellH, cell.cellW) };
+}
 
-export function phoneDefaultCell(orientation, width, height) {
+// The lowest pixel ratio the render budget may pick for a cell size on a
+// screen of this ratio: its frame budget can lower the ratio until glyphs
+// reach the legible minimum, never further (renderSize in budget.js).
+function lowestRatio(dpr, cell) {
+  return Math.min(dpr, Math.max(2 / (cell * ASPECT), 3 / cell));
+}
+
+// Hundredths of a CSS pixel: the default is checked at the value returned.
+const STEP = 0.01;
+const hundredths = (cell) => Math.round(cell * 100) / 100;
+
+// The default cell for a phone screen, at the orientation's zoom unless the
+// grid would cost more than the budget. The check is on the renderer's
+// device-pixel grid at any pixel ratio the render budget may choose: rounding
+// the canvas adds at most half a device pixel, so the worst case is half a
+// device pixel at the lowest ratio, plus a hair for floating point.
+export function phoneDefaultCell(orientation, width, height, dpr = 1) {
   const fits = (cell) => {
-    const { cols, rows } = gridSize(width + ROUNDING, height + ROUNDING, cell);
+    const slack = 0.5 / lowestRatio(dpr || 1, cell) + 1e-6;
+    const { cols, rows } = gridSize(width + slack, height + slack, cell);
     return cols * rows <= PHONE_CELL_BUDGET;
   };
-  let cell = Math.max(PHONE_ZOOM[orientation], Math.sqrt(width * height / (ASPECT * PHONE_CELL_BUDGET)));
-  while (!fits(cell)) cell += STEP;
-  return Math.round(cell * 100) / 100;
+  let cell = Math.ceil(Math.max(PHONE_ZOOM[orientation],
+    Math.sqrt(width * height / (ASPECT * PHONE_CELL_BUDGET))) * 100 - 1e-9) / 100;
+  while (!fits(cell)) cell = hundredths(cell + STEP);
+  return cell;
 }
 
 // Square counts as portrait, as the media feature does.
