@@ -432,8 +432,20 @@ test('a stone breaks the current into froth, a V-wake and an eddy, and bends fro
   }
   assert.ok(risen > 0, 'a fish rises in the pool');
   // Water hardly moving is drawn as calm as a lake.
+  // Every frame of a slack river matches the same water with no current at all.
   const slack = riverChunk({ speed: 0.02 });
-  assert.equal(animated(slack, 32 * 64 + 5, 5, 32, 3), animated(riverChunk({ speed: 0.02, depth: 0.05 }), 32 * 64 + 5, 5, 32, 3));
+  const lake = riverChunk({ speed: 0.02 });
+  lake.flow.river.fill(0);
+  delete lake.rivers;
+  for (let t = 0; t < 12; t += 0.53) {
+    const a = shadeChunk({ seed: 3 }, slack, t);
+    const b = shadeChunk({ seed: 3 }, lake, t);
+    assert.deepEqual([a.fg, a.bg, a.ov], [b.fg, b.bg, b.ov], `frame at ${t}s`);
+  }
+  // ...while a running river does not.
+  const running = shadeChunk({ seed: 3 }, riverChunk(), 1);
+  const calm = shadeChunk({ seed: 3 }, lake, 1);
+  assert.notDeepEqual([running.fg, running.bg, running.ov], [calm.fg, calm.bg, calm.ov]);
 });
 
 test('stones on a river bed are told apart, under the surface or breaking it', () => {
