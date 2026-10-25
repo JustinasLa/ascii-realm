@@ -4,7 +4,7 @@ import { rockTypeAt } from './geology.js';
 import { blocks, generateProps, makeRiverStone } from './props.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
-import { ACROSS, crossSpeed, groundHalfWidth, readFlow, RiverNetwork } from './rivers.js';
+import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
 import { createSpawnRuins } from './spawn-ruins.js';
 
 export const WATER = 0;
@@ -31,7 +31,7 @@ export const LAND_LIFT = 0.09;
 const LAKE_SHELF = 1.6;
 const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78];
 const cellKey = (x, y) => `${x},${y}`;
-const FLOW = { x: 0, y: 0, speed: 0 };
+const LINE_AT = { x: 0, y: 0, speed: 0, tau: 0 };
 const chunkKey = (cx, cy) => `${cx},${cy}`;
 const smoothRange = (a, b, x) => {
   const u = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -416,13 +416,13 @@ export class World {
   }
 
   // The river current at a point, in `out` so callers allocate nothing:
-  // its unit direction on the ground (east, south) and surface speed in
-  // metres a second, blended over the four nearest cells; how deep the
-  // water is; which river it is and where across it the point lies (-1 to
-  // 1, + on the left bank); the outward set of the water on a bend; the
-  // river's half-width in metres; how sharply it bends; and the seconds the
-  // water took to get here. Still everywhere but on river water, including
-  // river cells painted over with other ground.
+  // its unit direction on the ground (east, south), its surface speed in
+  // metres a second and the seconds the water took to get here down its own
+  // line through the river, all at the point itself; how deep the water is;
+  // which river it is and where across it the point lies (-1 to 1, + on the
+  // left bank); the outward set of the water on a bend; the river's
+  // half-width in metres; and how sharply it bends. Still everywhere but on river water, including river
+  // cells painted over with other ground.
   flowAt(x, y, out = {}) {
     out.x = 0; out.y = 0; out.speed = 0; out.river = 0; out.across = 0; out.secondary = 0;
     out.halfWidth = 0; out.bend = 0; out.tau = 0;
@@ -433,7 +433,7 @@ export class World {
     const x0 = Math.floor(fx);
     const y0 = Math.floor(fy);
     let near = 0;
-    let vx = 0, vy = 0, speed = 0, across = 0, secondary = 0, half = 0, bend = 0, tau = 0, weight = 0;
+    let across = 0, secondary = 0, half = 0, bend = 0, weight = 0;
     for (let k = 0; k < 4; k++) {
       const cx = x0 + (k & 1);
       const cy = y0 + (k >> 1);
@@ -445,27 +445,24 @@ export class World {
       // the edge; only river water counts as being in the current.
       if (!f?.width[i]) continue;
       if (f.river[i] && c.type[i] === WATER && w > near) { near = w; out.river = f.river[i]; }
-      readFlow(f, i, FLOW);
-      vx += FLOW.x * w;
-      vy += FLOW.y * w;
-      speed += f.speed[i] / 255 * w;
       across += f.across[i] / ACROSS * w;
       secondary += f.secondary[i] / 127 * w;
-      half += f.width[i] / 60 * w;
+      half += f.width[i] / WIDTH * w;
       bend += f.bend[i] / 255 * w;
-      tau += f.tau[i] * w;
       weight += w;
     }
     if (!out.river) return out;
-    const l = Math.hypot(vx, vy);
-    if (l > 1e-9) { out.x = vx / l; out.y = vy / l; }
+    // The way the water runs, how fast, and the time it took come from its
+    // own line through the river at the point itself, so whatever the
+    // current carries keeps exactly to that clock.
+    this.rivers.lineAt(x, y, LINE_AT);
+    out.x = LINE_AT.x;
+    out.y = LINE_AT.y;
+    out.tau = LINE_AT.tau;
+    out.speed = LINE_AT.speed;
     out.across = across / weight;
-    // Down the middle at the river's pace, slower toward the banks.
-    out.speed = speed / weight * crossSpeed(out.across);
     out.secondary = secondary / weight;
     out.bend = bend / weight;
-    // The water's own travel time along its line across the river.
-    out.tau = tau / weight / crossSpeed(out.across);
     out.halfWidth = groundHalfWidth(out.x, out.y, half / weight);
     return out;
   }
