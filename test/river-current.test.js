@@ -178,15 +178,23 @@ test('a splash in a river rides the current; one on a lake stays put', () => {
   const splashes = new Splashes();
   assert.equal(splashes.react(world, { type: 'land', x, y, strength: 1 }), true);
   const ring = splashes.rings[0];
-  const drop = splashes.drops[0];
-  const dropFrom = { x: drop.x + drop.vx * 0.1 * 0.9, y: drop.y };
+  const flights = splashes.drops.map(d => ({ d, x: d.x, y: d.y, vx: d.vx, vy: d.vy, flow: world.flowAt(d.x, d.y) }));
   const flow = world.flowAt(x, y);
   splashes.update(0.1);
   const moved = toGround((ring.x - x) * ASPECT, ring.y - y);
   const speed = Math.hypot(moved.x, moved.y) / 0.1;
   assert.ok((moved.x * flow.x + moved.y * flow.y) / Math.hypot(moved.x, moved.y) > 0.99, 'downstream');
   assert.ok(Math.abs(speed - flow.speed) / flow.speed < 0.1, `at the water's speed (${speed} vs ${flow.speed})`);
-  assert.ok(Number.isFinite(dropFrom.x));
+  // Each droplet flies its own arc and is carried by the water beneath it
+  // on top of that.
+  let carried = 0;
+  for (const { d, x: x0, y: y0, vx, vy, flow: under } of flights) {
+    const along = toCells(under.x * under.speed * 0.1, under.y * under.speed * 0.1);
+    assert.ok(Math.abs(d.x - x0 - vx * 0.1 - along.cols) < 1e-9, 'carried east as the water is');
+    assert.ok(Math.abs(d.y - y0 - vy * 0.1 - along.rows) < 1e-9, 'carried south as the water is');
+    carried += ((d.x - x0 - vx * 0.1) * ASPECT * flow.x + (d.y - y0 - vy * 0.1) * flow.y) > 0 ? 1 : 0;
+  }
+  assert.ok(flights.length > 3 && carried === flights.length, `${carried} of ${flights.length} droplets carried downstream`);
 
   const lake = new World(1);
   const calm = new Splashes();
