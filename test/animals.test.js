@@ -189,6 +189,39 @@ test('in the real world, footing and movement never generate a chunk', () => {
   assert.equal(made, 0, 'no chunk was generated');
 });
 
+test('an animal whose chunk is let go stands still and never makes it again', () => {
+  const world = new World(3, { rivers: false });
+  for (let cy = -1; cy <= 1; cy++) for (let cx = 3; cx <= 5; cx++) world.propsOf(cx, cy);
+  const x = 4 * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const animals = new Animals({ habitat: () => 'water' });
+  animals.spawn('deer', { x, y: 0, count: 2, world });
+  const player = walker(x - toCells(20, 0)[0], 0);
+  run(animals, world, player, 1);
+  let made = 0;
+  const generate = world.generate.bind(world);
+  world.generate = (...args) => {
+    made++;
+    return generate(...args);
+  };
+  const [deer] = animals.list;
+  const [cx, cy] = chunkOf(deer.x, deer.y);
+  for (const [key, c] of world.chunks) if (c.cx === cx && c.cy === cy) world.chunks.delete(key);
+  assert.equal(world.loaded(cx, cy), null);
+  const was = { x: deer.x, y: deer.y };
+  // Even a noise beside it only starts a flight it cannot yet run.
+  animals.hear({ type: 'strike', x: deer.x, y: deer.y });
+  run(animals, world, player, 2);
+  assert.equal(made, 0, 'no chunk was generated');
+  assert.deepEqual({ x: deer.x, y: deer.y }, was);
+  assert.equal(deer.state, 'flee');
+  assert.equal(deer.stateTime, 0, 'its time stands still too');
+  assert.equal(deer.groundSpeed, 0);
+  // Its land back, it carries on.
+  world.propsOf(cx, cy);
+  run(animals, world, player, 0.5);
+  assert.ok(deer.stateTime > 0);
+});
+
 test('a herd far behind is let go, rests, then returns home as it was', () => {
   const player = walker(5000, 3000);
   // The one region round the player that holds a herd at a fair distance.

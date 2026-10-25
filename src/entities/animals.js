@@ -370,6 +370,13 @@ export class Animal {
   // fears ({ x, y, distance, running }) or null.
   update(dt, world, threat = null) {
     const k = this.kind;
+    // Its land let go of behind the player, it stands as it is: reading the
+    // ground there would make the chunk again.
+    if (!ready(world, this.x, this.y)) {
+      this.speed = 0;
+      this.groundSpeed = 0;
+      return;
+    }
     this.stateTime += dt;
     this.wary = Math.max(0, this.wary - dt);
     if (this.boltIn !== null) {
