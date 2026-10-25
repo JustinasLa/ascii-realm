@@ -643,8 +643,12 @@ debug.animals = animals;
 // each; ?animals=0 leaves them out too.
 const birds = new Birds({ seed, cap: countOf('birds', 8), enabled: animals.enabled });
 const fishes = new Fishes({ seed, cap: countOf('fish', 8), enabled: animals.enabled });
-debug.birds = birds;
-debug.fish = fishes;
+// Their debug handles place groups on the game's own world.
+const onWorld = (manager) => new Proxy(manager, {
+  get: (m, key) => (key === 'spawn' ? (options = {}) => m.spawn({ world, ...options }) : Reflect.get(m, key)),
+});
+debug.birds = onWorld(birds);
+debug.fish = onWorld(fishes);
 // Every noise reaches the animals, the birds and the fish alike.
 const hearWild = (e) => {
   animals.hear(e);

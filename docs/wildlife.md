@@ -371,10 +371,10 @@ goes. `game.animals.calm()` settles every animal. `game.animals.hurt(i, damage)`
 deals a blow (lethal by default) to the animal at index `i`, and
 `game.huntDrops.all()` lists the stacks lying about.
 `game.animals.disengage()` calls every pack off.
-`game.birds.spawn({ x, y, count, airborne })` places a flock (feeding, or
-already in the air), and `game.fish.spawn({ x, y, count })` a school on the
-open water nearest the point within 6 m; both keep their group however far
-the player goes. `game.birds.calm()` and `game.fish.calm()` settle them, and
+`game.birds.spawn({ x, y, count, airborne })` places a flock (feeding on the
+open ground there, or already in the air), and `game.fish.spawn({ x, y, count })`
+a school on the open water nearest the point within 6 m; both use the game's
+own world and keep their group however far the player goes. `game.birds.calm()` and `game.fish.calm()` settle them, and
 `game.birds.list` and `game.fish.list` list them.
 
 ## Multiplayer

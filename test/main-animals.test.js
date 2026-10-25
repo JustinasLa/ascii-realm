@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { toCells, toMetres } from '../src/entities/monsters.js';
+import { lakeAt } from '../src/entities/animals.js';
+import { WATER } from '../src/world/world.js';
 import { loadGame } from './helpers/main-game.js';
 
 test('the game runs frames with a herd about, drawn once its figures arrive', async () => {
@@ -259,6 +261,33 @@ test('birds and fish live through the frame: noises reach them, a dart rings the
   assert.equal(game.fish.events.length, 0);
   assert.equal(game.birds.events.length, 0);
   assert.ok(kinds.air > 0 && kinds.ground + kinds.air >= 5);
+});
+
+test('the debug spawns of birds and fish need no world: they use the game\'s own', async () => {
+  const { game, frame } = await loadGame();
+  const { x, y } = game.player;
+  game.world.loaded = () => ({ props: [] });
+  const type = game.world.typeAt;
+  // All water: no flock can stand, and the school finds open water.
+  game.world.typeAt = () => WATER;
+  game.world.waterDepthAt = () => 0.4;
+  game.world.flowAt = (px, py, out = {}) => Object.assign(out, { speed: 0 });
+  game.world.rivers = null;
+  assert.equal(game.birds.spawn({ x, y, count: 3 }), null, 'checked against the world');
+  const lake = (() => {
+    for (let i = 0; i < 400; i++) {
+      const at = { x: x + (i % 20) * 40, y: y + Math.floor(i / 20) * 12 };
+      if (lakeAt(game.world, at.x, at.y)) return at;
+    }
+    return null;
+  })();
+  assert.ok(lake, 'a lake in the noise');
+  const school = game.fish.spawn({ ...lake, count: 3 });
+  assert.equal(school.members.length, 3);
+  assert.ok(game.fish.list.length >= 3);
+  game.world.typeAt = type;
+  frame();
+  game.fish.calm();
 });
 
 test('?birds=0&fish=0 leaves out birds and fish while deer still come; ?animals=0 leaves out all', async () => {
