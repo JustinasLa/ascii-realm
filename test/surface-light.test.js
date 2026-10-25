@@ -10,8 +10,8 @@ import { drawGround } from '../src/world/ground.js';
 import { fineRecipe } from '../src/world/prop-art.js';
 import { createProp, drawProp, makeRiverStone } from '../src/world/props.js';
 import {
-  AMBIENT, GLOSS_DAMP, GLOSS_DRY, GLOSS_SUBMERGED, GLOSS_WET, glossByte, glossOf, normalByte, normalOf, shadeFactors,
-  worldNormal,
+  AMBIENT, DIFFUSE, GLOSS_DAMP, GLOSS_DRY, GLOSS_SUBMERGED, GLOSS_WET, RAKE_MAX, glossByte, glossOf, normalByte, normalOf,
+  shadeFactors, worldNormal,
 } from '../src/world/surface-light.js';
 import * as water from '../src/world/terrain/water.js';
 import { STONE_GLYPH } from '../src/world/terrain/water.js';
@@ -48,6 +48,22 @@ test('a face takes the light by facing it: full, none at a right angle or behind
   assert.equal(behind.diffuse, AMBIENT);
   assert.equal(behind.spec, 0);
   assert.equal(shadeFactors(0, 0.99, 0, -0.2, 1, glossByte(1)).spec, 0, 'faces turned from the viewer never glint');
+});
+
+test('a stone is lit against the ground: level faces take the even light from any light', () => {
+  // A low campfire off to the side, a torch high over, a light barely over
+  // the ground: a face turned up takes what the ground does.
+  for (const [lx, ly, lz] of [[7, 3, 1], [-2, 0, 9], [12, -5, 0.2]]) {
+    assert.ok(Math.abs(shadeFactors(0, 0, lx, ly, lz, 0).diffuse - 1) < 1e-12);
+  }
+  // A light below a small cell high on a rock reaches no level face of it.
+  assert.equal(shadeFactors(0, 0, 3, 0, -1, 0).diffuse, AMBIENT);
+  // Against a low light to the east, a face tipped toward it takes more
+  // than the ground, one tipped away less, and none past RAKE_MAX.
+  const toward = shadeFactors(0.34, 0, 6, 0, 2, 0).diffuse;
+  const away = shadeFactors(-0.17, 0, 6, 0, 2, 0).diffuse;
+  assert.ok(toward > 1 && away < 1 && away > AMBIENT);
+  assert.equal(shadeFactors(1, 0, 6, 0, 2, 0).diffuse, AMBIENT + DIFFUSE * RAKE_MAX);
 });
 
 test('wet glints are brighter at the mirror angle and narrower than dry sheen', () => {

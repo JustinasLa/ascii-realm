@@ -5,18 +5,26 @@
 //
 // Shading is done in the world's frame: x east and y south along the
 // ground, both in row units, and z up. A light stands at a height over its
-// ground point, so a surface facing straight up under it takes exactly the
-// even light everything else gets, and flat ground looks as it always did.
+// ground point. A stone is lit against the ground: a surface facing up, as
+// the ground does, takes exactly the even light everything else gets
+// wherever the light stands, so flat ground looks as it always did.
 //
 // A surface's normal is kept in two bytes (x and y as signed bytes, z
 // implied: the faces we see never turn down), and how glossy it is in a
 // third, 0 meaning "no normal: light it evenly".
 
 // The share of a light a face turned away from it still gets, and the share
-// a face turns into by facing it. A face turned straight at the light takes
-// AMBIENT + DIFFUSE = 1, the even light.
+// a face turns into by facing it. A face turned the way the ground is
+// takes AMBIENT + DIFFUSE = 1, the even light the ground beside it gets.
 export const AMBIENT = 0.22;
 export const DIFFUSE = 1 - AMBIENT;
+// A face turned further toward the light than the ground is takes more
+// than the ground, up to this many times the facing share: a low fire
+// lights the sides of stones turned to it well beyond the flat bed.
+export const RAKE_MAX = 1.5;
+// The ground's own facing is never taken as less than this, so a light
+// level with the ground divides by no zero (RAKE_MAX caps the share).
+const GROUND_MIN = 1e-3;
 // How bright and how tight a glint is: a dry rock shows a broad faint
 // sheen, a wet stone a small bright spark.
 export const SPEC_GAIN = 4;
@@ -62,9 +70,10 @@ export function worldNormal(nx, ny, nz) {
 
 // Fills `out` with { diffuse, spec } for a unit normal (nx, ny, implied
 // nz) lit from the offset (lx, ly, lz) toward the light, not normalised,
-// with a byte gloss. diffuse is the share of the light the face takes
-// (AMBIENT to 1); spec the glint's strength, its lobe narrowed or widened
-// by `sharpness`.
+// with a byte gloss. diffuse is the share of the light the face takes:
+// how much it faces the light against how much the ground does (AMBIENT
+// to AMBIENT + DIFFUSE * RAKE_MAX); spec the glint's strength, its lobe
+// narrowed or widened by `sharpness`.
 const VIEW_LEN = Math.hypot(VIEW_S, VIEW_C);
 const VX = 0, VY = VIEW_S / VIEW_LEN, VZ = VIEW_C / VIEW_LEN;
 export function shadeFactors(nx, ny, lx, ly, lz, gloss8, out = { diffuse: 0, spec: 0 }, sharpness = 1) {
@@ -72,7 +81,10 @@ export function shadeFactors(nx, ny, lx, ly, lz, gloss8, out = { diffuse: 0, spe
   const len = Math.sqrt(lx * lx + ly * ly + lz * lz) || 1;
   lx /= len; ly /= len; lz /= len;
   const facing = nx * lx + ny * ly + nz * lz;
-  out.diffuse = AMBIENT + DIFFUSE * (facing > 0 ? facing : 0);
+  // The ground's facing is lz: everything without a normal takes the
+  // light as the ground does, so a stone is lit against it.
+  const rel = facing > 0 ? facing / (lz > GROUND_MIN ? lz : GROUND_MIN) : 0;
+  out.diffuse = AMBIENT + DIFFUSE * (rel < RAKE_MAX ? rel : RAKE_MAX);
   out.spec = 0;
   if (facing <= 0) return out;
   // Blinn-Phong: the glint is brightest where the face is halfway between
