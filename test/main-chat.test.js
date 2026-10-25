@@ -13,6 +13,7 @@ test('chat opens only in a lobby with nothing else open, and blocks play until e
   const { game } = harness;
   const { chat } = game;
   game.inventoryScreen.isOpen = false;
+  assert.equal(chat.scene, harness.canvas, 'a click or tap on the scene closes chat');
   assert.equal(chat.mayOpen(), false, 'solo');
   inLobby(game);
   assert.equal(chat.mayOpen(), true);

@@ -409,7 +409,8 @@ const renderLobby = bindMultiplayerControls(multiplayer, {
 // Lobby chat. It opens only in a lobby, with nothing else in the way; the
 // builder and the rune wheel are declared further down and are read only
 // once a key or tap arrives.
-const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, isControlTarget,
+const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
+  isControlTarget,
   mayOpen: () => !!multiplayer.room && !gate.waiting && !builder.enabled && !inventoryScreen.isOpen
     && !phoneMenu.open && !spellControls.menu?.isOpen && !isGameplayBlocked(),
   onToggle: (open) => {

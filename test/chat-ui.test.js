@@ -9,7 +9,8 @@ class El extends EventTarget {
   constructor(tagName, doc) {
     super();
     Object.assign(this, { tagName: tagName.toUpperCase(), doc, children: [], parentNode: null, style: {},
-      hidden: false, value: '', placeholder: '', className: '', scrollTop: 0, scrollHeight: 0, _text: '' });
+      hidden: false, value: '', placeholder: '', className: '', scrollTop: 0, scrollHeight: 0, clientHeight: 0,
+      _text: '' });
     const tokens = () => new Set(this.className.split(/\s+/).filter(Boolean));
     this.classList = {
       contains: (name) => tokens().has(name),
@@ -43,14 +44,14 @@ function setup({ phone = false, viewport = null, inLobby = true, mayOpen = () =>
   const ids = {};
   const bodyClasses = new Set();
   const rootStyle = {};
-  const doc = {
+  const doc = Object.assign(new EventTarget(), {
     activeElement: null,
     focusCalls: [],
     body: { classList: { add: (c) => bodyClasses.add(c), remove: (c) => bodyClasses.delete(c) } },
     documentElement: { style: { setProperty: (k, v) => { rootStyle[k] = v; } } },
     createElement: (tag) => new El(tag, doc),
     getElementById: (id) => ids[id],
-  };
+  });
   for (const [id, tag] of Object.entries({ chat: 'section', 'chat-log': 'ol', 'chat-bar': 'form', 'chat-channel': 'select',
     'chat-input': 'input', 'chat-send': 'button', 'chat-close': 'button', 'chat-open': 'button' })) {
     ids[id] = new El(tag, doc);
@@ -65,7 +66,8 @@ function setup({ phone = false, viewport = null, inLobby = true, mayOpen = () =>
     toggleChat: (channel) => { toggled.push(channel); return sendOk; },
   };
   const toggles = [];
-  const chat = new ChatUi({ doc, win, phone: { phone }, client, mayOpen, onToggle: (open) => toggles.push(open),
+  const scene = new EventTarget();
+  const chat = new ChatUi({ doc, win, phone: { phone }, client, scene, mayOpen, onToggle: (open) => toggles.push(open),
     colorOf: (member) => [[169, 212, 174], [146, 198, 235]][member.color] });
   chat.setAvailable(inLobby);
   const key = (key, { target = null, ...extra } = {}) => {
@@ -87,7 +89,7 @@ function setup({ phone = false, viewport = null, inLobby = true, mayOpen = () =>
     return event;
   };
   const lines = () => ids['chat-log'].children.map((li) => li.textContent);
-  return { chat, doc, win, ids, sent, toggled, toggles, key, barKey, type, lines, bodyClasses, rootStyle };
+  return { chat, doc, win, scene, ids, sent, toggled, toggles, key, barKey, type, lines, bodyClasses, rootStyle };
 }
 
 test('Enter opens the bar only in a lobby and when nothing else is in the way', () => {
@@ -243,6 +245,49 @@ test('a send the connection refused says so', () => {
   assert.ok(ui.ids['chat-log'].children[0].className.includes('chat-error'));
 });
 
+test('a click or tap on the scene closes the bar without also striking', () => {
+  const ui = setup();
+  let struck = 0;
+  ui.chat.open();
+  ui.ids['chat-input'].value = 'half a thought';
+  // The game's own pointer handler is added after the chat's.
+  ui.scene.addEventListener('pointerdown', () => { struck++; });
+  for (const pointerType of ['mouse', 'touch']) {
+    ui.chat.open();
+    ui.scene.dispatchEvent(Object.assign(new Event('pointerdown', { cancelable: true }), { pointerType }));
+    assert.equal(ui.chat.isOpen, false, pointerType);
+    assert.equal(struck, 0, `${pointerType}: the closing tap is only a close`);
+  }
+  assert.equal(ui.ids['chat-input'].value, '');
+  ui.scene.dispatchEvent(new Event('pointerdown'));
+  assert.equal(struck, 1, 'with the bar shut, the scene gets its clicks');
+  assert.deepEqual(ui.toggles, [true, false, true, false]);
+});
+
+test('Escape closes the bar once focus has left it, but not a key another panel took', () => {
+  const ui = setup();
+  const escape = (extra = {}) => {
+    const event = Object.assign(new Event('keydown', { cancelable: true }), { key: 'Escape', ...extra });
+    ui.doc.dispatchEvent(event);
+    return event;
+  };
+  assert.equal(escape().defaultPrevented, false, 'nothing to close');
+  ui.chat.open();
+  ui.ids['chat-input'].blur();
+  escape({ isComposing: true });
+  assert.equal(ui.chat.isOpen, true, 'an IME is still composing');
+  const taken = new Event('keydown', { cancelable: true });
+  Object.assign(taken, { key: 'Escape' });
+  taken.preventDefault();
+  ui.doc.dispatchEvent(taken);
+  assert.equal(ui.chat.isOpen, true, 'another panel took this Escape');
+  escape({ key: 'a' });
+  assert.equal(ui.chat.isOpen, true);
+  assert.equal(escape().defaultPrevented, true);
+  assert.equal(ui.chat.isOpen, false);
+  assert.deepEqual(ui.toggles, [true, false]);
+});
+
 test('every channel reads as it should, with the speaker\'s tint, and text stays text', () => {
   const ui = setup();
   const roster = [{ id: 'a1', color: 0 }, { id: 'b2', color: 1 }];
@@ -292,6 +337,37 @@ test('server notices, joins and leaves become quiet lines', () => {
   assert.equal(ui.chat.hidden.size, 0);
   ui.chat.setAvailable(false);
   assert.equal(ui.ids.chat.hidden, true);
+  // A reconnect the server could resume keeps what was hidden; one it
+  // couldn't made a fresh player with nothing hidden, so the page agrees.
+  ui.chat.notice({ code: 'toggled', channel: 'ooc', hidden: true });
+  ui.chat.roster({ self: true, code: 'ABC234', resumed: true });
+  assert.deepEqual([...ui.chat.hidden], ['ooc']);
+  ui.chat.roster({ self: true, code: 'ABC234', resumed: false });
+  assert.equal(ui.chat.hidden.size, 0);
+  ui.chat.setAvailable(true);
+  ui.key('Enter');
+  ui.type('/ooc back again');
+  assert.deepEqual(ui.sent.at(-1), ['ooc', 'back again']);
+});
+
+test('new lines keep a reader at the bottom but leave one reading back where they are', () => {
+  const ui = setup();
+  const log = ui.ids['chat-log'];
+  for (let i = 0; i < 30; i++) ui.chat.system(`line ${i}`);
+  assert.equal(log.scrollTop, log.scrollHeight, 'the closed log always shows the newest');
+  ui.chat.open();
+  log.clientHeight = 20 * 16;
+  log.scrollTop = log.scrollHeight - log.clientHeight;
+  ui.chat.system('at the bottom');
+  assert.equal(log.scrollTop, log.scrollHeight);
+  log.scrollTop = log.scrollHeight - log.clientHeight - 16;
+  ui.chat.system('a line up');
+  assert.equal(log.scrollTop, log.scrollHeight, 'within a line still follows');
+  const back = log.scrollHeight - log.clientHeight - 5 * 16;
+  log.scrollTop = back;
+  ui.chat.receive({ seq: 3, channel: 'ooc', from: 'a1', name: 'Ash', text: 'hi', clarity: 1, muffled: false });
+  ui.chat.system('another');
+  assert.equal(log.scrollTop, back, 'reading back is left alone');
 });
 
 test('the log keeps 100 lines, and closed lines fade out after nine seconds', () => {

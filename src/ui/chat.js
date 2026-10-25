@@ -10,6 +10,9 @@ import { CHAT_CHANNELS, CHAT_LOG_LINES, DEFAULT_CHANNEL, HELP_LINES, noticeText,
 export const LINE_SHOWN = 9;
 export const LINE_FADE = 1;
 const SENT_HISTORY = 100;
+// One log line's height in CSS pixels: a reader this close to the bottom is
+// following along, and new lines keep them there.
+const LINE_HEIGHT = 16;
 
 // How each channel's line reads: an optional [tag], a lead before the name,
 // the words after it and a close after the message.
@@ -29,9 +32,9 @@ const defaultControl = (target) => ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].inc
   || Boolean(target?.isContentEditable);
 
 export class ChatUi {
-  constructor({ doc = document, win = window, phone = { phone: false }, client, mayOpen = () => true,
+  constructor({ doc = document, win = window, phone = { phone: false }, client, scene = null, mayOpen = () => true,
     onToggle = () => {}, colorOf = () => null, isControlTarget = defaultControl } = {}) {
-    Object.assign(this, { doc, win, phone, client, mayOpen, onToggle, colorOf, isControlTarget });
+    Object.assign(this, { doc, win, phone, client, scene, mayOpen, onToggle, colorOf, isControlTarget });
     const $ = (id) => doc.getElementById(id);
     this.root = $('chat');
     this.log = $('chat-log');
@@ -66,6 +69,20 @@ export class ChatUi {
     // Inside the tap, so phones raise the keyboard.
     this.openButton.addEventListener('click', () => this.open());
     win.addEventListener('keydown', (event) => this.key(event));
+    // Escape closes the bar wherever focus has wandered, unless a panel
+    // already took the key.
+    doc.addEventListener('keydown', (event) => {
+      if (!this._open || event.key !== 'Escape' || event.defaultPrevented || event.isComposing) return;
+      event.preventDefault();
+      this.close();
+    });
+    // A click or tap on the scene puts the bar away, and only that: it
+    // doesn't also strike or aim.
+    scene?.addEventListener('pointerdown', (event) => {
+      if (!this._open) return;
+      event.stopImmediatePropagation();
+      this.close();
+    });
     win.addEventListener('pagehide', () => this.close({ keepDraft: true }));
     // The on-screen keyboard shrinks the visual viewport; the bar rides on it.
     const viewport = win.visualViewport;
@@ -179,12 +196,15 @@ export class ChatUi {
     return node;
   }
 
+  // A reader scrolled back through the log stays where they are.
   add(node) {
-    this.log.append(node);
+    const log = this.log;
+    const following = log.scrollHeight - log.scrollTop - log.clientHeight <= LINE_HEIGHT;
+    log.append(node);
     const line = { node, age: 0 };
     this.lines.push(line);
     while (this.lines.length > CHAT_LOG_LINES) this.lines.shift().node.remove();
-    this.log.scrollTop = this.log.scrollHeight;
+    if (following) log.scrollTop = log.scrollHeight;
     return line;
   }
 
@@ -227,9 +247,11 @@ export class ChatUi {
     this.system(noticeText(notice.code, notice), ERRORS.has(notice.code) ? 'error' : 'info');
   }
 
-  // Joins and leaves, worked out from the lobby's roster.
+  // Joins and leaves, worked out from the lobby's roster. A join that isn't
+  // a resume is a fresh player on the server, with nothing hidden.
   roster(change) {
     if (change.self) {
+      if (!change.resumed) this.hidden.clear();
       this.system(change.resumed ? `Reconnected to lobby ${change.code}.` : `Joined lobby ${change.code}.`);
       return;
     }

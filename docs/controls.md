@@ -32,7 +32,7 @@
 | `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
 | `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
-| `Enter` / `/`, in a lobby | Open the chat bar (`/` starts a command); `Enter` sends, `Escape` cancels, `Up` / `Down` recall what you sent |
+| `Enter` / `/`, in a lobby | Open the chat bar (`/` starts a command); `Enter` sends, `Escape` or a click on the scene cancels, `Up` / `Down` recall what you sent |
 
 ## Chat
 
