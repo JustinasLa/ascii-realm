@@ -53,7 +53,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   let modelUpdates = 0;
   let cellHeight;
   // The touch controls: the CAST hold hook and what the contextual button shows.
-  const touch = { castHold: null, interactions: [], setCastHold(fn) { this.castHold = fn; },
+  const touch = { castHold: null, castDrop: null, interactions: [],
+    setCastHold(open, drop) { this.castHold = open; this.castDrop = drop; },
     interact: { update: (target) => touch.interactions.push(target) } };
   const vibrations = [];
   const model = {

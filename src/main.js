@@ -433,6 +433,7 @@ function cancelActions() {
   rightClicked = false;
   mouseHeld = false;
   player.ranged.reset();
+  rangedSource = null;
   player.aimTarget = null;
   player.combat.charge = 0;
   player.combat.queued = null;
@@ -536,7 +537,8 @@ const spellControls = new SpellControls(casting, { surface: canvas,
   onBind: spell => hud.notify(castKey() === 'R' ? `${spell.name} bound to R` : `${spell.name} ready: tap ${castKey()}`, 'spell'),
   onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell'), castKey });
 debug.spellControls = spellControls;
-touch.setCastHold((pointerId) => spellControls.openTouch(pointerId));
+touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap),
+  (pointerId) => spellControls.dropTouch(pointerId));
 // What the contextual touch button can reach. Ground items appear once the
 // game keeps a collection of them.
 const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null });

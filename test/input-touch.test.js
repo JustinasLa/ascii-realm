@@ -201,6 +201,33 @@ test('a quick tap whose lift a busy frame delayed still casts', async (t) => {
   assert.equal(input.wasTapped('TouchCast'), true);
 });
 
+test('the wheel learns whether a lift is still a tap, and loses a finger CAST loses', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const { touch, cast, CAST_HOLD_MS } = { ...await installPage(), ...page.modules.touch };
+  const holds = [], drops = [];
+  touch.setCastHold((id, isTap) => { holds.push([id, isTap]); return true; }, id => drops.push(id));
+  const pressed = Date.now();
+  pointer(cast, 'pointerdown', 5);
+  pointer(cast, 'lostpointercapture', 6);
+  t.mock.timers.tick(CAST_HOLD_MS);
+  const [[id, isTap]] = holds;
+  assert.equal(id, 5);
+  assert.equal(isTap({ timeStamp: pressed + CAST_HOLD_MS - 1 }), true);
+  assert.equal(isTap({ timeStamp: pressed + CAST_HOLD_MS }), false);
+  pointer(cast, 'lostpointercapture', 5);
+  assert.deepEqual(drops, [5], 'the wheel goes with the finger');
+  assert.equal(cast.classList.contains('pressed'), false);
+  // A press that never reached the wheel, or a lift already handled, drops nothing.
+  pointer(cast, 'pointerdown', 7);
+  t.mock.timers.tick(100);
+  pointer(cast, 'lostpointercapture', 7);
+  pointer(cast, 'pointerdown', 8);
+  t.mock.timers.tick(CAST_HOLD_MS);
+  pointer(cast, 'pointerup', 8);
+  pointer(cast, 'lostpointercapture', 8);
+  assert.deepEqual(drops, [5]);
+});
+
 test('a hold the wheel refuses, or a cancelled press, casts nothing', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
   const { touch, cast, input } = await installPage();

@@ -105,6 +105,24 @@ test('a mouse-drawn bow is not assisted', async () => {
   assert.equal(game.projectiles.list.length, 1);
 });
 
+test('a cancelled STRIKE draw leaves no assist for the next bow draw', async () => {
+  const { game, frame, hold, pointer, blur } = await loadGame(undefined, { coarse: true });
+  game.inventory.add('longbow');
+  game.inventory.add('arrow', 4);
+  game.inventory.equip(game.inventory.slots.findIndex(stack => stack?.id === 'longbow'));
+  frame();
+  const target = foe(6, 10 * DEG);
+  game.monsters.list.push(target);
+  hold('TouchStrike');
+  for (let i = 0; i < 5; i++) frame(0.05);
+  blur();
+  // The mouse starts drawing before another frame has run.
+  pointer('pointerdown');
+  for (let i = 0; i < 15; i++) frame(0.05);
+  assert.ok(game.player.ranged.aiming);
+  assert.ok(!near(game.player.aimTarget, target), 'the mouse draw is not assisted');
+});
+
 test('a spear jab from STRIKE turns to the foe; from the mouse it follows the cursor', async () => {
   for (const [source, expectFacing] of [['touch', true], ['mouse', false]]) {
     const { game, frame, hold, release, pointer } = await loadGame(undefined, { coarse: true });
@@ -154,9 +172,14 @@ test('a rune that lands on another buzzes the caster', async () => {
 test('holding CAST hands the finger to the rune wheel', async () => {
   const { game, touch } = await loadGame(undefined, { coarse: true });
   let opened = null;
-  game.spellControls.openTouch = (id) => { opened = id; return true; };
-  assert.equal(touch.castHold(7), true);
-  assert.equal(opened, 7);
+  let dropped = null;
+  const isTap = () => true;
+  game.spellControls.openTouch = (id, tap) => { opened = [id, tap]; return true; };
+  game.spellControls.dropTouch = (id) => { dropped = id; };
+  assert.equal(touch.castHold(7, isTap), true);
+  assert.deepEqual(opened, [7, isTap]);
+  touch.castDrop(7);
+  assert.equal(dropped, 7);
 });
 
 test('the contextual button follows what is in reach and its tap does that thing', async () => {

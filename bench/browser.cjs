@@ -196,7 +196,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
       const off = d => Math.abs(Math.atan2(Math.sin(d), Math.cos(d))) * 180 / Math.PI;
       if (turns) {
         assert.ok(off(after.heading - placed.bearing) < 3, `turned ${off(after.heading - placed.bearing)} degrees short`);
-        if (after.health < placed.health) assert.deepEqual(after.vibrations.slice(0, 1), [12], 'a landed cut buzzes');
+        assert.ok(after.health < placed.health, 'the assisted cut lands');
+        assert.deepEqual(after.vibrations.slice(0, 1), [12], 'a landed cut buzzes');
       } else assert.ok(off(after.heading - placed.heading) < 3, 'a foe outside the cone is ignored');
       results.checks.push({ assist: { angle, placed, after } });
     }

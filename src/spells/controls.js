@@ -122,9 +122,19 @@ export class SpellControls {
 
   // Holding CAST opens the wheel mid-screen on that finger, which then
   // points, lifts and taps as the mouse does with the middle button held.
-  openTouch(pointerId) {
+  // `isTap(e)` tells a lift that still counts as a tap on CAST: that closes
+  // the wheel without choosing, whatever the finger passed over meanwhile.
+  openTouch(pointerId, isTap = () => false) {
     if (this.menu.isOpen || !this.canOpen()) return false;
+    this.isTap = isTap;
     return this.open(innerWidth / 2, innerHeight / 2, true, 'touch', pointerId);
+  }
+
+  // CAST lost its finger: the wheel it opened goes away with it.
+  dropTouch(pointerId) {
+    if (!this.menu.isOpen || this.source !== 'touch' || pointerId !== this.pointerId) return;
+    this.close();
+    this.onFocus();
   }
 
   close() {
@@ -327,7 +337,8 @@ export class SpellControls {
     const lift = e => {
       if (!this.menu.isOpen || e.pointerId !== this.pointerId) return;
       this.pointerId = null;
-      this.apply(e.type === 'pointercancel' ? this.menu.close() : this.menu.release());
+      const tap = this.isTap(e);
+      this.apply(e.type === 'pointercancel' || tap ? this.menu.close() : this.menu.release());
     };
     window.addEventListener('pointerup', lift, true);
     window.addEventListener('pointercancel', lift, true);

@@ -176,6 +176,39 @@ test('a cancelled finger shuts the wheel and an empty tap in the hub goes back',
   window.dispatchEvent(new Event('resize'));
 });
 
+test('a lift that still counts as a tap on CAST closes the wheel without binding', async (t) => {
+  const { window } = await page(t);
+  const { wheel, binds, focused } = controls();
+  wheel.openTouch(1, e => e.tap);
+  // Movement queued behind the hold timer slides into a school and onto a rune.
+  pointer(window, 'pointermove', { pointerId: 1, ...at(wheel, 150, 0) });
+  pointer(window, 'pointermove', { pointerId: 1, ...at(wheel, WHEEL.outer + WHEEL.flick + 10, 0) });
+  assert.equal(wheel.menu.stage, 'items');
+  pointer(window, 'pointermove', { pointerId: 1, ...at(wheel, 150, 0) });
+  pointer(window, 'pointerup', { pointerId: 1, tap: true, ...at(wheel, 150, 0) });
+  assert.equal(wheel.menu.isOpen, false);
+  assert.deepEqual(binds, [], 'a tap never rebinds');
+  assert.equal(focused(), 1);
+  wheel.openTouch(1, e => e.tap);
+  pointer(window, 'pointermove', { pointerId: 1, ...at(wheel, 150, 0) });
+  pointer(window, 'pointerup', { pointerId: 1, tap: false, ...at(wheel, 150, 0) });
+  assert.equal(wheel.menu.stage, 'items', 'a real hold still opens the school');
+});
+
+test('CAST losing its finger puts away the wheel that finger opened', async (t) => {
+  await page(t);
+  const { wheel, focused } = controls();
+  wheel.dropTouch(1);
+  assert.equal(focused(), 0, 'a closed wheel has nothing to drop');
+  wheel.openTouch(3);
+  wheel.dropTouch(4);
+  assert.equal(wheel.menu.isOpen, true, 'another finger is not the one that held');
+  wheel.dropTouch(3);
+  assert.equal(wheel.menu.isOpen, false);
+  assert.equal(wheel.wheel.hidden, true);
+  assert.equal(focused(), 1);
+});
+
 test('the middle mouse button holds the wheel open over the scene', async (t) => {
   const { window } = await page(t, { width: 1280, height: 720 });
   const { wheel, surface, binds } = controls({ castKey: () => 'R' });

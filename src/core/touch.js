@@ -94,15 +94,19 @@ export function installTouchControls(zoomBy) {
 }
 
 // CAST: a tap casts on release; holding it hands the finger to the rune
-// wheel through `hold(pointerId)`. Whether a press was a tap is read from the
-// events' own times, so a busy frame that delays the lift (and lets the
-// wheel open) still casts a quick tap, and the wheel closes on that lift.
+// wheel through `hold(pointerId, isTap)`. Whether a press was a tap is read
+// from the events' own times, so a busy frame that delays the lift (and lets
+// the wheel open) still casts a quick tap; `isTap` lets the wheel close on
+// that lift without choosing anything. Losing the finger after the wheel has
+// it calls `drop(pointerId)`, which puts the wheel away.
 function castButton(button) {
   let hold = () => false;
+  let drop = () => {};
   let pointer = null;
   let downAt = 0;
   let timer = null;
   let hint = null;
+  const isTap = (e) => e.timeStamp - downAt < CAST_HOLD_MS;
   const reset = () => {
     clearTimeout(timer);
     clearTimeout(hint);
@@ -119,20 +123,24 @@ function castButton(button) {
     hint = setTimeout(() => button.classList.add('holding'), CAST_HINT_MS);
     timer = setTimeout(() => {
       timer = null;
-      hold(pointer);
+      hold(pointer, isTap);
     }, CAST_HOLD_MS);
   });
   button.addEventListener('pointerup', (e) => {
     if (e.pointerId !== pointer) return;
-    if (e.timeStamp - downAt < CAST_HOLD_MS) input.tapped.add('TouchCast');
+    if (isTap(e)) input.tapped.add('TouchCast');
     reset();
   });
   for (const type of ['pointercancel', 'lostpointercapture']) {
-    button.addEventListener(type, (e) => { if (e.pointerId === pointer) reset(); });
+    button.addEventListener(type, (e) => {
+      if (e.pointerId !== pointer) return;
+      if (timer === null) drop(pointer);
+      reset();
+    });
   }
   button.addEventListener('click', (e) => { if (e.detail === 0) input.tapped.add('TouchCast'); });
   window.addEventListener('blur', reset);
   window.addEventListener('resize', reset);
   document.addEventListener('visibilitychange', () => { if (document.hidden) reset(); });
-  return { setHold: (fn) => { hold = fn; } };
+  return { setHold: (open, cancel = () => {}) => { hold = open; drop = cancel; } };
 }
