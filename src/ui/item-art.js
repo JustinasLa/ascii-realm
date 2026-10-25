@@ -243,6 +243,15 @@ const ITEM_ART = Object.freeze({
     ' >_______<',
     '( )     ( )',
   ),
+  wolfPelt: art(
+    '  /\\ /\\',
+    ' ( "v" )_',
+    ' /~~~~~\\ \\',
+    '|~ ~ ~ ~| )',
+    '|~ ~ ~ ~|/',
+    ' \\~~~~~/',
+    ' /_/ \\_\\',
+  ),
 });
 
 export function itemArt(id, fallbackGlyph = '?') {

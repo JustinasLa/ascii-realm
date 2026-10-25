@@ -11,7 +11,7 @@ from Quaternius' [Universal Animation Library](https://quaternius.com/packs/univ
 (CC0), rendered with [three.js](https://threejs.org/) (MIT, vendored in
 `vendor/three`).
 
-The deer and stag are from Quaternius' [Ultimate Animated Animals](https://quaternius.com/packs/ultimateanimatedanimals.html)
+The deer, stag and wolf are from Quaternius' [Ultimate Animated Animals](https://quaternius.com/packs/ultimateanimatedanimals.html)
 pack (CC0), and the rabbit is Čestmír Dammer's [Rabbit](https://opengameart.org/node/51722)
 (CC0); see their [provenance and conversion notes](../assets/animals/LICENSE.txt).
 

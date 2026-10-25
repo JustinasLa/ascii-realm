@@ -1,8 +1,9 @@
 # Wildlife
 
 Deer and rabbits live on the land round the player. They graze, stroll and
-watch, and they run from the player, friends and monsters, and from loud
-noises. They can be hunted for hide, meat and bone.
+watch, and they run from the player, friends, monsters and wolves, and from
+loud noises. They can be hunted for hide, meat and bone. Wolf packs roam the
+woods and forest edges, hunting the deer, the rabbits and the player.
 
 ## Where they live
 
@@ -32,8 +33,7 @@ the player. Its region then rests for 30 seconds, and after that the group
 can appear at its home again. Nothing about animals is saved.
 
 At most 10 animals live at once: no more than 8 deer and 6 rabbits. A group
-that doesn't fit waits and tries again. At most 6 animals are drawn (4 on
-phones), the nearest first.
+that doesn't fit waits and tries again.
 
 ## How they behave
 
@@ -47,7 +47,7 @@ Calm animals take turns to stand, graze and stroll:
   behind its leader (4 m for rabbits) heads back to it. Herd mates keep a
   little room between them.
 
-Animals shy from the player, friends and living monsters:
+Animals shy from the player, friends, living monsters and wolves:
 
 | | Deer | Rabbits |
 |---|---|---|
@@ -64,8 +64,11 @@ closer for 4 seconds, it goes back to what it was doing.
 **Deer bolt together.** The first to bolt sets the herd's line of flight,
 away from the threat and toward open, dry ground. The others follow within
 0.1 to 0.4 seconds each, so the alarm ripples through the herd. They gallop at
-5.8 m/s, half again as fast as the player's run, for 4 to 7 seconds, or until
-they are 30 m clear. Then they slow to a trot, walk and stand. For 10 seconds
+5.8 m/s, a little faster than the player's run, for 4 to 7 seconds, or until
+they are 30 m clear. Then they slow to a trot, walk and stand. A deer that
+keeps bolting, with wolves on its heels, tires after 6 seconds of flat-out
+running to three quarters of its pace, and gets its breath back at half the
+rate it lost it. For 10 seconds
 afterwards they settle, noticing things only at half the usual distance. A fleeing deer will wade a shallow stream, and
 the current carries it downstream as it does the player. Calm deer never
 enter water.
@@ -153,17 +156,130 @@ aren't saved.
 Hunt drops are kept apart from other loose items on the ground. When loose
 items get a shared store, the drops can move into it.
 
+## Wolves
+
+Wolves hunt in packs of 2 to 4. The game's wolves come after the player as
+well as the deer and rabbits.
+
+### Where packs live
+
+Packs have their own regions, each 2 by 2 animal regions (about 47 m by
+39 m). A pack region takes the most common habitat of its four regions;
+regions of water don't count, and three or more of them leave no pack.
+
+| Habitat | Pack |
+|---|---|
+| Meadow | none |
+| Forest edge | 20 % |
+| Woodland | 25 % |
+
+A pack appears like a herd: its home 12 to 48 m away, every wolf off screen
+on loaded, open, dry ground, and a 30 s rest for a region after its pack is
+let go. Only one pack lives at a time, with at most 4 wolves (`?wolves=N`).
+Wolves don't count toward the 10 prey animals. A pack isn't let go while it
+is after the player and any wolf is within 64 m. A pack that has run off is
+let go as soon as it is out of view and more than 30 m away.
+
+### The hunt
+
+- **Roaming.** The leader strolls to spots within 20 m of home and the rest
+  follow. Wolves stand, look round and walk; they never graze.
+- **Choosing.** A pack takes the player within 20 m of any wolf, or a deer or
+  rabbit within 24 m. A rabbit counts as a fifth nearer than it is. The
+  player within 12 m wins over any prey.
+- **Stalking.** The wolves walk in at 0.8 m/s, side by side, heads held low.
+  At 9 m from the player they **surround** them. At 9 m from prey, or when
+  the prey bolts, they **chase**. A stalk lasts 12 s at most.
+- **Surrounding.** Each wolf takes a place on a ring 4.5 m round the player,
+  in the order they stand round them, starting from the far side. Wolves far
+  from their place run round the ring to it, and wait there snarling. Once
+  every wolf is in place, or after 4 s, the pack **hunts**.
+- **Hunting.** The ring turns slowly round the player (0.35 rad/s). Two
+  wolves at most go in at once, the one most nearly behind the player first;
+  with nobody behind for 2.5 s, any wolf may go. A wolf runs in, bites,
+  and skips back to its place.
+- **Chasing.** A player running faster than a brisk walk and out past the
+  ring is chased by the whole pack, at 6.4 m/s, faster than the player's
+  sprint and a bolting deer. Once the player stops, the ring forms again.
+  Fleeing prey is run down to the end, every wolf in reach biting.
+- **Feeding.** When the pack's prey dies, every wolf eats at the body for
+  15 s, which lies at least 17 s, and the pack makes its home there. A player
+  who comes within 8 m of a feeding pack is surrounded at once.
+- **Giving up.** A pack drops its quarry when it gets more than 32 m from
+  every wolf, after a 12 s chase of the player (25 s for prey) without a bite
+  landing, or when chasing the player leads it more than 55 m from home. It
+  then takes nothing new for 10 s as it heads home.
+
+Deer and rabbits fear wolves as they fear the player: a stalking wolf is
+noticed at 10 m and bolted from at 5 m; a running one is bolted from at 9 m.
+
+### The bite
+
+A bite takes 1 s. The wolf turns toward its quarry as it winds up, then
+commits, lunging in. Its jaws close 0.29 s in, the moment the clip's muzzle
+reaches furthest forward. The bite lands once if the quarry is still within
+1.5 m (plus the prey's body) and within about 57° of the wolf's heading.
+Like a monster's blow, it misses a player in the air: jump or roll over it.
+
+- On the player it does **10** damage, with a screen shake and a thud.
+- On prey it does 12: a deer takes four bites, a rabbit one. A deer bitten
+  bolts as when struck.
+
+A wolf waits 1.4 s after a bite before the next. Four wolves against a
+player standing still deal about 5 to 6 health a second.
+
+### Fighting back
+
+The sword, arrows, spears and javelins wound wolves as they do deer.
+
+| | Wolf |
+|---|---|
+| Health | 40: two sword cuts or two full-draw arrows |
+| Drops | Wolf Pelt 1 (80 %), Bone 1 (50 %) |
+| Body lies for | 20 s, then sinks over 2.5 s |
+
+- A struck wolf flinches for 0.25 s, standing still. A bite it was winding up
+  is lost, so a well-timed cut stops a lunge.
+- Any hit from the player sets the whole pack on them at once, past the
+  stalk, even from range.
+- Below half health a wolf slinks off, running away for 3 to 5 s, then
+  rejoins the ring. It does this once.
+- When half the pack is dead, or the leader with two or fewer left, the pack
+  runs from the player for 8 s. For 90 s after that, a pack from that region
+  leaves the player alone unless struck, even after it has been let go and
+  come back.
+- Each region's pack comes back short of the wolves killed this session.
+- A sword cut's noise doesn't scare wolves off. A wolf's hurt and death cries
+  are heard by other animals.
+- "Wolf slain" shows when one dies. Animals killed by wolves drop nothing.
+- When the player is struck down, packs let them be and go home.
+
+Spells don't wound wolves yet.
+
+### Water and ground
+
+Wolves cross shallow water only on the hunt, in a chase, running off or
+slinking off hurt; roaming, stalking or feeding, they keep out of it. A wolf
+in the water when the hunt ends wades to the nearest bank. Like other
+animals, wolves never step onto land that isn't loaded.
+
+Wolves and monsters ignore each other.
+
 ## Looks
 
-Deer, stags and rabbits are rigged models that play their own animations
-(standing, looking, grazing, walking, galloping and running, flinching and
-falling, and for rabbits sitting, guarding and lying dead). Like the player and the monsters, they are rendered
+Deer, stags, rabbits and wolves are rigged models that play their own
+animations (standing, looking, grazing, walking, galloping and running,
+flinching and falling; for rabbits sitting, guarding and lying dead; for
+wolves biting, eating and walking with the head low while stalking, the
+head-low animation moving only the neck and head). Like the player and the monsters, they are rendered
 from the game's camera and turned into character cells with an outlined
 silhouette. Animals are drawn a little dimmer than monsters, so the player
 stays the brightest thing on screen. A gait's animation speeds up with the
 animal's pace, so the hooves and paws stay planted. Each animal casts a long
 shadow, pushes the ground fog aside, shows in the water's reflections, and
-breaks the surface where its legs wade. The models and their licences are
+breaks the surface where its legs wade. At most 6 animals are drawn (4 on
+phones): first wolves within 25 m that are stalking, ringing, chasing or
+biting, then animals in flight, then the nearest. The models and their licences are
 listed in [credits](credits.md).
 
 ## URL parameters
@@ -172,18 +288,21 @@ listed in [credits](credits.md).
 |---|---|
 | `?deer=N` | at most N deer at once (0 to 8, default 8) |
 | `?rabbits=N` | at most N rabbits at once (0 to 8, default 6) |
+| `?wolves=N` | at most N wolves at once (0 to 8, default 4; one pack at most 4) |
 | `?animals=0` | no wildlife at all |
 
 With `?debug`, `game.animals` lists the animals (`list`) and herds
-(`herds`). `game.animals.spawn('deer' | 'rabbit', { x, y, count, variant })`
+(`herds`). `game.animals.spawn('deer' | 'rabbit' | 'wolf', { x, y, count, variant })`
 places a group at once, wherever asked, and keeps it however far the player
 goes. `game.animals.calm()` settles every animal. `game.animals.hurt(i, damage)`
 deals a blow (lethal by default) to the animal at index `i`, and
 `game.huntDrops.all()` lists the stacks lying about.
+`game.animals.disengage()` calls every pack off.
 
 ## Multiplayer
 
 Wildlife is simulated by each player's game, like monsters. Everyone in a
 lobby shares the seed, so herds start in the same places, but their
 movement isn't synchronised. Hunting is local too: a kill and its drops
-happen only in the hunter's game.
+happen only in the hunter's game. Wolves hunt only the local player and
+animals; a friend's figure is neither their quarry nor a threat to them.

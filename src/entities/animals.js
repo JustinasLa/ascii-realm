@@ -4,15 +4,17 @@ import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from '../world/deadwood.js';
 import { currentAt, easeCarry, immersion, toCells as flowCells } from '../world/rivers.js';
 import { ASPECT, CHUNK_SIZE, LAND_LIFT, MAX_WATER_DEPTH, SHORE, SHORE_LEVEL, WATER } from '../world/world.js';
 import { standable, toCells, toMetres } from './monsters.js';
+import { PACK_REGION, engaged, mayWade, newPack, packHabitat, packOf, provoke, steer, updatePack } from './predators.js';
 import { SCALE } from './rig.js';
 
-// Wildlife: deer herds and rabbit groups that belong to the land. The world
+// Wildlife: deer herds, rabbit groups and wolf packs that belong to the land. The world
 // is cut into regions; from the seed each region holds a deer herd, a rabbit
 // group or nothing, by its habitat. A herd is placed off screen when its
 // region comes within range of the player and let go again once they have
 // left, so coming back finds it at home again. Animals stroll, graze and
 // watch; a threat or a loud noise sends deer bolting together in a ripple
-// through the herd, and rabbits scattering each their own way.
+// through the herd, and rabbits scattering each their own way. Wolves
+// hunt them and the player (their pack's mind is in predators.js).
 // Positions are in cells, distances and speeds in ground metres, and
 // headings as for monsters (0 faces down the screen).
 
@@ -46,13 +48,15 @@ export const KINDS = freeze({
     graze: freeze({ share: 0.6, bout: [6, 14], look: [2, 5] }),
     herd: freeze({ size: [2, 4], stagChance: 0.35, cohesion: 6, spacing: 1.2 }),
     senses: freeze({ notice: 10, bolt: 5, boltRunning: 9, noise: 30 }),
-    flee: freeze({ min: 4, max: 7, safe: 30, calm: 10 }),
+    // A deer run flat out by wolves for `wind` seconds tires to `tired` of
+    // its pace until it has its breath back, so a pack can run it down.
+    flee: freeze({ min: 4, max: 7, safe: 30, calm: 10, wind: 6, tired: 0.75 }),
     contagion: freeze({ radius: 15, delay: [0.1, 0.4] }),
     // Wades a stream while fleeing, never strolls in.
     water: 'wade',
     // The chance of a herd in a region of each habitat.
     habitat: freeze({ meadow: 0.25, edge: 0.3, woodland: 0.12 }),
-    fears: freeze(['player', 'monster']),
+    fears: freeze(['player', 'monster', 'predator']),
     clips: freeze({ idle: 'Idle', look: 'Idle_2', headLow: 'Idle_Headlow', graze: 'Eating', walk: 'Walk',
       run: 'Gallop', leap: 'Gallop_Jump', hitL: 'Idle_HitReact_Left', hitR: 'Idle_HitReact_Right', death: 'Death' }),
   }),
@@ -76,9 +80,57 @@ export const KINDS = freeze({
     scatter: 1.05,
     water: 'never',
     habitat: freeze({ meadow: 0.35, edge: 0.12, woodland: 0 }),
-    fears: freeze(['player', 'monster']),
+    fears: freeze(['player', 'monster', 'predator']),
     clips: freeze({ idle: 'Basic', alert: 'Guard', alertLoop: 'Guarding', graze: 'Sitting.000', groom: 'Sitting.001',
       run: 'Running', hop: 'Jump', death: 'Dying.000', dead: 'Dead' }),
+  }),
+  wolf: freeze({
+    id: 'wolf', name: 'Wolf', role: 'predator', locomotion: 'ground',
+    health: 40,
+    hurtWindow: 0.5, flinch: 0.25, hitHeight: 1.1, linger: 20, sink: 2.5,
+    drops: freeze([
+      freeze({ id: 'wolfPelt', chance: 0.8, count: freeze([1, 1]) }),
+      freeze({ id: 'bone', chance: 0.5, count: freeze([1, 1]) }),
+    ]),
+    height: 0.8, radius: 0.45,
+    // Matched to the clips' own ground speeds: the stalk is a slow walk,
+    // the trot its gallop at the slowest, and the run outpaces both a
+    // bolting deer and the player's sprint.
+    walkSpeed: 1.2, stalkSpeed: 0.8, trotSpeed: 2.8, runSpeed: 6.4,
+    rates: freeze([0.75, 1.8]),
+    turn: freeze({ calm: 3, hunt: 8 }),
+    wander: freeze({ idle: [3, 8], dist: [3, 8] }),
+    graze: freeze({ share: 0, bout: [0, 0], look: [2, 5] }),
+    herd: freeze({ size: [2, 4], stagChance: 0, cohesion: 8, spacing: 1.4 }),
+    // Metres: the player and prey are noticed within these of any wolf and
+    // dropped beyond `forget`; the player is given up `leash` from home.
+    senses: freeze({ player: 20, prey: 24, forget: 32, leash: 55, noise: 0 }),
+    // The stalk ends this near the player or prey (metres), or after `max`
+    // seconds.
+    stalk: freeze({ until: 9, preyRush: 9, max: 12 }),
+    // The ring round the quarry, metres; its turn, radians a second; and the
+    // seconds the wolves have to take their places.
+    ring: freeze({ radius: 4.5, drift: 0.35, settle: 4 }),
+    // `windUp` is when the jaws close, seconds into a `swingTime` bite. A
+    // chase with no bite landing is given up after `chase` seconds, or
+    // `preyChase` running down a deer, which is barely slower than a wolf.
+    attack: freeze({ reach: 1.1, hitRange: 1.5, hitArc: 1.0, windUp: 0.29, swingTime: 1.0,
+      cooldown: 1.4, damage: 10, preyDamage: 12, biters: 2, chase: 12, preyChase: 25 }),
+    // Below this share of its health a wolf slinks off once, for seconds.
+    panic: 0.5, retreat: freeze([3, 5]),
+    // Having lost this share of its number the pack runs for `routFor`
+    // seconds, then keeps clear of the player for `wary`.
+    rout: 0.5, routFor: 8, wary: 90,
+    // Seconds the pack feeds at a kill.
+    feed: 15,
+    water: 'wade',
+    // The chance of a pack in a pack region of each habitat.
+    habitat: freeze({ meadow: 0, edge: 0.2, woodland: 0.25 }),
+    fears: freeze([]),
+    prey: freeze(['player', 'deer', 'rabbit']),
+    clips: freeze({ idle: 'Idle', look: 'Idle_2', headLow: 'Idle_2_HeadLow', graze: 'Eating', walk: 'Walk',
+      run: 'Gallop', leap: 'Gallop_Jump', hitL: 'Idle_HitReact_Left', hitR: 'Idle_HitReact_Right',
+      death: 'Death', attack: 'Attack' }),
   }),
 });
 
@@ -87,8 +139,13 @@ export const REGION = freeze({ cols: CHUNK_SIZE * 8, rows: CHUNK_SIZE * 2 });
 // Herds appear between these distances from the player, metres, and are let
 // go beyond the last; a region let go rests this long, seconds.
 export const RING = freeze({ near: 12, far: 48, release: 64, cooldown: 30 });
-// At most this many animals live at once, whatever the kind caps.
+// At most this many animals live at once, whatever the kind caps; wolves
+// count apart, at most one pack of them.
 export const MAX_ANIMALS = 10;
+export const MAX_PREDATORS = 4;
+export const MAX_PACKS = 1;
+// A routed pack is let go once out of view and this far off, metres.
+const ROUT_RELEASE = 30;
 // Spawns stay this far outside the view, in cells.
 const VIEW_MARGIN = { cols: 8, rows: 4 };
 // How loud each noise is: the distance, metres, it can be heard at.
@@ -262,7 +319,27 @@ export class Animal {
     // How far the body has sunk into the ground, 0 to 1.
     this.sunk = 0;
     this.killer = null;
+    // Seconds it has lately run flat out, for its wind.
+    this.spent = 0;
+    // Seconds the body lies, where a feeding pack keeps it longer.
+    this.linger = kind.linger;
+    // A predator's bite: its count, whether this one has closed yet, and the
+    // seconds before the next; whether it has panicked once, the seconds it
+    // has left slinking off, and its place and part in the ring ('ring',
+    // 'bite' or 'back', skipping back out for up to `backFor` seconds).
+    this.swing = 0;
+    this.bit = false;
+    this.cooldown = 0;
+    this.panicked = false;
+    this.retreatFor = 0;
+    this.role = 'ring';
+    this.slot = -1;
+    this.backFor = 0;
     this.events = [];
+  }
+
+  get predator() {
+    return this.kind.role === 'predator';
   }
 
   get alive() {
@@ -297,9 +374,10 @@ export class Animal {
     return this.state === 'idle' || this.state === 'wander' || this.state === 'graze';
   }
 
-  // Whether it may take to the water: in flight, or wading out after one.
+  // Whether it may take to the water: in flight, or wading out after one;
+  // a predator on the hunt, in a chase or rout, or slinking off.
   get inFlight() {
-    return this.state === 'flee' || this.state === 'wade';
+    return this.state === 'flee' || this.state === 'wade' || (this.predator && mayWade(this));
   }
 
   // The nearest open, dry ground within six metres, or null.
@@ -457,6 +535,21 @@ export class Animal {
       return true;
     }
     this.threat = from;
+    if (this.predator) {
+      // A wolf doesn't bolt: it flinches, a bite it was winding up lost,
+      // and badly cut it slinks off once.
+      if (this.state === 'attack' && !this.bit) {
+        this.bit = true;
+        this.setState('idle', 1);
+      }
+      const side = Math.sin(this.offsetTo(fromX, fromY).bearing - this.heading) > 0 ? 'L' : 'R';
+      this.flinch = { side, left: k.flinch };
+      if (!this.panicked && this.health < k.panic * this.maxHealth) {
+        this.panicked = true;
+        this.retreatFor = between(this.random, k.retreat);
+      }
+      return true;
+    }
     if (this.state === 'flee') {
       // Hurt in flight, it runs on for longer, however far off the hunter.
       this.duration = Math.max(this.duration, this.stateTime + k.flee.min);
@@ -473,14 +566,15 @@ export class Animal {
   }
 
   // One step of thought and movement. `threat` is the nearest thing it
-  // fears ({ x, y, distance, running }) or null.
-  update(dt, world, threat = null) {
+  // fears ({ x, y, distance, running }) or null; `hunt` is what a
+  // predator's pack needs to steer it (see predators.js).
+  update(dt, world, threat = null, hunt = null) {
     const k = this.kind;
     this.hurt += dt;
     this.hurtFor = Math.max(0, this.hurtFor - dt);
     if (this.state === 'dead') {
       this.deadTime += dt;
-      if (this.deadTime > k.linger) this.sunk = Math.min(1, (this.deadTime - k.linger) / k.sink);
+      if (this.deadTime > this.linger) this.sunk = Math.min(1, (this.deadTime - this.linger) / k.sink);
       return;
     }
     // Its land let go of behind the player, it stands as it is: reading the
@@ -491,7 +585,22 @@ export class Animal {
       return;
     }
     this.stateTime += dt;
+    // Whatever else it was doing, one standing in water it may not cross
+    // wades out first.
+    if (!this.inFlight && k.water !== 'never' && world.typeAt(this.x, this.y) === WATER) {
+      this.setState('wade');
+      this.target = this.nearestBank(world);
+    }
+    const { speed, face, turn } = this.predator ? steer(this, { ...hunt, world }, dt) : this.think(dt, world, threat);
+    this.move(dt, world, speed, face, turn);
+  }
+
+  // A prey animal's mind: how it grazes, watches and flees. Returns how it
+  // moves this step.
+  think(dt, world, threat) {
+    const k = this.kind;
     this.wary = Math.max(0, this.wary - dt);
+    if (this.state !== 'flee') this.spent = Math.max(0, this.spent - dt / 2);
     if (this.boltIn !== null) {
       this.boltIn -= dt;
       if (this.boltIn <= 0) this.bolt(world, this.threat);
@@ -520,11 +629,6 @@ export class Animal {
       && metres(leader.x - this.x, leader.y - this.y) > k.herd.cohesion) {
       this.target = this.pickTarget(world);
       if (this.target) this.setState('wander', 12);
-    }
-    // Whatever else it was doing, a deer standing in water wades out first.
-    if (!this.inFlight && k.water !== 'never' && world.typeAt(this.x, this.y) === WATER) {
-      this.setState('wade');
-      this.target = this.nearestBank(world);
     }
     const s = this.state;
     if (s === 'idle') {
@@ -569,7 +673,10 @@ export class Animal {
         this.heading = this.bestHeading(world, h);
         this.nextTurn = this.stateTime + between(this.random, k.flee.zigzag);
       }
-      speed = k.fleeSpeed;
+      // Only a predator's chase winds it: from the player it runs on fresh.
+      const hunted = threat?.kind === 'predator';
+      if (hunted) this.spent += dt;
+      speed = k.fleeSpeed * (hunted && k.flee.wind && this.spent > k.flee.wind ? k.flee.tired : 1);
       turn = k.turn.flee;
       const safe = threat ? threat.distance > k.flee.safe : from.distance > k.flee.safe;
       if (this.stateTime >= this.duration || (safe && this.stateTime >= this.safeAfter)) {
@@ -593,7 +700,13 @@ export class Animal {
       speed = this.stateTime < 2 ? k.trotSpeed : k.walkSpeed;
       if (this.stateTime >= this.duration) this.setState('idle', between(this.random, k.wander.idle));
     } else if (s === 'freeze' && this.stateTime >= this.duration) this.setState('idle', between(this.random, k.wander.idle));
+    return { speed, face, turn };
+  }
 
+  // Turns and moves as its mind wants, wading slower and drifting with a
+  // river's current.
+  move(dt, world, speed, face, turn) {
+    const k = this.kind;
     // Struck, it stands in its flinch, turning a little toward the blow.
     if (this.flinch) {
       this.flinch.left -= dt;
@@ -613,7 +726,7 @@ export class Animal {
       const d = speed * this.speedScale * dt;
       const [dx, dy] = toCells(Math.sin(this.heading) * d, Math.cos(this.heading) * d);
       if (this.step(world, dx, dy)) this.blocked = 0;
-      else if (++this.blocked >= 3 && this.state === 'flee') {
+      else if (++this.blocked >= 3 && (this.state === 'flee' || this.state === 'retreat')) {
         this.heading = this.bestHeading(world, this.away);
         this.blocked = 0;
       } else if (this.blocked >= 3 && this.state === 'wade') {
@@ -684,6 +797,38 @@ export class Animals {
     // What each of the fallen left, { x, y, killer, kind, items: [{ id,
     // count }] }, spent by the game each frame like the events.
     this.drops = [];
+    // Each pack region's pack, once rolled; and until when each region's
+    // pack keeps clear of the player after a rout, kept for the session.
+    this.packRolls = new Map();
+    this.waryUntil = new Map();
+    this.player = null;
+  }
+
+  // A pack region's pack, rolled once and kept (the newest 32).
+  packRollOf(world, px, py) {
+    const key = `${px},${py}`;
+    if (this.packRolls.has(key)) return this.packRolls.get(key);
+    const habitats = [];
+    for (let j = 0; j < 2; j++) {
+      for (let i = 0; i < 2; i++) habitats.push(regionHabitat(world, px * 2 + i, py * 2 + j, this.habitat));
+    }
+    const roll = packOf(this.seed, px, py, packHabitat(habitats), KINDS.wolf);
+    this.packRolls.set(key, roll);
+    if (this.packRolls.size > 32) this.packRolls.delete(this.packRolls.keys().next().value);
+    return roll;
+  }
+
+  // Whether a region's pack is still wary of the player.
+  wary(key) {
+    const until = this.waryUntil.get(key);
+    if (until === undefined) return false;
+    if (until > this.time) return true;
+    this.waryUntil.delete(key);
+    return false;
+  }
+
+  get packs() {
+    return [...this.herds.values()].filter((h) => h.pack);
   }
 
   // A region's group, rolled once and kept (the newest 64).
@@ -701,10 +846,15 @@ export class Animals {
     return this.list.filter((a) => a.alive && a.kind.id === kind).length;
   }
 
-  // Whether a group of a kind and size fits under the caps.
+  // Whether a group of a kind and size fits under the caps: prey under the
+  // animals' cap, predators under their own, one pack at a time.
   fits(kind, size) {
-    return this.count(kind) + size <= (this.counts[kind] ?? 0)
-      && this.list.filter((a) => a.alive).length + size <= MAX_ANIMALS;
+    if (this.count(kind) + size > (this.counts[kind] ?? 0)) return false;
+    if (KINDS[kind].role === 'predator') {
+      return this.packs.length < MAX_PACKS
+        && this.list.filter((a) => a.alive && a.predator).length + size <= MAX_PREDATORS;
+    }
+    return this.list.filter((a) => a.alive && !a.predator).length + size <= MAX_ANIMALS;
   }
 
   // Puts a herd into the world, its first member leading.
@@ -718,6 +868,7 @@ export class Animals {
       this.list.push(animal);
     });
     herd.leader = herd.members[0];
+    if (kind.role === 'predator') herd.pack = newPack(herd.home, spots.length);
     this.herds.set(key, herd);
     return herd;
   }
@@ -801,6 +952,67 @@ export class Animals {
           heading: (roll.seed % 628) / 100 });
       }
     }
+    this.activatePacks(world, player, view);
+  }
+
+  // Brings in a pack the same way, at most one at a time.
+  activatePacks(world, player, view) {
+    if (this.packs.length >= MAX_PACKS) return;
+    const [cols, rows] = toCells(RING.far, RING.far);
+    for (let py = Math.floor((player.y - rows) / PACK_REGION.rows); py <= Math.floor((player.y + rows) / PACK_REGION.rows); py++) {
+      for (let px = Math.floor((player.x - cols) / PACK_REGION.cols); px <= Math.floor((player.x + cols) / PACK_REGION.cols); px++) {
+        const roll = this.packRollOf(world, px, py);
+        if (!roll || this.time - (this.released.get(roll.key) ?? -Infinity) < RING.cooldown) continue;
+        const size = roll.size - (this.culled.get(roll.key)?.count ?? 0);
+        if (size <= 0 || !this.fits('wolf', size)) continue;
+        const d = metres(roll.home.x - player.x, roll.home.y - player.y);
+        if (d < RING.near || d > RING.far || Animals.inView(view, roll.home.x, roll.home.y)) continue;
+        const spots = [];
+        for (const tries of roll.places) {
+          if (spots.length >= size) break;
+          for (const [mx, mz] of tries) {
+            const [dx, dy] = toCells(mx, mz);
+            const x = roll.home.x + dx;
+            const y = roll.home.y + dy;
+            if (Animals.inView(view, x, y) || !footing(world, roll.kind, x, y)) continue;
+            if (metres(x - player.x, y - player.y) < RING.near) continue;
+            spots.push([x, y]);
+            break;
+          }
+        }
+        if (spots.length < size) continue;
+        this.place(roll.key, roll.kind, spots, { seed: roll.seed, heading: (roll.seed % 628) / 100 });
+        return;
+      }
+    }
+  }
+
+  // Whether a herd may be let go: everyone far off, and a pack not on the
+  // hunt; a routed pack as soon as it is out of view and well away.
+  releasable(herd, player, view) {
+    const far = (r, who = herd.members) => who.every((a) => metres(a.x - player.x, a.y - player.y) > r);
+    if (herd.pack?.phase === 'rout' && far(ROUT_RELEASE, herd.members.filter((a) => a.alive))
+      && herd.members.every((a) => !Animals.inView(view, a.x, a.y))) return true;
+    if (!far(RING.release)) return false;
+    return !herd.members.some((a) => engaged(a) && metres(a.x - player.x, a.y - player.y) <= RING.release);
+  }
+
+  // The player fell: every pack lets them be, and a pack from the land goes
+  // home to rest.
+  disengage() {
+    for (const herd of this.packs) {
+      if (!herd.key.startsWith('debug:')) {
+        this.release(herd);
+        continue;
+      }
+      Object.assign(herd.pack, newPack(herd.pack.home, herd.pack.size0), { lost: herd.pack.lost });
+      for (const a of herd.members) {
+        if (!a.alive) continue;
+        a.retreatFor = 0;
+        a.role = 'ring';
+        a.setState('idle', 1);
+      }
+    }
   }
 
   // A noise: animals near enough bolt from it, those a little further off
@@ -820,32 +1032,54 @@ export class Animals {
     this.noises.push({ at, loud });
   }
 
-  // A blow on an animal from a point; a killing blow leaves its drops,
-  // marks its region and sends its herd off. Returns whether it landed.
-  hit(animal, damage, fromX, fromY) {
+  // A blow on an animal from a point, `by` a predator or else the player; a
+  // killing blow leaves its drops, marks its region and sends its herd off.
+  // The player's blow on a wolf, killing or not, sets the rest of its pack
+  // on them unless it routs. Returns whether it landed.
+  hit(animal, damage, fromX, fromY, { by = null } = {}) {
     const alive = animal.alive;
     if (!animal.takeHit(damage, fromX, fromY)) return false;
-    if (alive && !animal.alive) this.fell(animal);
+    if (alive && !animal.alive) this.fell(animal, by);
+    if (!by && animal.herd?.pack && this.player) provoke(animal.herd.pack, this.player);
     return true;
   }
 
-  fell(animal) {
-    const items = rollDrops(animal.kind, this.random);
+  // A death: a predator's kill leaves nothing to take.
+  fell(animal, by = null) {
+    const items = by?.predator ? [] : rollDrops(animal.kind, this.random);
     if (items.length) this.drops.push({ x: animal.x, y: animal.y, killer: animal.killer, kind: animal.kind.id, items });
     const herd = animal.herd;
     if (!herd) return;
+    if (herd.pack) this.lose(herd, animal);
     if (!herd.key.startsWith('debug:')) {
       const culled = this.culled.get(herd.key) ?? { count: 0, stag: false };
       this.culled.set(herd.key, { count: culled.count + 1, stag: culled.stag || animal.variant === 'stag' });
     }
     if (herd.leader === animal) herd.leader = herd.members.find((a) => a.alive) ?? null;
     // The rest of the herd runs from the killer, the alarm rippling through.
-    for (const mate of herd.members) {
+    for (const mate of herd.pack ? [] : herd.members) {
       if (!mate.alive || mate.state === 'flee' || mate.boltIn !== null) continue;
       if (metres(mate.x - animal.x, mate.y - animal.y) > animal.kind.contagion.radius) continue;
       mate.boltIn = between(mate.random, animal.kind.contagion.delay);
       mate.threat = { ...animal.killer };
       mate.alarmed = true;
+    }
+  }
+
+  // A wolf down: the pack loses its place in the ring, and runs once half
+  // of it is dead, or its leader with two or fewer left.
+  lose(herd, wolf) {
+    const pack = herd.pack;
+    pack.lost++;
+    pack.biters.delete(wolf);
+    const left = herd.members.filter((a) => a.alive).length;
+    const leader = herd.leader === wolf || !herd.leader?.alive;
+    if (left && pack.phase !== 'rout' && (pack.lost >= Math.ceil(pack.size0 * wolf.kind.rout) || (leader && left <= 2))) {
+      pack.phase = 'rout';
+      pack.phaseTime = 0;
+      pack.biters.clear();
+      // Wary from the moment it breaks, in case it is let go mid-rout.
+      this.waryUntil.set(herd.key, this.time + wolf.kind.wary);
     }
   }
 
@@ -942,6 +1176,7 @@ export class Animals {
   update(dt, world, { player, peers = [], monsters = [], view = null }) {
     this.time += dt;
     this.focus = { x: player.x, y: player.y };
+    this.player = player;
     if (!this.enabled) {
       this.list = [];
       this.herds.clear();
@@ -952,7 +1187,7 @@ export class Animals {
       this.scanIn = 0.5;
       for (const herd of [...this.herds.values()]) {
         if (herd.key.startsWith('debug:')) continue;
-        if (herd.members.every((a) => metres(a.x - player.x, a.y - player.y) > RING.release)) this.release(herd);
+        if (this.releasable(herd, player, view)) this.release(herd);
       }
       this.activate(world, player, view);
     }
@@ -968,11 +1203,17 @@ export class Animals {
       const speed = m.groundSpeed ?? m.speed ?? 0;
       threats.push({ kind: 'monster', x: m.x, y: m.y, moving: speed > 0.3, running: speed > 2.5 });
     }
+    // Wolves are feared by what they hunt.
+    for (const a of this.list) {
+      if (!a.alive || !a.predator) continue;
+      threats.push({ kind: 'predator', x: a.x, y: a.y, moving: a.groundSpeed > 0.3, running: a.groundSpeed > 2.5 });
+    }
     for (const { at, loud } of this.noises) {
       for (const a of this.list) {
         // The fallen hear nothing; one struck runs on its own blow's clock,
         // and one a fall alarmed runs from the killer, not the body's cry.
-        if (!a.alive || a.struck || a.alarmed) continue;
+        // A wolf pays a noise no mind.
+        if (!a.alive || a.struck || a.alarmed || a.predator) continue;
         const r = Math.min(loud, a.kind.senses.noise);
         const d = metres(at.x - a.x, at.y - a.y);
         if (d < r) {
@@ -982,9 +1223,23 @@ export class Animals {
     }
     this.noises.length = 0;
     for (const herd of this.herds.values()) herd.flightFor -= dt;
+    const prey = this.list.filter((a) => a.alive && KINDS.wolf.prey.includes(a.kind.id));
+    const hunts = new Map();
+    for (const herd of this.packs) {
+      const members = herd.members.filter((a) => a.alive);
+      const hunt = { player, prey, kind: herd.kind, wary: this.wary(herd.key),
+        makeWary: () => this.waryUntil.set(herd.key, this.time + herd.kind.wary),
+        clear: (x, y) => footing(world, herd.kind, x, y) };
+      updatePack(herd.pack, members, hunt, dt);
+      hunts.set(herd, hunt);
+    }
     for (const a of this.list) {
-      a.update(dt, world, a.alive ? this.nearestThreat(a, threats) : null);
-      for (const e of a.events) this.events.push({ ...e, animal: a });
+      a.update(dt, world, a.alive && !a.predator ? this.nearestThreat(a, threats) : null, hunts.get(a.herd));
+      for (const e of a.events) {
+        this.events.push({ ...e, animal: a });
+        // A wolf's bite lands on its prey.
+        if (e.type === 'bite') this.hit(e.prey, e.amount, a.x, a.y, { by: a });
+      }
       a.events.length = 0;
     }
     // Bodies that have sunk away are cleared, and herds with nobody left.

@@ -91,6 +91,44 @@ test('a wound the player did not deal selects nothing', async () => {
   assert.equal(last(), null);
 });
 
+test('a sword cut on a wolf makes it the target', async () => {
+  const { game, frame, last } = await start();
+  const wolf = animalAt(game, 'wolf', 1);
+  cut(game);
+  frame();
+  assert.ok(wolf.health < wolf.maxHealth);
+  assert.equal(game.target.entity, wolf);
+  assert.equal(last().id, `animal:${wolf.id}`);
+  assert.equal(last().name, 'Wolf');
+});
+
+test('wolf bites on the player or a deer select nothing', async () => {
+  const { game, frame, last } = await start();
+  const deer = animalAt(game, 'deer', 3);
+  const wolf = animalAt(game, 'wolf', 2, 90 * DEG);
+  game.animals.hurt(deer, 10, wolf);
+  const before = game.player.vitals.health;
+  game.animals.events.push({ type: 'hit-player', amount: 5, x: game.player.x, y: game.player.y, animal: wolf });
+  frame();
+  assert.ok(deer.health < deer.maxHealth);
+  assert.ok(game.player.vitals.health < before);
+  assert.equal(game.target.entity, null);
+  assert.equal(last(), null);
+
+  // A real pack at work on the player picks nothing either.
+  const [dx, dy] = toCells(0, 3);
+  game.animals.spawn('wolf', { x: game.player.x + dx, y: game.player.y + dy, count: 3 });
+  let bites = 0;
+  const takeDamage = game.player.takeDamage.bind(game.player);
+  game.player.takeDamage = (amount) => {
+    bites++;
+    return takeDamage(amount);
+  };
+  for (let i = 0; i < 300; i++) frame();
+  assert.ok(bites > 0, 'the pack bit the player');
+  assert.equal(game.target.entity, null);
+});
+
 test('a rune of the player\'s own marks what it struck; another\'s does not', async () => {
   const { game, frame, last } = await start();
   const { onDamage } = game.casting.options;
