@@ -94,6 +94,8 @@ kbd::after { content: "]"; color: var(--quiet); }
 }
 .hud-foe.target { outline: 1px solid var(--ink); outline-offset: 1px; }
 .hud-foe { position: absolute; left: 0; top: 0; width: 64px; height: 6px; filter: drop-shadow(0 0 1px #000) drop-shadow(0 0 1px #000); }
+.hud-loot-label { position: absolute; left: 0; top: 0; pointer-events: none; white-space: nowrap; font: 600 10px/1 var(--font); color: var(--ink); padding: 1px 4px; background: rgba(6, 8, 10, .72); border: 1px solid rgba(255, 255, 255, .08); border-radius: 2px; }
+.hud-loot-label.full { opacity: .5; }
 .hud-prompt { position: absolute; left: 50%; bottom: max(144px, calc(env(safe-area-inset-bottom) + 144px)); transform: translateX(-50%); max-width: calc(100% - 24px); padding: 4px 8px; background: var(--surface); border: 1px solid var(--frame); text-align: center; }
 #fire-status { position: fixed; z-index: 11; left: 50%; bottom: max(180px, calc(env(safe-area-inset-bottom) + 180px)); transform: translateX(-50%); max-width: calc(100% - 24px); padding: 5px 8px; background: var(--surface); border: 1px solid var(--frame); text-align: center; pointer-events: none; opacity: 0; transition: opacity 150ms; }
 #fire-status.visible { opacity: 1; }
@@ -397,6 +399,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
    buttons, a slim vitals strip and a corner menu stay on screen. Tablets,
    touchscreen laptops and narrow desktop windows never match. */
 @media (pointer: coarse) and (hover: none) and (max-width: 600px), (pointer: coarse) and (hover: none) and (max-height: 600px) {
+  .hud-loot-label { font-size: 9px; padding: 0 3px; }
   #panel-dock, .zoom-controls,
   .hud-hotbar-wrap, .hud-party, .hud-party-tab, .hud-name, .hud-frame-note,
   .hud-prompt, #fire-status, #builder-banner, #builder-cursor,

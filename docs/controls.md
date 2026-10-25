@@ -52,6 +52,19 @@ windows. On phones it is a slim strip on the top edge between the HP/MP strip
 and the **=** button; on the narrowest portrait phones it sits on a second
 row under the HP/MP strip.
 
+## Loot
+
+A monster you helped bring down, with at least 1 % of its health taken by
+your own sword or runes, may leave loot on dry ground beside its body, where
+you can walk to it: a skeleton always leaves a bone or two, often an arrow or
+two, and now and then an outlaw's hood; a goblin or an elf sometimes leaves an
+iron ingot, and a troll sometimes four. A monster slain by a friend's rune
+alone leaves nothing on your screen. Every stack on the ground, the hunt's
+included, has its name shown above it. Stacks within 4 m are always named;
+farther ones whose names would overlap share one label ("Bone x2, Arrow x1 +2
+more"). Walk close to draw them in, or use E / TAKE. A full bag leaves them
+lying with the name dimmed. They last five minutes.
+
 ## Touch
 
 On a touch screen, drag the left pad to walk and push it to the outer edge to

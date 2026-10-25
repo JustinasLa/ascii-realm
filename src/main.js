@@ -55,6 +55,8 @@ import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
 import { drawItem, drawResource } from './world/item-draw.js';
+import { layLoot, LootCredit, rollLoot } from './world/loot.js';
+import { mulberry32 } from './core/rng.js';
 import { drawLeaves, MAX_LEAF_DRIFT } from './world/leaves.js';
 import { Projectiles } from './world/projectiles.js';
 import { drawProp, propDepthSlices, propInView } from './world/props.js';
@@ -637,6 +639,14 @@ const huntDrops = new HuntDrops();
 const huntCollection = new Collection(world, inventory, huntDrops.items);
 debug.huntDrops = huntDrops;
 debug.collection ??= huntCollection;
+// Monster loot lies in the same drop store as the hunt's, so one collection
+// picks up both; the oldest stacks of either go first when it is full.
+const lootCredit = new LootCredit();
+const lootRandom = mulberry32((seed * 104729) ^ 0x1007);
+// What a slain monster leaves beside its body, rolled once.
+const dropLoot = (monster, items = rollLoot(monster.kind.id, lootRandom)) => layLoot(huntDrops, world,
+  { x: monster.x, y: monster.y, killer: { x: player.x, y: player.y }, items }, (a, b) => huntCollection.pathClear(a, b));
+debug.loot = { credit: lootCredit, roll: (kind) => rollLoot(kind, lootRandom), drop: dropLoot };
 // Rows a lying stack is drawn ahead of its own, over the grass in front.
 const HUNT_DROP_LIFT = 3;
 // Touch aim assist turns toward monsters and animals alike.
@@ -684,6 +694,7 @@ const casting = new Spellcasting({ player, world, monsters, peers: () => [...spe
     animals.hear({ type: 'lightning', x, y, strength });
   },
   onDamage: (struck, amount, ctx) => {
+    if (struck.takeHit) lootCredit.observe(struck, ctx?.caster === player);
     if (ctx?.caster !== player || struck === player || !(amount > 0)) return;
     haptics.hit();
     if (!struck.kind?.name) return;
@@ -840,6 +851,7 @@ function monsterEvent(e) {
         dust.burst(world, e.x, e.y, 26, 10);
       }
       hud.notify(`${kind.name} ${kind === KINDS.skeleton ? 'destroyed' : 'slain'} (${monsters.kills} slain)`, 'pickup');
+      if (lootCredit.claim(e.monster)) dropLoot(e.monster);
       break;
     case 'rise':
       sound.play({ ...e, type: voice });
@@ -1092,6 +1104,7 @@ function frame(now) {
       for (const result of harvesting.react(e, player)) if (result.message) hud.notify(result.message, 'pickup');
       const damage = Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0));
       const hit = monsters.strike(e, player, damage);
+      for (const m of hit) lootCredit.observe(m, true);
       const prey = animals.strike(e, player, damage);
       if (hit.length || prey.length) {
         hitStop = Math.max(hitStop, 0.06);
@@ -1425,6 +1438,7 @@ function frame(now) {
   markSpellHits();
   hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
+  hud.setLoot(huntDrops.in(view.x0 - 2, view.y0 - 2, view.x0 + view.cols + 2, view.y0 + view.rows + 4), player, inventory);
   const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
   hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
