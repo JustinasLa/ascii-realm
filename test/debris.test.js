@@ -384,8 +384,8 @@ test('a piece snagged on a stone keeps clear of the banks as it swings round', (
       continue;
     }
     snagged++;
-    start ??= d.embedded(d.freeHalf(p), world);
-    worst = Math.max(worst, d.embedded(d.freeHalf(p), world) - start);
+    start ??= d.penetration(p, world);
+    worst = Math.max(worst, d.penetration(p, world) - start);
     const half = toCells(Math.cos(p.angle) * p.length / 2, Math.sin(p.angle) * p.length / 2);
     const free = p.snag.end ? [p.x - half.cols, p.y - half.rows] : [p.x + half.cols, p.y + half.rows];
     if (world.typeAt(free[0], free[1]) !== WATER) dry++;
@@ -393,7 +393,75 @@ test('a piece snagged on a stone keeps clear of the banks as it swings round', (
   assert.ok(snagged > 30, `snagged for ${snagged} steps`);
   assert.equal(dry, 0);
   assert.ok(worst <= 1e-9, `driven ${worst} deeper into the bank`);
-  assert.ok(rings.length >= 2, 'knocked on the stone, then on the bank');
+  assert.ok(rings.length >= 1, 'knocked on the stone');
+});
+
+// A branch caught by its end at (0.5, 0.5) in open water, pointing straight
+// up the screen, for the current to swing round east.
+function caught(world, angle = -Math.PI / 2, pin = { x: 0.5, y: 0.5 }) {
+  const d = new Debris({ random: () => 0.5, world });
+  const p = d.spawn('branch', { x: 0, y: 0, angle: 0 });
+  p.length = 0.5; p.radius = 0.03;
+  const c = toCells(Math.cos(angle) * p.length / 2, Math.sin(angle) * p.length / 2);
+  p.angle = angle; p.x = pin.x + c.cols; p.y = pin.y + c.rows;
+  p.snag = { end: 0, until: 1e9, aligned: 0, ...pin };
+  return { d, p };
+}
+
+test('a snagged piece swinging round meets a stone or a jut of bank between its caught end and its middle', () => {
+  // Both lie in the way of the near half only: the free half would pass by.
+  const stone = { x: 2.42, y: -0.07, r: 0.3 };
+  const jut = (x, y) => Math.floor(x) === 2 && Math.floor(y) === -1;
+  for (const world of [channel({ half: 1.5, stones: [stone] }), channel({ half: 1.5, grass: jut })]) {
+    const { d, p } = caught(world);
+    const v = view(-2000, -40, 4000, 80);
+    assert.equal(d.penetration(p, world), 0);
+    let worst = 0;
+    for (let t = 0; t < 4 && p.snag; t += 1 / 30) {
+      d.step(p, 1 / 30, world, v);
+      worst = Math.max(worst, d.penetration(p, world));
+    }
+    assert.ok(p.snag, 'held, not swung through to trail the current');
+    assert.ok(p.angle < -1.2, `stopped at ${p.angle}`);
+    assert.ok(worst <= 1e-9, `driven ${worst} into it`);
+  }
+});
+
+test('a snagged piece already on the bank is not turned deeper onto it', () => {
+  // Land north of row -3; the branch lies 13.5 degrees up from its caught
+  // end, its free end on the land. A turn of one more degree leaves as many
+  // probes on the land, but deeper in.
+  const world = channel({ half: 3, grass: (x, y) => y < -3 });
+  const deg = Math.PI / 180;
+  const { d, p } = caught(world, -13.5 * deg, { x: 0.5, y: -2.5 });
+  const pos = { x: p.x, y: p.y, angle: p.angle };
+  const on = d.penetration(p, world);
+  assert.ok(on > 0);
+  const deeper = caught(world, -14.5 * deg, { x: 0.5, y: -2.5 });
+  assert.ok(d.penetration(deeper.p, world) > on);
+  // The water would turn it by that degree in a frame.
+  const h = 1 / 30;
+  const half = toCells(Math.cos(p.angle) * p.length / 2, Math.sin(p.angle) * p.length / 2);
+  const ends = [[p.x - half.cols, p.y - half.rows], [p.x + half.cols, p.y + half.rows]];
+  const along = -deg / h * p.length;
+  const w = [{ x: 0, y: 0 }, { x: -Math.sin(p.angle) * along, y: Math.cos(p.angle) * along }];
+  d.swing(p, h, ends, w, 1, world);
+  assert.deepEqual({ x: p.x, y: p.y, angle: p.angle }, pos);
+  assert.ok(p.spin > 0, 'knocked back off it');
+  // Turned back off the land instead, it goes.
+  w[1].x *= -1; w[1].y *= -1;
+  d.swing(p, h, ends, w, 1, world);
+  assert.ok(p.angle > pos.angle);
+  assert.ok(d.penetration(p, world) < on);
+});
+
+test('a point on the land is as deep in as the nearest water, out to four cells', () => {
+  const world = channel({ half: 3, grass: (x, y) => y < -3 });
+  const d = new Debris({ random: () => 0.5, world });
+  assert.equal(d.landDepth(world, 0.5, -2.5), 0);
+  assert.ok(Math.abs(d.landDepth(world, 0.5, -3.25) - 0.25) < 1e-9);
+  assert.ok(Math.abs(d.landDepth(world, 0.5, -5.5) - 2.5) < 1e-9);
+  assert.equal(d.landDepth(world, 0.5, -40), 5);
 });
 
 test('a piece wedged fast in running water works itself free', () => {

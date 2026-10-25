@@ -54,6 +54,7 @@ const MAX_STEP = 1 / 30;
 const MAX_PUSH = 0.03;
 const PROBE_PUSH = 0.006;
 const STONE_PUSH = 0.1;
+const LAND_REACH = 4;
 
 // Kinds: how often each comes down, its length and half-thickness in metres,
 // how quickly it takes up the water's speed (heavy logs lag), how long it
@@ -387,11 +388,11 @@ export class Debris {
   }
 
   // A snagged piece turns about its caught end until it trails downstream.
-  // Its free half still meets the banks and stones: a turn that would drive
-  // it further into them is undone, and it knocks back off them instead.
+  // All along it still meets the banks and stones: a turn that would drive
+  // its hull further into them is undone, and it knocks back off them instead.
   swing(piece, h, ends, w, ease, world) {
     const pin = piece.snag.end;
-    const before = { x: piece.x, y: piece.y, angle: piece.angle, against: this.embedded(this.freeHalf(piece), world) };
+    const before = { x: piece.x, y: piece.y, angle: piece.angle, against: this.penetration(piece, world) };
     const free = 1 - pin;
     const g = toGround((ends[free][0] - piece.snag.x) * ASPECT, ends[free][1] - piece.snag.y);
     const len = Math.hypot(g.x, g.y) || piece.length;
@@ -405,7 +406,7 @@ export class Debris {
     piece.x = piece.snag.x + c.cols;
     piece.y = piece.snag.y + c.rows;
     piece.vx = piece.vy = 0;
-    if (this.embedded(this.freeHalf(piece), world) > before.against + 1e-9) {
+    if (this.penetration(piece, world) > before.against + 1e-9) {
       const hit = Math.abs(piece.spin) * len;
       piece.x = before.x; piece.y = before.y; piece.angle = before.angle;
       piece.spin *= -RESTITUTION;
@@ -423,40 +424,61 @@ export class Debris {
     }
   }
 
-  // The half of a snagged piece away from its caught end, which lies against
-  // whatever caught it.
-  freeHalf(piece) {
-    const s = piece.snag.end ? -1 : 1;
-    const q = toCells(Math.cos(piece.angle) * piece.length / 4, Math.sin(piece.angle) * piece.length / 4);
-    return { x: piece.x + s * q.cols, y: piece.y + s * q.rows, angle: piece.angle, length: piece.length / 2,
-      radius: piece.radius };
+  // How far a snagged piece's whole hull reaches into what it can hit
+  // (layout units): each probe's depth into the land, and its capsule's
+  // into each stone. The caught end itself, which lies against whatever
+  // caught it and only turns about it, is left out. The same probes
+  // at every heading, so a turn alone does not change their number.
+  penetration(piece, world) {
+    const stations = Math.max(2, Math.ceil(toCells(piece.length, 0).cols) + 1);
+    const caught = piece.snag.end ? stations - 1 : 0;
+    let depth = 0;
+    this.probes(piece, (px, py, i) => {
+      if (i !== caught) depth += this.landDepth(world, px, py);
+    }, stations);
+    // A stone counts as far as the hull reaches deeper into it than the
+    // caught end does.
+    const pin = { ...piece, x: piece.snag.x, y: piece.snag.y, length: 0 };
+    for (const stone of this.stonesNear(world, piece.x, piece.y)) {
+      depth += Math.max(0, this.stoneOverlap(piece, stone).overlap - Math.max(0, this.stoneOverlap(pin, stone).overlap));
+    }
+    return depth;
   }
 
-  // Probes along the hull no more than a cell apart along its axis, on
-  // its middle and both sides, each handed to `fn(x, y)` (cells).
-  probes(piece, fn) {
+  // How far a point (cells) lies inside the land: the layout distance to the
+  // nearest water cell, searched ring by ring out to LAND_REACH cells.
+  landDepth(world, x, y) {
+    if (world.typeAt(x, y) === WATER) return 0;
+    const cx = Math.floor(x), cy = Math.floor(y);
+    let best = LAND_REACH + 1;
+    for (let r = 1; r <= LAND_REACH && best > (r - 1) * ASPECT; r++) {
+      for (let j = -r; j <= r; j++) {
+        for (let i = -r; i <= r; i++) {
+          if (Math.max(Math.abs(i), Math.abs(j)) !== r || world.typeAt(cx + i + 0.5, cy + j + 0.5) !== WATER) continue;
+          const dx = Math.max(cx + i - x, 0, x - (cx + i + 1)) * ASPECT;
+          const dy = Math.max(cy + j - y, 0, y - (cy + j + 1));
+          best = Math.min(best, Math.hypot(dx, dy));
+        }
+      }
+    }
+    return best;
+  }
+
+  // Probes along the hull no more than a cell apart along its axis (or at
+  // `stations` evenly), on its middle and both sides, each handed to
+  // `fn(x, y, station)` (cells).
+  probes(piece, fn, stations = 0) {
     const ax = Math.cos(piece.angle), ay = Math.sin(piece.angle);
     const g = toCells(ax, ay);
     const lenCells = Math.hypot(g.cols * piece.length, g.rows * piece.length);
-    const stations = Math.max(2, Math.ceil(lenCells) + 1);
+    stations ||= Math.max(2, Math.ceil(lenCells) + 1);
     const side = toCells(-ay * piece.radius, ax * piece.radius);
     for (let i = 0; i < stations; i++) {
       const t = i / (stations - 1) - 0.5;
       for (const sgn of [0, -1, 1]) {
-        fn(piece.x + g.cols * piece.length * t + side.cols * sgn, piece.y + g.rows * piece.length * t + side.rows * sgn);
+        fn(piece.x + g.cols * piece.length * t + side.cols * sgn, piece.y + g.rows * piece.length * t + side.rows * sgn, i);
       }
     }
-  }
-
-  // How deep a piece's hull lies in what it can hit: its probes off the
-  // water, and how far its capsule reaches into each stone (layout units).
-  embedded(piece, world) {
-    let depth = 0;
-    this.probes(piece, (px, py) => {
-      if (world.typeAt(px, py) !== WATER) depth++;
-    });
-    for (const stone of this.stonesNear(world, piece.x, piece.y)) depth += Math.max(0, this.stoneOverlap(piece, stone).overlap);
-    return depth;
   }
 
   // The hull's capsule against a stone's circle, in layout space: how far
