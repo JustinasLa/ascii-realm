@@ -176,6 +176,8 @@ test('the ring lights the grass along the band, never a disc in the middle', () 
     const { glows } = draw('zone', age);
     assert.ok(glows.length >= 8 && glows.length <= 16);
     assert.ok(glows.every(g => g.k > 0 && Math.abs(radius(g) - RING_RADIUS) <= 0.3 && radius(g) >= 0.8));
+    // Each disc's cost grows with its area, so the reach stays within the frame budget.
+    assert.ok(glows.every(g => g.reach <= 1.2 && g.k <= 1));
   }
   assert.ok(draw('scorch', 1).glows.length === 0, 'unknown stages draw nothing');
 });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { Fires, FIRE_GROW_SECONDS, MAX_FIRES, MAX_FIRE_PARTICLES, STRONG_WIND, firePulse } from '../src/world/fire.js';
+import { Fires, FIRE_GROW_SECONDS, MAX_FIRES, MAX_FIRE_PARTICLES, STRONG_WIND, drawFireLight, firePulse } from '../src/world/fire.js';
 import { grassGust } from '../src/audio/environment.js';
 import { reflector } from '../src/world/reflection.js';
 import { drawGround } from '../src/world/ground.js';
@@ -54,6 +54,28 @@ test('starter fires are reproducible and stand beside real seeded spawn clearing
     assert.ok(Math.hypot((a.x - world.spawn.x) * ASPECT, a.y - world.spawn.y) > 8);
     assert.equal(new Fires().canPlace(world, a.x, a.y), true);
   }
+});
+
+test('a starter fire is skipped when no spot round the spawn will take one', () => {
+  assert.equal(new Fires().addStarter(dryWorld({ isWalkable: () => false })), null);
+});
+
+test('fire light is a round disc in row units, brightest at the flame and clipped to the screen', () => {
+  const r = { cols: 60, rows: 30, fg: new Float32Array(60 * 30 * 4), ov: new Float32Array(60 * 30 * 4), bg: new Float32Array(60 * 30 * 4) };
+  const source = { x: 30, y: 15, intensity: 1, seed: 0 }, radius = 6;
+  drawFireLight(r, { x0: 0, y0: 0 }, 0, source, radius, 0);
+  const lit = (x, y) => r.bg[(y * r.cols + x) * 4];
+  for (let y = 0; y < r.rows; y++) for (let x = 0; x < r.cols; x++) {
+    const d = Math.hypot((x - 30) * ASPECT, y - 15);
+    if (d >= radius) assert.equal(lit(x, y), 0, `${x},${y} is outside the disc`);
+    else if (d < radius - 0.5) assert.ok(lit(x, y) > 0, `${x},${y} is inside the disc`);
+  }
+  assert.ok(lit(30, 15) > lit(33, 15) && lit(33, 15) > lit(36, 15));
+  assert.ok(Math.abs(lit(30, 11) - lit(30, 19)) < 1e-6, 'symmetric up and down');
+  // Wide enough to spill over every edge of the screen, and still in bounds.
+  const edge = { ...r, fg: new Float32Array(r.fg.length), ov: new Float32Array(r.fg.length), bg: new Float32Array(r.fg.length) };
+  assert.doesNotThrow(() => drawFireLight(edge, { x0: 0, y0: 0 }, 0, { x: 1, y: 1, intensity: 1, seed: 0 }, 60, 0));
+  assert.ok(edge.bg[0] > 0 && edge.bg[(29 * 60 + 59) * 4] > 0);
 });
 
 test('a live hearth clears grass roots, stays clear after travel and releases its coverage when extinguished', () => {

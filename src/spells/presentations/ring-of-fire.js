@@ -162,7 +162,9 @@ function ring(plot, glow, effect, R, age, seed) {
         heat(0.78 - j * 0.12), fade * flick * (1 - (j - 1) * 0.3));
     }
     // The flames light the grass along the band, never a disc in the middle.
-    if (lights < 16) { glow(p.x * 1.1, p.z * 1.1, flick * fade * (1 - gutter * 0.8), 1.6); lights++; }
+    // A 1.2 m reach keeps sixteen lights inside the frame budget (each disc's
+    // cost grows with its area); the extra strength makes up for the smaller disc.
+    if (lights < 16) { glow(p.x * 1.1, p.z * 1.1, Math.min(1, 1.3 * flick * fade * (1 - gutter * 0.8)), 1.2); lights++; }
   }
 
   // Sparks rise from the band and drift up the screen, fading with height.
