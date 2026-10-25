@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
 import { FINE } from '../src/render/cells.js';
@@ -7,8 +8,9 @@ import { AsciiRenderer } from '../src/render/renderer.js';
 import { drawFireLight, firePulse } from '../src/world/fire.js';
 import { bakeFine, fineOf, fineBuffers, packFine } from '../src/world/fine-bakes.js';
 import { drawGround } from '../src/world/ground.js';
-import { fineRecipe } from '../src/world/prop-art.js';
-import { createProp, drawProp, makeRiverStone } from '../src/world/props.js';
+import { fineRecipe, fineSource } from '../src/world/prop-art.js';
+import { PROP_CATALOG } from '../src/world/prop-catalog.js';
+import { createProp, drawProp, makeRiverStone, rebuildProp } from '../src/world/props.js';
 import {
   AMBIENT, DIFFUSE, GLOSS_DAMP, GLOSS_DRY, GLOSS_SUBMERGED, GLOSS_WET, RAKE_MAX, glossByte, glossOf, normalByte, normalOf,
   shadeFactors, worldNormal,
@@ -198,6 +200,51 @@ test('river stone bakes carry normals in the fine bake only, the ordinary bake u
   // Builder rocks keep their normals through their variation.
   const rock = createProp('rock', 0, 0, { seed: 4 });
   assert.ok(finish(fineRecipe(rock)()).some((c) => c.nx !== undefined));
+});
+
+// Ordinary and fine bakes as they were before stones carried normals:
+// glyphs, colours, depths and the random draws each prop recorded. The
+// digests were taken on the code before this change; normals are left out.
+const BAKE_PINS = {
+  rocks: { props: 9, draws: 773, cells: '1ff703bf467e5843', fine: '916b6d5fc6036b51' },
+  scenery: { props: 33, draws: 228, cells: '2db75bc86f7ea2ba', fine: '7eb8ce5794d10ecb' },
+};
+function bakeDigest(list) {
+  const cells = createHash('sha256');
+  const fine = createHash('sha256');
+  let draws = 0;
+  for (const prop of list) {
+    for (const c of prop.cells) {
+      cells.update(Object.keys(c).filter((k) => k !== 'nx' && k !== 'ny').sort()
+        .map((k) => `${k}:${typeof c[k] === 'number' ? +c[k].toFixed(6) : c[k]}`).join(',') + ';');
+    }
+    cells.update('|');
+    draws += fineSource(prop)?.draws?.length ?? 0;
+    const recipe = fineRecipe(prop);
+    if (!recipe) continue;
+    const packed = packFine(finish(recipe()));
+    for (const k of ['dx', 'dy', 'g', 'rustle', 'color', 'back', 'solid', 'foliage', 'flex', 'phaseSin', 'phaseCos']) {
+      fine.update(Buffer.from(packed[k].buffer, packed[k].byteOffset, packed[k].byteLength));
+    }
+  }
+  return { props: list.length, draws, cells: cells.digest('hex').slice(0, 16), fine: fine.digest('hex').slice(0, 16) };
+}
+const drawsOf = (seed) => Array.from({ length: 4000 }, mulberry32(seed));
+
+test('ordinary and fine bakes keep their glyphs, colours and random draws', () => {
+  const rocks = [rebuildProp({ make: 'bigRock', x: 11, y: 2, draws: drawsOf(300), seed: 80 })];
+  for (let i = 0; i < 3; i++) {
+    rocks.push(rebuildProp({ make: 'rock', x: i * 7, y: i * 3, draws: drawsOf(100 + i), seed: 40 + i }));
+    rocks.push(rebuildProp({ make: 'riverStone', x: i * 5, y: -i, draws: drawsOf(200 + i), seed: 60 + i }));
+  }
+  // A generated tree, and the cheaper builder props (the slow stonework
+  // has no stone normals either; two rubble kinds stand in for it).
+  const scenery = [rebuildProp({ make: 'tree', x: 3, y: 4, draws: drawsOf(400), options: { species: 'oak', seed: 9 } })];
+  for (const { kind, group } of PROP_CATALOG) {
+    if (group === 'Architecture' && !kind.startsWith('rubble')) continue;
+    for (const variant of [0, 1]) (kind === 'rock' ? rocks : scenery).push(createProp(kind, 4.5, 6.5, { seed: 3, variant }));
+  }
+  assert.deepEqual({ rocks: bakeDigest(rocks), scenery: bakeDigest(scenery) }, BAKE_PINS);
 });
 
 test('drawing a wet stone writes its normals with a wet gloss', () => {
