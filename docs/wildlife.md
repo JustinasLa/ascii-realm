@@ -307,8 +307,10 @@ Schools of 3 to 5 fish live in still lake water. A region rolls a school
 (70 %) only if at least 3 of its 9 samples are lake rather than river, and
 the school's home is the nearest spot to a seeded point that is open lake
 water: at least 0.15 m deep, at least 0.6 m from anything else, with no
-river line within a cell and no current. The search waits until the chunks
-it needs are loaded. Schools appear and are let go like herds, at most 2
+river line within a cell and no current. The search waits until every
+chunk it reads is loaded, its search box plus the 0.6 m ring round each
+spot in it, so a school's home is the same whatever order chunks load in.
+Schools appear and are let go like herds, at most 2
 schools and 8 fish at once.
 
 - **Schooling.** The leader swims 1 to 5 m at a time to a spot it can reach

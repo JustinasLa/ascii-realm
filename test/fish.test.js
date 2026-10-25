@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Animals, REGION, RING, lakeAt, wetAt } from '../src/entities/animals.js';
-import { FISH, Fish, Fishes, MAX_SCHOOLS, homeWater, openWater, qualifies, schoolOf } from '../src/entities/fish.js';
+import { FISH, Fish, Fishes, MAX_SCHOOLS, REACH, homeWater, openWater, qualifies, schoolOf } from '../src/entities/fish.js';
 import { toCells, toMetres } from '../src/entities/monsters.js';
 import { fbm } from '../src/core/noise.js';
 import { ASPECT, CHUNK_SIZE, GRASS, LAND_LIFT, SHORE_LEVEL, WATER, World } from '../src/world/world.js';
@@ -299,6 +299,64 @@ test('open water at the edge of a loaded chunk is refused, never generating the 
   assert.equal(openWater(world, -767.8, 384.2), true);
   assert.equal(openWater(world, -704.3, 400.5), true);
   assert.equal(world.chunks.size, 5);
+});
+
+test('a home needing a chunk past the old halo waits for it, whatever the loading order', () => {
+  // Shallow water up to the start's own column, deep east of it, so the
+  // nearest home is 12 cells east and its ring of water reaches past the
+  // chunk edge at x = -704, further than the search box plus two columns.
+  const start = { x: -726.4, y: 400.2 };
+  const loaded = new Set();
+  const base = lake({ loaded: (cx, cy) => loaded.has(`${cx},${cy}`) });
+  const world = { ...base, waterDepthAt: (x, y) => (x < -726 ? 0.1 : base.waterDepthAt(x, y)) };
+  assert.ok(start.x + 22 < -704 && REACH.cols > 11 && REACH.rows > 4);
+  const want = { x: -714.5, y: 400.5 };
+  for (const order of [['-12,6', '-11,6'], ['-11,6', '-12,6']]) {
+    loaded.clear();
+    for (const key of order) {
+      assert.equal(homeWater(world, { start, size: 3 }), undefined, 'waits, never a farther home or none');
+      loaded.add(key);
+    }
+    assert.deepEqual(homeWater(world, { start, size: 3 }), want);
+  }
+});
+
+test('a roll with a needed chunk unloaded is deferred, not cached, and homes once it loads', () => {
+  // A region roll whose search box plus the reach of qualifies() spans a
+  // chunk the search box plus two columns and a row would not.
+  const span = (start, cols, rows) => {
+    const x0 = Math.floor(start.x) + 0.5;
+    const y0 = Math.floor(start.y) + 0.5;
+    const out = [];
+    for (let cy = Math.floor((y0 - rows) / CHUNK_SIZE); cy <= Math.floor((y0 + rows) / CHUNK_SIZE); cy++) {
+      for (let cx = Math.floor((x0 - cols) / CHUNK_SIZE); cx <= Math.floor((x0 + cols) / CHUNK_SIZE); cx++) out.push(`${cx},${cy}`);
+    }
+    return out;
+  };
+  const rx = Math.floor(LAKE.x / REGION.cols);
+  let found = null;
+  for (let seed = 1; seed < 400 && !found; seed++) {
+    for (const ry of [2, 3]) {
+      const roll = schoolOf(seed, rx, ry, lake());
+      if (!roll || !homeWater(lake(), roll)) continue;
+      const old = span(roll.start, 22, 7);
+      const extra = span(roll.start, 20 + REACH.cols, 6 + REACH.rows).find((k) => !old.includes(k));
+      if (extra) { found = { seed, ry, roll, extra }; break; }
+    }
+  }
+  assert.ok(found);
+  const { seed, ry, roll, extra } = found;
+  const key = `${rx},${ry}`;
+  const whole = new Fishes({ seed }).rollOf(lake(), rx, ry);
+  assert.deepEqual(whole, { ...roll, home: homeWater(lake(), roll) });
+  let missing = extra;
+  const world = lake({ loaded: (cx, cy) => `${cx},${cy}` !== missing });
+  const fishes = new Fishes({ seed });
+  assert.equal(fishes.rollOf(world, rx, ry), null);
+  assert.equal(fishes.rolls.has(key), false, 'not cached');
+  missing = null;
+  assert.deepEqual(fishes.rollOf(world, rx, ry), whole);
+  assert.deepEqual(fishes.rolls.get(key), whole);
 });
 
 test('spawning snaps to open water within 6 m, or finds none on dry land', () => {

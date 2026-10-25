@@ -58,6 +58,12 @@ const between = (random, [a, b]) => a + random() * (b - a);
 const metres = (dx, dy) => Math.hypot(...toMetres(dx, dy));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const RING_OFFSETS = Array.from({ length: 6 }, (_, i) => toCells(Math.sin((i * Math.PI) / 3) * MARGIN, Math.cos((i * Math.PI) / 3) * MARGIN));
+// Cells either way of a point that qualifies() reads: its ring of water
+// round the point, plus the half cell the current blends over at each.
+export const REACH = freeze({
+  cols: Math.max(...RING_OFFSETS.map(([dx]) => Math.abs(dx))) + 0.5,
+  rows: Math.max(...RING_OFFSETS.map(([, dy]) => Math.abs(dy))) + 0.5,
+});
 
 // Whether every chunk the checks below read is already generated: the
 // point's own cell and the four cells the world's current blends between,
@@ -109,12 +115,18 @@ export function schoolOf(seed, rx, ry, world) {
 }
 
 // The school's home: the qualifying cell nearest its seeded start. Undefined
-// while the chunks it needs have not loaded (ask again later); null if the
-// region has none.
+// while any chunk the search reads has not loaded, the search box plus the
+// reach of qualifies() round each cell in it (ask again later), so the
+// answer never depends on which chunks loaded first; null if the region
+// has none.
 export function homeWater(world, roll) {
   const { start } = roll;
-  for (let cy = Math.floor((start.y - SEARCH.rows - 1) / CHUNK_SIZE); cy <= Math.floor((start.y + SEARCH.rows + 1) / CHUNK_SIZE); cy++) {
-    for (let cx = Math.floor((start.x - SEARCH.cols - 2) / CHUNK_SIZE); cx <= Math.floor((start.x + SEARCH.cols + 2) / CHUNK_SIZE); cx++) {
+  const x0 = Math.floor(start.x) + 0.5;
+  const y0 = Math.floor(start.y) + 0.5;
+  const cols = SEARCH.cols + REACH.cols;
+  const rows = SEARCH.rows + REACH.rows;
+  for (let cy = Math.floor((y0 - rows) / CHUNK_SIZE); cy <= Math.floor((y0 + rows) / CHUNK_SIZE); cy++) {
+    for (let cx = Math.floor((x0 - cols) / CHUNK_SIZE); cx <= Math.floor((x0 + cols) / CHUNK_SIZE); cx++) {
       if (!world.loaded?.(cx, cy)) return undefined;
     }
   }
