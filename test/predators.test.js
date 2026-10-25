@@ -728,3 +728,70 @@ test('a roaming pack keeps near home, the leader turning back from too far', () 
   steer(w, { world: boxed.world, player: boxed.player, kind: W, clear: () => true }, dt);
   assert.equal(w.state, 'idle');
 });
+
+test('a pack let go mid-rout is wary from the moment it broke, and still wary when it comes back', () => {
+  const scene = pack({ count: 4, away: 6 });
+  const { animals, herd, wolves, player } = scene;
+  herd.key = 'pack:4,4';
+  run(scene, 1);
+  animals.hit(wolves[1], 999, player.x, player.y);
+  animals.hit(wolves[2], 999, player.x, player.y);
+  assert.equal(herd.pack.phase, 'rout');
+  assert.equal(animals.wary(herd.key), true);
+  run(scene, 2);
+  assert.ok(herd.pack.phaseTime < W.routFor);
+  animals.release(herd);
+  animals.time += RING.cooldown + 1;
+  assert.equal(animals.wary('pack:4,4'), true);
+  animals.time += W.wary;
+  assert.equal(animals.wary('pack:4,4'), false);
+});
+
+test('a killing blow from the player turns the rest of the pack off its prey and onto them', () => {
+  const scene = pack({ count: 4, away: 6 });
+  const { animals, herd, wolves, player } = scene;
+  run(scene, 0.5);
+  const deer = { x: player.x + 40, y: player.y, alive: true, kind: KINDS.deer };
+  herd.pack.target = { ref: deer, kind: 'deer' };
+  herd.pack.phase = 'chase';
+  const victim = wolves.find((w) => w !== herd.leader);
+  animals.hit(victim, 999, player.x, player.y);
+  assert.equal(victim.alive, false);
+  assert.notEqual(herd.pack.phase, 'rout');
+  assert.equal(herd.pack.target.ref, player);
+  assert.equal(herd.pack.phase, 'surround');
+});
+
+test('a deer tires only when wolves run it: after its wind, back once rested, never below the player\'s run', () => {
+  const world = land();
+  const animals = new Animals({ counts: { deer: 8 }, habitat: () => 'water' });
+  const deer = animals.spawn('deer', { x: 0, y: 0, count: 1, world }).members[0];
+  animals.calm();
+  const D = KINDS.deer;
+  const chase = (kind, seconds) => {
+    const from = at(deer, 0, 6);
+    deer.bolt(world, from);
+    deer.duration = 99;
+    const speeds = [];
+    for (let t = 0; t < seconds; t += dt) {
+      const threat = { kind, ...at(deer, 0, 6), moving: true, running: true, distance: 6 };
+      speeds.push({ t, speed: deer.think(dt, world, threat).speed });
+    }
+    return speeds;
+  };
+  const wolves = chase('predator', D.flee.wind + 1);
+  assert.ok(wolves.filter((s) => s.t < D.flee.wind - 0.1).every((s) => s.speed === D.fleeSpeed));
+  assert.ok(wolves.filter((s) => s.t > D.flee.wind + 0.1).every((s) => s.speed === D.fleeSpeed * D.flee.tired));
+  // Out of the chase it gets its breath back at half the rate it lost it.
+  deer.setState('idle', 99);
+  for (let t = 0; t < (D.flee.wind + 1) * 2 + 0.5; t += dt) deer.think(dt, world, null);
+  assert.equal(deer.spent, 0);
+  assert.equal(chase('predator', 1).at(-1).speed, D.fleeSpeed);
+  // From the player alone it runs on fresh, past the player's sprint.
+  deer.setState('idle', 99);
+  deer.spent = 0;
+  const player = chase('player', D.flee.wind * 2);
+  assert.ok(player.every((s) => s.speed === D.fleeSpeed));
+  assert.ok(D.flee.tired * D.fleeSpeed < hunter().runSpeed && D.fleeSpeed > hunter().runSpeed);
+  assert.equal(deer.spent, 0);
+});

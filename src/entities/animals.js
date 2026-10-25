@@ -48,7 +48,7 @@ export const KINDS = freeze({
     graze: freeze({ share: 0.6, bout: [6, 14], look: [2, 5] }),
     herd: freeze({ size: [2, 4], stagChance: 0.35, cohesion: 6, spacing: 1.2 }),
     senses: freeze({ notice: 10, bolt: 5, boltRunning: 9, noise: 30 }),
-    // A deer that has run flat out for `wind` seconds tires to `tired` of
+    // A deer run flat out by wolves for `wind` seconds tires to `tired` of
     // its pace until it has its breath back, so a pack can run it down.
     flee: freeze({ min: 4, max: 7, safe: 30, calm: 10, wind: 6, tired: 0.75 }),
     contagion: freeze({ radius: 15, delay: [0.1, 0.4] }),
@@ -673,8 +673,10 @@ export class Animal {
         this.heading = this.bestHeading(world, h);
         this.nextTurn = this.stateTime + between(this.random, k.flee.zigzag);
       }
-      this.spent += dt;
-      speed = k.fleeSpeed * (k.flee.wind && this.spent > k.flee.wind ? k.flee.tired : 1);
+      // Only a predator's chase winds it: from the player it runs on fresh.
+      const hunted = threat?.kind === 'predator';
+      if (hunted) this.spent += dt;
+      speed = k.fleeSpeed * (hunted && k.flee.wind && this.spent > k.flee.wind ? k.flee.tired : 1);
       turn = k.turn.flee;
       const safe = threat ? threat.distance > k.flee.safe : from.distance > k.flee.safe;
       if (this.stateTime >= this.duration || (safe && this.stateTime >= this.safeAfter)) {
@@ -1032,13 +1034,13 @@ export class Animals {
 
   // A blow on an animal from a point, `by` a predator or else the player; a
   // killing blow leaves its drops, marks its region and sends its herd off.
-  // The player's blow on a wolf sets its pack on them. Returns whether it
-  // landed.
+  // The player's blow on a wolf, killing or not, sets the rest of its pack
+  // on them unless it routs. Returns whether it landed.
   hit(animal, damage, fromX, fromY, { by = null } = {}) {
     const alive = animal.alive;
     if (!animal.takeHit(damage, fromX, fromY)) return false;
     if (alive && !animal.alive) this.fell(animal, by);
-    else if (!by && animal.herd?.pack && this.player) provoke(animal.herd.pack, this.player);
+    if (!by && animal.herd?.pack && this.player) provoke(animal.herd.pack, this.player);
     return true;
   }
 
@@ -1076,6 +1078,8 @@ export class Animals {
       pack.phase = 'rout';
       pack.phaseTime = 0;
       pack.biters.clear();
+      // Wary from the moment it breaks, in case it is let go mid-rout.
+      this.waryUntil.set(herd.key, this.time + wolf.kind.wary);
     }
   }
 
