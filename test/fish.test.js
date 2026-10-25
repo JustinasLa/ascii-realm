@@ -4,7 +4,7 @@ import { Animals, REGION, RING, lakeAt, wetAt } from '../src/entities/animals.js
 import { FISH, Fish, Fishes, MAX_SCHOOLS, homeWater, openWater, qualifies, schoolOf } from '../src/entities/fish.js';
 import { toCells, toMetres } from '../src/entities/monsters.js';
 import { fbm } from '../src/core/noise.js';
-import { ASPECT, CHUNK_SIZE, GRASS, LAND_LIFT, SHORE_LEVEL, WATER } from '../src/world/world.js';
+import { ASPECT, CHUNK_SIZE, GRASS, LAND_LIFT, SHORE_LEVEL, WATER, World } from '../src/world/world.js';
 
 const dt = 1 / 30;
 const metres = (a, b) => Math.hypot(...toMetres(b.x - a.x, b.y - a.y));
@@ -254,6 +254,27 @@ test('a lake region with a slow river: the fish keep to the lake and stop at the
   delete noFlow.flowAt;
   delete noFlow.rivers;
   assert.equal(openWater(noFlow, LAKE.x, LAKE.y), true);
+});
+
+test('open water at the edge of a loaded chunk is refused, never generating the next', () => {
+  // Deep lake right up to the corner and the east edge of one chunk of the
+  // real seed-11 world; the current's blend reaches half a cell over.
+  const world = new World(11, { rivers: false });
+  world.chunk(-12, 6);
+  const edges = [[-767.8, 384.2], [-767.8, 400.5], [-704.3, 400.5], [-740.5, 384.3]];
+  for (const [x, y] of edges) {
+    assert.equal(world.typeAt(x, y), WATER);
+    assert.equal(openWater(world, x, y), false, `${x},${y}`);
+    assert.equal(qualifies(world, x, y), false);
+    assert.equal(world.chunks.size, 1, 'no chunk generated');
+  }
+  assert.equal(homeWater(world, { start: { x: -767, y: 385 }, size: 3 }), undefined);
+  assert.equal(world.chunks.size, 1);
+  // With its neighbours there too, the same water qualifies.
+  for (const [cx, cy] of [[-13, 5], [-12, 5], [-13, 6], [-11, 6]]) world.chunk(cx, cy);
+  assert.equal(openWater(world, -767.8, 384.2), true);
+  assert.equal(openWater(world, -704.3, 400.5), true);
+  assert.equal(world.chunks.size, 5);
 });
 
 test('spawning snaps to open water within 6 m, or finds none on dry land', () => {

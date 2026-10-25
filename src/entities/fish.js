@@ -58,10 +58,24 @@ const metres = (dx, dy) => Math.hypot(...toMetres(dx, dy));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const RING_OFFSETS = Array.from({ length: 6 }, (_, i) => toCells(Math.sin((i * Math.PI) / 3) * MARGIN, Math.cos((i * Math.PI) / 3) * MARGIN));
 
+// Whether every chunk the checks below read is already generated: the
+// point's own cell and the four cells the world's current blends between,
+// half a cell either way, so a point near a chunk's edge never generates
+// the next one.
+function loadedAround(world, x, y) {
+  if (!world.loaded) return false;
+  for (let cy = Math.floor((y - 0.5) / CHUNK_SIZE); cy <= Math.floor((y + 0.5) / CHUNK_SIZE); cy++) {
+    for (let cx = Math.floor((x - 0.5) / CHUNK_SIZE); cx <= Math.floor((x + 0.5) / CHUNK_SIZE); cx++) {
+      if (!world.loaded(cx, cy)) return false;
+    }
+  }
+  return true;
+}
+
 // Whether a point is loaded lake water deep and still enough for a fish:
 // no river line within a cell, and no current.
 export function openWater(world, x, y) {
-  if (!world.loaded?.(Math.floor(x / CHUNK_SIZE), Math.floor(y / CHUNK_SIZE))) return false;
+  if (!loadedAround(world, x, y)) return false;
   if (world.typeAt(x, y) !== WATER || world.waterDepthAt(x, y) < FISH.minDepth) return false;
   if (!lakeAt(world, x, y) || world.rivers?.near?.(x, y, 1)?.length) return false;
   return (world.flowAt?.(x, y, OUT)?.speed ?? 0) < FISH.still;
