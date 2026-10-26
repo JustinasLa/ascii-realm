@@ -68,7 +68,8 @@ const stamps = new WeakMap();
 
 // A tree's footprint, baked once: { x0, y0, w, h, layers } in world cells
 // and rows from its base (Math.floor of its position), layers as bytes of
-// LAYER_UNIT to a layer, 0 outside. Null for a prop without a canopy.
+// LAYER_UNIT to a layer, 0 outside, and `work`, what baking it cost (cells
+// times leaf masses). Null for a prop without a canopy.
 export function canopyStamp(prop, seed = 1) {
   let stamp = stamps.get(prop);
   if (stamp === undefined) {
@@ -141,5 +142,5 @@ function bakeStamp(prop, masses, seed) {
       layers[(dy - y0) * w + dx - x0] = Math.min(255, Math.round(sum * LAYER_UNIT));
     }
   }
-  return { x0, y0, w, h, layers };
+  return { x0, y0, w, h, layers, work: w * h * n };
 }

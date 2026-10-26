@@ -60,8 +60,9 @@ in `trees.js` before the branches split them, or from a builder tree's
 blobs); `world/canopy.js` bakes them once per tree into a stamp of leaf
 layers fixed to world cells (each mass an ellipse seen from above, its edge
 broken by world noise, leaned along the moon's ground direction, clipped to
-the tree's reach), a few new stamps a frame, each fading in. Each layer keeps
-`LEAF_GAIN` of the light, down to `GAIN_FLOOR`. The map is built straight
+the tree's reach). New stamps are baked a few a frame, stopping once that
+frame's baking work (cells times leaf masses) passes `BAKE_WORK`, and fade
+in. Each layer keeps `LEAF_GAIN` of the light, down to `GAIN_FLOOR`. The map is built straight
 after the frame's props are fetched and has three consumers: it multiplies
 the ground drawn so far (skipping water), `Grass.drawRow` scales each root's
 light by it, and `drawFine` scales a rock's or tree's ground cells as they

@@ -11,7 +11,7 @@ import { drawFireLight } from '../src/world/fire.js';
 import { Grass } from '../src/world/grass.js';
 import { DEW, FERN } from '../src/world/grass-roots.js';
 import {
-  FADE_FRAMES, MAX_BAKES_PER_FRAME, NightLight, PAD_BOTTOM, PAD_TOP, PAD_X, SKY_SHARE, skyFactor,
+  BAKE_WORK, FADE_FRAMES, MAX_BAKES_PER_FRAME, NightLight, PAD_BOTTOM, PAD_TOP, PAD_X, SKY_SHARE, skyFactor,
 } from '../src/world/night-light.js';
 import { withCanopy } from '../src/world/prop-art.js';
 import { drawProp } from '../src/world/props.js';
@@ -265,6 +265,28 @@ test('new footprints are baked a few a frame and fade in; a felled tree casts no
   fresh.prepare(view, one, { seed: 9 });
   assert.equal(fresh.active, false);
   assert.equal(fresh.gainAt(100, 30), 1);
+});
+
+test('big new footprints are baked within a frame\'s work budget, at least one a frame', () => {
+  const view = { x0: 0, y0: 0, cols: 300, rows: 80 };
+  // Crowns of eight broad masses: each footprint is far over a fifth of the budget.
+  const wide = [];
+  for (let i = 0; i < 8; i++) wide.push((i - 3.5) * 6, 40 + i, 22, 10);
+  const props = Array.from({ length: 5 }, (_, i) => plainTree(30.5 + i * 60, 40.5, wide));
+  const night = new NightLight();
+  night.prepare(view, props, { seed: 4 });
+  assert.ok(night.bakes >= 1 && night.bakes < props.length, `${night.bakes} baked`);
+  assert.ok(night.work >= BAKE_WORK);
+  assert.equal(props.filter(hasStamp).length, night.bakes);
+  let frames = 1;
+  while (!props.every(hasStamp)) { night.prepare(view, props, { seed: 4 }); frames++; }
+  assert.ok(frames > 1 && frames <= props.length);
+  // A tree with no leaves is settled at no cost.
+  const bare = { kind: 'tree', x: 10.5, y: 10.5 };
+  night.prepare(view, [bare], { seed: 4 });
+  assert.equal(night.bakes, 1);
+  assert.equal(night.work, 0);
+  assert.equal(hasStamp(bare), true);
 });
 
 test('the map is emptied where a tree was once it leaves the view, and can be switched off', () => {
