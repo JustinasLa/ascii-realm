@@ -605,6 +605,20 @@ export class AsciiRenderer {
     return false;
   }
 
+  // Whether a sprite's small letters stand in front of whatever was drawn
+  // into the cell before it, as a tree's crown does over a head under it.
+  fineInFront(x, y) {
+    if (x < 0 || y < 0 || x >= this.cols || y >= this.rows || !this.fineMark?.[y * this.cols + x]) return false;
+    for (let j = 0; j < FINE; j++) {
+      let at = ((y * FINE + j) * this.fineCols + x * FINE) * 4;
+      for (let i = 0; i < FINE; i++, at += 4) {
+        const flags = this.fineBg[at + 3];
+        if (flags >= FINE_SET && !(flags & FINE_UNDER) && (this.fine[at + 3] | ((flags & 15) << 8))) return true;
+      }
+    }
+    return false;
+  }
+
   // Lighting passes reach a sprite's small cells too. Adds a colour to the
   // small cells of a cell, and a share of it to their backdrop.
   lightFine(cell, cr, cg, cb, ground = 0.2) {

@@ -98,9 +98,10 @@ pacing is relearned on every load and never saved. Its constants are `PHONE_PACI
 
 The GPU check that lowers the backing resolution judges a late frame against
 the current cap, so an even 30 is not mistaken for a GPU bottleneck. Fog,
-glyph detail and halos are never reduced. Frame metrics (`game.metrics`) and
-both checks use the real time between frames, while the simulation step stays
-clamped. Desktops and tablets keep a fixed 60 cap.
+glyph detail and halos are never reduced. Frame metrics (`game.metrics`;
+`bubblesMs` is the speech bubbles' share of `workMs`) and both checks use the
+real time between frames, while the simulation step stays clamped. Desktops
+and tablets keep a fixed 60 cap.
 
 The dependency-free CPU scene benchmark remains available with `npm run
 bench`; `node bench/run.mjs path-to-other-checkout` measures another checkout.

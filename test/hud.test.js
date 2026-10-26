@@ -413,3 +413,28 @@ test('an unchanged pouch leaves its DOM untouched, and without a pouch the line 
   other.hud.destroy();
   other.hud.earned(100);
 });
+
+test('the projector reads the screen boxes once per size, again after a resize', (t) => {
+  const listeners = new Map();
+  globalThis.addEventListener = (type, fn) => listeners.set(type, fn);
+  globalThis.removeEventListener = (type, fn) => { if (listeners.get(type) === fn) listeners.delete(type); };
+  t.after(() => { delete globalThis.addEventListener; delete globalThis.removeEventListener; });
+  const { document, hud } = mount(t);
+  const screen = document.getElementById('screen');
+  let reads = 0;
+  let rect = { left: 25, top: 30, width: 800, height: 400 };
+  screen.getBoundingClientRect = () => { reads++; return rect; };
+  hud.boxes = null;
+  const at = () => hud.projector(view).project(110, 210);
+  assert.deepEqual(at(), { x: 125, y: 230, visible: true });
+  at();
+  assert.equal(reads, 1, 'read once while the screen keeps its size');
+  rect = { left: 0, top: 0, width: 800, height: 400 };
+  listeners.get('resize')();
+  assert.deepEqual(at(), { x: 100, y: 200, visible: true }, 'read again after a resize');
+  screen.width = 800;
+  assert.deepEqual(at(), { x: 200, y: 200, visible: true }, 'and when the canvas is given another size');
+  assert.equal(reads, 3);
+  hud.destroy();
+  assert.equal(listeners.has('resize'), false, 'a destroyed HUD stops listening');
+});

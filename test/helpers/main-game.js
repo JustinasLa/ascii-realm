@@ -26,6 +26,7 @@ import { pickStruck, TargetTracker, targetId } from '../../src/core/target.js';
 import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
 import { metresBetween } from '../../src/multiplayer/chat.js';
+import { figureTop } from '../../src/ui/bubbles.js';
 
 const noop = () => {};
 
@@ -186,6 +187,14 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       roster(change) { this.rostered = change; }
       update() { this.updates++; }
     },
+    // What reaches the speech bubbles; the real ones are tested on their own.
+    SpeechBubbles: class {
+      constructor(options) { Object.assign(this, options); this.size = 0; this.received = []; this.rostered = []; this.updates = []; }
+      receive(message, selfId) { this.received.push([message, selfId]); }
+      roster(change) { this.rostered.push(change); }
+      update(anchors, projection, form) { this.updates.push({ anchors, projection, form }); }
+    },
+    figureTop,
     metresBetween,
     Grass: inert(),
     MAX_TREE_HALF_WIDTH: 40, MAX_TREE_HEIGHT: 160, MAX_LEAF_DRIFT: 8,
@@ -259,6 +268,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       resize(width, height, pixelRatio, cellW, cellH) { cellHeight = cellH; }
       draw() {}
       put() {}
+      fineInFront() { return false; }
     },
     buildAtlas: noop, glyph: noop, drawGround: noop, drawSkyReflection: noop,
     drawShadow: noop, drawProp: noop, fineOf: noop, fineBakesPending: () => false, bakeFine: noop, startFineWorkers: noop,
@@ -291,7 +301,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       constructor(options) { this.players = []; this.room = null; Object.assign(this, options); }
       leave() {}
     },
-    RemotePlayers: class { sync() {} update() {} visible() { return []; } },
+    RemotePlayers: class { constructor() { this.peers = new Map(); } sync() {} update() {} visible() { return []; } },
     bindMultiplayerControls: noop,
   };
   // `real` swaps stand-ins for real systems (or for test worlds).
