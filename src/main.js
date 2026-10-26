@@ -21,6 +21,8 @@ import { Animals } from './entities/animals.js';
 import { Birds } from './entities/birds.js';
 import { Fishes } from './entities/fish.js';
 import { AnimalFigures } from './entities/animal-figures.js';
+import { Horses } from './entities/horses.js';
+import { HorseFigures } from './entities/horse-figure.js';
 import { HuntDrops } from './entities/hunt-drops.js';
 import { isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
@@ -685,6 +687,12 @@ const onWorld = (manager) => new Proxy(manager, {
 });
 debug.birds = onWorld(birds);
 debug.fish = onWorld(fishes);
+// Saddled horses with a rider sitting them, standing idle: ?horse=N stands
+// N of them by the spawn. Their figures are set up only once one exists.
+const horses = Horses.fromParams(params, { world, seed, spawn });
+debug.horses = onWorld(horses);
+let horseFigures = null;
+let horseLoad = null;
 // Every noise reaches the animals, the birds and the fish alike.
 const hearWild = (e) => {
   animals.hear(e);
@@ -850,6 +858,8 @@ function fogWalkers(view, missiles) {
   for (const m of foes) walkers.push({ id: m, x: m.x, y: m.y, size: figureScale(m.kind.id) });
   const wild = animals.list.filter((a) => a.alive).sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
   for (const a of wild) walkers.push({ id: a, x: a.x, y: a.y, size: a.kind.height / 1.8 });
+  const ridden = [...horses.list].sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
+  for (const h of ridden) walkers.push({ id: h, x: h.x, y: h.y, size: 2.45 / 1.8 });
   return walkers;
 }
 
@@ -1321,6 +1331,14 @@ function frame(now) {
       predators: animals.list.filter((a) => a.alive && a.predator), view });
     fishes.update(playerDt, world, { player, peers, view });
     animalFigures?.update(playerDt, animals.list, [...birds.list, ...fishes.list]);
+    if (horses.list.length && !horseLoad) {
+      horseLoad = HorseFigures.load({ phone: () => device.phone }).then((f) => {
+        horseFigures = f;
+        debug.horseFigures = f;
+      }).catch((e) => console.error('Could not set up the horses', e));
+    }
+    horses.update(playerDt);
+    horseFigures?.update(playerDt, horses.list);
   }
   // A darting fish now and then breaks the surface in a small ring.
   for (const e of fishes.events) if (e.ring) splashes.ring(e.x, e.y, 0.35, 0, true);
@@ -1369,6 +1387,8 @@ function frame(now) {
   const fishCells = wildCells.filter((f) => f.submerged);
   const birdCells = wildCells.filter((f) => f.small && !f.submerged);
   for (const figure of [...animalCells, ...birdCells]) AnimalFigures.drawShadow(renderer, view, figure);
+  const horseCells = horseFigures ? horseFigures.rasterise(view, horses.list, player) : [];
+  for (const figure of horseCells) AnimalFigures.drawShadow(renderer, view, figure);
 
   // Match the reveal region to this pose, including a jump or sword swing.
   let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
@@ -1459,6 +1479,12 @@ function frame(now) {
   for (const figure of animalCells) {
     reflections.push({ y: figure.animal.y, draw: () => AnimalFigures.draw(renderer, figure, mirror) });
     drawables.push({ y: figure.depth, draw: () => AnimalFigures.draw(renderer, figure, putOutlinedCell) });
+  }
+  // A horse is drawn band by band among the grass rows, each band at the
+  // ground row under it.
+  for (const figure of horseCells) {
+    reflections.push({ y: figure.horse.y, draw: () => HorseFigures.draw(renderer, figure, mirror) });
+    for (const band of figure.bands) drawables.push({ y: band.y, draw: () => HorseFigures.draw(renderer, band, putOutlinedCell) });
   }
   // A bird on the ground is shorter than the grass, so like a lying stack
   // it is drawn a few rows ahead of its own, over the blades in front; one
