@@ -35,8 +35,10 @@ import { Wallet } from './inventory/wallet.js';
 import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
-import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
+import { cleanName, displayName, playerState } from './multiplayer/protocol.js';
 import { RemotePlayers } from './multiplayer/remote-players.js';
+import { autoColour, hexRgb, memberColour, SOLO_COLOR } from './multiplayer/tint.js';
+import { bindTintPicker } from './multiplayer/tint-picker.js';
 import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas, glyph } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
@@ -410,6 +412,15 @@ const renderLobby = bindMultiplayerControls(multiplayer, {
   onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
   onDone: () => canvas.focus({ preventScroll: true }),
 });
+// Your name colour: what you chose (null for Auto), and how the lobby shows
+// you. Your own nameplate shows it solo too.
+let chosenTint = null;
+const selfMember = () => multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
+const tintPicker = bindTintPicker(multiplayer, { doc: document, params: new URLSearchParams(location.search),
+  getName: () => { const self = selfMember(); return self ? displayName(self) : name; },
+  autoColour: () => { const self = selfMember(); return self ? autoColour(self.color) : SOLO_COLOR; },
+  onTint: (tint) => { chosenTint = tint; } });
+debug.tint = tintPicker;
 // Lobby chat. It opens only in a lobby, with nothing else in the way, and
 // Escape closes a panel opened over it before the chat. The builder and the
 // rune wheel are declared further down and are read only once a key or tap
@@ -424,7 +435,7 @@ const chat = new ChatUi({ doc: document, win: window, phone: device, client: mul
     cancelActions();
     if (!open) canvas.focus({ preventScroll: true });
   },
-  colorOf: (member) => colorOf(member.color) });
+  colorOf: memberColour });
 debug.chat = chat;
 // What players say floats over their heads, above the scene and below the HUD.
 // The reduced-motion setting is kept from its change events: reading the
@@ -446,11 +457,11 @@ multiplayer.onRoster = (change) => {
 };
 multiplayer.onChange = (client) => {
   renderLobby?.(client);
+  tintPicker.render();
   chat.setAvailable(!!client.room);
 };
 window.addEventListener('pagehide', () => multiplayer.leave(false));
 window.addEventListener('pageshow', (event) => { if (event.persisted) multiplayer.leave(); });
-const colorOf = (index) => PLAYER_COLORS[index % PLAYER_COLORS.length];
 // Arrows, spears and javelins in flight or lying where they landed.
 const projectiles = new Projectiles();
 debug.projectiles = projectiles;
@@ -869,7 +880,7 @@ function fogWalkers(view, missiles) {
   return walkers;
 }
 
-function drawName(top, color = [212, 218, 228]) {
+function drawName(top, name, color = SOLO_COLOR) {
   if (top === null || top === undefined) return;
   const view = camera.view(renderer);
   const sy = top - 2 - view.y0;
@@ -1530,13 +1541,14 @@ function frame(now) {
   monsters.arrows.drawFlying(renderer, view);
   casting.effects.draw(renderer, view, casting.projectiles);
   drawTrail(renderer, view, player.trail, player.time);
-  const self = multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
-  const ownColor = self ? colorOf(self.color) : undefined;
-  if (model) drawName(model.top, ownColor);
-  else drawNameTag(renderer, view, player, figure, name, ownColor);
+  const self = selfMember();
+  const ownName = self ? displayName(self) : name;
+  const ownColor = self ? memberColour(self) : chosenTint ? hexRgb(chosenTint) : SOLO_COLOR;
+  if (model) drawName(model.top, ownName, ownColor);
+  else drawNameTag(renderer, view, player, figure, ownName, ownColor);
   for (const peer of peers) {
     drawTrail(renderer, view, peer.player.trail, peer.trailTime);
-    drawNameTag(renderer, view, peer.player, peer.figure, peer.name, colorOf(peer.color));
+    drawNameTag(renderer, view, peer.player, peer.figure, displayName(peer), memberColour(peer));
   }
   // Speech bubbles are placed before this frame's HUD writes, so reading
   // the screen's layout for them costs no extra style pass.
@@ -1566,7 +1578,7 @@ function frame(now) {
   renderer.draw(view.offX, view.offY, atmosphere);
   lastFrame = { width: canvas.width, height: canvas.height, cellW: renderer.cellW, cellH: renderer.cellH, view };
   hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)
-    .map((member) => ({ id: member.id, name: member.name, health: member.state.health,
+    .map((member) => ({ id: member.id, name: displayName(member), colour: memberColour(member), health: member.state.health,
       maxHealth: player.vitals.maxHealth,
       note: `${Math.round(metresBetween(member.state, player))}m` })) : []);
   markSpellHits();

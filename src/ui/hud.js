@@ -431,8 +431,9 @@ export class Hud {
     text(this.nameNode, String(name || 'Wanderer').slice(0, 24));
   }
 
-  // Party members' frames, below the player's own: [{ name, health, maxHealth,
-  // note }]. An empty list hides the party.
+  // Party members' frames, below the player's own: [{ name, colour, health,
+  // maxHealth, note }], `colour` being the name's [r, g, b]. An empty list
+  // hides the party.
   setParty(members) {
     const list = Array.isArray(members) ? members : [];
     const signature = JSON.stringify(list.map((m) => [m.id, m.name]));
@@ -442,16 +443,21 @@ export class Hud {
       this.partyFrames = list.map((member) => {
         const frame = element('div', 'hud-frame hud-member');
         const title = element('div', 'hud-name');
+        const name = element('span', 'hud-name-text');
+        const note = element('span', 'hud-name-note');
+        title.append(name, note);
         const health = makeVital(`${member.name} health`, 'health', 'HP');
         frame.append(title, health.node);
         this.party.append(frame);
-        return { title, health };
+        return { name, note, health };
       });
       this.partyTab.hidden = list.length === 0;
     }
     list.forEach((member, index) => {
       const frame = this.partyFrames[index];
-      text(frame.title, `${String(member.name || 'Wanderer').slice(0, 24)}${member.note ? ` · ${member.note}` : ''}`);
+      text(frame.name, String(member.name || 'Wanderer').slice(0, 29));
+      style(frame.name, 'color', Array.isArray(member.colour) ? `rgb(${member.colour.join(', ')})` : '');
+      text(frame.note, member.note ? ` · ${member.note}` : '');
       this.updateVital(frame.health, member.health, member.maxHealth);
     });
   }

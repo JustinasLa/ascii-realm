@@ -26,6 +26,8 @@ import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
 import { metresBetween } from '../../src/multiplayer/chat.js';
 import { figureTop } from '../../src/ui/bubbles.js';
+import { displayName } from '../../src/multiplayer/protocol.js';
+import { autoColour, hexRgb, memberColour, SOLO_COLOR } from '../../src/multiplayer/tint.js';
 
 const noop = () => {};
 
@@ -286,7 +288,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       update() {}
     },
     bindAudioControls: () => Object.assign(() => {}, { updateSong: noop }),
-    cleanName: (value) => String(value), PLAYER_COLORS: [[1, 2, 3]], playerState: () => ({}),
+    cleanName: (value) => String(value), playerState: () => ({}),
+    displayName, autoColour, hexRgb, memberColour, SOLO_COLOR,
+    // Records what the page tells the name-colour picker; the real one is
+    // tested on its own.
+    bindTintPicker: (client, options) => ({ ...options, renders: 0, render() { this.renders++; } }),
     MultiplayerClient: class {
       constructor(options) { this.players = []; this.room = null; Object.assign(this, options); }
       leave() {}

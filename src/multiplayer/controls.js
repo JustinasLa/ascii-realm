@@ -1,4 +1,5 @@
-import { cleanCode, cleanName } from './protocol.js';
+import { cleanCode, cleanName, displayName } from './protocol.js';
+import { memberColour } from './tint.js';
 
 export function bindMultiplayerControls(client, { name, seed, onName, onDone = () => {}, document: doc = document,
   location: loc = location, history: navigation = history } = {}) {
@@ -61,7 +62,7 @@ export function bindMultiplayerControls(client, { name, seed, onName, onDone = (
   invite.addEventListener('click', () => {
     if (!client.room) return;
     const url = new URL(loc.href);
-    for (const key of ['name', 'debug', 'seed']) url.searchParams.delete(key);
+    for (const key of ['name', 'tint', 'debug', 'seed']) url.searchParams.delete(key);
     url.searchParams.set('room', client.room.code);
     if (serverInput.value.trim()) url.searchParams.set('server', client.options.server);
     else url.searchParams.delete('server');
@@ -83,7 +84,12 @@ export function bindMultiplayerControls(client, { name, seed, onName, onDone = (
     party.replaceChildren();
     for (const member of client.players) {
       const item = doc.createElement('li');
-      item.textContent = `${member.name}${member.id === client.id ? ' (you)' : ''}`;
+      const label = doc.createElement('span');
+      label.className = 'lobby-player-name';
+      label.textContent = displayName(member);
+      label.style.color = `rgb(${memberColour(member).join(', ')})`;
+      item.append(label);
+      if (member.id === client.id) item.append(' (you)');
       party.append(item);
     }
     // Refreshing keeps the code; resume tokens never appear in URLs or rosters.

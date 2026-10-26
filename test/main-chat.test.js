@@ -74,7 +74,8 @@ test('lobby changes, relayed lines and notices reach the chat; frames fade it', 
   assert.deepEqual(chat.noticed, { code: 'rate' });
   multiplayer.onRoster({ left: 'self' });
   assert.deepEqual(chat.rostered, { left: 'self' });
-  assert.deepEqual(chat.colorOf({ color: 0 }), [1, 2, 3]);
+  assert.deepEqual(chat.colorOf({ color: 1, tint: null }), [146, 198, 235], "a member without a name colour shows their automatic one");
+  assert.deepEqual(chat.colorOf({ color: 1, tint: "#ff5555" }), [255, 85, 85]);
   const updates = chat.updates;
   harness.frame();
   assert.equal(chat.updates, updates + 1);
@@ -168,4 +169,60 @@ test('until the 3D character loads, the own bubble keeps above the shape-built f
   bubbles.size = 1;
   harness.frame();
   assert.equal(bubbles.updates.at(-1).anchors.get('self').nameRow, Math.floor(player.y - 23.4) - 2);
+});
+
+test('nameplates, party frames and the picker show each player\'s name colour and tag', async () => {
+  const pending = () => new Promise(() => {});
+  const tags = [];
+  const harness = await loadGame(undefined, { real: { dressFigure: () => [{ y0: -20 }],
+    ModelFigure: { load: pending, library: pending },
+    drawNameTag: (r, view, state, parts, name, color) => tags.push({ state, name, color }) } });
+  const { game } = harness;
+  const { multiplayer, tint, player } = game;
+  harness.frame();
+  assert.deepEqual(tags.at(-1).color, [212, 218, 228], 'solo on Auto, as before');
+  assert.equal(tint.getName(), tags.at(-1).name);
+  assert.deepEqual(tint.autoColour(), [212, 218, 228]);
+  tint.onTint('#ffaa00');
+  harness.frame();
+  assert.deepEqual(tags.at(-1).color, [255, 170, 0], 'your chosen colour shows solo too');
+
+  const state = { x: player.x + 3, y: player.y, health: 50 };
+  multiplayer.room = { code: 'ABC234' };
+  multiplayer.id = 'a1';
+  multiplayer.players = [{ id: 'a1', name: 'Ash', tag: 2, color: 1, tint: null, state },
+    { id: 'b2', name: 'Bryn', tag: null, color: 0, tint: '#ff5555', state }];
+  const bryn = { player: { x: state.x, y: state.y }, figure: [{ y0: -20 }], name: 'Bryn', tag: null, color: 0, tint: '#ff5555' };
+  game.remotePlayers.visible = () => [bryn];
+  let party = null;
+  game.hud.setParty = (members) => { party = members; };
+  const renders = tint.renders;
+  multiplayer.onChange(multiplayer);
+  assert.equal(tint.renders, renders + 1, 'the Auto swatch follows the lobby colour');
+  assert.equal(tint.getName(), 'Ash (2)');
+  assert.deepEqual(tint.autoColour(), [146, 198, 235]);
+  tags.length = 0;
+  harness.frame();
+  assert.deepEqual(tags.map((t) => [t.name, t.color]), [['Ash (2)', [146, 198, 235]], ['Bryn', [255, 85, 85]]],
+    'in a lobby your nameplate shows what the lobby shows; a friend\'s shows their choice');
+  assert.deepEqual(party.map((m) => [m.name, m.colour]), [['Bryn', [255, 85, 85]]]);
+  multiplayer.players[1] = { ...multiplayer.players[1], tint: null, tag: 3 };
+  harness.frame();
+  assert.deepEqual(party.map((m) => [m.name, m.colour]), [['Bryn (3)', [169, 212, 174]]]);
+
+});
+
+test('the 3D character\'s nameplate is drawn in the name colour at its own top row', async () => {
+  const harness = await loadGame();
+  const { game } = harness;
+  game.model.top = 40;
+  const puts = [];
+  game.renderer.put = (x, y, g, ...color) => puts.push([y, color.join()]);
+  game.renderer.putBg = () => {};
+  game.tint.onTint('#55ffff');
+  harness.frame();
+  const name = puts.filter(([y]) => y === 38);
+  assert.equal(name.length, 'Kael'.length);
+  assert.ok(name.every(([, color]) => color === '85,255,255'));
+  delete game.model.top;
 });

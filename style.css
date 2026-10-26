@@ -175,6 +175,23 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 #lobby-players { list-style: none; padding: 0; margin: 4px 0 8px; }
 #lobby-players li { margin: 4px 0; overflow-wrap: anywhere; }
 #lobby-players li::before { content: "> "; color: var(--quiet); }
+/* Name colours: each a framed cell of letters in that colour on the dark,
+   as a name is seen; the chosen one is bracketed. */
+#lobby-tint { min-width: 0; padding: 5px 0 0; border: 0; border-top: 1px solid var(--line); }
+#lobby-tint legend { padding: 0 4px 0 0; color: var(--quiet); font-size: 11px; }
+#lobby-tint-label { color: var(--ink); }
+#lobby-tint-swatches { display: grid; grid-template-columns: repeat(9, 28px); gap: 3px; margin-top: 4px; }
+#panel-dock .lobby-tint-swatch { display: grid; place-items: center; width: 28px; height: 28px; min-height: 0; padding: 0; background: var(--solid); border-color: var(--line); font: 600 11px/1 var(--font); }
+#panel-dock .lobby-tint-swatch:hover { background: var(--solid); border-color: var(--frame); }
+#panel-dock .lobby-tint-swatch[aria-checked="true"] { border-color: var(--ink); }
+.lobby-tint-swatch[aria-checked="true"] .lobby-tint-sample::before { content: "["; color: var(--ink); }
+.lobby-tint-swatch[aria-checked="true"] .lobby-tint-sample::after { content: "]"; color: var(--ink); }
+.lobby-tint-swatch:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
+.lobby-tint-sample { color: var(--quiet); white-space: nowrap; letter-spacing: -1px; }
+/* Rendered, so its own picker opens beside the swatches, but out of sight. */
+#lobby-tint-custom { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+#lobby-tint-preview { margin: 8px 0 4px; padding: 3px 6px; background: rgb(10, 9, 19); font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+#lobby-tint-status { min-height: 1.4em; margin: 4px 0 0; color: var(--quiet); }
 .control-list { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; padding: 0; font-size: 11px; }
 .control-list dt { color: var(--ink); }
 .control-list dd { margin: 0; color: var(--muted); }
@@ -406,7 +423,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 #chat { position: fixed; z-index: 11; left: max(12px, env(safe-area-inset-left)); bottom: max(12px, env(safe-area-inset-bottom)); width: min(420px, calc(100vw - 24px)); font: 12px/16px var(--font); pointer-events: none; }
 #chat[hidden], #chat-bar[hidden], #chat-open[hidden] { display: none !important; }
 #chat-log { display: flex; flex-direction: column; align-items: flex-start; gap: 0; margin: 0; padding: 0; list-style: none; overflow: hidden; }
-.chat-line { max-width: 100%; padding: 0 5px; background: rgba(6, 9, 10, 0.62); color: var(--ink); overflow-wrap: anywhere; }
+.chat-line { max-width: 100%; padding: 0 5px; background: var(--surface); color: var(--ink); overflow-wrap: anywhere; }
 #chat:not(.open) .chat-line.faded, #chat:not(.open) .chat-line:nth-last-child(n+11) { display: none; }
 #chat.open { z-index: 14; pointer-events: auto; }
 #chat.open #chat-log { max-height: calc(20 * 16px + 8px); padding: 4px 0; overflow-y: auto; background: var(--surface); border: 1px solid var(--frame); overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); }
@@ -555,6 +572,9 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat-bar :is(select, input, button) { min-height: 44px; }
   #chat-bar input { font-size: 16px; }
   #chat-bar select { max-width: 7.5em; font-size: 12px; }
+  /* Name colours: 44px cells, six to a row. */
+  #lobby-tint-swatches { grid-template-columns: repeat(6, 44px); gap: 6px; }
+  #panel-dock .lobby-tint-swatch { width: 44px; height: 44px; font-size: 13px; }
   /* The inventory is a full-screen sheet too. */
   .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
   .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
