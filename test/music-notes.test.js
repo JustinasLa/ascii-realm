@@ -97,11 +97,42 @@ test('glyphs off the screen are skipped', () => {
   const notes = new MusicNotes();
   notes.add({ x: 5, y: 40, top: 30, midi: 60 });
   const [note] = notes.list;
-  for (const view of [{ x0: 6, y0: 0 }, { x0: -40, y0: 0 }, { x0: 0, y0: 5 }, { x0: 0, y0: -60 }]) {
+  // Off to either side, with the head above the top edge too, and below.
+  for (const view of [{ x0: 6, y0: 0 }, { x0: -40, y0: 0 }, { x0: 0, y0: 31 }, { x0: 0, y0: 31, offY: 3 },
+    { x0: 0, y0: -60 }]) {
     const r = recorder();
     notes.draw(r, view, note);
     assert.deepEqual(r.writes, [], JSON.stringify(view));
   }
+});
+
+test('on a short screen the glyph is drawn on the top row while the head is in view', () => {
+  const notes = new MusicNotes();
+  notes.add({ x: 5, y: 40, top: 30, midi: 60 });
+  const [note] = notes.list;
+  const drawn = (view) => {
+    const r = recorder();
+    notes.draw(r, view, note);
+    return r.writes.map(([x, y]) => [x, y]);
+  };
+  // 2 m above the head is row 4: above a view starting at row 5 or 20.
+  assert.deepEqual(drawn({ x0: 0, y0: 5 }), [[5, 0]]);
+  assert.deepEqual(drawn({ x0: 0, y0: 20.6 }), [[5, 0]]);
+  // A view scrolled part way into its top row draws on the first whole row.
+  assert.deepEqual(drawn({ x0: 0, y0: 5, offY: 12 }), [[5, 1]]);
+  // The head on the top whole row still counts as in view.
+  assert.deepEqual(drawn({ x0: 0, y0: 30 }), [[5, 0]]);
+  assert.deepEqual(drawn({ x0: 0, y0: 29, offY: 2 }), [[5, 1]]);
+  // Its world position is unchanged, and so is its row where it fits.
+  assert.equal(note.row, 4);
+  assert.deepEqual(drawn({ x0: 0, y0: 0 }), [[5, 4]]);
+  assert.deepEqual(drawn({ x0: 0, y0: 3, offY: 5 }), [[5, 1]]);
+  assert.deepEqual(drawn({ x0: 0, y0: 2, offY: 5 }), [[5, 2]]);
+  // Still rising where it fits, held on the top row where it does not.
+  notes.update(0.1);
+  const risen = Math.floor(4 - noteRise(0.1) * SCALE);
+  assert.deepEqual(drawn({ x0: 0, y0: -20 }), [[5, risen + 20]]);
+  assert.deepEqual(drawn({ x0: 0, y0: 5 }), [[5, 0]]);
 });
 
 test('glyphs are capped, oldest first', () => {

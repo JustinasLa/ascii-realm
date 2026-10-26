@@ -64,9 +64,21 @@ export class MusicNotes {
     return Math.floor(note.row - noteRise(note.age) * SCALE);
   }
 
+  /**
+   * The screen row the glyph is drawn on. On a short screen 2 m above the
+   * head can be above the top edge: while the head itself is in view, the
+   * glyph is drawn on the top whole row instead. Its world row is unchanged.
+   */
+  screenRow(view, note) {
+    const y0 = Math.floor(view.y0);
+    const y = this.rowOf(note) - y0;
+    const top = view.offY > 0 ? 1 : 0;
+    return y < top && note.row + NOTE_HEIGHT * SCALE - y0 >= top ? top : y;
+  }
+
   draw(r, view, note) {
     const x = note.x - Math.floor(view.x0);
-    const y = this.rowOf(note) - Math.floor(view.y0);
+    const y = this.screenRow(view, note);
     if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) return;
     r.layer(x, y, NOTE, ...note.colour);
   }

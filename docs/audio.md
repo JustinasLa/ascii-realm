@@ -408,7 +408,8 @@ one glyph `d` 2 m above the performer's head, coloured by pitch like a note
 block's note: its colour is the note-block note of the same pitch, (MIDI - 54)
 mod 24, from the 25-colour note-block table (`src/world/music-notes.js`). A
 chord takes its root's colour. The glyph rises about half a metre and is gone
-after 0.3 s, at most 48 at once.
+after 0.3 s, at most 48 at once. On a screen too short for it, while the
+head is in view, it is drawn on the top row instead.
 
 ## Authoring synthesized sounds
 
