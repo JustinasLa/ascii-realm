@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
-import { cleanCode, cleanName, cleanSeed, lobbyServerUrl, playerState, readPlayerState,
-  validCode } from '../src/multiplayer/protocol.js';
+import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, playerState, readMembers,
+  readPlayerState, validCode } from '../src/multiplayer/protocol.js';
 import { blendState, RemotePlayers } from '../src/multiplayer/remote-players.js';
 
 test('player snapshots preserve poses without sharing mutable arrays or private fields', () => {
@@ -104,4 +104,28 @@ test('stale remote sword trails expire instead of growing while a tab is paused'
   assert.ok(remotes.peers.get('friend').player.trail.length > 0);
   remotes.update(0.1, 1400);
   assert.equal(remotes.peers.get('friend').player.trail.length, 0);
+});
+
+test('friends carry their name colour and tag, and only those near the view are drawn', () => {
+  const remotes = new RemotePlayers();
+  const near = playerState(new Player(10, 10));
+  const far = playerState(new Player(500, 10));
+  remotes.sync([{ id: 'a', name: 'Ash', tag: 2, color: 1, tint: '#ff5555', state: near },
+    { id: 'b', name: 'Bryn', tag: null, color: 2, tint: null, state: far }], 'self', 1000);
+  const ash = remotes.peers.get('a');
+  assert.deepEqual([ash.name, ash.tag, ash.color, ash.tint], ['Ash', 2, 1, '#ff5555']);
+  assert.equal(displayName(ash), 'Ash (2)');
+  assert.deepEqual(remotes.visible({ x0: 0, y0: 0, cols: 80, rows: 60 }), [ash]);
+  remotes.sync([{ id: 'a', name: 'Ash', tag: 2, color: 1, tint: null, state: near }], 'self', 1100);
+  assert.equal(ash.tint, null, 'a cleared colour follows');
+});
+
+test('tags and member colours are cleaned', () => {
+  for (const tag of [2, 10, 99]) assert.equal(cleanTag(tag), tag);
+  for (const tag of [0, 1, 100, 2.5, '2', null, undefined, NaN]) assert.equal(cleanTag(tag), null);
+  assert.equal(displayName({ name: 'Ash', tag: null }), 'Ash');
+  assert.equal(displayName({ name: 'Ash', tag: 12 }), 'Ash (12)');
+  const state = playerState(new Player(0, 0));
+  const [member] = readMembers([{ id: 'ab', name: 'Ash', color: 1, tint: '#0000AA', tag: 3, state }]);
+  assert.deepEqual([member.tint, member.tag], ['#4a89ff', 3]);
 });

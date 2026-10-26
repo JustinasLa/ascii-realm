@@ -74,7 +74,8 @@ test('lobby changes, relayed lines and notices reach the chat; frames fade it', 
   assert.deepEqual(chat.noticed, { code: 'rate' });
   multiplayer.onRoster({ left: 'self' });
   assert.deepEqual(chat.rostered, { left: 'self' });
-  assert.deepEqual(chat.colorOf({ color: 0 }), [1, 2, 3]);
+  assert.deepEqual(chat.colorOf({ color: 1, tint: null }), [146, 198, 235], "a member without a name colour shows their automatic one");
+  assert.deepEqual(chat.colorOf({ color: 1, tint: "#ff5555" }), [255, 85, 85]);
   const updates = chat.updates;
   harness.frame();
   assert.equal(chat.updates, updates + 1);
@@ -169,3 +170,81 @@ test('until the 3D character loads, the own bubble keeps above the shape-built f
   harness.frame();
   assert.equal(bubbles.updates.at(-1).anchors.get('self').nameRow, Math.floor(player.y - 23.4) - 2);
 });
+
+test('nameplates, party frames and the picker show each player\'s name colour and tag', async () => {
+  const pending = () => new Promise(() => {});
+  const harness = await loadGame(undefined, { real: { dressFigure: () => [{ y0: -20 }],
+    ModelFigure: { load: pending, library: pending } } });
+  const { game } = harness;
+  const { multiplayer, tint, player, nameplates } = game;
+  // Plain copies: the frame runs in a context of its own.
+  const plates = () => JSON.parse(JSON.stringify(nameplates.updates.at(-1).plates));
+  harness.frame();
+  assert.deepEqual(plates(), [{ key: 'self', x: player.x, row: Math.floor(player.y - 20) - 2, depth: player.y,
+    name: 'Kael', tag: null, colour: [212, 218, 228] }], 'solo on Auto, as before, two rows over the figure');
+  assert.equal(tint.getName(), plates()[0].name);
+  assert.deepEqual(tint.autoColour(), [212, 218, 228]);
+  tint.onTint('#ffaa00');
+  harness.frame();
+  assert.deepEqual(plates()[0].colour, [255, 170, 0], 'your chosen colour shows solo too');
+
+  const state = { x: player.x + 3, y: player.y, health: 50 };
+  multiplayer.room = { code: 'ABC234' };
+  multiplayer.id = 'a1';
+  multiplayer.players = [{ id: 'a1', name: 'Ash', tag: 2, color: 1, tint: null, state },
+    { id: 'b2', name: 'Bryn', tag: null, color: 0, tint: '#ff5555', state }];
+  const bryn = { id: 'b2', player: { x: state.x, y: state.y + 4 }, figure: [], name: 'Bryn', tag: null,
+    color: 0, tint: '#ff5555' };
+  game.remotePlayers.visible = () => [bryn];
+  let party = null;
+  game.hud.setParty = (members) => { party = members; };
+  const renders = tint.renders;
+  multiplayer.onChange(multiplayer);
+  assert.equal(tint.renders, renders + 1, 'the Auto swatch follows the lobby colour');
+  assert.equal(tint.getName(), 'Ash (2)');
+  assert.deepEqual(tint.autoColour(), [146, 198, 235]);
+  harness.frame();
+  assert.deepEqual(plates().map(({ key, name, tag, colour }) => [key, name, tag, colour]),
+    [['self', 'Ash', 2, [146, 198, 235]], ['b2', 'Bryn', null, [255, 85, 85]]],
+    'in a lobby your nameplate shows what the lobby shows; a friend\'s shows their choice');
+  assert.equal(plates()[1].row, Math.floor(state.y + 4 - 20) - 2, 'a friend\'s two rows over their dressed figure');
+  assert.equal(plates()[1].x, state.x);
+  assert.deepEqual(plates().map((plate) => plate.depth), [player.y, state.y + 4], 'each ordered by their feet');
+  assert.deepEqual(party.map((m) => [m.name, m.tag, m.colour]), [['Bryn', null, [255, 85, 85]]]);
+  multiplayer.players[1] = { ...multiplayer.players[1], tint: null, tag: 3 };
+  bryn.tag = 3;
+  harness.frame();
+  assert.deepEqual(party.map((m) => [m.name, m.tag, m.colour]), [['Bryn', 3, [169, 212, 174]]],
+    'the tag goes to the frame on its own, to show whole after a long name');
+  assert.equal(plates()[1].tag, 3);
+});
+
+test('names are never drawn into the scene, so its fog and dark edges never reach them', async () => {
+  const harness = await loadGame();
+  const { game } = harness;
+  const puts = [];
+  game.renderer.put = (...cell) => puts.push(cell);
+  game.renderer.putBg = (...cell) => puts.push(cell);
+  harness.frame();
+  assert.equal(puts.length, 0);
+  const { projection } = game.nameplates.updates.at(-1);
+  assert.equal(projection, game.bubbles.updates.at(-1)?.projection ?? projection, 'the same projection as the bubbles');
+});
+
+test('the 3D character\'s nameplate shows in the name colour at its own top row, and not before it has one', async () => {
+  const harness = await loadGame();
+  const { game } = harness;
+  harness.frame();
+  assert.equal(game.nameplates.updates.at(-1).plates.length, 0, 'no top yet, no name');
+  game.model.top = 40;
+  game.tint.onTint('#55ffff');
+  game.bubbles.size = 1;
+  harness.frame();
+  const [plate] = game.nameplates.updates.at(-1).plates;
+  assert.deepEqual(JSON.parse(JSON.stringify(plate)),
+    { key: 'self', x: game.player.x, row: 38, depth: game.player.y, name: 'Kael', tag: null, colour: [85, 255, 255] });
+  assert.equal(game.bubbles.updates.at(-1).anchors.get('self').nameRow, plate.row, 'the bubble keeps above it');
+  assert.equal(game.bubbles.updates.at(-1).projection, game.nameplates.updates.at(-1).projection);
+  delete game.model.top;
+});
+

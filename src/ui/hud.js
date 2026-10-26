@@ -431,27 +431,38 @@ export class Hud {
     text(this.nameNode, String(name || 'Wanderer').slice(0, 24));
   }
 
-  // Party members' frames, below the player's own: [{ name, health, maxHealth,
-  // note }]. An empty list hides the party.
+  // Party members' frames, below the player's own: [{ name, tag, colour,
+  // health, maxHealth, note }], `tag` being the number that tells same-named
+  // players apart and `colour` the name's [r, g, b]. A long name is cut
+  // short, but its tag always shows in full. An empty list hides the party.
   setParty(members) {
     const list = Array.isArray(members) ? members : [];
-    const signature = JSON.stringify(list.map((m) => [m.id, m.name]));
+    const signature = JSON.stringify(list.map((m) => [m.id, m.name, m.tag]));
     if (signature !== this.partySignature) {
       this.partySignature = signature;
       this.party.replaceChildren();
       this.partyFrames = list.map((member) => {
         const frame = element('div', 'hud-frame hud-member');
         const title = element('div', 'hud-name');
-        const health = makeVital(`${member.name} health`, 'health', 'HP');
+        const name = element('span', 'hud-name-text');
+        const tag = element('span', 'hud-name-tag');
+        const note = element('span', 'hud-name-note');
+        title.append(name, tag, note);
+        const health = makeVital(`${member.name}${member.tag ? ` (${member.tag})` : ''} health`, 'health', 'HP');
         frame.append(title, health.node);
         this.party.append(frame);
-        return { title, health };
+        return { name, tag, note, health };
       });
       this.partyTab.hidden = list.length === 0;
     }
     list.forEach((member, index) => {
       const frame = this.partyFrames[index];
-      text(frame.title, `${String(member.name || 'Wanderer').slice(0, 24)}${member.note ? ` · ${member.note}` : ''}`);
+      const colour = Array.isArray(member.colour) ? `rgb(${member.colour.join(', ')})` : '';
+      text(frame.name, String(member.name || 'Wanderer').slice(0, 24));
+      style(frame.name, 'color', colour);
+      text(frame.tag, member.tag ? ` (${member.tag})` : '');
+      style(frame.tag, 'color', colour);
+      text(frame.note, member.note ? ` · ${member.note}` : '');
       this.updateVital(frame.health, member.health, member.maxHealth);
     });
   }

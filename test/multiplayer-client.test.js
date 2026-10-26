@@ -122,6 +122,7 @@ test('a brief disconnect rejoins the same code with its private resume token', a
   assert.equal(second.sent[0].type, 'join');
   assert.equal(second.sent[0].code, 'ABC234');
   assert.equal(second.sent[0].token, 'private-token');
+  assert.equal(second.sent[0].tint, null, 'a resume always says the colour, even Auto');
   second.message({ ...joined(), resumed: true });
   assert.equal(client.status, 'online');
   assert.equal(client.retry, 0);
@@ -203,6 +204,56 @@ test('malformed lobby members are dropped and names, colours and seeds are clean
   assert.equal(client.players[0].color, 0);
   socket.message({ type: 'joined', ...joined(), id: { toString: () => 'a1' } });
   assert.equal(client.id, 'a1');
+  socket.message({ ...joined(), players: [{ ...good, tint: '#000000', tag: 2 }, { ...good, id: 'b2', tint: 'red', tag: '3' },
+    { ...good, id: 'c3', tint: { toString: () => '#ff5555' }, tag: 1 }, { ...good, id: 'd4' }] });
+  assert.deepEqual(client.players.map((p) => [p.tint, p.tag]), [['#8d8d8d', 2], [null, null], [null, null], [null, null]],
+    'a server cannot send an unreadable or malformed colour, or a strange tag');
+});
+
+test('the name colour goes with every join and straight to the lobby once in one', async (t) => {
+  const client = setup(t, { retryDelay: 5 });
+  client.setTint('#FF5555');
+  assert.equal(client.tint, '#ff5555', 'kept while solo');
+  client.setTint('dark_aqua');
+  assert.equal(client.tint, null, 'only hex is a colour here');
+  client.setTint('#000000');
+  assert.equal(client.tint, '#8d8d8d');
+  client.connect({ mode: 'create', name: 'Kael', seed: 7 });
+  const socket = Socket.instances[0];
+  client.setTint('#ffaa00');
+  assert.equal(socket.sent.length, 0, 'nothing is sent before the socket opens');
+  socket.open();
+  assert.equal(socket.sent[0].type, 'create');
+  assert.equal(socket.sent[0].tint, '#ffaa00');
+  socket.message(joined());
+  client.setTint(null);
+  assert.deepEqual(socket.sent.at(-1), { type: 'tint', tint: null });
+  client.leave();
+  client.connect({ mode: 'join', name: 'Kael', code: 'ABC234' });
+  Socket.instances[1].open();
+  assert.equal(Socket.instances[1].sent[0].type, 'join');
+  assert.equal(Socket.instances[1].sent[0].tint, null);
+});
+
+test('a new name colour or tag redraws the lobby panel but is no join', (t) => {
+  const changes = [];
+  const rosters = [];
+  const client = setup(t, { onChange: () => changes.push(client.players.map((p) => p.tint)) });
+  client.onRoster = (change) => rosters.push(change);
+  client.connect({ mode: 'create' });
+  const socket = Socket.instances[0];
+  socket.open();
+  socket.message(joined());
+  const self = joined().self;
+  const count = changes.length;
+  socket.message({ type: 'snapshot', time: 2, players: [self] });
+  assert.equal(changes.length, count, 'nothing new');
+  socket.message({ type: 'snapshot', time: 3, players: [{ ...self, tint: '#55ffff' }] });
+  assert.equal(changes.length, count + 1);
+  assert.deepEqual(changes.at(-1), ['#55ffff']);
+  socket.message({ type: 'snapshot', time: 4, players: [{ ...self, tint: '#55ffff', tag: 2 }] });
+  assert.equal(changes.length, count + 2);
+  assert.equal(rosters.length, 1, 'only the first roster was reported');
 });
 
 test('chat, toggles and casts are sent only while online and not backed up', (t) => {
@@ -269,7 +320,9 @@ test('the roster reports who joins and leaves, but not who was already there', (
   assert.equal(changes.length, 1, 'Rowan was already here');
   const bryn = { ...rowan, id: 'c3', name: 'Bryn' };
   socket.message({ type: 'snapshot', time: 3, players: [joined().self, bryn] });
-  assert.deepEqual(changes.at(-1), { joined: [client.players[1]], left: [{ id: 'b2', name: 'Rowan' }] });
+  const rowanBefore = changes.at(-1).left[0];
+  assert.deepEqual(changes.at(-1), { joined: [client.players[1]], left: [rowanBefore] });
+  assert.deepEqual([rowanBefore.id, rowanBefore.name, rowanBefore.tag], ['b2', 'Rowan', null], 'who left, as last seen');
   socket.message({ type: 'snapshot', time: 4, players: [joined().self, { ...bryn, name: 'Bryn the Bold' }] });
   assert.equal(changes.length, 2, 'a new name is no join or leave');
   client.leave();

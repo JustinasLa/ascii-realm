@@ -51,7 +51,7 @@ export function createChatRelay({ send, now = Date.now }) {
           if (!out) continue;
         }
       }
-      send(listener.socket, { type: 'chat', seq, channel, from: speaker.id, name: speaker.name, text: out.text,
+      send(listener.socket, { type: 'chat', seq, channel, from: speaker.id, name: speaker.name, tag: speaker.tag, text: out.text,
         clarity: Math.round(clarity * 100) / 100, muffled: out.muffled });
       if (!self) heard++;
     }

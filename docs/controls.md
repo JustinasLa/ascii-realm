@@ -51,6 +51,9 @@ local speech (**Say**) until you pick another in the bar's list or with
 | `/me` | Emote: `* Name waves` | 20 m |
 | `/scene` | Scene description: `[Scene] Name: *message*` | 20 m |
 
+Names show in each speaker's name colour, except in LOOC and OOC lines, where
+they are plain.
+
 Speech (Say, Shout, Yell, Whisper) is heard clearly up to 60 % of its reach
 and blurs beyond that: words break into `th...`, lose sounds and trail off,
 until a listener near the edge hears only `*muffled voices*`. You always see

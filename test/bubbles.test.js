@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { drawNameTag } from '../src/entities/figure.js';
 import { SCALE } from '../src/entities/rig.js';
 import { MAX_CHAT_LENGTH } from '../src/multiplayer/chat.js';
 import { anchorRow, bobRows, bottomRule, BUBBLES, bubbleRows, figureTop, followShare, rowBudget, SpeechBubbles,
@@ -199,14 +198,6 @@ test('the follow moves 0.35 of the way every twentieth of a second at any frame 
   const twice = 1 - (1 - followShare(0.025)) ** 2;
   assert.ok(Math.abs(twice - 0.35) < 1e-9);
   assert.equal(followShare(0), 0);
-});
-
-test('the nameplate row the bubbles guard is the one the nameplate is drawn on', () => {
-  for (const [y, parts] of [[100.4, [{ y0: -23.2 }, { y0: -10 }]], [57, []], [80.9, [{ y0: -0.5 }]]]) {
-    const rows = new Set();
-    drawNameTag({ put: (x, row) => rows.add(row), putBg() {} }, { x0: 0, y0: 0 }, { x: 10, y }, parts, 'Ash');
-    assert.deepEqual([...rows], [Math.floor(y + figureTop(parts)) - 2]);
-  }
 });
 
 test('only spoken channels make a bubble, keyed by the speaker, own lines as self', () => {

@@ -1,6 +1,7 @@
 import { readChat, readChatNotice } from './chat.js';
 import { cleanCode, cleanName, cleanSeed, lobbyServerUrl, MAX_PLAYERS, PROTOCOL_VERSION, readMembers,
   UPDATE_MS, validCode } from './protocol.js';
+import { parseTint } from './tint.js';
 
 const validId = (id) => typeof id === 'string' && /^[0-9a-f]{1,32}$/.test(id);
 
@@ -16,6 +17,12 @@ export class MultiplayerClient {
   // wasn't sent at all.
   sendChat(channel, text) { return this.sendNow({ type: 'chat', channel, text }); }
   toggleChat(channel) { return this.sendNow({ type: 'chat-toggle', channel }); }
+  // The player's name colour, or null for the automatic one. It goes with
+  // every join, and straight to the lobby when it changes there.
+  setTint(tint) {
+    this.tint = parseTint(tint);
+    this.sendNow({ type: 'tint', tint: this.tint });
+  }
   constructor({ getState, onJoin = () => {}, onSnapshot = () => {}, onChange = () => {},
     WebSocketImpl = globalThis.WebSocket, baseUrl = globalThis.location?.href,
     connectionTimeout = 8000, retryDelay = 1000 } = {}) {
@@ -28,6 +35,7 @@ export class MultiplayerClient {
     this.id = null;
     this.token = null;
     this.retry = 0;
+    this.tint = null;
   }
 
   connect({ mode, name, seed, code, server = '' }) {
@@ -71,9 +79,9 @@ export class MultiplayerClient {
     socket.addEventListener('open', () => {
       if (this.socket !== socket) return;
       socket.send(JSON.stringify(resuming ? { type: 'join', version: PROTOCOL_VERSION,
-        code: this.room.code, token: this.token, name: this.options.name }
+        code: this.room.code, token: this.token, name: this.options.name, tint: this.tint }
         : { type: this.options.mode, version: PROTOCOL_VERSION, name: this.options.name,
-          seed: this.options.seed, code: this.options.code }));
+          seed: this.options.seed, code: this.options.code, tint: this.tint }));
     });
     socket.addEventListener('message', (event) => {
       if (this.socket !== socket) return;
@@ -95,7 +103,7 @@ export class MultiplayerClient {
         this.players = readMembers(message.players);
         const self = this.players.find((p) => p.id === this.id);
         // Those already here aren't announced; changes from now on are.
-        this.known = new Map(this.players.map((p) => [p.id, p.name]));
+        this.known = new Map(this.players.map((p) => [p.id, p]));
         this.onRoster?.({ self: true, code: message.code, resumed: message.resumed === true });
         this.onJoin({ code: message.code, seed, id: this.id, self: self?.state ?? null });
         if (this.socket !== socket) return;
@@ -115,10 +123,12 @@ export class MultiplayerClient {
         const notice = readChatNotice(message);
         if (notice) this.onChatNotice?.(notice);
       } else if (message.type === 'snapshot' && this.room && Array.isArray(message.players)) {
-        const before = this.players.map((p) => `${p.id}:${p.name}`).join('|');
+        // A new name colour redraws the lobby panel, but isn't a join.
+        const roster = () => this.players.map((p) => `${p.id}:${p.name}:${p.tag}:${p.tint}`).join('|');
+        const before = roster();
         this.players = readMembers(message.players);
         this.onSnapshot(this.players, this.id);
-        const after = this.players.map((p) => `${p.id}:${p.name}`).join('|');
+        const after = roster();
         if (before !== after) {
           this.diffRoster();
           this.onChange(this);
@@ -137,9 +147,9 @@ export class MultiplayerClient {
 
   // Tells the chat who joined and who left since the last roster.
   diffRoster() {
-    const now = new Map(this.players.map((p) => [p.id, p.name]));
+    const now = new Map(this.players.map((p) => [p.id, p]));
     const joined = this.players.filter((p) => !this.known.has(p.id));
-    const left = [...this.known].filter(([id]) => !now.has(id)).map(([id, name]) => ({ id, name }));
+    const left = [...this.known.values()].filter((p) => !now.has(p.id));
     this.known = now;
     if (joined.length || left.length) this.onRoster?.({ joined, left });
   }
