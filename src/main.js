@@ -56,6 +56,7 @@ import { Dust } from './world/dust.js';
 import { Fires } from './world/fire.js';
 import { Fireflies } from './world/fireflies.js';
 import { Fog } from './world/fog.js';
+import { NightLight } from './world/night-light.js';
 import { SpellFogStirs } from './world/fog-spells.js';
 import { MAX_WALKERS } from './world/fog-wake.js';
 import { Footprints } from './world/footprints.js';
@@ -285,11 +286,12 @@ window.addEventListener('pageshow', (event) => {
 // setting `freeze` stops the wanderer updating so a pose can be inspected.
 const fog = new Fog();
 const fogSpells = new SpellFogStirs();
-const debug = { player, camera, world, grass, splashes, debris, weather, fog, fires, torches, renderer, quality, inventory,
+const nightLight = new NightLight();
+const debug = { player, camera, world, grass, splashes, debris, weather, fog, nightLight, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
-  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, bubblesMs: 0, intervalMs: 0, rate: 60 },
+  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, bubblesMs: 0, intervalMs: 0, rate: 60, nightMs: 0 },
   // ?pintime=<seconds> freezes the world and holds the render clock there.
   pinTime: params.has('debug') && params.has('pintime') ? Number(params.get('pintime')) || 0 : null };
 debug.freeze = debug.pinTime !== null;
@@ -1388,6 +1390,13 @@ function frame(now) {
   const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
     view.x0 + view.cols + marginX, view.y0 + view.rows + tall, wide);
+  // Trees' shadows darken the ground drawn so far, and the grass and rocks'
+  // ground cells as they are drawn; warm light is added over them later.
+  const nightStart = performance.now();
+  nightLight.prepare(view, props, { weather, seed: world.seed });
+  nightLight.shadeGround(renderer, view);
+  renderer.night = nightLight.active ? nightLight : null;
+  debug.metrics.nightMs = performance.now() - nightStart;
   const mirror = reflector(time, view);
   const visibleMushrooms = mushrooms.prepare(view, wide);
   const visibleFires = fires.prepare(view, time);

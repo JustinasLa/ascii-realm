@@ -3,10 +3,11 @@
 export async function createScene(root = new URL('../', import.meta.url), options = {}) {
   const load = (path) => import(new URL(`src/${path}.js`, root));
   const [worldModule, { Player }, figure, { Grass }, { drawGround }, { drawSkyReflection },
-    { reflector }, propsModule, { Camera }, { AsciiRenderer }] = await Promise.all([
+    { reflector }, propsModule, { Camera }, { AsciiRenderer }, { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT },
+    { MAX_LEAF_DRIFT }] = await Promise.all([
     load('world/world'), load('entities/player'), load('entities/figure'), load('world/grass'),
     load('world/ground'), load('world/sky'), load('world/reflection'), load('world/props'),
-    load('world/camera'), load('render/renderer'),
+    load('world/camera'), load('render/renderer'), load('world/trees'), load('world/leaves'),
   ]);
   const { width = 390, height = 844, cell = 8, seed = 1 } = options;
   const world = new worldModule.World(seed);
@@ -19,6 +20,9 @@ export async function createScene(root = new URL('../', import.meta.url), option
   const { drawProp } = propsModule;
   // Older checkouts have no fine bakes.
   const { bakeFine } = await import(new URL('src/world/fine-bakes.js', root)).catch(() => ({}));
+  // Nor trees' shadows.
+  const { NightLight } = await import(new URL('src/world/night-light.js', root)).catch(() => ({}));
+  const night = NightLight ? new NightLight() : null;
   const r = Object.assign(Object.create(AsciiRenderer.prototype), {
     cellW: cell * worldModule.ASPECT, cellH: cell, dpr: 1, canvas: { width, height },
   });
@@ -47,8 +51,11 @@ export async function createScene(root = new URL('../', import.meta.url), option
     drawSkyReflection(r, view, time);
     figure.drawShadow(r, view, player.x, player.y, player.air);
     mark('groundAndSky');
-    const props = world.propsIn(view.x0 - 30, view.y0 - view.rows,
-      view.x0 + view.cols + 30, view.y0 + view.rows + 50);
+    // The same props the game's frame fetches (see main.js).
+    const marginX = Math.max(world.propRenderW, MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT) + 2;
+    const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
+    const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
+      view.x0 + view.cols + marginX, view.y0 + view.rows + tall);
     const parts = figure.dressFigure(player);
     const mirror = reflector(time, view);
     const drawables = props.map((p) => ({ y: p.y, draw: () => drawProp(r, view, p),
@@ -57,6 +64,12 @@ export async function createScene(root = new URL('../', import.meta.url), option
       reflect: () => figure.drawFigure(r, view, player, parts, mirror) });
     drawables.sort((a, b) => a.y - b.y);
     mark('prepareSprites');
+    if (night) {
+      night.prepare(view, props, { seed: world.seed });
+      night.shadeGround(r, view);
+      r.night = night.active ? night : null;
+      mark('night');
+    }
     grass.drawReflections(r, world, view, time, mirror, drawables.map((d) => ({ y: d.y, draw: d.reflect })));
     mark('reflections');
     grass.drawLayered(r, world, view, time, drawables);
@@ -71,7 +84,7 @@ export async function createScene(root = new URL('../', import.meta.url), option
     }
     return timings;
   }
-  return { frame, world, player, grass, camera, renderer: r, move };
+  return { frame, world, player, grass, camera, renderer: r, move, night };
 }
 
 export const scenarios = [

@@ -3,7 +3,7 @@ import { hash2 } from '../core/rng.js';
 import { FINE } from '../render/cells.js';
 import { valueNoise } from '../core/noise.js';
 import { FOLIAGE_TINT, FOLIAGE_TINT_AMOUNT, MOONLIGHT, SHADE } from '../render/palette.js';
-import { recording, withFine } from './prop-art.js';
+import { recording, withCanopy, withFine } from './prop-art.js';
 import { ASPECT } from './world.js';
 import { BARK_RAMP, BIRCH_RAMP, char, edgeChar, leafStroke, rampChar, strokeChar } from './tree-chars.js';
 import { branchCrown } from './tree-branches.js';
@@ -22,7 +22,7 @@ export const MAX_ROOT_DEPTH = 8;
 const TAU = Math.PI * 2;
 const SUB_X = [-0.25, 0.25];
 const SUB_Y = [-5 / 6, -0.5, -1 / 6];
-const EVERGREEN = new Set(['pine', 'spruce']);
+export const EVERGREEN = new Set(['pine', 'spruce']);
 const SEASONS = new Set(['spring', 'summer', 'autumn', 'winter']);
 const SWAY = { oak: 1.05, birch: 1.3, pine: 0.7, spruce: 0.55, acacia: 0.8, jungle: 1.1, cherry: 1.2, willow: 1.5 };
 const BARK = {
@@ -554,6 +554,18 @@ function grow(shape, growth, rand) {
   shape.footW *= sx;
   shape.footH *= mature ? 1.45 : growth === 'sapling' ? 0.6 : 1;
   return shape;
+}
+
+// The crown's leaf masses as the ground sees them (see canopy.js), four
+// numbers each: x across from the trunk and radius rx in row units, height
+// above the base and vertical radius ry in rows. Mature crowns come from
+// their grown ellipses, a spruce's from its tiers, each a mass half its
+// depth below its top. Taken before the branches split them into sprays.
+function leafMasses(shape) {
+  const masses = [];
+  for (const c of shape.crowns) masses.push(c.x, -c.y, c.rx, c.ry);
+  for (const t of shape.tiers) masses.push(t.x, -(t.y + t.depth / 2), t.width, t.depth / 2);
+  return Float32Array.from(masses);
 }
 
 // Keep only geometry that can touch this row. These bounds include the
@@ -1319,6 +1331,8 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
   const random = recorded ? recorded.random : () => hash2(draw++, spriteSeed, seed + 17);
   if (!['mature', 'sapling', 'bush'].includes(growth)) growth = 'mature';
   const shape = grow(growth === 'bush' ? bushGeometry(random) : geometry(species, random), growth, random);
+  // A bush's contact shadow is enough; a tree shades the ground around it.
+  const canopy = growth === 'bush' ? null : leafMasses(shape);
   branchCrown(shape, species, growth, spriteSeed);
   // Trunk age varies independently of crown size: slender trees and broad,
   // old trunks can share the same height and species.
@@ -1356,7 +1370,7 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
   crownHalf /= ASPECT;
   scatterLitter(cells, bounds, species, season, spriteSeed, crownHalf, growth);
   for (let i = 0; i < cells.length; i++) cells[i] = uniform(cells[i]);
-  return withFine({
+  return withCanopy(withFine({
     kind: growth === 'bush' ? 'bush' : 'tree', growth, species, season, x, y,
     girth: thickness,
     footW: shape.footW, footH: shape.footH,
@@ -1368,7 +1382,7 @@ export function makeTree(x, y, rand, { species = 'oak', season = 'summer', seed 
     textureSeed: spriteSeed,
     phase: hash2(Math.floor(x * 16), Math.floor(y * 16), spriteSeed + 157) * TAU,
     sway: SWAY[species] * (growth === 'sapling' ? 1.25 : growth === 'bush' ? 0.65 : 1),
-  }, fine, { make: 'tree', x, y, draws: recorded?.draws ?? null, options: { species, season, seed, growth, girth } });
+  }, fine, { make: 'tree', x, y, draws: recorded?.draws ?? null, options: { species, season, seed, growth, girth } }), canopy);
 }
 
 export function makeBush(x, y, rand, options = {}) {
