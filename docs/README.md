@@ -10,6 +10,8 @@ Technical and player documentation for [ASCII Realm](../README.md).
   and flee, what they hear, and how they are hunted.
 - [Horses](horses.md) — a first look at a saddled horse with a seated
   rider, standing idle.
+- [Characters](characters.md) — races, classes, attributes, the realm
+  calendar, clues and change locks.
 - [Controls](controls.md) — keyboard, mouse, inventory and touch.
 - [Scenery builder](scenery-builder.md) — painting terrain, placing props,
   undo, saving and sharing scenes.

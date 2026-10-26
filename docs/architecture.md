@@ -3,6 +3,7 @@
 ```
 src/
   main.js            game loop and wiring
+  character/         character sheet rules, realm calendar and the saved roster
   core/              input, touch controls, pointer aiming, ballistics, hashing, noise
   multiplayer/       lobby client, controls, snapshot validation and interpolation
   editor/            scenery builder controls, scene history and persistence
