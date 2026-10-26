@@ -105,3 +105,10 @@ clamped. Desktops and tablets keep a fixed 60 cap.
 The dependency-free CPU scene benchmark remains available with `npm run
 bench`; `node bench/run.mjs path-to-other-checkout` measures another checkout.
 That synthetic scene uses the procedural character and is not a game-FPS test.
+
+Trees' shadows are measured at a fixed lakeside scene (`bench/lakeside.js`).
+`node bench/night-cpu.mjs <before-checkout>` steps both checkouts in one
+process, a frame each in turn, and also times stalls when walking into a
+fresh area and at the widest zoom. `BEFORE_URL=… AFTER_URL=… node
+bench/night.cjs` does the same in Chrome, with the shadows switched off as a
+control (`SPIKES=1` for the stalls, `THROTTLE=4` for a slow phone).

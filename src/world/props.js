@@ -9,9 +9,9 @@ import { deadwoodBlocks } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
 import { fineOf } from './fine-bakes.js';
 import { shade } from './glow.js';
-import { bakeSurface, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withFine } from './prop-art.js';
+import { bakeSurface, canopyOf, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withCanopy, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
-import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, VIEW_C, VIEW_S, glossByte } from './surface-light.js';
+import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, MOON, VIEW_C, VIEW_S, glossByte } from './surface-light.js';
 import { makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
@@ -24,9 +24,8 @@ import { ASPECT, GRASS, WATER } from './world.js';
 // rebuilding their geometry.
 
 const LIGHT = (() => {
-  const v = [-0.5, -0.72, 0.48];
-  const n = Math.hypot(...v);
-  return v.map((x) => x / n);
+  const n = Math.hypot(...MOON);
+  return MOON.map((x) => x / n);
 })();
 const STONE_GAP = [24, 22, 36];
 
@@ -348,7 +347,8 @@ function makeBuilderTree(x, y, rand, seed = x * 31 + y, bakeFn = bake) {
   const w = Math.ceil((radius * 1.7) / ASPECT);
   const top = -Math.ceil(height + radius);
   let cells;
-  return {
+  // Its leaf masses, for the shadow it casts (see canopy.js).
+  return withCanopy({
     kind: 'tree',
     x,
     y,
@@ -360,7 +360,7 @@ function makeBuilderTree(x, y, rand, seed = x * 31 + y, bakeFn = bake) {
     },
     // Replaced cells (e.g. a rescaled builder prop) bring their own extent.
     set cells(value) { cells = value; this.bounds = null; },
-  };
+  }, Float32Array.from(blobs.flatMap((bl) => [bl.x, -bl.y, bl.r, bl.r * 0.85])));
 }
 
 // Hand-placed boulders take one of several minerals and more varied
@@ -532,6 +532,9 @@ export function createProp(kind, x, y, options = {}) {
   prop.footH *= height;
   prop.footW *= scale;
   prop.footH *= scale;
+  // A tree's leaf masses: x and rx across, h and ry up.
+  const canopy = canopyOf(prop);
+  if (canopy) withCanopy(prop, canopy.map((v, i) => v * (i % 2 ? height : width) * scale));
   if (prop.unrotatedFootW !== undefined) prop.unrotatedFootW *= width * scale;
   // Composite footprints use local world coordinates, just like footW/H.
   // Scale both axes with the same variation and size used for the artwork.
@@ -816,9 +819,19 @@ const GLOSS_BYTE = [GLOSS_DRY, GLOSS_DAMP, GLOSS_WET].map(glossByte);
 function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
   const { cells: p, ground } = baked;
   if (prop.kind === 'tree') groundShadow(r, view, prop, bx, by);
+  // The prop's ground cells (its pebbles, its baked contact shadow) replace
+  // ground a tree's shadow has already darkened: they take the same shade
+  // as they go down, once (see night-light.js).
+  const night = r.night;
   for (const c of ground) {
     const sy = by + c.dy;
-    if (sy >= 0 && sy < view.rows) putCell(r, bx + c.dx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
+    if (sy < 0 || sy >= view.rows) continue;
+    const k = night ? night.gainAt(view.x0 + bx + c.dx, view.y0 + sy) : 1;
+    if (k === 1) putCell(r, bx + c.dx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
+    else {
+      putCell(r, bx + c.dx, sy, c.g, c.r * k, c.gg * k, c.b * k, by,
+        c.br === undefined ? undefined : c.br * k, c.bgG * k, c.bb * k);
+    }
   }
   const tree = prop.kind === 'tree' || prop.kind === 'bush';
   const sway = tree ? treeWind(prop, t, seed) * FINE : 0;

@@ -72,7 +72,16 @@ short version see the [README](../README.md).
   with scattered chips add history to the forest; beaver damage stays near
   water. Fallen trunks block their full length, including across chunks.
   Layered foliage has shaded depth and moonlit edges; crowns rustle and gently
-  sway with the grass, while trunks and roots stay planted. Leaves and blossoms
+  sway with the grass, while trunks and roots stay planted. Every tree casts
+  a soft moon shadow on the meadow under its crown, lobed like the crown and
+  leaning a little away from the moon: the ground, the grass and flowers in
+  it are darker, blades there lose their pale moonlit tips, and overlapping
+  crowns shade deeper, down to a floor that keeps the grass readable. The
+  shadows stay put as you walk and zoom and do not sway with the crowns.
+  Bare winter crowns cast only a thin shadow, burning trees less as they
+  burn, and felled or burnt ones none; cloud thins them and lightning lifts
+  them for its flash. Water, torchlight, firelight and spell light are not
+  dimmed by them. Leaves and blossoms
   drift down, and foliage thins around the warrior when it would hide them.
   Add `?season=spring`, `?season=autumn` or `?season=winter` for seasonal
   palettes and snow-tipped evergreens. Summer is the default; the season

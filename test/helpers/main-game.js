@@ -14,6 +14,7 @@ import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
 import { isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
+import { NightLight } from '../../src/world/night-light.js';
 import { FrameClock, FramePacer, FrameQuality, renderSize } from '../../src/render/budget.js';
 import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from '../../src/core/native.js';
 import { PlayGate } from '../../src/ui/play-gate.js';
@@ -228,7 +229,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Fires: class extends inert() { nearest() { return null; } },
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
-    Fog: inert(), MAX_WALKERS: 20, figureScale: () => 1,
+    Fog: inert(), NightLight, MAX_WALKERS: 20, figureScale: () => 1,
     SpellFogStirs: class { collect() { return { walkers: [], bursts: [], whirls: [] }; } },
     fireWeatherWind: () => 0,
     Splashes: class {

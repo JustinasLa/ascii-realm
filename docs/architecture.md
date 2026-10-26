@@ -51,6 +51,24 @@ lit faces turn toward a warm gold (`LIT_INK`), scaled down as a whole rather
 than clipped to white. `?debug&pintime=<s>`
 freezes the world and holds the render clock, for pixel comparisons.
 
+Trees' moon shadows come from a per-frame night light map
+(`world/night-light.js`): one value per world cell over the view and a
+margin, saying how much of the night's light reaches the ground there. Each
+tree's crown keeps its leaf masses (`canopyOf` in `world/prop-art.js`, taken
+in `trees.js` before the branches split them, or from a builder tree's
+blobs); `world/canopy.js` bakes them once per tree into a stamp of leaf
+layers fixed to world cells (each mass an ellipse seen from above, its edge
+broken by world noise, leaned along the moon's ground direction, clipped to
+the tree's reach), a few new stamps a frame, each fading in. Each layer keeps
+`LEAF_GAIN` of the light, down to `GAIN_FLOOR`. The map is built straight
+after the frame's props are fetched and has three consumers: it multiplies
+the ground drawn so far (skipping water), `Grass.drawRow` scales each root's
+light by it, and `drawFine` scales a rock's or tree's ground cells as they
+are laid down, so no cell is shaded twice. Warm light is added after it, so
+a torch under a tree is as bright as in the open. With no tree near, nothing
+is drawn differently. `game.nightLight` and `game.metrics.nightMs` are on
+`?debug`.
+
 River debris (`world/debris.js`) is local to each player. Each frame, after
 the player and the monsters have moved, it is handed the bodies standing in
 the water, works out how each moved, and settles every meeting of a body and

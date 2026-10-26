@@ -20,6 +20,9 @@ export async function createScene(root = new URL('../', import.meta.url), option
   const { drawProp } = propsModule;
   // Older checkouts have no fine bakes.
   const { bakeFine } = await import(new URL('src/world/fine-bakes.js', root)).catch(() => ({}));
+  // Nor trees' shadows.
+  const { NightLight } = await import(new URL('src/world/night-light.js', root)).catch(() => ({}));
+  const night = NightLight ? new NightLight() : null;
   const r = Object.assign(Object.create(AsciiRenderer.prototype), {
     cellW: cell * worldModule.ASPECT, cellH: cell, dpr: 1, canvas: { width, height },
   });
@@ -61,6 +64,12 @@ export async function createScene(root = new URL('../', import.meta.url), option
       reflect: () => figure.drawFigure(r, view, player, parts, mirror) });
     drawables.sort((a, b) => a.y - b.y);
     mark('prepareSprites');
+    if (night) {
+      night.prepare(view, props, { seed: world.seed });
+      night.shadeGround(r, view);
+      r.night = night.active ? night : null;
+      mark('night');
+    }
     grass.drawReflections(r, world, view, time, mirror, drawables.map((d) => ({ y: d.y, draw: d.reflect })));
     mark('reflections');
     grass.drawLayered(r, world, view, time, drawables);
@@ -75,7 +84,7 @@ export async function createScene(root = new URL('../', import.meta.url), option
     }
     return timings;
   }
-  return { frame, world, player, grass, camera, renderer: r, move };
+  return { frame, world, player, grass, camera, renderer: r, move, night };
 }
 
 export const scenarios = [

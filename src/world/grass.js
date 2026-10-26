@@ -8,6 +8,7 @@ import {
   BLUEBELL, BUTTERCUP, CATTAIL, CLOCK, CLOVER, CORNFLOWER, DAISY, DANDELION, DEW, FERN, FORGET_ME_NOT,
   FOXGLOVE, LUPIN, PALETTES, POPPY, THISTLE, YARROW, extraAt,
 } from './grass-roots.js';
+import { GAIN_FLOOR } from './canopy.js';
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 
 // Terrain grows blades up to five cells high; drawn blades are longer than
@@ -15,7 +16,7 @@ import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 const MAX_PROFILE = 5;
 const BLADE_LENGTH = 1.3;
 export const MAX_GRASS_HEIGHT = 8;
-const SIDE_PAD = 12;
+export const SIDE_PAD = 12;
 const SOLE_RADIUS = SCALE * 0.1;
 const HOLD = 0.25;
 const LIFE = 2;
@@ -95,6 +96,9 @@ let tipY = 0;
 let tipAt = 0.5;
 let bladeRows = 0;
 const ROW_X = new Int16Array(16);
+// How much of the moon reaches the root being drawn: 1 in the open, 0
+// deep under a tree's crown, where blade tips no longer pale toward it.
+let moonlit = 1;
 const ROW_P = new Uint8Array(16);
 const TONE = [0, 0, 0];
 const STALK = [0, 0, 0];
@@ -150,7 +154,7 @@ function drawBlade(r, view, write, x, y, height, lean, flat, light, tone, phase 
       // tall blades do not line up into horizontal bands of brightness.
       const u = Math.min(1, (j + 0.5) / rows + phase);
       const l = lit * (0.66 + u * 0.6);
-      const pale = u > 0.6 ? Math.min(1, (u - 0.6) * moon) : 0;
+      const pale = u > 0.6 ? Math.min(1, (u - 0.6) * moon) * moonlit : 0;
       const cr = (tr + (TIP[0] - tr) * pale) * l;
       const cg = (tg + (TIP[1] - tg) * pale) * l;
       const cb = (tb + (TIP[2] - tb) * pale) * l;
@@ -593,6 +597,9 @@ export class Grass {
     };
     const left = view.x0 - SIDE_PAD;
     const right = view.x0 + view.cols + SIDE_PAD;
+    // Trees' shadows on this row, if any (see night-light.js).
+    const night = r.night?.rowShaded(y) ? r.night : null;
+    moonlit = 1;
     const windNoise = valueNoiseRow(y * 0.045 + t * 0.03, world.seed + 900);
     for (let cx = Math.floor(left / CHUNK_SIZE); cx <= Math.floor((right - 1) / CHUNK_SIZE); cx++) {
       const chunk = world.chunk(cx, cy);
@@ -638,8 +645,12 @@ export class Grass {
           curve + bend * (1.4 + height * 0.45) + field.part[fi]) * BLADE_LENGTH));
         // Gusts lay blades over to show their lit sides; the parted hollow
         // under a figure stays in shadow.
+        // A root in a tree's shadow takes less of the night's light, and
+        // everything growing from it with it.
+        const gain = night ? night.gainAt(x, y) : 1;
+        if (night) moonlit = gain < 1 ? Math.max(0, (gain - GAIN_FLOOR) / (1 - GAIN_FLOOR)) : 1;
         const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.1) *
-          (0.82 + variation * 0.36) * (1 - sink * 0.8);
+          (0.82 + variation * 0.36) * (1 - sink * 0.8) * gain;
         let tone = PALETTES[style];
         if (blades) {
           const k = root * 3;
@@ -675,7 +686,7 @@ export class Grass {
           drawBlade(r, view, paint, x, y, length, lean, flat, light, tone, (variation - 0.5) * 0.4);
         }
         if (flower) {
-          const glow = (0.78 + chunk.shade[i] * 0.35 + variation * 0.2) * (1 - sink * 0.45) * (1 - flat * 0.4);
+          const glow = (0.78 + chunk.shade[i] * 0.35 + variation * 0.2) * (1 - sink * 0.45) * (1 - flat * 0.4) * gain;
           drawFlower(r, paint, SPECIES[flower], base, glow, flat, variation);
         } else if (extra && flat < 0.5) {
           if (extra === DEW) {
@@ -684,7 +695,8 @@ export class Grass {
             const glint = ripple(t * 0.23 + variation * 7.1 + rnd * 3);
             if (bladeRows > 1 && glint > 0.5) {
               const j = bladeRows >> 1;
-              const g = (glint - 0.5) * 2 * (1 - sink);
+              // A glint is the moon's own reflection: shade all but hides it.
+              const g = (glint - 0.5) * 2 * (1 - sink) * gain * gain;
               paint(r, ROW_X[j], base - j, DEWDROPS[(variation * 40) & 3],
                 DEW_LIGHT[0] * g, DEW_LIGHT[1] * g, DEW_LIGHT[2] * g, base);
             }
