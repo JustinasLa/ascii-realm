@@ -16,7 +16,9 @@
 // moonbeams' worst cases: walking fast (two cells a frame) across the slots,
 // so beams keep coming and going, and the tier switched between a phone's and
 // its reduced cells every 12 frames, fading columns in and out, each with
-// every frame's work and its night and shafts stages counted.
+// every frame's work and its night and shafts stages counted, and the same
+// for a third scene, the after build with its beams off (`control`), so the
+// trees' own baking as they come into view is told apart from the beams'.
 import os from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -115,15 +117,18 @@ for (const [label, cell] of [['entry', 8], ['widest', WIDEST]]) {
 // The beams coming and going: both builds step a fresh scene by the lake in
 // turn, one walking fast east, one with its tier switched back and forth.
 for (const label of ['walk', 'tiers']) {
-  const frame = { before: [], after: [] }, stage = [];
+  const frame = { before: [], after: [], control: [] }, stage = [], controlStage = [];
   let most = 0;
   for (let round = 0; round < SPIKE_ROUNDS; round++) {
     const at = { x: PLAYER.x, y: PLAYER.y + 97 * round, tier: label === 'tiers' ? 'phone' : tier };
     const fresh = {};
     for (const name of round % 2 ? ['after', 'before'] : ['before', 'after']) fresh[name] = await scenes[name](at);
-    for (let k = 0; k < 40; k++) for (const name of ['before', 'after']) fresh[name].frame();
+    fresh.control = await scenes.after(at);
+    if (fresh.control.night) fresh.control.night.shafts = false;
+    const names = ['before', 'after', 'control'];
+    for (let k = 0; k < 40; k++) for (const name of names) fresh[name].frame();
     for (let k = 0; k < +frames; k++) {
-      for (const name of k % 2 ? ['after', 'before'] : ['before', 'after']) {
+      for (const name of names.map((_, i) => names[(i + k + round) % 3])) {
         const scene = fresh[name];
         if (label === 'walk') scene.player.x += 2;
         else if (scene.night && k % 12 === 0) scene.night.tier = (k / 12) % 2 ? 'phone' : 'reduced';
@@ -132,12 +137,13 @@ for (const label of ['walk', 'tiers']) {
         if (name === 'after' && stages.night !== undefined) {
           stage.push(stages.night + (stages.shafts ?? 0));
           most = Math.max(most, scene.night.beams?.size ?? 0);
-        }
+        } else if (name === 'control' && stages.night !== undefined) controlStage.push(stages.night + (stages.shafts ?? 0));
       }
     }
   }
   spikes[label] = { frames: SPIKE_ROUNDS * +frames, before: tail(frame.before), after: tail(frame.after),
-    nightAndShafts: stage.length ? tail(stage) : null, mostBeams: most };
+    control: tail(frame.control), nightAndShafts: stage.length ? tail(stage) : null,
+    controlNight: controlStage.length ? tail(controlStage) : null, mostBeams: most };
 }
 out.spikes = spikes;
 out.load = [ms(loadStart), ms(os.loadavg()[0])];

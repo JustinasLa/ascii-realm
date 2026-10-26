@@ -11,7 +11,7 @@ import { drawFireLight } from '../src/world/fire.js';
 import { Grass } from '../src/world/grass.js';
 import { DEW, FERN } from '../src/world/grass-roots.js';
 import {
-  BAKE_WORK, FADE_FRAMES, MAX_BAKES_PER_FRAME, NightLight, PAD_BOTTOM, PAD_TOP, PAD_X, SKY_SHARE, beamFactor,
+  BAKE_WORK, FADE_FRAMES, MAX_BAKES_PER_FRAME, MAX_BEAM_BAKES, NightLight, PAD_BOTTOM, PAD_TOP, PAD_X, SKY_SHARE, beamFactor,
   moonlightOf, skyFactor,
 } from '../src/world/night-light.js';
 import { SHAFT_TIERS, patchStamp, shaftAt } from '../src/world/moon-shafts.js';
@@ -791,8 +791,10 @@ test('trees\' footprints and beams\' patches share a frame\'s bake budget', () =
   assert.equal(night.beams.size, 0, 'the patches wait');
   let frames = 1;
   while (night.beams.size < SHAFT_TIERS.desktop.max) {
+    const had = night.beams.size;
     night.prepare(view, props, { seed: 11, world });
     assert.ok(night.bakes <= MAX_BAKES_PER_FRAME);
+    assert.ok(night.beams.size - had <= MAX_BEAM_BAKES, 'one beam baked a frame');
     frames++;
   }
   assert.ok(frames > 2);

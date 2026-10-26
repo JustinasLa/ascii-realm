@@ -30,6 +30,9 @@ export const FADE_FRAMES = 24;
 // Most crowns are over BAKE_WORK alone, so it is mostly one a frame.
 export const MAX_BAKES_PER_FRAME = 3;
 export const BAKE_WORK = 16000;
+// Of those, moonbeams baked in one frame: a beam's patch and column cost
+// more than most crowns, and one coming into view can always wait a frame.
+export const MAX_BEAM_BAKES = 1;
 // The map's margin around the view: blades lean in from roots beside it,
 // the grass's reflections read roots above it and blades rise from roots
 // below it.
@@ -212,13 +215,15 @@ export class NightLight {
     const far = (s) => ((s.cx - mx) * ASPECT) ** 2 + (s.cy - my) ** 2;
     near.sort((a, b) => far(a) - far(b) || (a.key < b.key ? -1 : 1));
     const beams = this.beams;
+    let beamBakes = 0;
     for (const beam of beams.values()) beam.out = true;
     for (let k = 0; k < near.length && k < tier.max; k++) {
       const shaft = near[k];
       let beam = beams.get(shaft.key);
       if (!beam) {
         if (!shaft.stamp) {
-          if (!this.canBake()) continue;
+          if (!this.canBake() || beamBakes >= MAX_BEAM_BAKES) continue;
+          beamBakes++;
           const started = performance.now();
           this.countBake(started, patchStamp(shaft, seed).work + columnStamp(shaft, seed).work);
         }

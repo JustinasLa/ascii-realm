@@ -68,6 +68,7 @@ export const shaftTier = ({ phone, reduced }) => (!phone ? 'desktop' : reduced ?
 const MOTES = Array.from({ length: 9 }, (_, i) => over(dg(`effects.mote.${i}`)));
 // How far out, as a share of its radius, noise can carry an edge.
 const REACH = 1 / (1 - EDGE_JITTER);
+const D2 = new Float64Array(3);
 
 const smoothstep = (a, b, x) => {
   const t = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a);
@@ -181,14 +182,18 @@ export function patchStamp(shaft, seed) {
     const py = y0 + dy + 0.5, wy = by + y0 + dy;
     for (let dx = 0; dx < w; dx++) {
       const px = x0 + dx + 0.5, wx = bx + x0 + dx;
+      let near = Infinity;
+      for (let k = 0; k < 3; k++) {
+        const u = (px - lx[k]) / ax[k], v = (py - ly[k]) / ay[k];
+        D2[k] = u * u + v * v;
+        near = Math.min(near, D2[k]);
+      }
+      // Beyond every lobe's reach, however the noise moves its edge.
+      if (near >= REACH * REACH) continue;
       const jitter = 1 + EDGE_JITTER * (2 * valueNoise(wx * ASPECT * 0.18, wy * 0.3, seed + 2289) - 1);
       // The lobes overlap softly: none of them adds light another already gave.
       let dark = 1;
-      for (let k = 0; k < 3; k++) {
-        const u = (px - lx[k]) / ax[k], v = (py - ly[k]) / ay[k];
-        const d2 = u * u + v * v;
-        if (d2 < REACH * REACH) dark *= smoothstep(1 - SOFT, 1, Math.sqrt(d2) * jitter);
-      }
+      for (let k = 0; k < 3; k++) if (D2[k] < REACH * REACH) dark *= smoothstep(1 - SOFT, 1, Math.sqrt(D2[k]) * jitter);
       if (dark >= 1) continue;
       const lit = (1 - dark) * (1 - GRAIN + GRAIN * valueNoise(wx * ASPECT * 0.3, wy * 0.5, seed + 2297));
       lift[dy * w + dx] = Math.round(lit * 255);
