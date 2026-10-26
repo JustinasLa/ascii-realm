@@ -61,7 +61,7 @@ test('a line said nearby reaches both players, cleaned, from the speaker', async
   chat(ash, 'rp', `  hello  ${u(0x201c)}friend${u(0x201d)} <b>${u(0x202e)}${u(0xd83d, 0xde00)}  `);
   const [heard, echo] = await Promise.all([bryn.client.next('chat'), ash.client.next('chat')]);
   assert.equal(heard.seq, echo.seq);
-  assert.deepEqual(heard, { type: 'chat', seq: heard.seq, channel: 'rp', from: ash.lobby.id, name: 'Ash',
+  assert.deepEqual(heard, { type: 'chat', seq: heard.seq, channel: 'rp', from: ash.lobby.id, name: 'Ash', tag: null,
     text: 'hello "friend" <b>', clarity: 1, muffled: false });
   assert.deepEqual(echo, heard);
   chat(bryn, 'action', 'waves');

@@ -5,7 +5,7 @@
 import { mulberry32 } from '../core/rng.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { ASPECT } from '../world/world.js';
-import { cleanName } from './protocol.js';
+import { cleanName, cleanTag } from './protocol.js';
 
 export const MAX_CHAT_LENGTH = 256;
 export const CHAT_LOG_LINES = 100;
@@ -368,7 +368,7 @@ export function readChat(raw) {
   if (!Number.isSafeInteger(raw.seq) || raw.seq < 0 || !isChannel(raw.channel) || !validId(raw.from)) return null;
   const text = cleanChatText(raw.text);
   if (!text || text.length > MAX_CHAT_LENGTH) return null;
-  return { seq: raw.seq, channel: raw.channel, from: raw.from, name: cleanName(raw.name), text,
+  return { seq: raw.seq, channel: raw.channel, from: raw.from, name: cleanName(raw.name), tag: cleanTag(raw.tag), text,
     clarity: Math.round(finite01(raw.clarity) * 100) / 100, muffled: raw.muffled === true };
 }
 

@@ -44,7 +44,9 @@ export class RemotePlayers {
         peer.player.settleCape();
       }
       peer.name = member.name;
+      peer.tag = member.tag;
       peer.color = member.color;
+      peer.tint = member.tint;
       peer.samples.push({ at: now, state });
       if (peer.samples.length > 8) peer.samples.shift();
     }

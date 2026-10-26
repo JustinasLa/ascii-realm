@@ -165,7 +165,9 @@ test('muffled lines stay within the message limit at every clarity', () => {
 
 test('relayed lines and notices are checked again on the page', () => {
   const line = { type: 'chat', seq: 3, channel: 'rp', from: 'ab12', name: 'Ash', text: 'hi', clarity: 0.5, muffled: false };
-  assert.deepEqual(readChat(line), { seq: 3, channel: 'rp', from: 'ab12', name: 'Ash', text: 'hi', clarity: 0.5, muffled: false });
+  assert.deepEqual(readChat(line), { seq: 3, channel: 'rp', from: 'ab12', name: 'Ash', tag: null, text: 'hi', clarity: 0.5, muffled: false });
+  assert.equal(readChat({ ...line, tag: 2 }).tag, 2, 'a second Ash is tagged');
+  for (const tag of [1, 100, 2.5, '2', -3]) assert.equal(readChat({ ...line, tag }).tag, null, `tag ${tag}`);
   assert.equal(readChat({ ...line, clarity: 7, muffled: 'yes' }).clarity, 1);
   assert.equal(readChat({ ...line, clarity: -1 }).clarity, 0);
   assert.equal(readChat({ ...line, clarity: Number.NaN }).clarity, 1);
