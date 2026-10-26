@@ -554,7 +554,9 @@ test('a stack stands only as tall as the room over its speaker, within the form 
   const rise = BUBBLES.lift * SCALE;
   // Feet that put the highest tip `px` CSS px under the screen's top.
   const feetFor = (px) => rise + px / CELL.h;
+  // Each view is a teleport: the box starts on its speaker.
   const show = (feetY, form = 'desktop', extra = {}) => {
+    if (bubbles.stacks.get('b2')) bubbles.stacks.get('b2').at = null;
     bubbles.update(anchors([['b2', speaker(160, feetY, extra)]]), projection, form);
     const node = boxes()[0];
     return { rows: node.rows, top: translate(node)[1] };
@@ -569,7 +571,6 @@ test('a stack stands only as tall as the room over its speaker, within the form 
   assert.ok(six.top + LINE_H >= 0, `the first line is on the screen (${six.top})`);
   // With the tip at full height (no nameplate under it), only the top rule
   // may be over the screen's edge.
-  bubbles.stacks.get('b2').at = null;
   const high = show(feetFor(5 * LINE_H + 5), 'desktop', { nameRow: Infinity });
   assert.equal(high.rows.length, 6);
   assert.ok(high.top < 0 && high.top + LINE_H >= 0, `the top rule over the edge, the text under it (${high.top})`);
@@ -590,6 +591,51 @@ test('a stack stands only as tall as the room over its speaker, within the form 
   assert.equal(rowBudget(6 * LINE_H, LINE_H, 9), 7);
   assert.equal(rowBudget(20 * LINE_H, LINE_H, 9), 9);
   assert.equal(rowBudget(-1, LINE_H, 9), BUBBLES.minRows);
+});
+
+test('a speaker walking down the screen keeps the first line on it while the box follows', () => {
+  const { bubbles, boxes, tick } = setup({ reduced: true });
+  bubbles.receive(line('word '.repeat(50).trim()), 'a1');
+  const rise = BUBBLES.lift * SCALE;
+  // No nameplate under the tip, so the tip stands at its full height.
+  const show = (feetY) => {
+    bubbles.update(anchors([['b2', speaker(160, feetY, { nameRow: Infinity })]]), projection);
+    const node = boxes()[0];
+    return { rows: node.rows.length, top: translate(node)[1] };
+  };
+  assert.equal(show(rise + (5 * LINE_H + 5) / CELL.h).rows, 6);
+  let rows = 6;
+  for (let frame = 0; frame < 40; frame++) {
+    tick(50);
+    const now = show(rise + 160 / CELL.h);
+    assert.ok(now.top + LINE_H >= -0.5, `frame ${frame}: the first line is on the screen (${now.top})`);
+    assert.ok(now.rows >= rows, 'rows only join as the box comes down');
+    rows = now.rows;
+  }
+  assert.equal(rows, 11, 'all nine lines once it has landed');
+});
+
+test('a fading row that takes another channel\'s line keeps its own layer', () => {
+  const { bubbles, boxes, tick } = setup({ reduced: true });
+  bubbles.receive(line('first'), 'a1');
+  bubbles.receive(line('second', { channel: 'yell' }), 'a1');
+  tick(4800);
+  bubbles.update(anchors([['b2', speaker()]]), projection);
+  const rows = () => boxes()[0].children;
+  const fading = () => rows().map((row) => row.classList.contains('bubble-fading'));
+  assert.deepEqual(fading(), [true, true, true, true, true]);
+  // The speaker steps up under the screen's top: only the newest line fits,
+  // and the row that held the first line now holds the yell, as faded.
+  const rise = BUBBLES.lift * SCALE;
+  bubbles.update(anchors([['b2', speaker(160, rise + (3 * LINE_H + 5) / CELL.h)]]), projection);
+  assert.equal(rows().length, 3);
+  assert.equal(rows()[1].style.opacity, '0.5');
+  assert.ok(rows()[1].classList.contains('bubble-yell'));
+  assert.deepEqual(fading(), [true, true, true], 'the fade keeps its layer through the change');
+  tick(100);
+  bubbles.update(anchors([['b2', speaker(160, rise + (3 * LINE_H + 5) / CELL.h)]]), projection);
+  assert.equal(rows()[1].style.opacity, '0.25');
+  assert.deepEqual(fading(), [true, true, true]);
 });
 
 test('a new or expired line rewrites the rows in place instead of building them again', () => {

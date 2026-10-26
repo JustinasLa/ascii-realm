@@ -246,10 +246,11 @@ export class SpeechBubbles {
         continue;
       }
       const row = anchorRow(anchor.feetY, anchor.nameRow, t, 0, reduced);
-      if (!stack.at) stack.at = { x: anchor.x, row };
+      if (!stack.at) stack.at = { x: anchor.x, row, feetY: anchor.feetY };
       else {
         stack.at.x += (anchor.x - stack.at.x) * share;
         stack.at.row += (row - stack.at.row) * share;
+        stack.at.feetY += (anchor.feetY - stack.at.feetY) * share;
       }
       showing.push({ stack, anchor, tip: Math.min(stack.at.row, anchor.nameRow - 1) });
     }
@@ -262,12 +263,14 @@ export class SpeechBubbles {
     const cap = BUBBLES.rows[form] ?? BUBBLES.rows.desktop;
     // The highest the tip rises over standing feet, so a stack keeps its rows
     // through the bob and through a jump (which lifts the nameplate, not the
-    // feet).
+    // feet). The feet are the higher of where they stand and where the box
+    // follows them: a box still coming down keeps its rows until it lands.
     const rise = (BUBBLES.lift + (reduced ? 0 : BUBBLES.bob)) * SCALE;
     showing.sort((a, b) => a.anchor.depth - b.anchor.depth);
     showing.forEach(({ stack, anchor, tip }, rank) => {
       const { charW, lineH } = this.metrics;
-      const budget = rowBudget(projection.project(anchor.x, anchor.feetY - rise).y - box.top - safe.top, lineH, cap);
+      const feetY = Math.min(anchor.feetY, stack.at.feetY);
+      const budget = rowBudget(projection.project(stack.at.x, feetY - rise).y - box.top - safe.top, lineH, cap);
       if (stack.dirty || budget !== stack.budget) this.build(stack, budget);
       const p = projection.project(stack.at.x, tip);
       const columns = stack.width + 4;
@@ -310,8 +313,12 @@ export class SpeechBubbles {
     return slot;
   }
 
+  // A fading row keeps its layer when it takes another channel's line.
   write(slot, className, texts, classes) {
-    if (slot.className !== className) slot.node.className = slot.className = className;
+    if (slot.className !== className) {
+      slot.className = className;
+      slot.node.className = slot.opacity ? `${className} bubble-fading` : className;
+    }
     for (let i = 0; i < 3; i++) {
       if (slot.texts[i] !== texts[i]) slot.parts[i].textContent = slot.texts[i] = texts[i];
       if (slot.classes[i] !== classes[i]) slot.parts[i].className = slot.classes[i] = classes[i];
