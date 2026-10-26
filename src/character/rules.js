@@ -19,15 +19,63 @@ export const nameKey = (name) => normalName(name).toLowerCase();
 // combining marks, variation selectors, skin tones and tags stay with what
 // they follow, flags are pairs of regional indicators, a joiner joins two
 // pictographs into one emoji, a virama joins two Indic consonants, and
-// Hangul jamo make one syllable.
-const EXTEND = String.raw`[\p{M}\p{EMod}\u200C\uFF9E\uFF9F\u{E0020}-\u{E007F}]`;
-const LINK = String.raw`[\u094D\u09CD\u0ACD\u0B4D\u0C4D\u0D4D][\p{M}\u200D]*\p{Lo}`;
-const [L, V, T] = [String.raw`[\u1100-\u115F\uA960-\uA97C]`, String.raw`[\u1160-\u11A7\uD7B0-\uD7C6]`,
-  String.raw`[\u11A8-\u11FF\uD7CB-\uD7FB]`];
-const HANGUL = String.raw`${L}*(?:[\uAC00-\uD7A3]|${V})${V}*${T}*|${L}+|${T}+`;
-const CLUSTER = new RegExp(String.raw`\r\n|\p{RI}\p{RI}|\p{ExtPict}(?:${EXTEND}|\u200D\p{ExtPict}|\u200D)*|`
-  + String.raw`(?:${HANGUL}|[^])(?:${LINK}|${EXTEND}|\u200D)*`, 'gu');
-export const clusterCount = (text) => text.match(CLUSTER)?.length ?? 0;
+// Hangul jamo make one syllable. It takes one pass over the code points, so
+// long input stays quick.
+const EXTEND = /[\p{M}\p{EMod}\u200C\u200D\uFF9E\uFF9F\u{E0020}-\u{E007F}]/u;
+const VIRAMA = /[\u094D\u09CD\u0ACD\u0B4D\u0C4D\u0D4D]/u;
+const CONTROL = /[\p{Cc}\u2028\u2029]/u;
+const [PICT, RI] = [/\p{ExtPict}/u, /\p{RI}/u];
+// The consonants of the Indic scripts a virama joins.
+const CONSONANT = new RegExp(String.raw`(?=\p{Lo})[\u0915-\u0939\u0958-\u095F\u0978-\u097F\u0995-\u09B9`
+  + String.raw`\u09DC-\u09DF\u09F0\u09F1\u0A95-\u0AB9\u0AF9\u0B15-\u0B39\u0B5C-\u0B5F\u0B71\u0C15-\u0C39`
+  + String.raw`\u0C58-\u0C5A\u0D15-\u0D3A]`, 'u');
+
+// A code point's part in Hangul: a leading consonant, vowel or trailing
+// consonant jamo, or a syllable without (LV) or with (LVT) a trailing one.
+function hangul(cp) {
+  if ((cp >= 0x1100 && cp <= 0x115F) || (cp >= 0xA960 && cp <= 0xA97C)) return 'L';
+  if ((cp >= 0x1160 && cp <= 0x11A7) || (cp >= 0xD7B0 && cp <= 0xD7C6)) return 'V';
+  if ((cp >= 0x11A8 && cp <= 0x11FF) || (cp >= 0xD7CB && cp <= 0xD7FB)) return 'T';
+  if (cp >= 0xAC00 && cp <= 0xD7A3) return (cp - 0xAC00) % 28 === 0 ? 'LV' : 'LVT';
+  return null;
+}
+
+// The Hangul parts each part joins when they come right after it.
+const JAMO = { L: ['L', 'V', 'LV', 'LVT'], V: ['V', 'T'], LV: ['V', 'T'], LVT: ['T'], T: ['T'] };
+
+export function clusterCount(text) {
+  let count = 0;
+  // About the code point before: its Hangul part, whether it was CR or a
+  // control, and how many regional indicators ran up to it. About the
+  // cluster: whether it ends in a pictograph and marks, the same followed by
+  // a joiner, or an Indic consonant's virama and marks waiting for another.
+  let jamo = null, cr = false, control = false, ri = 0, pict = false, pictJoiner = false, linked = false;
+  let consonant = false;
+  for (const c of text) {
+    const cp = c.codePointAt(0);
+    const part = hangul(cp);
+    const extend = EXTEND.test(c);
+    const isRi = RI.test(c);
+    let join;
+    if (count === 0) join = false;
+    else if (cr && c === '\n') join = true;
+    else if (control || CONTROL.test(c)) join = false;
+    else if (jamo && part) join = JAMO[jamo].includes(part);
+    else join = extend || (pictJoiner && PICT.test(c)) || (isRi && ri % 2 === 1) || (linked && CONSONANT.test(c));
+    if (!join) count++;
+    // A non-joiner keeps the consonant from joining the next.
+    if (!join || c === '\u200C') consonant = CONSONANT.test(c);
+    const marked = join && extend;
+    pictJoiner = pict && c === '\u200D';
+    pict = marked && c !== '\u200D' ? pict : PICT.test(c);
+    linked = consonant && (VIRAMA.test(c) || (marked && linked));
+    ri = isRi ? ri + 1 : 0;
+    jamo = part;
+    cr = c === '\r';
+    control = CONTROL.test(c);
+  }
+  return count;
+}
 
 // Letters as a reader counts them, so an accented or combined letter is one.
 let graphemes = null;

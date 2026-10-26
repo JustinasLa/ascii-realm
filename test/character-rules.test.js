@@ -68,6 +68,11 @@ const CLUSTERS = [
   ['🇳🇱🇱🇹', 2], ['🇳🇱🇱', 2], ['🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}', 1],
   ['क्षत्रिय', 3], ['স্ত্রী', 1], ['ক্\u200Dষ', 1], ['ಕ್ಷ', 2], ['ﾃﾞﾊﾟ', 2],
   ['ᄀ\u1161\u11A8', 1], ['ᄀᄀ', 1], ['\u11A8\u11A8', 1], ['가\u1161', 1], ['ᄀ가', 1],
+  // A precomposed syllable with a final consonant takes only more finals.
+  ['각\u1161가', 3], ['각\u11A8', 1], ['가\u11A8', 1], ['가\u1161\u11A8', 1], ['\u11A8\u1161', 2], ['각가', 2],
+  ['ᄀ각', 1], ['\u1161가', 2],
+  // A virama joins only consonants, and not across a non-joiner.
+  ['अ्क', 2], ['क\u200C्क', 2], ['क्\u200Cक', 2], ['ক्ষ', 1],
 ];
 
 test('without Intl.Segmenter, letters are counted the same', () => {
@@ -87,6 +92,25 @@ test('without Intl.Segmenter, letters are counted the same', () => {
   assert.deepEqual(withSegmenter[0], CLUSTERS.map(([, letters]) => [letters, letters]));
   assert.deepEqual(CLUSTERS.map(([text]) => [...segments.segment(text)].length), CLUSTERS.map(([, letters]) => letters));
   assert.deepEqual(without[1], [null, 'Name cannot exceed 24 characters.', 'Name must be at least 3 characters.', null]);
+});
+
+test('without Intl.Segmenter, long runs of marks are counted in one pass', () => {
+  const text = `a${'\u094D'.repeat(10_000)}`;
+  const segmenter = Intl.Segmenter;
+  delete Intl.Segmenter;
+  let letters;
+  let message;
+  const start = performance.now();
+  try {
+    letters = textLength(text);
+    message = nameError(`Ana${'\u094D'.repeat(10_000)}`);
+  } finally {
+    Intl.Segmenter = segmenter;
+  }
+  assert.ok(performance.now() - start < 50);
+  assert.equal(letters, 1);
+  assert.equal(clusterCount(`क${'\u094D'.repeat(10_000)}क`), 1);
+  assert.equal(message, null);
 });
 
 test('no two characters share a name, ignoring case', () => {
