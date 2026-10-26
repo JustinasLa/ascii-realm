@@ -13,6 +13,7 @@ import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
+import { INSTRUMENT_IDS } from '../../src/audio/instruments.js';
 import { isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { NightLight } from '../../src/world/night-light.js';
@@ -215,7 +216,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     isControlTarget: () => false,
     clearInput: () => { taps.clear(); held.clear(); }, isGameplayBlocked: () => blocked,
     setGameplayBlocked: value => { blocked = value; taps.clear(); held.clear(); },
-    Inventory, ITEMS, Hud: inert(),
+    Inventory, ITEMS, INSTRUMENT_IDS, Hud: inert(),
     InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
     GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {

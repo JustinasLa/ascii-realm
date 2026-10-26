@@ -437,3 +437,35 @@ test('pickup events report actual quantities and failed adds or equipment transf
   assert.deepEqual(inventory.events, []);
   assert.equal(carriedCount(inventory, 'longbow'), 2);
 });
+
+test('the nine instruments are off-hand items that leave the main hand alone', async () => {
+  const { INSTRUMENT_IDS } = await import('../src/audio/instruments.js');
+  const { heldWeapon } = await import('../src/entities/loadout.js');
+  for (const id of INSTRUMENT_IDS) {
+    const item = ITEMS[id];
+    assert.equal(item.equipmentSlot, 'offHand', id);
+    assert.ok(item.tags.includes('instrument') && item.tags.includes('equipment'));
+    assert.equal(item.stackLimit, 1);
+    for (const key of ['weapon', 'twoHanded', 'use', 'durability']) assert.equal(item[key], undefined, `${id} ${key}`);
+    assert.ok(item.name && item.shortName && item.description.endsWith('Carry it in the off hand to play.'));
+    assert.ok(item.weight > 0 && item.weight < 5);
+    assert.ok(Object.isFrozen(item) && Object.isFrozen(item.stats));
+  }
+  const inventory = emptyInventory();
+  inventory.add('shortSword');
+  inventory.equip(0);
+  inventory.add('lute');
+  assert.equal(inventory.equip(0), true);
+  assert.deepEqual(inventory.equipment.offHand, { id: 'lute', count: 1 });
+  assert.deepEqual(inventory.equipment.mainHand, { id: 'shortSword', count: 1 });
+  assert.equal(heldWeapon(inventory.equipment).type, heldWeapon({ mainHand: { id: 'shortSword' } }).type);
+  // A two-handed bow takes the instrument off, as it does the buckler.
+  inventory.add('longbow');
+  assert.equal(inventory.equip(inventory.slots.findIndex(stack => stack?.id === 'longbow')), true);
+  assert.equal(inventory.equipment.offHand, null);
+  assert.equal(carriedCount(inventory, 'lute'), 1);
+  // All nine and the sword fit in a fresh bag.
+  const bag = new Inventory({ starter: false });
+  bag.add('shortSword');
+  for (const id of INSTRUMENT_IDS) assert.equal(bag.add(id), 1, id);
+});

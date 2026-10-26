@@ -4,6 +4,7 @@ import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
 import { prepareSpellSounds } from './audio/spells.js';
 import { bindAudioControls } from './audio/controls.js';
+import { INSTRUMENT_IDS } from './audio/instruments.js';
 import { installTouchControls } from './core/touch.js';
 import { assistTarget, castAssist, strikeAssist } from './core/aim-assist.js';
 import { pickStruck, TargetTracker, targetId } from './core/target.js';
@@ -212,6 +213,8 @@ const inventory = new Inventory({ starter: false });
 inventory.add('shortSword');
 inventory.equip(0);
 inventory.assignHotbar(0, 'shortSword');
+// Until instruments can be crafted, ?instruments puts one of each in the bag.
+if (params.has('instruments')) for (const id of INSTRUMENT_IDS) inventory.add(id);
 inventory.events.length = 0;
 // The pouch: money carried, in cents, kept on this device between visits.
 let walletStorage = null;

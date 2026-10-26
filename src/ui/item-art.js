@@ -252,6 +252,102 @@ const ITEM_ART = Object.freeze({
     ' \\~~~~~/',
     ' /_/ \\_\\',
   ),
+  // Instruments, carried in the off hand.
+  // A pear-bodied lute, neck up, its pegbox bent back.
+  lute: art(
+    '     __',
+    '    /_/',
+    '    |:|',
+    '    |:|',
+    '   /:::\\',
+    '  /:(O):\\',
+    ' |:::::::|',
+    '  \\:=-=:/',
+    '   `---\'',
+  ),
+  // A framed harp: curved neck, pillar and strings.
+  celticHarp: art(
+    ' __',
+    '|  \\__',
+    '||\\   \\_',
+    '|||\\    \\',
+    '||||\\    |',
+    '|||||\\   |',
+    '||||||\\ /',
+    '|_______\\',
+  ),
+  // A trapezoid of strings with its two hammers.
+  dulcimer: art(
+    '  _______',
+    ' /=======\\',
+    '/=========\\',
+    '|=========|',
+    '\\_________/',
+    '   /   \\',
+    '  o     o',
+  ),
+  // Tines over a sound hole on a little box.
+  kalimba: art(
+    ' _________',
+    '| ||||||| |',
+    '| ||||||| |',
+    '|  =====  |',
+    '|   ( )   |',
+    '|_________|',
+  ),
+  // A fiddle: scroll, pegbox, a waisted body with its sound holes.
+  vielle: art(
+    '    _@_',
+    '    |=|',
+    '    | |',
+    '   /   \\',
+    '  ( ):( )',
+    '   ) : (',
+    '  ( ):( )',
+    '   \\___/',
+    '     V',
+  ),
+  // Bellows between two keyboards.
+  accordion: art(
+    ' _________',
+    '|o|/\\/\\|o|',
+    '|o|\\/\\/|o|',
+    '|o|/\\/\\|o|',
+    '|o|\\/\\/|o|',
+    '|_|____|_|',
+  ),
+  // Drones over a round bag and the chanter below.
+  bagpipe: art(
+    ' |  |  |',
+    ' |  |  |',
+    ' |  | /',
+    '_\\__|/_',
+    '/       \\',
+    '( ::::: )',
+    ' \\_____/\\',
+    '         \\',
+    '          o',
+  ),
+  // A slim flute at a slant, with its finger holes.
+  flute: art(
+    '         /',
+    '        //',
+    '       /o/',
+    '      /o/',
+    '     /o/',
+    '    /o/',
+    '   /o/',
+    '  //',
+    ' /',
+  ),
+  // Mouthpiece, three valves, a flared bell and the looped tube.
+  trumpet: art(
+    '    _ _ _',
+    '    | | | /',
+    'o===|=|=|<',
+    '    |_|_| \\',
+    ' \\=======/',
+  ),
 });
 
 export function itemArt(id, fallbackGlyph = '?') {

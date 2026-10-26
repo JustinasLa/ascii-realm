@@ -158,6 +158,23 @@ test('grass preview plays six recorded contacts at 420ms spacing and restores on
   assertClean(audio);
 });
 
+test('the game unlocks audio inside every key and pointer gesture, before anything waits', t => {
+  const ui = dom(t);
+  const audio = fakeAudio();
+  let calls = 0;
+  audio.engine.unlock = () => { calls++; return Promise.resolve(true); };
+  ui.bind(audio.engine);
+  const pointer = (type, pointerType) => Object.assign(new Event(type), { pointerType });
+  ui.window.dispatchEvent(Object.assign(new Event('keydown'), { code: 'Digit1' }));
+  assert.equal(calls, 1, 'a key press unlocks within its handler');
+  ui.window.dispatchEvent(pointer('pointerdown', 'mouse'));
+  assert.equal(calls, 2, 'a mouse press unlocks within its handler');
+  ui.window.dispatchEvent(pointer('pointerdown', 'touch'));
+  assert.equal(calls, 2, 'touch gains activation on release');
+  ui.window.dispatchEvent(pointer('pointerup', 'touch'));
+  assert.equal(calls, 3, 'a tap unlocks within its release handler');
+});
+
 test('volume changes and mute controls preserve preview ducking with the real engine', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const ui = dom(t);
@@ -173,13 +190,15 @@ test('volume changes and mute controls preserve preview ducking with the real en
     for (const bus of ['music', 'ambience']) assert.equal(engine.buses[bus].gain.value, 0);
   };
   assertDucked();
-  for (const [bus, value] of [['sfx', 50], ['music', 25], ['ambience', 40]]) {
+  assert.equal(sliders.find(slider => slider.dataset.volume === 'records').value, 80);
+  for (const [bus, value] of [['sfx', 50], ['music', 25], ['ambience', 40], ['records', 30]]) {
     const slider = sliders.find(slider => slider.dataset.volume === bus);
     slider.value = value;
     slider.dispatchEvent(new Event('input'));
     assert.equal(engine.volumes[bus], value / 100);
     assertDucked();
   }
+  assert.equal(engine.buses.records.gain.value, 0.3, 'the grass preview leaves instruments alone');
   mute.dispatchEvent(new Event('click'));
   assert.equal(engine.muted, true);
   assertDucked();

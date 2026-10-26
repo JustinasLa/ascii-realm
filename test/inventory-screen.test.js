@@ -940,3 +940,32 @@ test('pointer and wheel events inside the panel stay away from the scene', (t) =
     assert.equal(screen.screen.dispatch(type).stopped, true, type);
   }
 });
+
+test('an instrument lists its keys under the description, and phones say why they wait', (t) => {
+  let phone = false;
+  const inventory = new Inventory({ starter: false });
+  for (const id of ['shortSword', 'lute', 'flute']) inventory.add(id);
+  const { screen, press, bagButton } = mount(t, { inventory, phone: () => phone });
+  press('KeyI');
+  const lines = () => screen.noteLines.filter((line) => !line.hidden).map((line) => line.textContent);
+  bagButton(0).click();
+  assert.equal(screen.notes.hidden, true, 'the sword plays nothing');
+  assert.deepEqual(lines(), []);
+  bagButton(1).click();
+  assert.equal(screen.notes.hidden, false);
+  assert.deepEqual(lines(), [
+    'Use keys 1-8 to play notes: 1-[C] 2-[D] 3-[E] 4-[F] 5-[G] 6-[A] 7-[B] 8-[C]',
+    'Hold Shift to play chords: 1-[C] 2-[D] 3-[E] 4-[F] 5-[G] 6-[A] 7-[B] 8-[C]',
+  ]);
+  assert.deepEqual(screen.stats.children.map((node) => node.textContent),
+    ['Material', 'Wood and gut', 'Voice', 'Plucked strings', 'Notes', 'C4-C5', 'Shift', 'Chords']);
+  bagButton(2).click();
+  assert.equal(lines()[1], 'Hold Shift to play additional notes: 9-[C] 10-[D] 11-[E] 12-[F] 13-[G] 14-[A] 15-[B] 16-[C]');
+  phone = true;
+  screen.update();
+  assert.equal(lines().length, 3);
+  assert.equal(lines()[2], 'Played with a keyboard for now.');
+  assert.equal(screen.itemPreview.textContent, itemArt('flute', ITEMS.flute.glyph));
+  bagButton(3).click();
+  assert.equal(screen.notes.hidden, true, 'an empty slot plays nothing');
+});

@@ -38,7 +38,7 @@ export function setParam(param, value, time, smoothing = 0.08) {
   } catch { /* A closed context must not interrupt gameplay. */ }
 }
 
-function noiseBuffer(context) {
+export function noiseBuffer(context) {
   let buffer = noiseBuffers.get(context);
   if (buffer) return buffer;
   buffer = context.createBuffer(1, Math.max(2, Math.floor(context.sampleRate * 2)), context.sampleRate);
