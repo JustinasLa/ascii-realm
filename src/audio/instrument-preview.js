@@ -3,6 +3,8 @@
 // scale. Every press starts unlocking audio inside the gesture itself, before
 // anything waits or is scheduled: unlock() creates and resumes the context
 // synchronously, and a browser that gates sound on a gesture only counts that.
+// Stop, hiding the page and a new row cancel by bumping a generation; anything
+// still waiting on unlock checks it before it sounds.
 import { CHORD_NAMES, INSTRUMENT_IDS, INSTRUMENTS, NOTE_LETTERS, layerNote, noteRange, playInstrumentNote,
   prepareInstrument, secondLayer } from './instruments.js';
 
@@ -28,9 +30,10 @@ const noteName = (slot, number = slot) => 'note ' + number + ' ' + NOTE_LETTERS[
 export function mountInstrumentPreview(engine, doc = globalThis.document, win = globalThis.window) {
   const status = doc.querySelector('#status'), grid = doc.querySelector('#instruments');
   const prepared = new Set();
-  let active = [], timers = [];
+  let active = [], timers = [], generation = 0;
   const say = text => { status.textContent = text; };
   function stop() {
+    generation++;
     for (const timer of timers) clearTimeout(timer);
     timers = [];
     for (const handle of active) handle.stop();
@@ -52,18 +55,24 @@ export function mountInstrumentPreview(engine, doc = globalThis.document, win = 
   }
   // One key: unlock inside the press, then play once audio runs.
   async function press(id, slot, shifted, button) {
-    const unlocking = engine.unlock();
-    if (!await unlocking) { say(LOCKED); return; }
+    const unlocking = engine.unlock(), current = generation;
+    const running = await unlocking;
+    if (current !== generation) return;
+    if (!running) { say(LOCKED); return; }
     sound(id, slot, shifted, button);
   }
-  // A whole row: unlock inside the press, then space the notes out.
-  function scale(id, buttons, shifted) {
+  // A whole row: unlock inside the press, then space the notes out from the
+  // moment audio runs, so a slow resume never releases several at once.
+  async function scale(id, buttons, shifted) {
     const unlocking = engine.unlock();
     stop();
-    void unlocking.then(running => { if (!running) { stop(); say(LOCKED); } });
+    const current = generation;
+    const running = await unlocking;
+    if (current !== generation) return;
+    if (!running) { say(LOCKED); return; }
     for (let slot = 1; slot <= 8; slot++) {
       timers.push(setTimeout(() => {
-        void unlocking.then(running => { if (running) sound(id, slot, shifted, buttons[slot - 1]); });
+        if (current === generation) sound(id, slot, shifted, buttons[slot - 1]);
       }, (slot - 1) * SCALE_STEP));
     }
   }
@@ -107,7 +116,7 @@ export function mountInstrumentPreview(engine, doc = globalThis.document, win = 
       const button = doc.createElement('button');
       button.type = 'button';
       button.textContent = label;
-      button.onclick = () => scale(id, buttons, shifted);
+      button.onclick = () => scale(id, buttons, shifted).catch(() => say('Audio playback failed. Try again.'));
       extras.append(button);
     }
     card.append(heading, voice, mode, firstLabel, first.node, secondLabel, second.node, extras);

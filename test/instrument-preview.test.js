@@ -44,6 +44,19 @@ function locked() {
   return { fake, engine };
 }
 
+// A context whose resume stays pending until the test lets it finish, as a
+// slow or autoplay-blocked browser's can.
+function slowResume() {
+  const { fake, engine } = locked();
+  const pending = [];
+  fake.context.resume = function () {
+    this.resumeCalls++;
+    return new Promise(resolve => pending.push(() => { this.state = 'running'; resolve(); }));
+  };
+  const finish = () => { for (const resolve of pending.splice(0)) resolve(); };
+  return { fake, engine, finish };
+}
+
 const settle = () => new Promise(resolve => setImmediate(resolve));
 const started = fake => fake.sources().filter(source => source.starts.length).length;
 
@@ -119,6 +132,7 @@ test('a row button unlocks inside the click before any note is scheduled', async
   t.mock.timers.tick(0);
   await settle();
   ui.keys('lute')[17].onclick();
+  await settle();
   t.mock.timers.tick(SCALE_STEP * 8);
   await settle();
   assert.ok(ui.elements.status.textContent.startsWith('Lute - chord'), 'only the second row played on');
@@ -142,6 +156,74 @@ test('when audio cannot start, presses and rows say so and schedule nothing', as
   assert.equal(ui.elements.status.textContent, '', 'the row was cancelled');
 });
 
+test('stop, hiding or a new row while resume is pending cancels what was waiting', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ui = page();
+  const { fake, engine, finish } = slowResume();
+  mountInstrumentPreview(engine, ui.doc, ui.win);
+  // Stop: a key and a row pressed before audio runs stay silent after it does.
+  ui.keys('lute')[0].onclick();
+  ui.keys('lute')[16].onclick();
+  t.mock.timers.tick(SCALE_STEP * 3);
+  ui.elements.stop.onclick();
+  finish();
+  await settle();
+  t.mock.timers.tick(SCALE_STEP * 8);
+  await settle();
+  assert.equal(started(fake), 0, 'nothing sounds after Stop');
+  assert.equal(ui.elements.status.textContent, 'Stopped.');
+  // Hiding the page while a row waits on resume.
+  ui.keys('flute')[16].onclick();
+  ui.doc.hidden = true;
+  ui.doc.dispatchEvent(new Event('visibilitychange'));
+  ui.doc.hidden = false;
+  finish();
+  await settle();
+  t.mock.timers.tick(SCALE_STEP * 8);
+  await settle();
+  assert.equal(started(fake), 0, 'nothing sounds after hiding');
+  // A new row cancels the old row's pending notes; only the new one plays.
+  const said = [];
+  Object.defineProperty(ui.elements.status, 'textContent', { set: text => said.push(text), get: () => said.at(-1) });
+  fake.context.state = 'suspended';
+  ui.keys('lute')[16].onclick();
+  ui.keys('trumpet')[17].onclick();
+  finish();
+  await settle();
+  t.mock.timers.tick(SCALE_STEP * 8);
+  await settle();
+  assert.equal(said.length, 8, 'one row of notes sounds');
+  assert.ok(said.every(text => text.startsWith('Trumpet - note')), 'none of them from the cancelled row');
+  assert.equal(started(fake) > 0, true);
+});
+
+test('a row keeps its spacing after a slow resume', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const ui = page();
+  const { fake, engine, finish } = slowResume();
+  mountInstrumentPreview(engine, ui.doc, ui.win);
+  ui.keys('kalimba')[16].onclick();
+  // Resume takes longer than three note gaps.
+  t.mock.timers.tick(SCALE_STEP * 3 + 50);
+  await settle();
+  assert.equal(started(fake), 0, 'no note before audio runs');
+  finish();
+  await settle();
+  const heard = [];
+  for (let slot = 1; slot <= 8; slot++) {
+    t.mock.timers.tick(slot === 1 ? 0 : SCALE_STEP - 1);
+    await settle();
+    const before = started(fake);
+    if (slot > 1) {
+      t.mock.timers.tick(1);
+      await settle();
+    }
+    heard.push(started(fake) - before);
+    assert.ok(ui.elements.status.textContent.endsWith(`note ${slot} ${'CDEFGABC'[slot - 1]}`), `note ${slot} plays on its own beat`);
+  }
+  assert.deepEqual(heard.slice(1).map(count => count > 0), Array(7).fill(true), 'one note per gap, none bunched');
+});
+
 test('failed notes and failed unlocks are reported', async () => {
   const ui = page();
   let unlock = async () => true;
@@ -152,6 +234,10 @@ test('failed notes and failed unlocks are reported', async () => {
   assert.equal(ui.elements.status.textContent, 'That note could not play.');
   unlock = () => { throw new Error('No audio'); };
   ui.keys('vielle')[0].onclick();
+  await settle();
+  assert.equal(ui.elements.status.textContent, 'Audio playback failed. Try again.');
+  ui.elements.status.textContent = '';
+  ui.keys('vielle')[16].onclick();
   await settle();
   assert.equal(ui.elements.status.textContent, 'Audio playback failed. Try again.');
 });
