@@ -1,6 +1,7 @@
 import { FINE } from '../render/cells.js';
 import { LAYER } from '../render/glyphs.js';
 import { fineRecipe, fineSource } from './prop-art.js';
+import { normalByte } from './surface-light.js';
 
 // Trees and rocks are drawn in small letters on the renderer's fine grid
 // (see drawProp). Their fine bakes are long (a big tree takes a few hundred
@@ -33,6 +34,9 @@ export function packFine(cells) {
     color: new Uint8ClampedArray(n * 3), back: new Uint8ClampedArray(n * 3), solid: new Uint8Array(n),
     foliage: new Uint8Array(n), flex: new Float32Array(n), phaseSin: new Float32Array(n),
     phaseCos: new Float32Array(n), rows: null,
+    // A stone cell's normal as bytes (see surface-light.js), and whether
+    // it has one.
+    normal: new Uint8Array(n * 2), bump: new Uint8Array(n),
   };
   const rows = [];
   for (let k = 0; k < n; k++) {
@@ -54,6 +58,11 @@ export function packFine(cells) {
     out.flex[k] = c.flex ?? 0;
     out.phaseSin[k] = c.phaseSin ?? 0;
     out.phaseCos[k] = c.phaseCos ?? 1;
+    if (c.nx !== undefined) {
+      out.bump[k] = 1;
+      out.normal[k * 2] = normalByte(c.nx);
+      out.normal[k * 2 + 1] = normalByte(c.ny);
+    }
     const pad = c.foliage ? Math.ceil(Math.abs(c.flex) * SWAY_PAD) : 0;
     const last = rows[rows.length - 1];
     if (last && last.y === c.dy) {
@@ -68,7 +77,7 @@ export function packFine(cells) {
 
 // The buffers of a packed bake, to hand to postMessage without copying.
 export const fineBuffers = (p) => [p.dx, p.dy, p.g, p.rustle, p.color, p.back, p.solid, p.foliage,
-  p.flex, p.phaseSin, p.phaseCos, p.rows].map((a) => a.buffer);
+  p.flex, p.phaseSin, p.phaseCos, p.rows, p.normal, p.bump].map((a) => a.buffer);
 
 // The cells of a prop's ordinary bake that lie on the ground beside it (a
 // shadow, pebbles, leaf litter: glyphs layered where the prop itself has no
