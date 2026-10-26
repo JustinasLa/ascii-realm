@@ -15,9 +15,27 @@ export function normalName(raw) {
 
 export const nameKey = (name) => normalName(name).toLowerCase();
 
+// Without Intl.Segmenter, a close match for the cases names and text meet:
+// combining marks, variation selectors, skin tones and tags stay with what
+// they follow, flags are pairs of regional indicators, a joiner joins two
+// pictographs into one emoji, a virama joins two Indic consonants, and
+// Hangul jamo make one syllable.
+const EXTEND = String.raw`[\p{M}\p{EMod}\u200C\uFF9E\uFF9F\u{E0020}-\u{E007F}]`;
+const LINK = String.raw`[\u094D\u09CD\u0ACD\u0B4D\u0C4D\u0D4D][\p{M}\u200D]*\p{Lo}`;
+const [L, V, T] = [String.raw`[\u1100-\u115F\uA960-\uA97C]`, String.raw`[\u1160-\u11A7\uD7B0-\uD7C6]`,
+  String.raw`[\u11A8-\u11FF\uD7CB-\uD7FB]`];
+const HANGUL = String.raw`${L}*(?:[\uAC00-\uD7A3]|${V})${V}*${T}*|${L}+|${T}+`;
+const CLUSTER = new RegExp(String.raw`\r\n|\p{RI}\p{RI}|\p{ExtPict}(?:${EXTEND}|\u200D\p{ExtPict}|\u200D)*|`
+  + String.raw`(?:${HANGUL}|[^])(?:${LINK}|${EXTEND}|\u200D)*`, 'gu');
+export const clusterCount = (text) => text.match(CLUSTER)?.length ?? 0;
+
 // Letters as a reader counts them, so an accented or combined letter is one.
-const graphemes = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('en', { granularity: 'grapheme' }) : null;
-export const textLength = (text) => graphemes ? [...graphemes.segment(text)].length : [...text].length;
+let graphemes = null;
+export function textLength(text) {
+  if (typeof Intl.Segmenter !== 'function') return clusterCount(text);
+  graphemes ??= new Intl.Segmenter('en', { granularity: 'grapheme' });
+  return [...graphemes.segment(text)].length;
+}
 
 const NAME = /^\p{L}[\p{L}\p{M} .'-]*$/u;
 

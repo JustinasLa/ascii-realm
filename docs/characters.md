@@ -50,7 +50,8 @@ never below 0. Attributes have no effect on play yet.
 A name starts with a letter in any alphabet, followed by letters, combining
 marks, spaces, apostrophes, hyphens and full stops. It is 3 to 24 letters
 long after trimming, counted as a reader sees them, so `ë` or a letter with
-an accent mark is one. Curly apostrophes (as phones type them) become
+an accent mark is one. Browsers without `Intl.Segmenter` count combining
+marks, emoji, flags, Indic conjuncts and Hangul the same way. Curly apostrophes (as phones type them) become
 straight ones, and names are stored in composed Unicode form (NFC), so
 "Zoë" typed two ways is the same name. No two of the player's characters
 may share a name, ignoring case.

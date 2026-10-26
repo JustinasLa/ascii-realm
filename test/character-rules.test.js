@@ -4,8 +4,8 @@ import { DAY, RACES } from '../src/character/catalog.js';
 import { ageOn, birthdayFromAge, realmToday } from '../src/character/calendar.js';
 import { ageError, ageOf, attributeCost, attributesError, attributesSpent, attributeTotals, birthdayError, blankSheet,
   canChange, classError, cleanSheet, cluesError, cluesNeeded, descriptionError, fieldError, genderError, lockEndsAt,
-  nameError, nameKey, normalName, raceError, setAge, setBirthday, sheetErrors, stepError, STEPS, textLength }
-  from '../src/character/rules.js';
+  clusterCount, nameError, nameKey, normalName, raceError, setAge, setBirthday, sheetErrors, stepError, STEPS,
+  textLength } from '../src/character/rules.js';
 
 const NOW = new Date(2026, 9, 26, 12).getTime();
 const TODAY = realmToday(NOW);
@@ -58,6 +58,35 @@ test('names are counted in letters as read, not code units', () => {
   assert.equal(nameError('q\u0307'.repeat(25)), 'Name cannot exceed 24 characters.');
   assert.equal(nameError('𠀀'.repeat(24)), null);
   assert.equal(nameError('𠀀'.repeat(25)), 'Name cannot exceed 24 characters.');
+});
+
+// Text whose letter count a code point count gets wrong.
+const CLUSTERS = [
+  ['q\u0307q', 2], ['q\u0307'.repeat(13), 13], ['\u0301a', 2], ['Zoe\u0308', 3], ['𠀀𠀀', 2], ['a\r\nb', 3], ['', 0],
+  ['👩\u200D👩\u200D👧', 1], ['😀\u200D', 1], ['a\u200Db', 2], ['a\u200D😀', 2], ['Ali\u200Cce', 5],
+  ['❤\uFE0F', 1], ['❤\uFE0E', 1], ['a\uFE0F', 1], ['👍🏽', 1],
+  ['🇳🇱🇱🇹', 2], ['🇳🇱🇱', 2], ['🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}', 1],
+  ['क्षत्रिय', 3], ['স্ত্রী', 1], ['ক্\u200Dষ', 1], ['ಕ್ಷ', 2], ['ﾃﾞﾊﾟ', 2],
+  ['ᄀ\u1161\u11A8', 1], ['ᄀᄀ', 1], ['\u11A8\u11A8', 1], ['가\u1161', 1], ['ᄀ가', 1],
+];
+
+test('without Intl.Segmenter, letters are counted the same', () => {
+  const segments = new Intl.Segmenter('en', { granularity: 'grapheme' });
+  const counts = () => CLUSTERS.map(([text]) => [textLength(text), clusterCount(text)]);
+  const names = () => ['q\u0307'.repeat(24), 'q\u0307'.repeat(25), 'q\u0307q', 'q\u0307qq'].map((name) => nameError(name));
+  const withSegmenter = [counts(), names()];
+  const segmenter = Intl.Segmenter;
+  delete Intl.Segmenter;
+  let without;
+  try {
+    without = [counts(), names()];
+  } finally {
+    Intl.Segmenter = segmenter;
+  }
+  assert.deepEqual(without, withSegmenter);
+  assert.deepEqual(withSegmenter[0], CLUSTERS.map(([, letters]) => [letters, letters]));
+  assert.deepEqual(CLUSTERS.map(([text]) => [...segments.segment(text)].length), CLUSTERS.map(([, letters]) => letters));
+  assert.deepEqual(without[1], [null, 'Name cannot exceed 24 characters.', 'Name must be at least 3 characters.', null]);
 });
 
 test('no two characters share a name, ignoring case', () => {
