@@ -267,6 +267,10 @@ export class World {
     }
     this.applyTerrain(c, i, type);
     this.touched(c);
+    // A standing stone follows the ground painted beneath its foot.
+    for (const prop of this.addedPropChunks.get(chunk)?.values() ?? []) {
+      if (prop.kind === 'standing-stone' && Math.floor(prop.x) === x && Math.floor(prop.y) === y) this.wetStone(prop);
+    }
   }
 
   // Sets one cell's terrain and the grass growing on it. Painted meadow
@@ -313,7 +317,7 @@ export class World {
     if (this.addedProps.has(prop.id)) this.deleteProp(prop.id);
     this.addedProps.set(prop.id, prop);
     // A builder's rock beside water is damp, as a generated one is.
-    if (this.dampStone(prop)) prop.damp = true;
+    this.wetStone(prop);
     this.coverGrass(prop, 1);
     this.measureProp(prop);
     const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
@@ -629,6 +633,13 @@ export class World {
   dampStone(prop) {
     if (prop.kind === 'standing-stone') return this.typeAt(Math.floor(prop.x), Math.floor(prop.y)) === WATER;
     return prop.kind === 'rock' && !prop.wet && this.byWater(prop);
+  }
+
+  // Marks a stone damp where dampStone says so. A rock stays damp once it
+  // is; a standing stone dries again when its cell is no longer water.
+  wetStone(prop) {
+    if (this.dampStone(prop)) prop.damp = true;
+    else if (prop.kind === 'standing-stone') delete prop.damp;
   }
 
   // Whether water lies within DAMP_REACH cells of a prop's foot: a rock

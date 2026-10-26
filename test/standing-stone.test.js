@@ -135,6 +135,47 @@ test('a standing stone is damp only where it stands in water, and solid at its f
   assert.equal(world.isWalkable(shore.x + 3, shore.y), true);
 });
 
+test('a standing stone dampens and dries as water is painted and cleared beneath it', () => {
+  const world = new World(42);
+  const scene = new Scenery(world);
+  const x = Math.floor(world.spawn.x) + 30, y = Math.floor(world.spawn.y) + 12;
+  const stone = scene.place('standing-stone', x + 0.5, y + 0.5, { seed: 3 });
+  const rock = scene.place('rock', x + 8.5, y + 0.5, { seed: 3 });
+  assert.equal(world.typeAt(x, y), GRASS);
+  assert.equal(stone.damp, undefined);
+  assert.equal(rock.damp, undefined);
+  scene.paint(x + 0.5, y + 0.5, 0, WATER);
+  assert.equal(stone.damp, true);
+  // Water beside the stone's foot leaves it as it was.
+  scene.paint(x + 1.5, y + 0.5, 0, WATER);
+  scene.paint(x + 8.5, y + 0.5, 0, WATER);
+  assert.equal(rock.damp, undefined, 'a rock keeps the dampness it was placed with');
+  scene.paint(x + 0.5, y + 0.5, 0, GRASS);
+  assert.equal(stone.damp, undefined);
+  assert.equal(world.typeAt(x + 1, y), WATER);
+  // Undo and redo rebuild the stone from the scene, damp as its cell is now.
+  assert.equal(scene.undo(), true);
+  assert.equal(world.addedProps.get(stone.id).damp, true);
+  assert.equal(scene.redo(), true);
+  assert.equal(world.addedProps.get(stone.id).damp, undefined);
+});
+
+test('a standing stone above the view still reflects into the water at its top', () => {
+  const world = new World(42);
+  const scene = new Scenery(world);
+  const view = { x0: 0, y0: 0, cols: 40, rows: 24 };
+  const stone = scene.place('standing-stone', 20.5, -3.5, { seed: 5 });
+  const queried = world.propsInView(view).find(({ id }) => id === stone.id);
+  assert.ok(queried, 'the stone above the view stays queryable');
+  const mask = new Uint8Array(view.cols * view.rows).fill(WATER);
+  const direct = withLayers({ cols: view.cols, rows: view.rows, mask, fg: new Float32Array(view.cols * view.rows * 4) });
+  drawProp(direct, view, queried);
+  assert.ok(direct.fg.every((v, i) => i % 4 !== 3 || !v), 'the stone itself is off screen');
+  const renderer = withLayers({ cols: view.cols, rows: view.rows, mask, fg: new Float32Array(view.cols * view.rows * 4) });
+  drawProp(renderer, view, queried, reflector(0, view));
+  assert.ok(renderer.fg.some((v, i) => i % 4 === 3 && v > 0), 'its reflection reaches the visible water');
+});
+
 test('a standing stone on the shore reflects its full height into the pool below', () => {
   const world = new World(42);
   const scene = new Scenery(world);
