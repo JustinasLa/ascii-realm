@@ -1544,11 +1544,12 @@ function frame(now) {
   const projection = hud.projector(hudView);
   const ownTop = model ? model.top : Math.floor(player.y + figureTop(figure));
   const self = selfMember();
-  const plates = Number.isFinite(ownTop) ? [{ key: 'self', x: player.x, row: ownTop - 2, name: self ? self.name : name,
-    tag: self?.tag ?? null, colour: self ? memberColour(self) : chosenTint ? hexRgb(chosenTint) : SOLO_COLOR }] : [];
+  const plates = Number.isFinite(ownTop) ? [{ key: 'self', x: player.x, row: ownTop - 2, depth: player.y,
+    name: self ? self.name : name, tag: self?.tag ?? null,
+    colour: self ? memberColour(self) : chosenTint ? hexRgb(chosenTint) : SOLO_COLOR }] : [];
   for (const peer of peers) {
     plates.push({ key: peer.id, x: peer.player.x, row: Math.floor(peer.player.y + figureTop(peer.figure)) - 2,
-      name: peer.name, tag: peer.tag ?? null, colour: memberColour(peer) });
+      depth: peer.player.y, name: peer.name, tag: peer.tag ?? null, colour: memberColour(peer) });
   }
   nameplates.update(plates, projection);
   const bubblesStarted = performance.now();

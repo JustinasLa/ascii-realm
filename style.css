@@ -488,6 +488,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 #nameplate-root { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; contain: strict; }
 .nameplate { position: absolute; left: 0; top: 0; padding: 0 0.25em; font-family: var(--font); line-height: 1; white-space: pre; font-variant-ligatures: none; font-kerning: none; background: rgb(10, 9, 19); will-change: transform; }
 .nameplate-probe { visibility: hidden; letter-spacing: 0; padding: 0; }
+.nameplate-safe { position: absolute; visibility: hidden; padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 #bubble-root { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; contain: strict; }
 .bubble { position: absolute; left: 0; top: 0; font: 12px/14px var(--font); white-space: pre; font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; will-change: transform; contain: layout style; }
 .bubble-covered { opacity: 0.6; }

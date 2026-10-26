@@ -180,8 +180,8 @@ test('nameplates, party frames and the picker show each player\'s name colour an
   // Plain copies: the frame runs in a context of its own.
   const plates = () => JSON.parse(JSON.stringify(nameplates.updates.at(-1).plates));
   harness.frame();
-  assert.deepEqual(plates(), [{ key: 'self', x: player.x, row: Math.floor(player.y - 20) - 2, name: 'Kael', tag: null,
-    colour: [212, 218, 228] }], 'solo on Auto, as before, two rows over the figure');
+  assert.deepEqual(plates(), [{ key: 'self', x: player.x, row: Math.floor(player.y - 20) - 2, depth: player.y,
+    name: 'Kael', tag: null, colour: [212, 218, 228] }], 'solo on Auto, as before, two rows over the figure');
   assert.equal(tint.getName(), plates()[0].name);
   assert.deepEqual(tint.autoColour(), [212, 218, 228]);
   tint.onTint('#ffaa00');
@@ -209,6 +209,7 @@ test('nameplates, party frames and the picker show each player\'s name colour an
     'in a lobby your nameplate shows what the lobby shows; a friend\'s shows their choice');
   assert.equal(plates()[1].row, Math.floor(state.y + 4 - 20) - 2, 'a friend\'s two rows over their dressed figure');
   assert.equal(plates()[1].x, state.x);
+  assert.deepEqual(plates().map((plate) => plate.depth), [player.y, state.y + 4], 'each ordered by their feet');
   assert.deepEqual(party.map((m) => [m.name, m.tag, m.colour]), [['Bryn', null, [255, 85, 85]]]);
   multiplayer.players[1] = { ...multiplayer.players[1], tint: null, tag: 3 };
   bryn.tag = 3;
@@ -241,7 +242,7 @@ test('the 3D character\'s nameplate shows in the name colour at its own top row,
   harness.frame();
   const [plate] = game.nameplates.updates.at(-1).plates;
   assert.deepEqual(JSON.parse(JSON.stringify(plate)),
-    { key: 'self', x: game.player.x, row: 38, name: 'Kael', tag: null, colour: [85, 255, 255] });
+    { key: 'self', x: game.player.x, row: 38, depth: game.player.y, name: 'Kael', tag: null, colour: [85, 255, 255] });
   assert.equal(game.bubbles.updates.at(-1).anchors.get('self').nameRow, plate.row, 'the bubble keeps above it');
   assert.equal(game.bubbles.updates.at(-1).projection, game.nameplates.updates.at(-1).projection);
   delete game.model.top;

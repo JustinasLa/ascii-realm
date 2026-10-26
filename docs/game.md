@@ -313,4 +313,7 @@ short version see the [README](../README.md).
   them. In the rare crowd where every such colour looks like one already shown,
   the least alike is used and the number tells them apart.
 - **Nameplates** float over the scene on a dark backdrop of their own, so fog
-  and the darker screen edges never wash a name out.
+  and the darker screen edges never wash a name out. A player by the edge of
+  the screen keeps their whole nameplate inside it, clear of a phone's notch;
+  a name too long for the screen is cut short with `…`, never its number. A
+  nearer player's nameplate stands over a farther one's.
