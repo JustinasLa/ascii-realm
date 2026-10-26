@@ -11,7 +11,7 @@ from Quaternius' [Universal Animation Library](https://quaternius.com/packs/univ
 (CC0), rendered with [three.js](https://threejs.org/) (MIT, vendored in
 `vendor/three`).
 
-The deer, stag and wolf are from Quaternius' [Ultimate Animated Animals](https://quaternius.com/packs/ultimateanimatedanimals.html)
+The deer, stag, wolf and horse are from Quaternius' [Ultimate Animated Animals](https://quaternius.com/packs/ultimateanimatedanimals.html)
 pack (CC0), and the rabbit is Čestmír Dammer's [Rabbit](https://opengameart.org/node/51722)
 (CC0). The wood pigeon is Paul Spooner's [Animated Bird, Pigeon](https://peripheralarbor.com/bird.blend)
 (public domain, by [his dedication](https://ip.tryop.com)), and the fish is Quaternius'

@@ -104,7 +104,7 @@ export const lookOf = (animal) => (animal.variant === 'stag' ? 'stag' : animal.k
 
 // Flat-coloured or textured Lambert copies of a model's materials, so the
 // lights fall on them as on the monsters; eyes are left unlit black.
-function relight(scene) {
+export function relight(scene) {
   const made = new Map();
   scene.traverse((o) => {
     if (!o.isMesh) return;
@@ -124,7 +124,7 @@ function relight(scene) {
 // The scale and turn that stand a model at its kind's withers height,
 // facing +z, measured once in its rest pose.
 // A small creature is scaled by its length along its facing instead.
-function measure(scene, look, height) {
+export function measure(scene, look, height) {
   scene.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(scene, true);
   const at = (name) => scene.getObjectByName(bone(name)).getWorldPosition(new THREE.Vector3());

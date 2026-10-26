@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { AudioEngine, DEFAULT_VOLUMES } from '../src/audio/engine.js';
+import { AudioEngine, DEFAULT_VOLUMES, ceilingCurve } from '../src/audio/engine.js';
 import { ASPECT } from '../src/world/world.js';
 
 // Only model the graph and scheduled parameter targets, never browser audio.
@@ -217,6 +217,68 @@ test('weather has independent volume within ambience and master routing', async 
   await engine.dispose();
 });
 
+test('instruments play on a records bus that feeds Master, not Music', async () => {
+  const { engine, context } = fixture();
+  assert.equal(DEFAULT_VOLUMES.records, 0.8);
+  await engine.unlock();
+  assert.equal(engine.buses.records.gain.value, 0.8);
+  assert.deepEqual(engine.buses.records.connections, [engine.buses.master],
+    'without a wave shaper the bus feeds Master directly');
+  assert.ok(!engine.buses.music.connections.includes(engine.buses.records));
+  engine.setVolume('records', 0.3);
+  assert.equal(engine.buses.records.gain.value, 0.3);
+  engine.setMuted(true);
+  assert.equal(engine.buses.master.gain.value, 0, 'mute silences instruments with everything else');
+  const route = engine.route('records', 3, 4);
+  assert.ok(route.pan.connections.includes(engine.buses.records));
+  route.dispose();
+  await engine.dispose();
+  assert.equal(context.state, 'closed');
+});
+
+test('the records bus reaches Master through a soft ceiling when the browser has one', async () => {
+  const context = new FakeContext();
+  const shapers = [];
+  context.createWaveShaper = () => {
+    const node = new FakeNode();
+    shapers.push(node);
+    return node;
+  };
+  const engine = new AudioEngine({ contextFactory: () => context, storage: null });
+  await engine.unlock();
+  const [ceiling] = shapers;
+  assert.deepEqual(engine.buses.records.connections, [ceiling]);
+  assert.deepEqual(ceiling.connections, [engine.buses.master]);
+  assert.equal(ceiling.oversample, '2x');
+  assert.equal(ceiling.curve.length, 1025);
+  await engine.dispose();
+  assert.equal(ceiling.disconnects, 1);
+});
+
+test('the ceiling is unity below 0.6 and never reaches 0.9', () => {
+  const curve = ceilingCurve(201);
+  for (let index = 0; index < curve.length; index++) {
+    const x = -1 + 2 * index / 200;
+    if (Math.abs(x) <= 0.6) assert.ok(Math.abs(curve[index] - x) < 1e-6, `unity at ${x}`);
+    assert.ok(Math.abs(curve[index]) < 0.9);
+    assert.ok(Math.abs(curve[index] + curve[200 - index]) < 1e-6, 'symmetric');
+    if (index) assert.ok(curve[index] > curve[index - 1], 'rising');
+  }
+  assert.ok(curve[200] > 0.89, 'loud input still reaches near the top');
+});
+
+test('saved instrument volume persists, and older saves without it get the default', async () => {
+  const store = new Map();
+  const storage = { getItem: key => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  const first = new AudioEngine({ contextFactory: () => new FakeContext(), storage });
+  first.setVolume('records', 0.3);
+  assert.equal(new AudioEngine({ contextFactory: () => new FakeContext(), storage }).volumes.records, 0.3);
+  store.set('ascii-realm.audio', JSON.stringify({ volumes: { master: 0.5 }, muted: false }));
+  const older = new AudioEngine({ contextFactory: () => new FakeContext(), storage });
+  assert.equal(older.volumes.records, 0.8);
+  assert.equal(older.volumes.master, 0.5);
+});
+
 test('persisted preferences clamp invalid levels and retain defaults for malformed values', async () => {
   let saved;
   const engine = new AudioEngine({
@@ -325,4 +387,56 @@ test('suspending blocks new sources until unlocked again and teardown is idempot
   assert.equal(route.input.disconnects, 1);
   assert.equal(await engine.unlock(), false);
   assert.equal(engine.route(), null);
+});
+
+test('the default context comes from the browser, and is optional', async (t) => {
+  const previous = [globalThis.AudioContext, globalThis.webkitAudioContext];
+  t.after(() => { [globalThis.AudioContext, globalThis.webkitAudioContext] = previous; });
+  globalThis.AudioContext = undefined;
+  globalThis.webkitAudioContext = undefined;
+  assert.equal(await new AudioEngine({ storage: null }).unlock(), false);
+  globalThis.webkitAudioContext = FakeContext;
+  const engine = new AudioEngine({ storage: null });
+  assert.equal(await engine.unlock(), true);
+  assert.ok(engine.context instanceof FakeContext);
+  await engine.dispose();
+});
+
+test('a graph that cannot be built closes its context and leaves audio off', async () => {
+  for (const close of [async function () { this.closeCalls++; }, () => { throw new Error('No close'); }]) {
+    const context = new FakeContext();
+    let gains = 0;
+    context.createGain = () => { if (++gains === 3) throw new Error('No more nodes'); return new FakeNode(); };
+    context.close = close;
+    const engine = new AudioEngine({ contextFactory: () => context, storage: null });
+    assert.equal(await engine.unlock(), false);
+    assert.equal(engine.context, null);
+    assert.deepEqual(engine.buses, {});
+  }
+});
+
+test('failed suspend and close never break the game', async () => {
+  const { engine, context } = fixture();
+  await engine.unlock();
+  context.suspend = async () => { throw new Error('Busy'); };
+  assert.equal(await engine.suspend(), false);
+  context.close = async () => { throw new Error('Gone'); };
+  await engine.dispose();
+  assert.equal(engine.context, null);
+});
+
+test('parameters without automation are set directly', async () => {
+  const { engine } = fixture();
+  await engine.unlock();
+  const route = engine.route('records', 0, 0);
+  route.input.gain = { value: 1 };
+  route.update(48, 0);
+  assert.ok(route.input.gain.value < 1, 'moved away, the plain gain is set at once');
+  const held = [];
+  route.input.gain = { value: 1, cancelAndHoldAtTime: (at) => held.push(at), setTargetAtTime(value) { this.value = value; } };
+  route.update(0, 0);
+  assert.deepEqual(held, [0], 'automation is held where it is before moving on');
+  assert.equal(route.input.gain.value, 1);
+  route.dispose();
+  await engine.dispose();
 });

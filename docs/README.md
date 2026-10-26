@@ -8,6 +8,8 @@ Technical and player documentation for [ASCII Realm](../README.md).
   weather, monsters, runes, audio and multiplayer, system by system.
 - [Wildlife](wildlife.md) — where deer and rabbits live, how they graze
   and flee, what they hear, and how they are hunted.
+- [Horses](horses.md) — a first look at a saddled horse with a seated
+  rider, standing idle.
 - [Controls](controls.md) — keyboard, mouse, inventory and touch.
 - [Scenery builder](scenery-builder.md) — painting terrain, placing props,
   undo, saving and sharing scenes.
@@ -38,6 +40,8 @@ Technical and player documentation for [ASCII Realm](../README.md).
 - [Casting arena](casting-simulation.html) — practise every rune against
   stationary enemy and ally targets.
 - [Tree preview](tree-preview.html) — the tree species rendered on their own.
+- [Instrument sounds](audio-instruments.html) — every note and chord of the
+  nine instruments.
 
 ## Credits
 

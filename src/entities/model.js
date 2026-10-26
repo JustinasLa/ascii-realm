@@ -167,14 +167,14 @@ function shortenStride(clip, k) {
 }
 
 // Turns a bone so its world orientation becomes `world`.
-function setWorldQuaternion(b, world) {
+export function setWorldQuaternion(b, world) {
   const parent = b.parent.getWorldQuaternion(new THREE.Quaternion());
   b.quaternion.copy(parent.invert().multiply(world));
   b.updateMatrixWorld(true);
 }
 
 // Two-bone IK: bends and swings a limb to reach `target` in its current plane.
-function reachFor(upper, lower, end, target) {
+export function reachFor(upper, lower, end, target) {
   const A = upper.getWorldPosition(new THREE.Vector3());
   const B = lower.getWorldPosition(new THREE.Vector3());
   const C = end.getWorldPosition(new THREE.Vector3());
@@ -212,6 +212,35 @@ export function outline(mx, my, cover) {
   return { g, rim: Math.max(0, nx * -0.6 + ny * -0.8) };
 }
 
+// The outlaw as the player sees them: a copy of the character with its own
+// skeleton and geometry, in dark undyed cloth and leather, dressed in its
+// clothing and weapons. Anyone else drawn as the outlaw (a rider) is made
+// the same way.
+export function dressCharacter(gltf) {
+  const model = cloneSkinned(gltf.scene);
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    o.frustumCulled = false;
+    // Gear paints vertex colours, so its geometry belongs to this figure too.
+    o.geometry = o.geometry.clone();
+    // Dark, undyed cloth and leather; the mannequin's joint rings a shade
+    // darker still.
+    const joint = o.material?.name === 'M_Joints';
+    o.material = new THREE.MeshLambertMaterial({ color: joint ? 0x4a443e : 0x8c7a6c });
+    o.material.userData.joint = joint;
+  });
+  const bones = {};
+  model.traverse((o) => {
+    if (o.isBone) bones[o.name] = o;
+  });
+  // Weapons in hand, across the back or at the hip; then clothing painted
+  // by body region and gear on the bones, set up while the skeleton is
+  // still in its rest pose.
+  const armory = new Armory(model, bones);
+  const gear = new Gear(model, bones);
+  return { model, bones, gear, armory };
+}
+
 // Each animation library is fetched once and shared, e.g. with the skeletons.
 const libraries = new Map();
 
@@ -247,29 +276,13 @@ export class ModelFigure {
     rim.position.set(2, 3, -5);
     this.scene.add(moon, rim, new THREE.HemisphereLight(0x8090b0, 0x202418, 1.6));
 
-    this.model = cloneSkinned(gltf.scene);
-    this.model.traverse((o) => {
-      if (!o.isMesh) return;
-      o.frustumCulled = false;
-      // Gear paints vertex colours, so its geometry belongs to this figure too.
-      o.geometry = o.geometry.clone();
-      // Dark, undyed cloth and leather; the mannequin's joint rings a shade
-      // darker still.
-      const joint = o.material?.name === 'M_Joints';
-      o.material = new THREE.MeshLambertMaterial({ color: joint ? 0x4a443e : 0x8c7a6c });
-      o.material.userData.joint = joint;
-    });
+    const { model, bones, gear, armory } = dressCharacter(gltf);
+    this.model = model;
     this.scene.add(this.model);
-    this.bones = {};
-    this.model.traverse((o) => {
-      if (o.isBone) this.bones[o.name] = o;
-    });
-
-    // Weapons in hand, across the back or at the hip.
-    this.armory = new Armory(this.model, this.bones);
-    // Clothing painted by body region and gear on the bones, set up while
-    // the skeleton is still in its rest pose.
-    this.gear = new Gear(this.model, this.bones);
+    this.bones = bones;
+    // Weapons in hand, across the back or at the hip, and the clothing.
+    this.armory = armory;
+    this.gear = gear;
     this.feet = ['DEF-foot.L', 'DEF-foot.R'].map((n) => this.bones[bone(n)]);
     this.legs = ['L', 'R'].map((side) => ({
       thigh: this.bones[bone(`DEF-thigh.${side}`)],

@@ -1,8 +1,20 @@
 import { ASPECT } from '../world/world.js';
 
-export const DEFAULT_VOLUMES = Object.freeze({ master: 0.7, music: 0.35, sfx: 0.8, ambience: 0.6, sword: 0.65, weather: 0.6 });
+export const DEFAULT_VOLUMES = Object.freeze({ master: 0.7, music: 0.35, sfx: 0.8, ambience: 0.6, sword: 0.65, weather: 0.6, records: 0.8 });
 const STORAGE_KEY = 'ascii-realm.audio';
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+// A soft ceiling for the records bus: unity below 0.6, then easing towards
+// just under 0.9, so 24 stacked instrument voices can't go past full scale.
+export function ceilingCurve(points = 1025) {
+  const curve = new Float32Array(points);
+  for (let index = 0; index < points; index++) {
+    const x = -1 + 2 * index / (points - 1);
+    const size = Math.abs(x);
+    curve[index] = size <= 0.6 ? x : Math.sign(x) * (0.6 + 0.38 * Math.tanh((size - 0.6) / 0.38));
+  }
+  return curve;
+}
 
 // The constructor only reads preferences. Call unlock() from a player gesture;
 // sources may then connect to route(...).input and dispose their route on end.
@@ -47,6 +59,15 @@ export class AudioEngine {
             this.buses[bus] = context.createGain();
             this.buses[bus].connect(this.buses.master);
           }
+          // Instruments reach Master through the soft ceiling, where there is one.
+          this.buses.records = context.createGain();
+          this._ceiling = context.createWaveShaper?.() ?? null;
+          if (this._ceiling) {
+            this._ceiling.curve = ceilingCurve();
+            this._ceiling.oversample = '2x';
+            this._ceiling.connect(this.buses.master);
+          }
+          this.buses.records.connect(this._ceiling ?? this.buses.master);
           this.buses.sword = context.createGain();
           this.buses.sword.connect(this.buses.sfx);
           this.buses.weather = context.createGain();
@@ -148,6 +169,7 @@ export class AudioEngine {
     this._disposed = true;
     for (const route of this._routes) route.dispose();
     for (const node of Object.values(this.buses)) node.disconnect();
+    this._ceiling?.disconnect();
     const context = this.context;
     this.context = null;
     this.buses = {};

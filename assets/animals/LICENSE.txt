@@ -1,8 +1,8 @@
 Animal models
 =============
 
-All the models here are in the public domain: the deer, stag, wolf, rabbit
-and fish are dedicated to it under CC0 1.0 Universal
+All the models here are in the public domain: the deer, stag, wolf, horse,
+rabbit and fish are dedicated to it under CC0 1.0 Universal
 (https://creativecommons.org/publicdomain/zero/1.0/), and the pigeon by its
 author's own public-domain dedication (below). No attribution is required;
 the authors are credited here with thanks.
@@ -24,6 +24,18 @@ wolf.glb
   stated on its Poly Pizza page when downloaded on 2026-10-25:
     https://poly.pizza/m/P1gU3Qkr9r
   Changes: the duplicate "AnimalArmature|" copies of the 12 clips were
+  dropped the same way as for the deer and stag (GLTFLoader, then
+  GLTFExporter, binary). Geometry, skin, materials and clips are otherwise
+  as published.
+
+horse.glb
+  "Horse" from the Ultimate Animated Animals pack by Quaternius
+  (https://quaternius.com/packs/ultimateanimatedanimals.html), CC0, as
+  stated on its Poly Pizza page when downloaded on 2026-10-26:
+    https://poly.pizza/m/qvTrSG9pZF
+    (1,108,124 bytes, SHA-256
+    fae7a7ec91e0d6a33554efb896fac9c4e8c632644183bcb8cc962f673d3ce609)
+  Changes: the duplicate "AnimalArmature|" copies of the 13 clips were
   dropped the same way as for the deer and stag (GLTFLoader, then
   GLTFExporter, binary). Geometry, skin, materials and clips are otherwise
   as published.

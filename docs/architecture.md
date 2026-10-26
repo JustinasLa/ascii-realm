@@ -15,10 +15,11 @@ src/
                      shading, props and their fine bakes (with a worker), sky, reflections,
                      fireflies, campfires, dust
   entities/          the outlaw: skeleton, clothing, materials, cloak, combat, movement;
-                     monsters, animals, predators, birds, fish and their figures, hunt drops
+                     monsters, animals, predators, birds, fish and horses with their
+                     riders, and their figures; hunt drops
 ```
 
-Animals are described in [wildlife](wildlife.md).
+Animals are described in [wildlife](wildlife.md), horses in [horses](horses.md).
 
 `server/` contains the HTTP/WebSocket server and in-memory lobby lifecycle.
 The server owns lobby membership, IDs, colours and world seeds. Players
