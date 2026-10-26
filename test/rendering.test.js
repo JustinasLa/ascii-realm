@@ -24,26 +24,28 @@ import { createScene, scenarios } from '../bench/scene.js';
 // the real north-up lunar near side from NASA LROC and continuous water ripples.
 // The scene fetches the same props as the game's frame since, so phone
 // landscape also draws a tall willow that stands below the view and reaches up into it.
-// Trees' moon shadows now darken the meadow's ground and grass around them.
+// Trees' moon shadows now darken the meadow's ground and grass around them,
+// and moonbeams light patches of it, with faint columns of air above; the
+// beams leave the overlay buffer's unshown colours alone.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
   ['2d34e5cc6a5220a370476775079a8f553ea50c14f65f3a45ab274600f92fab2d',
-    '599d496a1ea58c30b90f10d31b77f6cdc95b6fb4b253a6aeeed8124c757d4a3e',
-    'a1060edf4271a91027cf85b5ada49bc1ca7c9549affead4814f77d5a5031da0f',
-    '0512f375fca07e2385f4e8306aaebe24ff81c18b5c83ce66b38ce2a16dde25d7'],
+    'ad267647d1b2173107d1b865eb70274ace8861f88edf7179f40c829bd7dbffdc',
+    '82308dda251a2b914b691e0895407adbc5b9a410357b1f804df4bc2cec4ab00c',
+    'c40ccba3eefcec6d37f4f0b348c46d20c0bf50da89ce17048cf100f3dd8fcfbb'],
   ['4d7784eeab053fce4096e6cecfb1b293c62145b49a6b5c29db41ef37918ab07b',
-    '155f5be106872ee5ac00b3633141c7425d3c3f4dad49de1324321fbb2bd8e037',
-    'b8b67b6458c4b310e99d5626101b35e31121b9ad25d4ae76d0cfd4ded7e8f3fa',
-    '6ad0b65311e6485207baea36a6458d2e0b55bd6a08825dd7adf1dffbf98bd0ab'],
+    'efc0e36e4521b633e98af1a4c99011a7d2dfd3079ca686267af88b362a7b4ce9',
+    'f15987a448750736f539822af374586f29f4d91259b2792bdfb336b98e5c3765',
+    '1051c6022d53054462fa5d503195491f7c55ad50ce4e1e2d72626b17b4ba64d1'],
   ['ed160d9edddd86795fa84b9f2f28a7401379718b3123401e3551ea129ab4d01e',
-    '0c80d07348afa392ed20f8794bcfae12060297a896363ba580240b20b7481ad6',
-    'cfecddabb13bf67e477e40650417b0c40d4daddb5ea5308dcb2cd22b548de990',
-    'c86f14006ec20cbba16e261e563c8859f3cc3dfdfb3d8380b41ba698e99161e1'],
+    '12bee8abfb3716c1ecc9b1d1c3a797b87951e640d699825cb44200a8e01299a9',
+    '9321c1d7d215bd809a6faacc4651159659366bda84d90f8ca233873e2e0d9bb3',
+    '3e423e0f86d0a98cb638e83ac714c1b18c89a11c8267f664016696c7b588818b'],
   ['4e99c69de306dbd477403bb93e86defbee151bf6315b38011768fa9e2d412867',
-    'f42655430f2c4d6aa8e8faf7bbd1ca5cdfe67a08a35a41f08f0f241c94391a22',
-    '27337a62c4fde635cf7d801fd400321c7d9c04a7bea017100ffc9bb85b676ee3',
-    'e6c44863f4deed91e1deacecdc0c16390bc742ff1b10ac34ea1a3dbc2609d760'],
+    '66248a7396b16363ab6e95a4f226652c436d3aacc556b69714c687ea7a35cee8',
+    '9a9d8f5868d1251b207e1e5a80d91f4edcb9bf92b5acbc193c1310a4f807f7bd',
+    '0b3941ad8d8303dbe21d3f4e1105eb9448484384f0b8407403a1e9a5ebaf78e5'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.

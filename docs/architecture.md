@@ -80,8 +80,33 @@ the ground drawn so far (skipping water), `Grass.drawRow` scales each root's
 light by it, and `drawFine` scales a rock's or tree's ground cells as they
 are laid down, so no cell is shaded twice. Warm light is added after it, so
 a torch under a tree is as bright as in the open. With no tree near, nothing
-is drawn differently. `game.nightLight` and `game.metrics.nightMs` are on
-`?debug`.
+is drawn differently.
+
+Moonbeams use the same map: a second layer, `lift`, holds how much more
+light than the open sky reaches each cell, so `gainAt` goes above 1 in a
+beam and `tintAt` says how far the colours turn toward the moonlight
+(`world/moon-tint.js`); the grass and `drawFine` read both at once with
+`lightAt`. `world/moon-shafts.js` cuts the world into slots
+(`SLOT_W` × `SLOT_H`); half of them, by a hash of the slot and the seed, hold
+a beam whose patch centre is not on water. A slot is decided only once
+the world has loaded the chunk under its centre, so looking for beams never
+generates ground; decided slots are remembered per world and seed. A beam's patch (three lobes with noise-broken edges) and its
+column of air (leaning by `COLUMN_STEP`, from the moon's direction) are
+baked once into stamps fixed to world cells, within the trees' bake budget.
+Each frame `NightLight` picks the beams near the view, nearest first, up to
+the device's tier (`SHAFT_TIERS`: desktop, phone, or a phone at its reduced
+cells, which has no columns), fades new ones in and dropped ones out (at
+most a tier's count more, the faintest dropped at once) and lays the patches
+into `lift`, the brighter where two overlap. The ground pass then multiplies
+each cell once by both the canopy and the lift, and tints it. After the
+layered draw and the contact splashes, before warm light, `drawShafts`
+lightens the glyphs in each column (not water, not sprites' small cells) and
+lays its motes with `softLayer`, for every column that reaches into the
+view, whether or not its patch is on the map; a tier change fades the columns and motes
+rather than dropping them. Cloud and lightning scale the beams by the moon's
+share (`moonlightOf`). `game.nightLight` (with `shafts`, `tier`, `visible`
+and `debugShaftAt`), `game.metrics.nightMs` and `game.metrics.shaftMs` (the
+columns alone, included in `nightMs`) are on `?debug`.
 
 River debris (`world/debris.js`) is local to each player. Each frame, after
 the player and the monsters have moved, it is handed the bodies standing in

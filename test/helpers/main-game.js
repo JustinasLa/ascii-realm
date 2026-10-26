@@ -20,6 +20,7 @@ import { MusicNotes } from '../../src/world/music-notes.js';
 import { isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { NightLight } from '../../src/world/night-light.js';
+import { shaftTier } from '../../src/world/moon-shafts.js';
 import { FrameClock, FramePacer, FrameQuality, renderSize } from '../../src/render/budget.js';
 import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from '../../src/core/native.js';
 import { PlayGate } from '../../src/ui/play-gate.js';
@@ -260,7 +261,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Fires: class extends inert() { nearest() { return null; } },
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
-    Fog: inert(), NightLight, MAX_WALKERS: 20, figureScale: () => 1,
+    Fog: inert(), NightLight, shaftTier, MAX_WALKERS: 20, figureScale: () => 1,
     SpellFogStirs: class { collect() { return { walkers: [], bursts: [], whirls: [] }; } },
     fireWeatherWind: () => 0,
     Splashes: class {
@@ -278,6 +279,13 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     },
     WATER,
     AsciiRenderer: class {
+      // Buffers for the camera's view, for the passes that run on them
+      // (moonbeams' patches and columns); a layered glyph is never laid.
+      constructor() {
+        Object.assign(this, { cols: 80, rows: 60, fg: new Uint8ClampedArray(19200), bg: new Uint8ClampedArray(19200),
+          ov: new Uint8ClampedArray(19200), mask: new Uint8Array(4800).fill(GRASS), fineMark: new Uint8Array(4800) });
+      }
+      hasLayer() { return true; }
       resize(width, height, pixelRatio, cellW, cellH) { cellHeight = cellH; }
       draw() {}
       put() {}
