@@ -46,33 +46,44 @@ test('a session with no player, or a malformed note, relays nothing and spends n
   assert.equal(sent.length, 40, 'all 20 valid notes in the same moment pass');
 });
 
-test('exactly 20 notes pass in any rolling second; the 21st is refused', () => {
+test('23 notes pass at once and one more every 50 ms; past that they are refused', () => {
   const { sent, ash, play, at } = lobby();
   const passed = () => sent.length / 2;
-  for (let t = 0; t < 250; t += 10) { at(t); play(ash); }
-  assert.equal(passed(), 20, '25 notes in a quarter second give 20');
-  at(999);
+  for (let i = 0; i < 30; i++) play(ash);
+  assert.equal(passed(), 23, '30 at once give 23');
+  at(49);
   play(ash);
-  assert.equal(passed(), 20, 'still within the second of the first');
-  at(1000);
+  assert.equal(passed(), 23);
+  at(50);
   play(ash);
-  assert.equal(passed(), 21, 'the first slot frees after a full second');
-  at(1005);
+  assert.equal(passed(), 24, 'one more every 50 ms');
   play(ash);
-  assert.equal(passed(), 21);
-  at(1010);
-  play(ash);
-  assert.equal(passed(), 22);
+  assert.equal(passed(), 24);
+  // A second on, 20 have been earned again, and no more.
+  at(1050);
+  for (let i = 0; i < 30; i++) play(ash);
+  assert.equal(passed(), 44);
+});
+
+test('a performer at exactly 20 a second, each note delayed 0-150 ms on the way, loses nothing', () => {
+  const { sent, ash, play, at } = lobby();
+  const arrivals = Array.from({ length: 200 }, (_, i) => i * 50 + ((i * 37) % 7) * 25).sort((a, b) => a - b);
+  for (const t of arrivals) {
+    at(t);
+    play(ash);
+  }
+  assert.equal(sent.length, 400);
 });
 
 test('the budget survives a reconnect, and each player has their own', () => {
   const { sent, ash, bryn, room, play, at } = lobby();
-  for (let i = 0; i < 20; i++) play(ash);
-  // The same player record resumed on a new socket, within the second.
+  for (let i = 0; i < 23; i++) play(ash);
+  // The same player record resumed on a new socket, half a second later:
+  // only the 10 notes earned since come back, not all 23.
   ash.socket = { id: 'socket-a1-again' };
   at(500);
-  play(ash);
-  assert.equal(sent.filter(([, m]) => m.from === 'a1').length, 40);
+  for (let i = 0; i < 23; i++) play(ash);
+  assert.equal(sent.filter(([, m]) => m.from === 'a1').length, 2 * 33);
   play(bryn);
   assert.equal(sent.filter(([, m]) => m.from === 'b2').length, 2, 'another player is untouched');
   // Leaving and joining again makes a new player record, with a new budget.

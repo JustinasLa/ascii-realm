@@ -43,8 +43,8 @@ back clean, and the server only sends notice codes, which the page turns into
 text. Chat is not stored. The page draws speech bubbles from the lines it is
 relayed (`ui/bubbles.js`); the server knows nothing of them. Played instrument
 notes (`server/notes.js`) are relayed as checked note intent to the rest of
-the lobby, at most 20 per player per rolling second, kept on the player
-through reconnects; each listener decides by distance whether to play one. Monsters, wildlife and combat are simulated locally;
+the lobby, at most 20 per player a second with bursts of 23, kept on the
+player through reconnects; each listener decides by distance whether to play one. Monsters, wildlife and combat are simulated locally;
 lobbies do not synchronize enemies or add PvP damage, shared loot or competitive
 movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT);
 the browser uses its native WebSocket API.

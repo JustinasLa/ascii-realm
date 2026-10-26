@@ -17,9 +17,11 @@ export class MultiplayerClient {
   // wasn't sent at all.
   sendChat(channel, text) { return this.sendNow({ type: 'chat', channel, text }); }
   toggleChat(channel) { return this.sendNow({ type: 'chat-toggle', channel }); }
-  // A played note, for friends to hear. The server's 20-a-second window is
-  // kept here too, so a note it would drop is never sent; the window isn't
-  // reset by a reconnect, as the server's isn't. False means not sent.
+  // A played note, for friends to hear. At most 20 go in any rolling second,
+  // which the server's budget takes with room for 150 ms of arrival jitter,
+  // so it drops a sent note only if the network bunches them more than that.
+  // The window isn't reset by a reconnect, as the server's budget isn't.
+  // False means not sent.
   sendNote(note) {
     const clean = readNote(note);
     if (!clean || this.status !== 'online' || this.socket?.readyState !== 1 || this.socket.bufferedAmount >= 32768) return false;

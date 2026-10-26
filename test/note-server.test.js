@@ -81,40 +81,47 @@ test('malformed notes neither fail the socket nor spend its budget', async (t) =
   assert.equal(ash.client.ws.readyState, WebSocket.OPEN);
 });
 
-test('a performer at 20 notes a second alongside state updates keeps its socket and every note', async (t) => {
+test('a performer at exactly 20 notes a second alongside state updates keeps its socket and every note', async (t) => {
   const { ash, bryn } = await pair(t);
   const heard = listen(bryn, ash.lobby.id);
   const state = playerState(new Player(0, 0));
-  // Paced a touch over 50 ms so arrival jitter on the server never squeezes
-  // twenty-one notes into one second; when each arrives isn't checked.
+  // On a 50 ms beat from the start, so the pace is exactly 20 a second, with
+  // the timers' own lateness and up to 30 ms more on each note on top.
+  const start = performance.now();
   for (let i = 0; i < 60; i++) {
+    await delay(Math.max(0, start + i * 50 + ((i * 13) % 7) * 5 - performance.now()));
     ash.client.send({ type: 'state', state });
     play(ash, LUTE(i % 8));
-    await delay(52);
   }
   await until(() => heard.length >= 60);
+  await delay(100);
   assert.deepEqual(heard.map((m) => m.note.degree), Array.from({ length: 60 }, (_, i) => i % 8));
-  assert.equal(ash.client.ws.readyState, WebSocket.OPEN, 'the per-socket budget was not tripped');
+  assert.equal(ash.client.ws.readyState, WebSocket.OPEN);
 });
 
-test('a burst past the limit gives friends twenty, and the budget outlasts a reconnect', async (t) => {
+test('a burst past the limit gives friends 23, and the budget outlasts a reconnect', async (t) => {
   const { ash, bryn, track } = await pair(t);
   const heard = listen(bryn, ash.lobby.id);
   for (let i = 0; i < 30; i++) play(ash, LUTE(i % 8));
-  await until(() => heard.length >= 20);
-  await delay(300);
-  assert.equal(heard.length, 20);
-  // Drop the connection and resume the same place within the second.
+  const burst = performance.now();
+  await until(() => heard.length >= 23);
+  await delay(100);
+  assert.equal(heard.length, 23);
+  // Drop the connection and resume the same place.
   ash.client.ws.terminate();
   await bryn.client.next('snapshot', (m) => !m.players.some((p) => p.id === ash.lobby.id));
   const again = track(await join(server.port, server.code, 'Ash', ash.lobby.token));
   assert.equal(again.lobby.resumed, true);
   assert.equal(again.lobby.id, ash.lobby.id);
-  for (let i = 0; i < 5; i++) play(again, LUTE());
+  // Only what was earned since the burst, one every 50 ms, comes through.
+  const since = performance.now() - burst;
+  for (let i = 0; i < 30; i++) play(again, LUTE());
   await delay(300);
-  assert.equal(heard.length, 20, 'none of the five arrive');
-  await delay(1100);
+  const earned = heard.length - 23;
+  assert.ok(earned <= Math.ceil(since / 50) + 2, `${earned} after ${Math.round(since)} ms`);
+  assert.ok(earned < 23, 'the budget was not refilled');
+  await delay(1200);
   for (let i = 0; i < 5; i++) play(again, LUTE());
-  await until(() => heard.length >= 25);
-  assert.equal(heard.length, 25);
+  await until(() => heard.length >= 23 + earned + 5);
+  assert.equal(heard.length, 23 + earned + 5);
 });

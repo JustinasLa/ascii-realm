@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
 import { INSTRUMENT_IDS } from '../src/audio/instruments.js';
-import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, NOTE_WINDOW_MS, NOTES_PER_SECOND,
-  playerState, readMembers, readNote, readPlayerState, RollingLimit, validCode } from '../src/multiplayer/protocol.js';
+import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, NOTE_SLACK, NOTE_WINDOW_MS,
+  NOTES_PER_SECOND, playerState, RateBudget, readMembers, readNote, readPlayerState, RollingLimit,
+  validCode } from '../src/multiplayer/protocol.js';
 import { blendState, RemotePlayers } from '../src/multiplayer/remote-players.js';
 
 test('player snapshots preserve poses without sharing mutable arrays or private fields', () => {
@@ -187,4 +188,55 @@ test('RollingLimit allows 20 in any rolling second, a refusal taking no slot', (
   assert.deepEqual(perSecond, [20, 20, 20], '40 a second gives exactly 20');
   const small = new RollingLimit(2, 100);
   assert.deepEqual([small.allow(0), small.allow(10), small.allow(50), small.allow(100), small.allow(105)], [true, true, false, true, false]);
+});
+
+test('RateBudget takes 23 at once and 20 a second after, a refusal booking nothing', () => {
+  assert.equal(NOTE_SLACK, 3);
+  const budget = new RateBudget();
+  for (let i = 0; i < 23; i++) assert.equal(budget.allow(0), true);
+  assert.equal(budget.allow(0), false, 'the 24th in the same moment');
+  assert.equal(budget.allow(49), false);
+  assert.equal(budget.allow(50), true, 'one more every 50 ms');
+  assert.equal(budget.allow(50), false);
+  assert.equal(budget.allow(NaN), false, 'a bad clock refuses');
+  assert.equal(budget.allow(100), true, 'and the refusals cost nothing');
+  const small = new RateBudget(2, 10);
+  assert.deepEqual([0, 0, 0, 99, 100, 300, 300, 300].map((t) => small.allow(t)),
+    [true, true, false, false, true, true, true, false]);
+});
+
+test('a flood at 25 a second is cut to exactly 20 a second once its burst is spent', () => {
+  const budget = new RateBudget();
+  const perSecond = new Array(20).fill(0);
+  for (let t = 0; t < 20000; t += 40) if (budget.allow(t)) perSecond[Math.floor(t / 1000)]++;
+  // The 23 at hand drain at 5 a second, then only the 20 a second remain.
+  assert.deepEqual(perSecond.slice(0, 5), [25, 25, 25, 25, 22]);
+  assert.deepEqual(perSecond.slice(5), new Array(15).fill(20));
+  for (let seconds = 1; seconds <= 20; seconds++) {
+    const total = perSecond.slice(0, seconds).reduce((a, b) => a + b, 0);
+    assert.ok(total <= 23 + 20 * seconds, `${total} in ${seconds} s`);
+  }
+});
+
+test('a steady 20 a second passes RateBudget with 400 ms of jitter, and so does the page window delayed up to 150 ms', () => {
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // Exactly 20 a second on average, each note up to 400 ms off its beat.
+  const steady = new RateBudget();
+  const beats = Array.from({ length: 400 }, (_, i) => i * 50 + random() * 400).sort((a, b) => a - b);
+  assert.ok(beats.every((t) => steady.allow(t)));
+  // A performer hammering keys in bursts, limited by the page's window, then
+  // delayed on the way by 0-150 ms each.
+  for (let run = 0; run < 20; run++) {
+    const page = new RollingLimit();
+    const arrivals = [];
+    let t = 0;
+    for (let i = 0; i < 600; i++) {
+      t += random() < 0.3 ? 0 : Math.floor(random() * 120);
+      if (page.allow(t)) arrivals.push(t + Math.floor(random() * 151));
+    }
+    assert.ok(arrivals.length > 200);
+    const server = new RateBudget();
+    assert.deepEqual(arrivals.sort((a, b) => a - b).filter((at) => !server.allow(at)), [], `run ${run}`);
+  }
 });

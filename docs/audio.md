@@ -418,11 +418,13 @@ chord goes to the lobby server as `{ instrument, degree, octave, chord }`,
 which is checked by `readNote` in `src/multiplayer/protocol.js` on the page
 and again on the server: a known instrument, degree 0-7, octave -1, 0 or 1 and
 a boolean chord on any instrument, every field present and nothing else. The
-server relays it to everyone else in the lobby, never back to you, at most 20
-notes per player in any rolling second (`RollingLimit`). That budget is kept
-on the player, so reconnecting doesn't refill it; past it, notes are dropped
-silently, and the page keeps the same window so it never sends one the server
-would drop. You always hear your own notes. A listener plays a friend's note
+page sends at most 20 notes in any rolling second (`RollingLimit`). The
+server relays them to everyone else in the lobby, never back to you, within a
+budget of 20 notes a second per player with bursts of up to 23 (`RateBudget`).
+The 3 spare notes absorb arrival jitter: a note the page sent is dropped only
+if the network bunches notes by more than 150 ms. The budget is kept on the
+player, so reconnecting doesn't refill it; past it, notes are dropped
+silently. You always hear your own notes. A listener plays a friend's note
 where the friend's figure is drawn (interpolated 100 ms behind the network),
 on their own records bus with the same voice: full loudness at the friend,
 fading linearly to silence 64 m away, measured in metres from the listener's

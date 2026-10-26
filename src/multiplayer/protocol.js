@@ -6,10 +6,12 @@ export { PLAYER_COLORS } from './tint.js';
 export const PROTOCOL_VERSION = 4;
 export const MAX_PLAYERS = 8;
 export const UPDATE_MS = 50;
-// Each player's notes reach the lobby at most this many times in any
-// rolling window of NOTE_WINDOW_MS.
+// A player plays at most NOTES_PER_SECOND notes in any rolling window of
+// NOTE_WINDOW_MS. The server allows NOTE_SLACK more at once, so network
+// jitter bunching a steady performer's notes doesn't cost any.
 export const NOTES_PER_SECOND = 20;
 export const NOTE_WINDOW_MS = 1000;
+export const NOTE_SLACK = 3;
 
 // Only these fields cross the network. Cape physics and blade trails are local.
 export const STATE_RANGES = {
@@ -63,6 +65,26 @@ export class RollingLimit {
     if (!(now - this.times[this.next] >= this.windowMs)) return false;
     this.times[this.next] = now;
     this.next = (this.next + 1) % this.times.length;
+    return true;
+  }
+}
+
+// A sustained `perSecond` events with room for `burst` at once. Each accepted
+// event books the next 1/perSecond of a second, from now or from the end of
+// what is already booked, and is refused if that would book more than
+// `burst` of them ahead of now. A refused event books nothing.
+export class RateBudget {
+  constructor(burst = NOTES_PER_SECOND + NOTE_SLACK, perSecond = NOTES_PER_SECOND) {
+    this.interval = 1000 / perSecond;
+    this.ahead = burst * this.interval;
+    this.booked = -Infinity;
+  }
+
+  allow(now) {
+    const booked = Math.max(this.booked, now) + this.interval;
+    // Written so a NaN clock refuses.
+    if (!(booked - now <= this.ahead)) return false;
+    this.booked = booked;
     return true;
   }
 }
