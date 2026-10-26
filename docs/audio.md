@@ -397,6 +397,19 @@ the first note. Until instruments can be
 crafted, the `?instruments` query puts one of each in the bag. Each item's
 details list its keys.
 
+In play, the off-hand instrument answers keys 1-8 and Shift+1-8
+(`src/core/instrument-keys.js`; see [controls](controls.md#instruments)). A
+note is scheduled inside the key press itself, with no wait for the next
+frame. The key is claimed before the page's own listeners see it, so the press
+also resumes the audio context first (after the page was hidden, say), and the
+note plays once it runs. An instrument's string buffers are rendered once per
+audio context as soon as it is carried and sound is running. Each note shows
+one glyph `d` 2 m above the performer's head, coloured by pitch like a note
+block's note: its colour is the note-block note of the same pitch, (MIDI - 54)
+mod 24, from the 25-colour note-block table (`src/world/music-notes.js`). A
+chord takes its root's colour. The glyph rises about half a metre and is gone
+after 0.3 s, at most 48 at once.
+
 ## Authoring synthesized sounds
 
 Use `tone(engine, options)` for a pitched note or `noise(engine, options)` for a

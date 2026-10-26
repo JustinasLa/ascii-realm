@@ -1,3 +1,4 @@
+import { INSTRUMENTS, noteSlots, secondLayer } from '../audio/instruments.js';
 import { ITEMS } from '../inventory/items.js';
 import { denars } from '../inventory/wallet.js';
 import { itemArt } from './item-art.js';
@@ -9,6 +10,10 @@ const MAX_DAMAGE = 16;
 const DAMAGE_LIFETIME = 1.1;
 // Seconds the pouch line shows a gain in brighter gold.
 const PURSE_GAIN = 1.2;
+// Seconds a played note slot stays lit: four 50 ms ticks.
+export const NOTE_FLASH = 0.2;
+const QUICK_HINT = '1–9 select · Q use';
+const QUICK_LABEL = 'Quick slots. Use number keys 1 to 9 to select.';
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -76,6 +81,10 @@ export class Hud {
     this.loot = [];
     this.target = null;
     this.destroyed = false;
+    // The off-hand instrument whose notes slots 1-8 show, and how long each
+    // slot stays lit after a note.
+    this.instrument = null;
+    this.flashes = new Array(9).fill(0);
 
     this.root = document.getElementById('hud-root');
     if (!this.root) {
@@ -133,10 +142,12 @@ export class Hud {
     const hotbarWrap = element('div', 'hud-hotbar-wrap');
     const hotbarHeading = element('div', 'hud-hotbar-heading');
     this.selectedItem = element('div', 'hud-selected-item');
-    hotbarHeading.append(this.selectedItem, element('span', 'hud-quick-hint', '1–9 select · Q use'));
+    this.quickHint = element('span', 'hud-quick-hint', QUICK_HINT);
+    hotbarHeading.append(this.selectedItem, this.quickHint);
     const hotbar = element('div', 'hud-hotbar');
     attribute(hotbar, 'role', 'group');
-    attribute(hotbar, 'aria-label', 'Quick slots. Use number keys 1 to 9 to select.');
+    attribute(hotbar, 'aria-label', QUICK_LABEL);
+    this.hotbar = hotbar;
     this.slots = Array.from({ length: 9 }, (_, index) => {
       const button = element('button', 'hud-slot');
       button.type = 'button';
@@ -146,10 +157,14 @@ export class Hud {
       attribute(glyph, 'aria-hidden', 'true');
       const count = element('span', 'hud-slot-count');
       const state = element('span', 'hud-slot-state');
-      button.append(key, glyph, count, state);
-      button.addEventListener('click', () => this.onSelect(index));
+      // A note's letter and its pitch, shown while an instrument is carried.
+      const note = element('span', 'hud-slot-note');
+      const pitch = element('span', 'hud-slot-pitch');
+      note.hidden = pitch.hidden = true;
+      button.append(key, glyph, count, state, note, pitch);
+      button.addEventListener('click', (event) => this.onSelect(index, event));
       hotbar.append(button);
-      return { button, glyph, count, state, signature: '' };
+      return { button, glyph, count, state, note, pitch, signature: '' };
     });
     const inventoryButton = element('button', 'hud-inventory-button');
     inventoryButton.type = 'button';
@@ -195,9 +210,65 @@ export class Hud {
     attribute(vital.node, 'aria-valuetext', `${label}${available ? `${number(current)} of ${number(max)}` : 'Unavailable'}`);
   }
 
+  /**
+   * Shows the notes of an off-hand instrument on slots 1-8, `{ id, shifted }`,
+   * with Shift's layer while `shifted`; null puts the quick slots back.
+   */
+  setInstrument(view) {
+    const id = view && secondLayer(view.id) ? view.id : null;
+    const shifted = Boolean(id && view.shifted);
+    if (this.instrument?.id === id && this.instrument?.shifted === shifted) return;
+    if (!id && !this.instrument) return;
+    for (const slot of this.slots) slot.signature = '';
+    if (!id) {
+      this.instrument = null;
+      text(this.quickHint, QUICK_HINT);
+      attribute(this.hotbar, 'aria-label', QUICK_LABEL);
+      return;
+    }
+    const { name } = INSTRUMENTS[id];
+    const chords = secondLayer(id) === 'chords';
+    this.instrument = { id, shifted, slots: noteSlots(id, shifted) };
+    text(this.quickHint, `${name} | 1-8 notes | Shift ${chords ? 'chords' : '9-16'}`);
+    attribute(this.hotbar, 'aria-label', `${name} notes. Keys 1 to 8 play notes; hold Shift for ${chords ? 'chords' : 'notes 9 to 16'}. `
+      + 'Key 9 selects quick slot 9.');
+  }
+
+  /** Lights a note slot (0-7) briefly, as a note is played on it. */
+  flashSlot(index) {
+    if (index >= 0 && index < 8) this.flashes[index] = NOTE_FLASH;
+  }
+
+  // A slot showing the note it plays instead of an item.
+  updateNoteSlot(slot, index, note) {
+    const lit = this.flashes[index] > 0;
+    const signature = JSON.stringify(['note', note.label, note.pitches, lit]);
+    if (signature === slot.signature) return;
+    slot.signature = signature;
+    for (const name of ['empty', 'selected', 'equipped']) slot.button.classList.toggle(name, false);
+    slot.button.classList.toggle('note', true);
+    slot.button.classList.toggle('note-flash', lit);
+    slot.button.dataset.itemId = '';
+    text(slot.glyph, '');
+    text(slot.count, '');
+    text(slot.state, '');
+    text(slot.note, note.label);
+    text(slot.pitch, note.pitches);
+    hidden(slot.note, false);
+    hidden(slot.pitch, false);
+    attribute(slot.button, 'aria-pressed', false);
+    attribute(slot.button, 'aria-label', `Slot ${index + 1}: ${note.chord ? `chord ${note.label}, ${note.pitches}` : `note ${note.pitches}`}`);
+    attribute(slot.button, 'title', `${index + 1}: ${note.chord ? `${note.label} (${note.pitches})` : note.pitches}`);
+  }
+
   updateHotbar() {
     for (let index = 0; index < this.slots.length; index++) {
       const slot = this.slots[index];
+      const note = this.instrument?.slots[index];
+      if (note) {
+        this.updateNoteSlot(slot, index, note);
+        continue;
+      }
       const entry = this.inventory.getHotbar(index);
       const item = entry?.item;
       const count = item && Number.isFinite(entry.count) ? Math.max(0, Math.floor(entry.count)) : 0;
@@ -208,6 +279,14 @@ export class Hud {
       const signature = JSON.stringify([item?.id, name, glyph, count, selected, equipped]);
       if (signature === slot.signature) continue;
       slot.signature = signature;
+      if (slot.button.classList.contains('note')) {
+        slot.button.classList.toggle('note', false);
+        slot.button.classList.toggle('note-flash', false);
+        text(slot.note, '');
+        text(slot.pitch, '');
+        hidden(slot.note, true);
+        hidden(slot.pitch, true);
+      }
       slot.button.classList.toggle('empty', !item);
       slot.button.classList.toggle('selected', selected);
       slot.button.classList.toggle('equipped', equipped);
@@ -232,6 +311,7 @@ export class Hud {
     const weight = Number.isFinite(this.inventory.weight) ? this.inventory.weight : 0;
     text(this.load, `Bag ${number(weight)}/${number(this.inventory.capacity ?? 0)} kg`);
     this.updatePurse(elapsed);
+    for (let index = 0; index < this.flashes.length; index++) this.flashes[index] = Math.max(0, this.flashes[index] - elapsed);
     this.updateHotbar();
 
     for (let index = this.toasts.length - 1; index >= 0; index--) {
