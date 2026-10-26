@@ -162,6 +162,11 @@ export class Hud {
       const pitch = element('span', 'hud-slot-pitch');
       note.hidden = pitch.hidden = true;
       button.append(key, glyph, count, state, note, pitch);
+      // A note slot never takes focus from the game, which would let go of
+      // every held key, Shift included, in the middle of a Shift-click.
+      button.addEventListener('mousedown', (event) => {
+        if (this.instrument?.slots[index]) event.preventDefault();
+      });
       button.addEventListener('click', (event) => this.onSelect(index, event));
       hotbar.append(button);
       return { button, glyph, count, state, note, pitch, signature: '' };
