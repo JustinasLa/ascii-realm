@@ -576,6 +576,26 @@ test('the beams\' map is kept while the view and the beams rest, and is laid afr
   }
 });
 
+test('the beams near a resting view are looked up once, unless a slot there still waits for its ground', () => {
+  let ready = false;
+  const world = { typeAt: () => GRASS, loaded: () => ready };
+  const view = { x0: 500, y0: 400, cols: 200, rows: 60 };
+  const night = new NightLight();
+  settle(night, view, [], { seed: 4, world });
+  assert.deepEqual([night.visible.length, night.query.done], [0, false], 'no ground yet, so asked again each frame');
+  ready = true;
+  settle(night, view, [], { seed: 4, world });
+  settle(night, view, [], { seed: 4, world });
+  assert.ok(night.visible.length > 0, 'the beams appear once the ground is loaded, the view never moving');
+  assert.equal(night.query.done, true);
+  const found = [...night.near];
+  night.prepare(view, [], { seed: 4, world });
+  assert.deepEqual([...night.near], found, 'the same list, nearest first');
+  night.prepare({ ...view, x0: view.x0 + 300 }, [], { seed: 4, world });
+  assert.equal(night.query.x0, view.x0 + 300 - PAD_X - 24, 'looked up afresh once the view moves');
+  assert.notDeepEqual([...night.near], found);
+});
+
 test('with beams switched off, or none in the world, nothing changes', () => {
   const view = { x0: 0, y0: 0, cols: 80, rows: 40 };
   const props = [plainTree(40.5, 20.5)];

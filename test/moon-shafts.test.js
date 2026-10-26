@@ -82,10 +82,13 @@ test('half the slots hold a beam, each in its slot\'s middle', () => {
 test('a slot is decided only once the world has loaded its ground, without loading it', () => {
   const world = new World(1);
   const before = world.chunks.size;
-  assert.deepEqual(shaftsNear(-300, -150, 300, 150, 1, world), []);
+  const waiting = shaftsNear(-300, -150, 300, 150, 1, world);
+  assert.deepEqual([waiting.length, waiting.pending], [0, true], 'none yet, some to come');
   assert.equal(world.chunks.size, before, 'no ground was generated');
   loaded(world, -400, -250, 400, 250);
-  assert.ok(shaftsNear(-300, -150, 300, 150, 1, world).length > 6);
+  const found = shaftsNear(-300, -150, 300, 150, 1, world);
+  assert.ok(found.length > 6);
+  assert.equal(found.pending, false);
 });
 
 test('no beam lands on the water or the shore', () => {

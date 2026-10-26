@@ -77,6 +77,8 @@ const smoothstep = (a, b, x) => {
 
 // Each world's slots, for the seed they were made with.
 const caches = new WeakMap();
+// Slots shaftAt found not yet loaded since this was last zeroed.
+let undecided = 0;
 
 function slotsOf(world, seed) {
   let cache = caches.get(world);
@@ -103,7 +105,10 @@ export function shaftAt(i, j, seed, world) {
   let shaft = slots.get(key);
   if (shaft === undefined) {
     shaft = makeShaft(i, j, seed, world);
-    if (shaft === undefined) return null;
+    if (shaft === undefined) {
+      undecided++;
+      return null;
+    }
     if (slots.size >= SHAFT_CACHE) slots.delete(slots.keys().next().value);
     slots.set(key, shaft);
   }
@@ -158,14 +163,17 @@ const overlaps = (b, x0, y0, x1, y1) => b.x0 < x1 && b.x1 > x0 && b.y0 < y1 && b
 
 // The beams whose patch (and column, with `columns`) reach into the world
 // box x0..x1, y0..y1 (end exclusive), added to `out`. A patch and its
-// column stay within a slot of their own.
+// column stay within a slot of their own. `out.pending` says whether a slot
+// there waits for its ground to load, so asking again later may find more.
 export function shaftsNear(x0, y0, x1, y1, seed, world, columns = true, out = []) {
+  undecided = 0;
   for (let j = Math.floor(y0 / SLOT_H) - 1; j <= Math.floor((y1 - 1) / SLOT_H) + 1; j++) {
     for (let i = Math.floor(x0 / SLOT_W) - 1; i <= Math.floor((x1 - 1) / SLOT_W) + 1; i++) {
       const shaft = shaftAt(i, j, seed, world);
       if (shaft && overlaps(columns ? shaft.reach : shaft.box, x0, y0, x1, y1)) out.push(shaft);
     }
   }
+  out.pending = undecided > 0;
   return out;
 }
 

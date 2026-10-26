@@ -116,6 +116,10 @@ export class NightLight {
     this.tint = 0;
     this.near = [];
     this.leaving = [];
+    // The window and the world `near` was found for, nearest first: while
+    // they hold (the view at rest) and no slot there waited for its ground,
+    // the list is used again rather than looked up and sorted afresh.
+    this.query = { x0: 0, y0: 0, x1: 0, y1: 0, columns: false, world: null, seed: null, done: false };
     // What the beams' map was last laid from: the map's place and size, and
     // each beam's shaft and strength in turn. While all of it holds (the view
     // and the beams at rest) the map is kept as it is, not laid again.
@@ -259,9 +263,15 @@ export class NightLight {
     const x0 = view.x0 - PAD_X - SHAFT_MARGIN_X, x1 = view.x0 + view.cols + PAD_X + SHAFT_MARGIN_X;
     const y0 = view.y0 - PAD_TOP - SHAFT_MARGIN_Y, y1 = view.y0 + view.rows + PAD_BOTTOM + SHAFT_MARGIN_Y;
     const mx = view.x0 + view.cols / 2, my = view.y0 + view.rows / 2;
-    const near = shaftsNear(x0, y0, x1, y1, seed, world, tier.column, this.near);
-    for (const shaft of near) shaft.far = ((shaft.cx - mx) * ASPECT) ** 2 + (shaft.cy - my) ** 2;
-    near.sort(nearest);
+    const near = this.near, q = this.query;
+    if (!(q.done && q.x0 === x0 && q.y0 === y0 && q.x1 === x1 && q.y1 === y1 && q.columns === tier.column &&
+      q.world === world && q.seed === seed)) {
+      near.length = 0;
+      shaftsNear(x0, y0, x1, y1, seed, world, tier.column, near);
+      for (const shaft of near) shaft.far = ((shaft.cx - mx) * ASPECT) ** 2 + (shaft.cy - my) ** 2;
+      near.sort(nearest);
+      Object.assign(q, { x0, y0, x1, y1, columns: tier.column, world, seed, done: !near.pending });
+    }
     const beams = this.beams;
     let beamBakes = 0;
     for (const beam of beams.values()) beam.out = true;
@@ -301,7 +311,6 @@ export class NightLight {
       this.visible.push(beam);
       if (beam.mix > 0 && overlaps(beam.shaft.reach, view)) this.columns = true;
     }
-    near.length = 0;
     if (!this.stillLaid()) this.layBeams();
     this.visible.sort(nearestBeam);
   }
