@@ -305,4 +305,5 @@ short version see the [README](../README.md).
 - **Chat.** In a lobby, `Enter` opens a chat bar (a **CHAT** button on
   phones). Local speech carries 15 m and blurs with distance; shouts, yells,
   whispers, emotes, scene lines and local out-of-character chat have their own
-  reach, and `/ooc` reaches the whole lobby. See [controls](controls.md#chat).
+  reach, and `/ooc` reaches the whole lobby. Spoken lines float above the
+  speaker's head for a few seconds. See [controls](controls.md#chat).
