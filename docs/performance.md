@@ -111,10 +111,13 @@ Trees' shadows and moonbeams are measured at a fixed lakeside scene
 (`bench/lakeside.js`, whose `SHAFTS` are the three beams in its view).
 `node bench/night-cpu.mjs <before-checkout> . <w> <h> <rounds> <frames> [tier]`
 steps both checkouts in one process, a frame each in turn, reporting the
-`night` and `shafts` stages, and also times stalls when walking into a
+`night` and `shafts` stages (with `off` for the before checkout, the before
+build is this one with its beams switched off, so the difference is the
+beams' whole cost, the grass's tint included), and also times stalls when walking into a
 fresh area and at the widest zoom, and the beams' worst cases: walking fast
 across the slots and switching a phone's tier back and forth. `BEFORE_URL=…
 AFTER_URL=… node bench/night.cjs` does the same in Chrome, with the beams
 switched off as a control (`CONTROL=shadows` switches off the whole night
 light instead; `TIER=desktop|phone|reduced` holds the beams' tier; `SPIKES=1`
-for the stalls and a walk, `THROTTLE=4` for a slow phone).
+for the stalls and a walk, `THROTTLE=4` for a slow phone, `TOGGLE=1` to time
+the control on and off by turns on one page, free of page-to-page noise).

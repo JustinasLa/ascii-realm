@@ -27,6 +27,10 @@
 // REDUCED=1 for a phone's reduced cell budget, TIER=desktop|phone|reduced
 // to hold the beams' tier, SHOTS=<dir> for a screenshot of each page after
 // its last window.
+// TOGGLE=1 times the after build alone, on one page: every round it times a
+// window with the control on and one with it off, in turns that swap every
+// round, so page-to-page differences (JIT, memory, GPU) drop out, and
+// prints the paired on - off difference with its quartiles and its share.
 const fs = require('node:fs');
 const os = require('node:os');
 const { join } = require('node:path');
@@ -42,6 +46,7 @@ const THROTTLE = Number(process.env.THROTTLE) || 1;
 const REDUCED = process.env.REDUCED === '1';
 const CONTROL = process.env.CONTROL || 'shafts';
 const TIER = process.env.TIER || null;
+const TOGGLE = process.env.TOGGLE === '1';
 // Frames timed one by one after walking in, and while zooming out.
 const ENTRY = 60;
 const ZOOM = 90;
@@ -109,8 +114,9 @@ async function open(browser, name, size, shadows) {
   if (THROTTLE > 1) await cdp.send('Emulation.setCPUThrottlingRate', { rate: THROTTLE });
   const entry = { name, shadows, key: `${name}${name === 'after' ? (shadows ? ' on' : ' off') : ''}`,
     base: builds[name], page, cdp, windows: [], frames: [], zoom: [], walk: [], night: [], shaft: [],
-    bakes: { entry: 0, zoom: 0 }, recorded: [], worst: [], bakeMs: [] };
-  if (!SPIKES) {
+    bakes: { entry: 0, zoom: 0 }, recorded: [], worst: [], bakeMs: [], off: [] };
+  if (TOGGLE) await goto(entry, lakeside.PLAYER);
+  else if (!SPIKES) {
     await goto(entry, lakeside.PLAYER);
     await new Promise((r) => setTimeout(r, 3000));
     await cdp.send('Page.setWebLifecycleState', { state: 'frozen' });
@@ -137,6 +143,22 @@ const record = (page, skip, n) => page.evaluate((skip, n) => new Promise((resolv
   };
   requestAnimationFrame(tick);
 }), skip, n);
+
+// Times a window of the one page with the control on and one with it off,
+// in an order that swaps every round. The beams fade back in within the
+// warm-up (their stamps are kept), the shadows likewise.
+async function toggled(entry, round) {
+  await entry.page.bringToFront();
+  for (const on of round % 2 ? [false, true] : [true, false]) {
+    await entry.page.evaluate((on, control) => {
+      const night = game.nightLight;
+      if (control === 'shadows') night.enabled = on;
+      else night.shafts = on;
+    }, on, CONTROL);
+    const { work, night, shaft } = await record(entry.page, WARM, FRAMES);
+    (on ? entry.windows : entry.off).push({ median: median(work), p95: quantile(work, 0.95), night: median(night), shaft: median(shaft) });
+  }
+}
 
 // Wakes a page, lets it warm up, times one window of frames, freezes it.
 async function time(entry) {
@@ -221,13 +243,18 @@ let lakeside;
       const pages = [];
       for (const [name, shadows] of [['before', true], ['after', true], ['after', false]]) {
         if (SPIKES && !shadows) continue;
+        if (TOGGLE && !(name === 'after' && shadows)) continue;
         if (builds[name]) pages.push(await open(browser, name, size, shadows));
       }
       for (let round = 0; round < ROUNDS; round++) {
         const order = pages.map((_, i) => pages[(i + round) % pages.length]);
         if (round % 2) order.reverse();
-        for (const entry of order) await (SPIKES ? stall(entry, round) : time(entry));
-        if (!SPIKES) {
+        for (const entry of order) await (TOGGLE ? toggled(entry, round) : SPIKES ? stall(entry, round) : time(entry));
+        if (TOGGLE) {
+          const [p] = pages;
+          console.log(size.name, `round ${round}`, `on ${p.windows[round].median.toFixed(2)}/${p.windows[round].p95.toFixed(2)},`,
+            `off ${p.off[round].median.toFixed(2)}/${p.off[round].p95.toFixed(2)}`, `load ${load()}`);
+        } else if (!SPIKES) {
           console.log(size.name, `round ${round}`, pages.map((p) => `${p.key} ${p.windows[round].median.toFixed(2)}/${p.windows[round].p95.toFixed(2)}`).join(', '), `load ${load()}`);
         } else console.log(size.name, `round ${round}`, `load ${load()}`);
       }
@@ -254,6 +281,17 @@ let lakeside;
             console.log(size.name, entry.key, 'largest nightMs:', entry.worst.map((f) =>
               `${f.night.toFixed(2)} ms (${f.at}, ${f.bakes} baked in ${f.bakeMs.toFixed(2)} ms, work ${f.bakeWork}, frame ${f.work.toFixed(1)} ms)`).join('; '));
           }
+        } else if (TOGGLE) {
+          const d = entry.windows.map((w, i) => w.median - entry.off[i].median);
+          const share = entry.windows.map((w, i) => (w.median - entry.off[i].median) / entry.off[i].median * 100);
+          for (const [label, list] of [['on', entry.windows], ['off', entry.off]]) {
+            console.log(size.name, `one page, ${label}: median ${median(list.map((w) => w.median)).toFixed(2)} ms`,
+              `p95 ${median(list.map((w) => w.p95)).toFixed(2)} ms nightMs ${fixed(median(list.map((w) => w.night)))}`,
+              `shaftMs ${fixed(median(list.map((w) => w.shaft)))}`);
+          }
+          console.log(size.name, `one page, on - off: median ${median(d).toFixed(2)} ms (IQR ${quantile(d, 0.25).toFixed(2)}..${
+            quantile(d, 0.75).toFixed(2)}), ${median(share).toFixed(2)} % (IQR ${quantile(share, 0.25).toFixed(2)}..${
+            quantile(share, 0.75).toFixed(2)}), mean ${(d.reduce((a, b) => a + b, 0) / d.length).toFixed(3)} ms;`, grid);
         } else {
           console.log(size.name, entry.key, `median ${median(entry.windows.map((w) => w.median)).toFixed(2)} ms`,
             `p95 ${median(entry.windows.map((w) => w.p95)).toFixed(2)} ms`,
