@@ -38,13 +38,15 @@ export class RemotePlayers {
       present.add(member.id);
       let peer = this.peers.get(member.id);
       if (!peer) {
-        peer = { player: new Player(state.x, state.y), samples: [] };
+        peer = { id: member.id, player: new Player(state.x, state.y), samples: [] };
         this.peers.set(member.id, peer);
         this.apply(peer.player, state);
         peer.player.settleCape();
       }
       peer.name = member.name;
+      peer.tag = member.tag;
       peer.color = member.color;
+      peer.tint = member.tint;
       peer.samples.push({ at: now, state });
       if (peer.samples.length > 8) peer.samples.shift();
     }

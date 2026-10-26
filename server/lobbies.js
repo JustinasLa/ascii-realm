@@ -5,8 +5,9 @@ import { Player } from '../src/entities/player.js';
 import { spellIds } from '../src/spells/catalog.js';
 import { readSpellCast } from '../src/spells/protocol.js';
 import { World, ASPECT } from '../src/world/world.js';
-import { cleanCode, cleanName, cleanSeed, MAX_PLAYERS, playerState,
+import { cleanCode, cleanName, cleanSeed, displayName, MAX_PLAYERS, playerState,
   PROTOCOL_VERSION, readPlayerState, UPDATE_MS, validCode } from '../src/multiplayer/protocol.js';
+import { parseTint, resolveTints } from '../src/multiplayer/tint.js';
 
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
@@ -35,10 +36,24 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
 
   const chat = createChatRelay({ send });
 
+  // Who is in the lobby, in join order, each in the colour everyone sees
+  // them in.
   function members(room) {
-    return [...room.players.values()].filter((p) => p.socket).map((p) => ({
-      id: p.id, name: p.name, color: p.color, state: p.state,
+    const present = [...room.players.values()].filter((p) => p.socket);
+    const tints = resolveTints(present);
+    return present.map((p, i) => ({
+      id: p.id, name: p.name, tag: p.tag, color: p.color, tint: tints[i], state: p.state,
     }));
+  }
+
+  // A newcomer sharing a name with someone in the lobby (or holding a place
+  // in it) is told apart by the lowest number that makes their name unique.
+  // Tags never change while a player stays, even when others leave.
+  function tagFor(room, name) {
+    const taken = new Set([...room.players.values()].map((p) => displayName(p).toLowerCase()));
+    let tag = null;
+    while (taken.has(displayName({ name, tag }).toLowerCase())) tag = (tag ?? 1) + 1;
+    return tag;
   }
 
   function broadcast(room) {
@@ -118,12 +133,16 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
       const color = Array.from({ length: MAX_PLAYERS }, (_, i) => i)
         .find((i) => ![...room.players.values()].some((p) => p.color === i));
       const { x, y } = spawnFor(room);
+      const name = cleanName(request.name);
       player = { id: randomBytes(8).toString('hex'), token: randomBytes(24).toString('hex'),
-        name: cleanName(request.name), color, state: playerState(new Player(x, y)),
+        name, tag: tagFor(room, name), color, state: playerState(new Player(x, y)),
         // Chat channels this player has hidden; kept through a reconnect.
         hidden: new Set() };
       room.players.set(player.id, player);
     }
+    // The name colour comes with every join, so a change made while the
+    // connection was down still lands. A colour never fails a join.
+    player.tint = parseTint(request.tint);
     player.socket = socket;
     player.expires = null;
     session.room = room;
@@ -173,6 +192,11 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
         }
       } else if (request.type === 'chat' || request.type === 'chat-toggle') {
         chat.handle(session, request);
+      } else if (request.type === 'tint' && session.player) {
+        // A new name colour, or null for the automatic one. Anything else
+        // keeps the colour as it was. The next snapshot carries it.
+        if (request.tint === null) session.player.tint = null;
+        else session.player.tint = parseTint(request.tint) ?? session.player.tint;
       } else if (request.type === 'state' && session.player && now - session.lastState >= 20) {
         const state = readPlayerState(request.state);
         if (state) {

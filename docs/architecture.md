@@ -22,8 +22,16 @@ src/
 Animals are described in [wildlife](wildlife.md), horses in [horses](horses.md).
 
 `server/` contains the HTTP/WebSocket server and in-memory lobby lifecycle.
-The server owns lobby membership, IDs, colours and world seeds; each player
-simulates their own movement and sends bounded pose snapshots at 20 Hz.
+The server owns lobby membership, IDs, colours and world seeds. Players
+choose a name colour (`multiplayer/tint.js`, shared by the page and the
+server): the server accepts only `#rrggbb` (the page tidies what a player
+types), lightens it until it reads on every surface that shows a name,
+numbers players who share a name, and gives a later same-named player another
+colour if theirs would look alike. Nameplates are text in a layer over the
+canvas (`ui/nameplates.js`), on an opaque backdrop, so the shader's fog and
+vignette never change the colour behind a name.
+Each player simulates their own movement and sends bounded pose snapshots at
+20 Hz.
 Other players interpolate snapshots 100 ms behind and are drawn as the
 shape-built outlaw in their own gear. Rune casts are relayed as allowlisted cast
 intent and simulated by each client. Chat (`server/chat.js`, rules in

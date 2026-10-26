@@ -1,12 +1,10 @@
 import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
+import { parseTint } from './tint.js';
 
-export const PROTOCOL_VERSION = 3;
+export { PLAYER_COLORS } from './tint.js';
+export const PROTOCOL_VERSION = 4;
 export const MAX_PLAYERS = 8;
 export const UPDATE_MS = 50;
-export const PLAYER_COLORS = [
-  [169, 212, 174], [146, 198, 235], [224, 176, 229], [239, 207, 151],
-  [237, 162, 155], [149, 220, 208], [183, 180, 237], [224, 222, 174],
-];
 
 // Only these fields cross the network. Cape physics and blade trails are local.
 export const STATE_RANGES = {
@@ -41,6 +39,17 @@ const finite = (value, [min, max]) => typeof value === 'number' && Number.isFini
 
 export function cleanName(value) {
   return (typeof value === 'string' ? value : '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 24) || 'Wanderer';
+}
+
+// The server numbers players who share a name, by join order: Ash, Ash (2),
+// Ash (3). A tag is 2-99, or null for none.
+export function cleanTag(value) {
+  return Number.isInteger(value) && value >= 2 && value <= 99 ? value : null;
+}
+
+// A member's name as every list, frame, nameplate and chat line shows it.
+export function displayName(member) {
+  return member.tag ? `${member.name} (${member.tag})` : member.name;
 }
 
 export function cleanCode(value) {
@@ -85,9 +94,9 @@ export function readPlayerState(raw) {
 }
 
 // Lobby members as the server reports them, keeping only well-formed ones:
-// a hex id, a clean short name, a palette colour and a valid state. A
-// malicious server cannot make the page loop over a huge name or crash on a
-// missing colour.
+// a hex id, a clean short name and tag, a palette colour, a readable name
+// colour and a valid state. A malicious server cannot make the page loop
+// over a huge name, crash on a missing colour or show an unreadable one.
 export function readMembers(raw) {
   if (!Array.isArray(raw)) return [];
   const members = [];
@@ -96,7 +105,8 @@ export function readMembers(raw) {
     const state = readPlayerState(member.state);
     if (!state) continue;
     const color = Number.isInteger(member.color) && member.color >= 0 && member.color < MAX_PLAYERS ? member.color : 0;
-    members.push({ id: member.id, name: cleanName(typeof member.name === 'string' ? member.name : ''), color, state });
+    members.push({ id: member.id, name: cleanName(typeof member.name === 'string' ? member.name : ''),
+      tag: cleanTag(member.tag), color, tint: parseTint(member.tint), state });
   }
   return members;
 }

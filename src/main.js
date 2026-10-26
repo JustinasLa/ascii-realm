@@ -13,7 +13,7 @@ import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/lay
 import { watchPhone } from './core/phone.js';
 import { installPinchZoom } from './core/pinch.js';
 import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from './core/native.js';
-import { dressFigure, drawFigure, drawNameTag, drawShadow, drawTrail } from './entities/figure.js';
+import { dressFigure, drawFigure, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters } from './entities/monsters.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
@@ -37,13 +37,16 @@ import { Wallet } from './inventory/wallet.js';
 import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
-import { cleanName, PLAYER_COLORS, playerState } from './multiplayer/protocol.js';
+import { cleanName, displayName, playerState } from './multiplayer/protocol.js';
 import { RemotePlayers } from './multiplayer/remote-players.js';
+import { autoColour, hexRgb, memberColour, SOLO_COLOR } from './multiplayer/tint.js';
+import { bindTintPicker } from './multiplayer/tint-picker.js';
 import { putOutlinedCell } from './render/cells.js';
-import { buildAtlas, glyph } from './render/glyphs.js';
+import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { ChatUi } from './ui/chat.js';
 import { figureTop, SpeechBubbles } from './ui/bubbles.js';
+import { Nameplates } from './ui/nameplates.js';
 import { Hud } from './ui/hud.js';
 import { InventoryScreen } from './ui/inventory.js';
 import { PhoneMenu } from './ui/phone-menu.js';
@@ -412,6 +415,15 @@ const renderLobby = bindMultiplayerControls(multiplayer, {
   onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
   onDone: () => canvas.focus({ preventScroll: true }),
 });
+// Your name colour: what you chose (null for Auto), and how the lobby shows
+// you. Your own nameplate shows it solo too.
+let chosenTint = null;
+const selfMember = () => multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
+const tintPicker = bindTintPicker(multiplayer, { doc: document, params: new URLSearchParams(location.search),
+  getName: () => { const self = selfMember(); return self ? displayName(self) : name; },
+  autoColour: () => { const self = selfMember(); return self ? autoColour(self.color) : SOLO_COLOR; },
+  onTint: (tint) => { chosenTint = tint; } });
+debug.tint = tintPicker;
 // Lobby chat. It opens only in a lobby, with nothing else in the way, and
 // Escape closes a panel opened over it before the chat. The builder and the
 // rune wheel are declared further down and are read only once a key or tap
@@ -426,7 +438,7 @@ const chat = new ChatUi({ doc: document, win: window, phone: device, client: mul
     cancelActions();
     if (!open) canvas.focus({ preventScroll: true });
   },
-  colorOf: (member) => colorOf(member.color) });
+  colorOf: memberColour });
 debug.chat = chat;
 // What players say floats over their heads, above the scene and below the HUD.
 // The reduced-motion setting is kept from its change events: reading the
@@ -437,6 +449,9 @@ reducedMotionQuery.addEventListener('change', (event) => { reducedMotion = event
 const bubbles = new SpeechBubbles({ doc: document, root: document.getElementById('bubble-root'),
   reducedMotion: () => reducedMotion });
 debug.bubbles = bubbles;
+// Every player's name over their head, below the bubbles.
+const nameplates = new Nameplates({ doc: document, root: document.getElementById('nameplate-root') });
+debug.nameplates = nameplates;
 multiplayer.onChat = (message) => {
   chat.receive(message, multiplayer.players);
   bubbles.receive(message, multiplayer.id);
@@ -448,11 +463,11 @@ multiplayer.onRoster = (change) => {
 };
 multiplayer.onChange = (client) => {
   renderLobby?.(client);
+  tintPicker.render();
   chat.setAvailable(!!client.room);
 };
 window.addEventListener('pagehide', () => multiplayer.leave(false));
 window.addEventListener('pageshow', (event) => { if (event.persisted) multiplayer.leave(); });
-const colorOf = (index) => PLAYER_COLORS[index % PLAYER_COLORS.length];
 // Arrows, spears and javelins in flight or lying where they landed.
 const projectiles = new Projectiles();
 debug.projectiles = projectiles;
@@ -880,16 +895,6 @@ function fogWalkers(view, missiles) {
   return walkers;
 }
 
-function drawName(top, color = [212, 218, 228]) {
-  if (top === null || top === undefined) return;
-  const view = camera.view(renderer);
-  const sy = top - 2 - view.y0;
-  const sx = Math.floor(player.x - name.length / 2) - view.x0;
-  for (let i = 0; i < name.length; i++) {
-    renderer.put(sx + i, sy, glyph(name[i]), ...color);
-    renderer.putBg(sx + i, sy, 8, 10, 14);
-  }
-}
 // Where each speaker's bubble hangs this frame: their feet, the row of their
 // nameplate (two over the figure's top) and whether scenery was drawn over
 // their head. `ownTop` is null while the 3D character shows nothing.
@@ -1557,21 +1562,26 @@ function frame(now) {
   monsters.arrows.drawFlying(renderer, view);
   casting.effects.draw(renderer, view, casting.projectiles);
   drawTrail(renderer, view, player.trail, player.time);
-  const self = multiplayer.room ? multiplayer.players.find((member) => member.id === multiplayer.id) : null;
-  const ownColor = self ? colorOf(self.color) : undefined;
-  if (model) drawName(model.top, ownColor);
-  else drawNameTag(renderer, view, player, figure, name, ownColor);
-  for (const peer of peers) {
-    drawTrail(renderer, view, peer.player.trail, peer.trailTime);
-    drawNameTag(renderer, view, peer.player, peer.figure, peer.name, colorOf(peer.color));
-  }
-  // Speech bubbles are placed before this frame's HUD writes, so reading
-  // the screen's layout for them costs no extra style pass.
+  for (const peer of peers) drawTrail(renderer, view, peer.player.trail, peer.trailTime);
+  // Nameplates and speech bubbles are placed before this frame's HUD
+  // writes, so reading the screen's layout for them costs no extra style
+  // pass. A nameplate sits two rows over its figure's top; the 3D
+  // character's top is unknown while it shows nothing, and so is its name.
   const hudView = { ...view, cellW: renderer.cellW, cellH: renderer.cellH };
+  const projection = hud.projector(hudView);
+  const ownTop = model ? model.top : Math.floor(player.y + figureTop(figure));
+  const self = selfMember();
+  const plates = Number.isFinite(ownTop) ? [{ key: 'self', x: player.x, row: ownTop - 2, depth: player.y,
+    name: self ? self.name : name, tag: self?.tag ?? null,
+    colour: self ? memberColour(self) : chosenTint ? hexRgb(chosenTint) : SOLO_COLOR }] : [];
+  for (const peer of peers) {
+    plates.push({ key: peer.id, x: peer.player.x, row: Math.floor(peer.player.y + figureTop(peer.figure)) - 2,
+      depth: peer.player.y, name: peer.name, tag: peer.tag ?? null, colour: memberColour(peer) });
+  }
+  nameplates.update(plates, projection);
   const bubblesStarted = performance.now();
   if (bubbles.size) {
-    bubbles.update(bubbleAnchors(view, model ? model.top : Math.floor(player.y + figureTop(figure)), peers),
-      hud.projector(hudView), device.phone ? layout.orientation : 'desktop');
+    bubbles.update(bubbleAnchors(view, ownTop, peers), projection, device.phone ? layout.orientation : 'desktop');
   }
   const bubblesMs = performance.now() - bubblesStarted;
   dust.draw(renderer, view);
@@ -1593,7 +1603,7 @@ function frame(now) {
   renderer.draw(view.offX, view.offY, atmosphere);
   lastFrame = { width: canvas.width, height: canvas.height, cellW: renderer.cellW, cellH: renderer.cellH, view };
   hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)
-    .map((member) => ({ id: member.id, name: member.name, health: member.state.health,
+    .map((member) => ({ id: member.id, name: member.name, tag: member.tag, colour: memberColour(member), health: member.state.health,
       maxHealth: player.vitals.maxHealth,
       note: `${Math.round(metresBetween(member.state, player))}m` })) : []);
   markSpellHits();
