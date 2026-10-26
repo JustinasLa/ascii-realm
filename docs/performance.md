@@ -107,9 +107,14 @@ The dependency-free CPU scene benchmark remains available with `npm run
 bench`; `node bench/run.mjs path-to-other-checkout` measures another checkout.
 That synthetic scene uses the procedural character and is not a game-FPS test.
 
-Trees' shadows are measured at a fixed lakeside scene (`bench/lakeside.js`).
-`node bench/night-cpu.mjs <before-checkout>` steps both checkouts in one
-process, a frame each in turn, and also times stalls when walking into a
-fresh area and at the widest zoom. `BEFORE_URL=… AFTER_URL=… node
-bench/night.cjs` does the same in Chrome, with the shadows switched off as a
-control (`SPIKES=1` for the stalls, `THROTTLE=4` for a slow phone).
+Trees' shadows and moonbeams are measured at a fixed lakeside scene
+(`bench/lakeside.js`, whose `SHAFTS` are the three beams in its view).
+`node bench/night-cpu.mjs <before-checkout> . <w> <h> <rounds> <frames> [tier]`
+steps both checkouts in one process, a frame each in turn, reporting the
+`night` and `shafts` stages, and also times stalls when walking into a
+fresh area and at the widest zoom, and the beams' worst cases: walking fast
+across the slots and switching a phone's tier back and forth. `BEFORE_URL=…
+AFTER_URL=… node bench/night.cjs` does the same in Chrome, with the beams
+switched off as a control (`CONTROL=shadows` switches off the whole night
+light instead; `TIER=desktop|phone|reduced` holds the beams' tier; `SPIKES=1`
+for the stalls and a walk, `THROTTLE=4` for a slow phone).
