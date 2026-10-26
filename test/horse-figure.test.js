@@ -42,7 +42,7 @@ register(dataURL(`
   }
 `));
 const { AnimalFigures } = await import('../src/entities/animal-figures.js');
-const { DETAIL, FAR, HorseFigures, MAX_DRAWN, MAX_DRAWN_PHONE, NEAR, RIDER, STILL, bandCells, coarsen, depthAlpha, groundRowOf,
+const { DETAIL, FAR, HorseFigures, MAX_DRAWN, MAX_DRAWN_PHONE, NEAR, RIDER, STILL, TURN, bandCells, coarsen, depthAlpha, groundRowOf,
   mergeFigure, riderLegs, writeDepth } = await import('../src/entities/horse-figure.js');
 const THREE = await import(threeURL);
 
@@ -707,6 +707,58 @@ test('a horse that has not moved keeps its cells; one that has is drawn again', 
   const newcomer = new Horse(0, 0);
   f.update(0, [other, newcomer]);
   same(f.rigs.get(newcomer).raster, null, 'nothing kept for a newcomer');
+});
+
+test('a bone that only turns in place is drawn again once it moves its skin or its shading', () => {
+  let f;
+  const gpu = fakeGPU(() => f);
+  f = figures({ renderer: gpu });
+  const h = new Horse(0, 0, { heading: 0.3 });
+  f.update(dt, [h]);
+  f.rasterise(view, [h], h);
+  assert.equal(gpu.reads, 1);
+  const rig = f.rigs.get(h);
+  const v = new THREE.Vector3();
+  const metres = (bone) => (rig.spans.get(bone) ?? 0) * v.setFromMatrixColumn(bone.matrixWorld, 0).length();
+  // The tips of the skeleton, horse and rider: turning one moves no joint.
+  const tip = (bones, name) => bones.find((b) => b.name === name && !b.children.some((c) => c.isBone));
+  const at = new THREE.Vector3();
+  const was = new THREE.Vector3();
+  const turn = (bone, angle, axis = new THREE.Vector3(1, 0, 0)) => {
+    bone.getWorldPosition(was);
+    bone.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(axis, angle));
+    bone.updateMatrixWorld(true);
+    assert.ok(bone.getWorldPosition(at).distanceTo(was) < 1e-6, 'turned in place');
+  };
+  // The head's skin reaches half a metre, so a turn that moves it a pixel
+  // is less than TURN; an ear or a finger is short, so TURN shades it anew.
+  const head = rig.joints.find((b) => b.name === 'Head');
+  assert.ok(metres(head) > 0.4 && STILL / metres(head) * 1.5 < TURN, `head ${metres(head)} m`);
+  let reads = gpu.reads;
+  for (const bone of [head, tip(rig.joints, 'Ear4L'), tip(rig.riderJoints, 'DEF-f_index03L')]) {
+    assert.ok(bone && metres(bone) > 0, 'a bone bending skin');
+    const limit = Math.min(TURN, STILL / metres(bone));
+    turn(bone, limit * 0.5);
+    f.rasterise(view, [h], h);
+    assert.equal(gpu.reads, reads, `${bone.name} turned a little`);
+    // Half as much again past it, still short of TURN for the head.
+    turn(bone, limit);
+    f.rasterise(view, [h], h);
+    assert.equal(gpu.reads, ++reads, `${bone.name} turned`);
+  }
+  assert.ok(TURN <= 0.06, 'about 3°');
+  // A bone that bends no skin changes nothing, however far it turns (here
+  // about the line to its end, which stays put and frames the slot).
+  const bare = rig.joints.find((b) => !rig.spans.get(b) && b.children.length === 1 && !b.children[0].isBone);
+  assert.ok(bare, 'a bone bending no skin');
+  turn(bare, 1, bare.children[0].position.clone().normalize());
+  f.rasterise(view, [h], h);
+  assert.equal(gpu.reads, reads);
+  // The horse turning on the spot is drawn again too.
+  h.heading += TURN;
+  f.update(0, [h]);
+  f.rasterise(view, [h], h);
+  assert.equal(gpu.reads, ++reads);
 });
 
 test('one readback serves every horse drawn, each drawn alone in its slot', () => {

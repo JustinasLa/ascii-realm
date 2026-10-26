@@ -42,10 +42,12 @@ const D = 20;
 export const NEAR = 17;
 export const FAR = 22;
 // Metres: the rider's body is merged to one vertex per cube this size, and
-// a figure whose bones have all moved less than STILL (about a pixel)
-// since it was drawn is not drawn again.
+// a figure is not drawn again while every bone has moved less than STILL
+// (about a pixel) since it was drawn, and turned too little to move its
+// skin STILL or to shade it a step differently (TURN radians, about 3°).
 export const DETAIL = 0.02;
 export const STILL = 0.01;
+export const TURN = 0.05;
 
 // Drawn like the animals: a softer rim and gain than the player's.
 const RAMP = [...' .:-=+*#%@'].map(glyph);
@@ -166,6 +168,28 @@ export function coarsen(geometry, size) {
     tris.push(a, b, c);
   }
   out.setIndex(tris);
+  return out;
+}
+
+// How far each bone's skin reaches from it, weighted by how much the bone
+// bends it, in the bone's own units: turned by a small angle, a bone moves
+// its skin by that angle times this at most.
+export function spans(meshes) {
+  const out = new Map();
+  const v = new THREE.Vector3();
+  for (const mesh of meshes) {
+    const { position, skinIndex, skinWeight } = mesh.geometry.attributes;
+    const { bones, boneInverses } = mesh.skeleton;
+    for (let i = 0; i < position.count; i++) {
+      for (let k = 0; k < 4; k++) {
+        const w = skinWeight.getComponent(i, k);
+        if (!w) continue;
+        const b = skinIndex.getComponent(i, k);
+        v.fromBufferAttribute(position, i).applyMatrix4(mesh.bindMatrix).applyMatrix4(boneInverses[b]);
+        out.set(bones[b], Math.max(out.get(bones[b]) ?? 0, w * v.length()));
+      }
+    }
+  }
   return out;
 }
 
@@ -378,6 +402,7 @@ class HorseRig {
     this.joints = skinned(this.inner);
     this.riderJoints = skinned(model);
     this.ground = 0;
+    this.spans = new Map();
     // What was last drawn: where, the pose then, and the cells.
     this.raster = null;
   }
@@ -386,8 +411,7 @@ class HorseRig {
   // and rider each become one mesh, the rider's body a coarser one.
   simplify() {
     this.model.updateMatrixWorld(true);
-    mergeFigure(this.inner);
-    mergeFigure(this.rider, DETAIL);
+    this.spans = spans([...mergeFigure(this.inner), ...mergeFigure(this.rider, DETAIL)]);
     return this;
   }
 
@@ -452,21 +476,20 @@ class HorseRig {
     return this.rider.visible ? [...this.joints, ...this.riderJoints] : this.joints;
   }
 
-  // Where every bone shown is, three numbers each.
+  // Where every bone shown is and which way it faces: its world matrix,
+  // sixteen numbers each.
   pose() {
     const bones = this.shown();
-    const out = new Float32Array(bones.length * 3);
-    bones.forEach((o, i) => {
-      const e = o.matrixWorld.elements;
-      out[i * 3] = e[12];
-      out[i * 3 + 1] = e[13];
-      out[i * 3 + 2] = e[14];
-    });
+    const out = new Float32Array(bones.length * 16);
+    bones.forEach((o, i) => out.set(o.matrixWorld.elements, i * 16));
     return out;
   }
 
   // Whether the cells last drawn still serve: the horse where it was, its
-  // slot within the one drawn, and no bone moved STILL or more since.
+  // slot within the one drawn, and no bone moved STILL since or turned
+  // enough to move its skin STILL or by TURN. A bone turning in place (the
+  // head, an ear, the tail's tip) moves no joint but still bends the skin
+  // round it and the light on it; heading turns every bone.
   fresh(horse, slot) {
     const r = this.raster;
     if (!r || r.x !== horse.x || r.y !== horse.y) return false;
@@ -474,11 +497,22 @@ class HorseRig {
     if (slot.cx0 < was.cx0 || slot.cy0 < was.cy0 || slot.cx0 + slot.cols > was.cx0 + was.cols
       || slot.cy0 + slot.rows > was.cy0 + was.rows) return false;
     const bones = this.shown();
-    if (bones.length * 3 !== r.pose.length) return false;
+    if (bones.length * 16 !== r.pose.length) return false;
+    const p = r.pose;
     for (let i = 0; i < bones.length; i++) {
       const e = bones[i].matrixWorld.elements;
-      const o = i * 3;
-      if ((e[12] - r.pose[o]) ** 2 + (e[13] - r.pose[o + 1]) ** 2 + (e[14] - r.pose[o + 2]) ** 2 >= STILL * STILL) return false;
+      const o = i * 16;
+      if ((e[12] - p[o + 12]) ** 2 + (e[13] - p[o + 13]) ** 2 + (e[14] - p[o + 14]) ** 2 >= STILL * STILL) return false;
+      // A bone's axis turned by a small angle moves by that angle times its
+      // length (the rig is scaled), its skin by that times the span; a bone
+      // bending no skin changes nothing.
+      const span = this.spans.get(bones[i]);
+      if (!span) continue;
+      for (let a = 0; a < 12; a += 4) {
+        const d = (e[a] - p[o + a]) ** 2 + (e[a + 1] - p[o + a + 1]) ** 2 + (e[a + 2] - p[o + a + 2]) ** 2;
+        if (d * span * span >= STILL * STILL
+          || d >= TURN * TURN * (p[o + a] ** 2 + p[o + a + 1] ** 2 + p[o + a + 2] ** 2)) return false;
+      }
     }
     return true;
   }
