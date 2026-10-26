@@ -10,9 +10,17 @@ import {
 } from '../src/world/moon-shafts.js';
 import { MOON_HUE, moonTint, tintRgb } from '../src/world/moon-tint.js';
 import { MOON, worldNormal } from '../src/world/surface-light.js';
-import { ASPECT, GRASS, SHORE, WATER, World } from '../src/world/world.js';
+import { ASPECT, CHUNK_SIZE, GRASS, SHORE, WATER, World } from '../src/world/world.js';
 
 const meadow = () => ({ typeAt: () => GRASS });
+
+// A world with its ground loaded over a box, as the game loads it around the view.
+function loaded(world, x0, y0, x1, y1) {
+  for (let cy = Math.floor(y0 / CHUNK_SIZE); cy <= Math.floor(y1 / CHUNK_SIZE); cy++) {
+    for (let cx = Math.floor(x0 / CHUNK_SIZE); cx <= Math.floor(x1 / CHUNK_SIZE); cx++) world.chunk(cx, cy);
+  }
+  return world;
+}
 
 // The first slot from (0, 0) eastward holding a beam on a meadow.
 function firstShaft(world, seed) {
@@ -37,13 +45,13 @@ function renderer(cols, rows) {
 }
 
 test('beams stand in the same slots every time, per world and seed', () => {
-  const a = new World(1), b = new World(1);
-  const keys = (world, seed) => shaftsNear(-400, -400, 400, 400, seed, world).map((s) => `${s.key} ${s.cx} ${s.cy} ${s.r}`);
+  const a = loaded(new World(1), -400, -250, 400, 250), b = loaded(new World(1), -400, -250, 400, 250);
+  const keys = (world, seed) => shaftsNear(-300, -150, 300, 150, seed, world).map((s) => `${s.key} ${s.cx} ${s.cy} ${s.r}`);
   const first = keys(a, 1);
-  assert.ok(first.length > 10);
+  assert.ok(first.length > 6);
   assert.deepEqual(keys(a, 1), first);
   assert.deepEqual(keys(b, 1), first, 'another world of the same seed');
-  assert.notDeepEqual(keys(new World(2), 2), first, 'another seed');
+  assert.notDeepEqual(keys(loaded(new World(2), -400, -250, 400, 250), 2), first, 'another seed');
   // One world's slots never leak into another's, and switching back finds them again.
   const stub = meadow();
   const other = keys(stub, 7);
@@ -69,6 +77,15 @@ test('half the slots hold a beam, each in its slot\'s middle', () => {
     }
   }
   assert.ok(Math.abs(n / 1600 - SHAFT_CHANCE) < 0.03, `${n} of 1600`);
+});
+
+test('a slot is decided only once the world has loaded its ground, without loading it', () => {
+  const world = new World(1);
+  const before = world.chunks.size;
+  assert.deepEqual(shaftsNear(-300, -150, 300, 150, 1, world), []);
+  assert.equal(world.chunks.size, before, 'no ground was generated');
+  loaded(world, -400, -250, 400, 250);
+  assert.ok(shaftsNear(-300, -150, 300, 150, 1, world).length > 6);
 });
 
 test('no beam lands on the water or the shore', () => {
@@ -242,8 +259,8 @@ test('the moon\'s tint turns colours paler and bluer at their own brightness', (
 });
 
 test('the lakeside scene keeps its three moonbeams', () => {
-  const world = new World(SEED);
   const view = { x0: Math.floor(PLAYER.x - 134), y0: Math.floor(PLAYER.y - 11 - 45), cols: 268, rows: 91 };
+  const world = loaded(new World(SEED), view.x0 - 80, view.y0 - 60, view.x0 + view.cols + 80, view.y0 + view.rows + 60);
   const found = shaftsNear(view.x0, view.y0, view.x0 + view.cols, view.y0 + view.rows, SEED, world, false);
   for (const at of SHAFTS) {
     assert.ok(found.some((s) => Math.abs(s.cx - at.x) < 0.5 && Math.abs(s.cy - at.y) < 0.5), `a beam at ${at.x}, ${at.y}`);

@@ -5,7 +5,7 @@ import { dg, over } from '../render/glyphs.js';
 import { MOONLIGHT } from '../render/palette.js';
 import { softLayer, subGlyph } from './glow.js';
 import { MOON, worldNormal } from './surface-light.js';
-import { ASPECT, SHORE, WATER } from './world.js';
+import { ASPECT, CHUNK_SIZE, SHORE, WATER } from './world.js';
 
 export { PEAK_LIFT, TINT } from './moon-tint.js';
 
@@ -94,12 +94,16 @@ function slotsOf(world, seed) {
 // bounds from Math.floor of the centre, and the world boxes (end
 // exclusive) of the patch alone and of the patch with its column, and its
 // stamps once baked (patchStamp, columnStamp).
+// A slot whose ground the world has not loaded yet has none for now: it is
+// decided once its chunk is loaded, so looking for beams never makes the
+// world generate ground nobody sees.
 export function shaftAt(i, j, seed, world) {
   const slots = slotsOf(world, seed);
   const key = i * 1048576 + j;
   let shaft = slots.get(key);
   if (shaft === undefined) {
     shaft = makeShaft(i, j, seed, world);
+    if (shaft === undefined) return null;
     if (slots.size >= SHAFT_CACHE) slots.delete(slots.keys().next().value);
     slots.set(key, shaft);
   }
@@ -110,8 +114,10 @@ function makeShaft(i, j, seed, world) {
   if (hash2(i, j, seed + 2290) >= SHAFT_CHANCE) return null;
   const cx = i * SLOT_W + SLOT_W * (0.2 + 0.6 * hash2(i, j, seed + 2291));
   const cy = j * SLOT_H + SLOT_H * (0.2 + 0.6 * hash2(i, j, seed + 2292));
+  const fx = Math.floor(cx), fy = Math.floor(cy);
+  if (world.loaded && !world.loaded(Math.floor(fx / CHUNK_SIZE), Math.floor(fy / CHUNK_SIZE))) return undefined;
   // Never on the water: a beam there would fight the moon's reflection.
-  const type = world.typeAt(Math.floor(cx), Math.floor(cy));
+  const type = world.typeAt(fx, fy);
   if (type === WATER || type === SHORE) return null;
   const r = 7 + 4 * hash2(i, j, seed + 2293);
   const lobes = new Float32Array(9);
@@ -123,7 +129,7 @@ function makeShaft(i, j, seed, world) {
     lobes[k * 3 + 1] = Math.sin(angle) * d;
     lobes[k * 3 + 2] = r * (0.5 + 0.2 * hash2(i * 3 + k, j * 3 + k, seed + 2299));
   }
-  const bx = Math.floor(cx), by = Math.floor(cy);
+  const bx = fx, by = fy;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (let k = 0; k < 3; k++) {
     const x = cx + lobes[k * 3] / ASPECT, y = cy + lobes[k * 3 + 1] * TILT;

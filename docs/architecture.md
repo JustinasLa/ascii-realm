@@ -83,8 +83,9 @@ light than the open sky reaches each cell, so `gainAt` goes above 1 in a
 beam and `tintAt` says how far the colours turn toward the moonlight
 (`world/moon-tint.js`). `world/moon-shafts.js` cuts the world into slots
 (`SLOT_W` × `SLOT_H`); half of them, by a hash of the slot and the seed, hold
-a beam whose patch centre is not on water. Slots are remembered per world
-and seed. A beam's patch (three lobes with noise-broken edges) and its
+a beam whose patch centre is not on water. A slot is decided only once
+the world has loaded the chunk under its centre, so looking for beams never
+generates ground; decided slots are remembered per world and seed. A beam's patch (three lobes with noise-broken edges) and its
 column of air (leaning by `COLUMN_STEP`, from the moon's direction) are
 baked once into stamps fixed to world cells, within the trees' bake budget.
 Each frame `NightLight` picks the beams near the view, nearest first, up to
