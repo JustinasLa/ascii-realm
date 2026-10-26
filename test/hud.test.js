@@ -460,3 +460,84 @@ test('the projector reads the screen boxes once per size, again after a resize',
   hud.destroy();
   assert.equal(listeners.has('resize'), false, 'a destroyed HUD stops listening');
 });
+
+test('the top cover gives the first row clear of the target panel at a large cell size', async (t) => {
+  const { hud } = mount(t);
+  const { MusicNotes } = await import('../src/world/music-notes.js');
+  // The fixture canvas: 800x400 CSS px at (25, 30), 1600x800 device px.
+  // Large cells, 40x80 device px: 40 columns, 10 rows.
+  const big = { x0: 0, y0: 0, offX: 0, offY: 0, cols: 40, rows: 10, cellW: 40, cellH: 80 };
+  hud.frames.getBoundingClientRect = () => ({ left: 37, top: 42, width: 244, height: 100 });
+  hud.targetFrame.getBoundingClientRect = () => ({ left: 315, top: 42, width: 220, height: 50 });
+  // No target: only the status frames, device px 24-512 wide and 224 deep.
+  const frames = hud.topCover(big);
+  assert.deepEqual(frames.slice(0, 14), [...new Array(13).fill(3), 0]);
+  assert.ok(frames.slice(13).every((row) => row === 0));
+  // With a target the centred panel, device px 580-1020 by 124, covers columns 14-25.
+  hud.setTarget({ name: 'Wolf', health: 5, maxHealth: 10 });
+  hud.update(0, view);
+  const cover = hud.topCover(big);
+  assert.deepEqual(cover.slice(13, 27), [0, ...new Array(12).fill(2), 0]);
+  // A note glyph over a head on row 8 there would be above the screen: it
+  // is drawn on row 2, under the panel rather than beneath it.
+  const notes = new MusicNotes();
+  notes.add({ x: 20, y: 9, top: 8, midi: 60 });
+  const writes = [];
+  const r = { cols: 40, rows: 10, layer: (x, y) => writes.push([x, y]) };
+  notes.draw(r, big, notes.list[0], cover);
+  assert.deepEqual(writes, [[20, 2]]);
+  // A head under the panel itself leaves nothing to draw.
+  notes.list[0].row -= 7;
+  writes.length = 0;
+  notes.draw(r, big, notes.list[0], cover);
+  assert.deepEqual(writes, []);
+  // Scrolled by part of a cell, the cover moves with the cells.
+  const scrolled = hud.topCover({ ...big, offX: 20, offY: 40 });
+  assert.deepEqual(scrolled.slice(12, 17), [4, 4, 0, 3, 3]);
+  assert.deepEqual(scrolled.slice(24, 27), [3, 3, 0]);
+  // Without a sized view or canvas there is no cover.
+  assert.equal(hud.topCover({ ...big, cellW: 0 }), null);
+  assert.equal(hud.topCover(null), null);
+  hud.canvas.width = 0;
+  assert.equal(hud.topCover(big), null);
+});
+
+test('the top cover reads panel boxes once, again after one changes or the screen is resized', (t) => {
+  const listeners = new Map();
+  globalThis.addEventListener = (type, fn) => listeners.set(type, fn);
+  globalThis.removeEventListener = (type, fn) => { if (listeners.get(type) === fn) listeners.delete(type); };
+  const observers = [];
+  globalThis.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; this.nodes = []; observers.push(this); }
+    observe(node) { this.nodes.push(node); }
+    disconnect() { this.nodes = []; }
+  };
+  t.after(() => { delete globalThis.addEventListener; delete globalThis.removeEventListener; delete globalThis.ResizeObserver; });
+  const dock = installDocument(t).createElement('div');
+  const hidden = installDocument(t).createElement('div');
+  const { hud } = mount(t, { covers: [dock, null, hidden] });
+  const [observer] = observers;
+  assert.deepEqual(observer.nodes, [hud.frames, hud.targetFrame, dock, hidden], 'the page panels are watched too');
+  let reads = 0;
+  hud.frames.getBoundingClientRect = () => { reads++; return { left: 25, top: 30, width: 40, height: 40 }; };
+  // The dock in the top-right corner; a panel hidden by its style has no box.
+  dock.getBoundingClientRect = () => ({ left: 785, top: 30, width: 40, height: 120 });
+  hidden.getBoundingClientRect = () => ({ left: 25, top: 30, width: 0, height: 0 });
+  const small = { x0: 0, y0: 0, offX: 0, offY: 0, cols: 80, rows: 20, cellW: 20, cellH: 40 };
+  const cover = hud.topCover(small);
+  assert.deepEqual(cover.slice(0, 5), [2, 2, 2, 2, 0]);
+  assert.deepEqual(cover.slice(75), [0, 6, 6, 6, 6]);
+  hud.topCover(small);
+  assert.equal(reads, 1, 'read once while nothing changes');
+  observer.callback();
+  hud.topCover(small);
+  assert.equal(reads, 2, 'read again after a panel changes size');
+  listeners.get('resize')();
+  hud.topCover(small);
+  assert.equal(reads, 3, 'and after a resize');
+  hud.targetFrame.hidden = false;
+  hud.topCover(small);
+  assert.equal(reads, 4, 'and when a panel shows or hides');
+  hud.destroy();
+  assert.deepEqual(observer.nodes, [], 'a destroyed HUD stops watching');
+});

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   CHORD_NAMES, INSTRUMENT_IDS, INSTRUMENTS, NOTE_LETTERS, SCALE, hearingRange, instrumentFalloff,
-  isInstrumentNote, layerNote, noteMidi, noteRange, noteReference, secondLayer,
+  isInstrumentNote, layerNote, noteMidi, noteRange, noteReference, noteSlots, pitchName, secondLayer,
 } from '../src/audio/instruments.js';
 import { INSTRUMENT_ITEMS } from '../src/inventory/instrument-items.js';
 import { itemArt } from '../src/ui/item-art.js';
@@ -130,9 +130,13 @@ test('instrument text, art and source are plain ASCII', () => {
     strings.push(item.name, item.shortName, item.glyph, item.groundGlyph, item.description,
       ...Object.values(item.stats).map(String));
   }
+  for (const id of INSTRUMENT_IDS) {
+    for (const note of [...noteSlots(id), ...noteSlots(id, true)]) strings.push(note.label, note.pitches);
+  }
   for (const text of strings) assert.match(text, ascii, text);
   for (const file of ['src/audio/instruments.js', 'src/audio/instrument-voices.js',
-    'src/inventory/instrument-items.js', 'src/audio/instrument-preview.js', 'docs/audio-instruments.html']) {
+    'src/inventory/instrument-items.js', 'src/audio/instrument-preview.js', 'docs/audio-instruments.html',
+    'src/core/instrument-keys.js', 'src/world/music-notes.js', 'src/entities/instrument-shapes.js']) {
     const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
     const bad = [...source].find(char => !/[\x20-\x7e\n]/.test(char));
     assert.equal(bad, undefined, `${file} has a non-ASCII character`);
@@ -156,4 +160,33 @@ test('peers already receive an off-hand instrument through synced equipment', as
   const { readEquipment } = await import('../src/multiplayer/protocol.js');
   for (const id of INSTRUMENT_IDS) assert.deepEqual(readEquipment({ offHand: { id } }).offHand, { id, count: 1 });
   assert.equal(readEquipment({ mainHand: { id: 'lute' } }).mainHand, null, 'never in the main hand');
+});
+
+test('pitch names are ASCII note names with their octave', () => {
+  assert.deepEqual([48, 60, 61, 72, 84, 59, 0, -1].map(pitchName), ['C3', 'C4', 'C#4', 'C5', 'C6', 'B3', 'C-1', 'B-2']);
+});
+
+test('the hotbar note layout: notes, then chords or the octave above with Shift', () => {
+  const pick = (id, shifted, key) => noteSlots(id, shifted).map(note => note[key]);
+  assert.deepEqual(pick('lute', false, 'label'), ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C']);
+  assert.deepEqual(pick('lute', false, 'pitches'), ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5']);
+  assert.deepEqual(pick('lute', true, 'label'), ['C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C']);
+  assert.deepEqual(pick('lute', true, 'pitches'), ['C E G', 'D F A', 'E G B', 'F A C', 'G B D', 'A C E', 'B D F', 'C E G']);
+  assert.deepEqual(pick('flute', false, 'pitches'), ['C5', 'D5', 'E5', 'F5', 'G5', 'A5', 'B5', 'C6']);
+  assert.deepEqual(pick('flute', true, 'pitches'), ['C6', 'D6', 'E6', 'F6', 'G6', 'A6', 'B6', 'C7']);
+  assert.deepEqual(pick('trumpet', true, 'pitches'), ['C5', 'D5', 'E5', 'F5', 'G5', 'A5', 'B5', 'C6']);
+  assert.deepEqual(pick('trumpet', true, 'label'), ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C']);
+  assert.deepEqual(noteSlots('lute', true)[1], { slot: 2, label: 'Dm', pitches: 'D F A', degree: 1, octave: 0, chord: true });
+  assert.deepEqual(noteSlots('flute', true)[7], { slot: 8, label: 'C', pitches: 'C7', degree: 7, octave: 1, chord: false });
+  for (const id of INSTRUMENT_IDS) {
+    for (const shifted of [false, true]) {
+      assert.deepEqual(noteSlots(id, shifted).map(note => note.slot), [1, 2, 3, 4, 5, 6, 7, 8]);
+      for (const note of noteSlots(id, shifted)) {
+        const { degree, octave, chord } = layerNote(id, note.slot, shifted);
+        assert.deepEqual([note.degree, note.octave, note.chord], [degree, octave, chord]);
+      }
+    }
+  }
+  assert.deepEqual(noteSlots('woodenBuckler'), []);
+  assert.deepEqual(noteSlots(undefined, true), []);
 });

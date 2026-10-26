@@ -23,7 +23,9 @@
 | `L` / Weather & seasons panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
-| `1`–`9` | Select a quick slot; gear in it is equipped |
+| `1`–`9` | Select a quick slot; gear in it is equipped (without an instrument in the off hand) |
+| `1`–`8`, instrument in the off hand | Play notes C D E F G A B C; the selection returns to quick slot 9 |
+| `Shift`+`1`–`8`, instrument in the off hand | Play the chords (lute, vielle, celtic harp, dulcimer, kalimba, accordion) or notes 9–16 an octave up (flute, trumpet, bagpipe) |
 | `Q` | Activate the selected quick slot to re-equip the sword |
 | `I` / `Tab` | Open or close the inventory (`Escape` also closes it) |
 | `G`, with inventory open | Switch between the satchel and equipment |
@@ -33,6 +35,30 @@
 | `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
 | `Enter` / `/`, in a lobby | Open the chat bar (`/` starts a command); `Enter` sends, `Escape` or a click on the scene cancels (the click does nothing else; with the builder open over the chat, `Escape` closes the builder first), `Up` / `Down` recall what you sent |
+
+## Instruments
+
+With an instrument in the off hand, `1`–`8` (or the numpad's `1`–`8`) play
+its notes the moment they go down, and `Shift` held at the press plays the
+second layer. Holding a key down plays its note once. What the main hand holds
+doesn't matter, and walking, running (`Shift` still runs), striking, jumping
+and casting all work while you play.
+
+The quick slots show the layout while you carry one: slots 1–8 read
+`C D E F G A B C` with the exact pitch below, chord names (or the octave
+above) while `Shift` is held, and the played slot lights up. The hint reads,
+for example, `Lute | 1-8 notes | Shift chords`. Clicking a note slot plays it,
+and `Shift`-click plays the second layer. After each note the selection goes
+back to quick slot 9 without equipping anything there, so the same key plays
+again at once.
+
+While you carry an instrument, `1`–`8` don't switch gear: press `9`, open
+the inventory, or take the instrument off. `9` still selects quick slot 9 as
+usual. Notes don't play in the Scenery builder, while typing, with the
+inventory, chat or rune wheel open, or while down. A note glyph `d`, coloured
+by pitch, pops up 2 m above your head with each note.
+
+Phones can't play instruments yet: their quick slots stay as they are.
 
 ## Chat
 

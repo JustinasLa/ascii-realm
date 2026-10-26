@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { buildInstrumentShape, HOLD } from './instrument-shapes.js';
 import { wears } from './loadout.js';
 
 // What the outlaw wears on the 3D character. The mannequin is one plain
@@ -123,6 +124,13 @@ export class Gear {
     const boss = mesh(new THREE.SphereGeometry(0.04, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), COLORS.iron);
     this.buckler.add(board, rim, boss);
     this.attach(this.buckler, forearm, [0.62, 1.49, -0.068]);
+    // An off-hand instrument hangs from the left hand instead. Each is built
+    // the first time it is carried and kept for the next.
+    this.offHand = new THREE.Group();
+    this.offHand.position.set(...HOLD.at);
+    this.offHand.quaternion.set(...HOLD.quaternion);
+    forearm.add(this.offHand);
+    this.instruments = new Map();
 
     this.signature = null;
   }
@@ -147,7 +155,14 @@ export class Gear {
     this.capelet.visible = wearing('helm');
     this.hair.visible = !wearing('helm');
     this.cloak.visible = wearing('cape');
-    this.buckler.visible = equipment?.offHand?.id === 'woodenBuckler';
+    const offHand = equipment?.offHand?.id;
+    this.buckler.visible = offHand === 'woodenBuckler';
+    if (offHand && !this.instruments.has(offHand)) {
+      const shape = buildInstrumentShape(THREE, offHand);
+      if (shape) this.offHand.add(shape);
+      this.instruments.set(offHand, shape);
+    }
+    for (const [id, shape] of this.instruments) if (shape) shape.visible = id === offHand;
     const regions = regionColors(equipment);
     const color = new THREE.Color();
     for (const { mesh: o, regions: of } of this.painted) {

@@ -105,6 +105,30 @@ export function noteReference(id) {
   ];
 }
 
+const PITCH_LETTERS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+/** A MIDI note's name in ASCII, e.g. 60 -> 'C4' (sharps as '#'). */
+export function pitchName(midi) {
+  return `${PITCH_LETTERS[((midi % 12) + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+}
+
+/**
+ * What slots 1-8 play, for the hotbar: { slot, label, pitches, degree,
+ * octave, chord }. Single notes carry their octave ('C4'); chords list only
+ * their letters ('D F A'), which is all a slot has room for.
+ */
+export function noteSlots(id, shifted = false) {
+  if (!secondLayer(id)) return [];
+  return NOTE_LETTERS.map((letter, index) => {
+    const slot = index + 1;
+    const note = layerNote(id, slot, shifted);
+    const midis = noteMidi(id, note.degree, note.octave, note.chord);
+    return { slot, label: note.chord ? CHORD_NAMES[index] : letter,
+      pitches: note.chord ? midis.map(midi => pitchName(midi).replace(/-?\d+$/, '')).join(' ') : pitchName(midis[0]),
+      ...note };
+  });
+}
+
 /** How far a note carries, in metres. */
 export function hearingRange(id) {
   const instrument = instrumentOf(id);
