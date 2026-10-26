@@ -6,6 +6,7 @@ export const PROP_CATALOG = Object.freeze([
   { kind: 'tree', label: 'Tree', symbol: 'Y', group: 'Nature', solid: true },
   { kind: 'pine', label: 'Pine', symbol: '^', group: 'Nature', solid: true },
   { kind: 'rock', label: 'Rock', symbol: 'O', group: 'Nature', solid: true },
+  { kind: 'standing-stone', label: 'Standing stone', symbol: '!', group: 'Nature', solid: true },
   { kind: 'bush', label: 'Bush', symbol: '*', group: 'Nature', solid: true },
   { kind: 'stump', label: 'Stump', symbol: 'o', group: 'Nature', solid: true },
   { kind: 'log', label: 'Log', symbol: '=', group: 'Nature', solid: true },
