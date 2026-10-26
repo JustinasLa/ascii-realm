@@ -354,9 +354,15 @@ chord's three pitches are scaled by 1/sqrt(3), so a chord is about as loud as
 a note. A note carries 16 m per unit of loudness (64 m), fading linearly to
 silence (`hearingRange`, `instrumentFalloff`).
 
-At most 24 pitches sound at once. A new note first makes room: the oldest
-voices fade over 40 ms and still count until their fade ends, so when the pool
-is full the new note starts up to 40 ms later. `GameAudio.play({ type:
+A note renders every buffer it needs first and only then reads the audio
+clock, so a chord's pitches share one start time, 10 ms ahead of the clock,
+and no envelope point is already past when it is scheduled.
+
+At most 24 pitches sound at once. A new note first makes room by taking the
+oldest voices: one that hasn't started yet was never heard and is cancelled
+outright; one that is sounding fades over 40 ms and still counts until its
+fade ends. When the pool is full the new note so starts at most 40 ms later,
+however many notes arrive together. `GameAudio.play({ type:
 'instrument', ... })` registers the handle with the other effects, so pausing
 stops it and mute silences it.
 

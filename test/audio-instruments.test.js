@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  INSTRUMENT_IDS, INSTRUMENTS, MAX_VOICES, STEAL_RELEASE, noteMidi, playInstrumentNote,
+  INSTRUMENT_IDS, INSTRUMENTS, MAX_VOICES, START_LEAD, STEAL_RELEASE, noteMidi, playInstrumentNote,
   prepareInstrument, soundingVoices,
 } from '../src/audio/instruments.js';
 import {
@@ -93,6 +93,8 @@ function pitchOf(samples, rate, near) {
 }
 const cents = (got, want) => 1200 * Math.log2(got / want);
 const hz = midi => 440 * 2 ** ((midi - 69) / 12);
+// Notes played at the fake clock's 10 s start a little ahead of it.
+const T = 10 + START_LEAD;
 
 test('every instrument builds a complete one-shot on the records bus', () => {
   for (const id of INSTRUMENT_IDS) {
@@ -107,16 +109,16 @@ test('every instrument builds a complete one-shot on the records bus', () => {
     assert.ok(fake.nodes.some(node => node.connections.includes(route.input)), `${id} reaches the route`);
     const length = INSTRUMENTS[id].length;
     for (const source of fake.sources()) {
-      assert.deepEqual(source.starts, [10]);
-      assert.ok(Math.abs(source.stops[0] - 10 - length) <= 0.05, `${id} lasts its natural length`);
+      assert.deepEqual(source.starts, [T]);
+      assert.ok(Math.abs(source.stops[0] - T - length) <= 0.05, `${id} lasts its natural length`);
     }
-    assert.equal(handle.end, 10 + length);
+    assert.equal(handle.end, T + length);
     assert.equal(handle.voices.length, 1);
     // The envelope reaches the instrument's level and ends silent.
     const envelope = fake.nodes.find(node => node.connections.includes(route.input));
     const calls = envelope.gain.calls;
     assert.ok(calls.some(call => Math.abs(call.args[0] - INSTRUMENTS[id].level) < 1e-9));
-    assert.deepEqual(calls.at(-1), { method: 'linearRampToValueAtTime', args: [0, 10 + length] });
+    assert.deepEqual(calls.at(-1), { method: 'linearRampToValueAtTime', args: [0, T + length] });
   }
 });
 
@@ -150,7 +152,7 @@ test('each instrument has its own sound: no two graphs are alike', () => {
   assert.deepEqual(reeds, [-7, 7], 'two reeds tuned apart');
   const bagpipe = graphOf('bagpipe');
   const pipes = bagpipe.nodes.filter(node => node.kind === 'oscillator');
-  assert.deepEqual(pipes[0].frequency.calls.map(call => call.args), [[hz(60) * 1.5, 10], [hz(60), 10.022]],
+  assert.deepEqual(pipes[0].frequency.calls.map(call => call.args), [[hz(60) * 1.5, T], [hz(60), T + 0.022]],
     'a grace note a fifth above opens the chanter');
   assert.equal(pipes[1].frequency.calls[0].args[0], hz(48), 'the drone sits on C3');
   const trumpet = graphOf('trumpet');
@@ -378,27 +380,98 @@ test('at most 24 pitches sound, fading ones included, under 20 chords a second',
   assert.ok(stolen.end - stolen.start < 3);
 });
 
-test('a burst of single notes fades the oldest and starts the newest within 40 ms', () => {
+test('a burst of single notes fades the oldest sounding ones and starts the newest within 40 ms', () => {
   const fake = fakeAudio({ currentTime: 5 });
   const handles = [];
-  for (let index = 0; index < 30; index++) handles.push(playInstrumentNote(fake.engine, { instrument: 'trumpet', degree: index % 8 }));
+  for (let index = 0; index < 24; index++) handles.push(playInstrumentNote(fake.engine, { instrument: 'trumpet', degree: index % 8 }));
+  // The first 24 have started when six more arrive.
+  fake.context.currentTime = 5.1;
+  for (let index = 0; index < 6; index++) handles.push(playInstrumentNote(fake.engine, { instrument: 'trumpet', degree: index }));
   assert.ok(handles.every(Boolean));
   const voices = handles.flatMap(handle => handle.voices);
   assert.equal(voices.filter(voice => voice.fading).length, 6, 'the six oldest are stolen');
-  assert.ok(voices.slice(0, 6).every(voice => voice.fading));
-  assert.ok(voices.slice(24).every(voice => voice.start === 5 + STEAL_RELEASE), 'the newest wait for the fade');
+  assert.ok(voices.slice(0, 6).every(voice => voice.fading && !voice.ended));
+  assert.ok(voices.slice(24).every(voice => voice.start === 5.1 + STEAL_RELEASE), 'the newest wait for the fade');
   const envelopes = fake.nodes.filter(node => node.kind === 'gain' && node.connections.some(target => target.kind === 'route'));
   for (const envelope of envelopes.slice(0, 6)) {
-    assert.ok(envelope.gain.calls.some(call => call.method === 'cancelAndHoldAtTime' && call.args[0] === 5));
+    assert.ok(envelope.gain.calls.some(call => call.method === 'cancelAndHoldAtTime' && call.args[0] === 5.1));
     assert.ok(envelope.gain.calls.some(call => call.method === 'linearRampToValueAtTime'
-      && call.args[0] === 0 && call.args[1] === 5 + STEAL_RELEASE));
+      && call.args[0] === 0 && call.args[1] === 5.1 + STEAL_RELEASE));
   }
   const stops = fake.sources().filter(source => source.stops.length === 2);
-  assert.ok(stops.length >= 6 && stops.every(source => source.stops[1] <= 5 + 0.05), 'stolen sources stop');
+  assert.ok(stops.length >= 6 && stops.every(source => source.stops[1] <= 5.1 + 0.05), 'stolen sources stop');
   // Ten chords at once also fit.
   const chords = fakeAudio();
   for (let index = 0; index < 10; index++) playInstrumentNote(chords.engine, { instrument: 'lute', degree: index % 8, chord: true });
   assert.equal(soundingVoices(chords.engine).filter(voice => !voice.fading).length, 24);
+});
+
+test('notes that have not started yet are cancelled outright, not faded', () => {
+  const fake = fakeAudio({ currentTime: 5 });
+  const handles = [];
+  for (let index = 0; index < 30; index++) handles.push(playInstrumentNote(fake.engine, { instrument: 'trumpet', degree: index % 8 }));
+  const voices = handles.flatMap(handle => handle.voices);
+  assert.ok(voices.slice(0, 6).every(voice => voice.ended && !voice.fading && voice.end === voice.start),
+    'the six oldest never sounded and are gone');
+  assert.ok(voices.slice(6).every(voice => !voice.ended && voice.start === 5 + START_LEAD), 'nobody waits');
+  assert.equal(soundingVoices(fake.engine).length, MAX_VOICES);
+  const envelopes = fake.nodes.filter(node => node.kind === 'gain' && node.connections.some(target => target.kind === 'route'));
+  assert.ok(envelopes.every(envelope => !envelope.gain.calls.some(call => call.method === 'cancelAndHoldAtTime')),
+    'no fade is scheduled');
+  assert.ok(fake.routes.slice(0, 6).every(route => route.disposals === 1), 'their routes are released');
+});
+
+test('a burst of 17 chords waits at most one 40 ms release, even over sounding chords', () => {
+  for (const sounding of [0, 8]) {
+    const fake = fakeAudio({ currentTime: 0 });
+    const voices = [];
+    for (let index = 0; index < sounding; index++) {
+      voices.push(...playInstrumentNote(fake.engine, { instrument: 'lute', degree: index % 8, chord: true }).voices);
+    }
+    fake.context.currentTime = 1;
+    let latest = 0;
+    for (let index = 0; index < 17; index++) {
+      const handle = playInstrumentNote(fake.engine, { instrument: 'dulcimer', degree: index % 8, chord: true });
+      assert.ok(handle, 'every chord plays');
+      latest = Math.max(latest, ...handle.voices.map(voice => voice.start));
+      voices.push(...handle.voices);
+    }
+    assert.ok(latest - 1 <= STEAL_RELEASE + 1e-9, `the last chord starts ${(latest - 1) * 1000} ms late`);
+    assert.equal(latest, sounding ? 1 + STEAL_RELEASE : 1 + START_LEAD);
+    for (let time = 0; time < 4; time += 0.001) {
+      const audible = voices.filter(voice => voice.start <= time && time < voice.end).length;
+      assert.ok(audible <= MAX_VOICES, `${audible} voices at ${time.toFixed(3)} s`);
+    }
+  }
+});
+
+test('a cold chord renders before its start time: one shared start, no envelope point in the past', () => {
+  for (const id of ['lute', 'celticHarp', 'dulcimer', 'vielle']) {
+    const fake = fakeAudio();
+    // Rendering is slow here: each new buffer takes 5 ms of audio clock,
+    // longer than a string's 2 ms attack. The fake asserts every start and
+    // automation point is at or after the clock when it is scheduled.
+    const create = fake.context.createBuffer;
+    fake.context.createBuffer = (...args) => {
+      fake.context.currentTime += 0.005;
+      return create(...args);
+    };
+    const handle = playInstrumentNote(fake.engine, { instrument: id, degree: 3, chord: true });
+    assert.ok(handle, id);
+    assert.ok(fake.buffers.length >= 1, `${id} rendered something`);
+    const starts = new Set(fake.sources().flatMap(source => source.starts));
+    assert.equal(starts.size, 1, `${id} chord pitches share one start`);
+    const [start] = starts;
+    assert.ok(handle.voices.every(voice => voice.start === start));
+    assert.ok(Math.abs(start - (fake.context.currentTime + START_LEAD)) < 1e-9,
+      `${id} starts just ahead of the clock read after rendering`);
+  }
+  // A render that fails plays nothing and builds nothing.
+  const broken = fakeAudio();
+  broken.context.createBuffer = () => { throw new Error('No memory'); };
+  assert.equal(playInstrumentNote(broken.engine, { instrument: 'lute', degree: 0 }), null);
+  assert.equal(broken.nodes.length, 0);
+  assert.equal(broken.routes.length, 0);
 });
 
 test('fading works without cancelAndHold, is idempotent and survives a closed context', () => {
@@ -407,11 +480,12 @@ test('fading works without cancelAndHold, is idempotent and survives a closed co
   const envelope = fake.nodes.find(node => node.connections.some(target => target.kind === 'route'));
   delete envelope.gain.cancelAndHoldAtTime;
   envelope.gain.value = 0.05;
+  fake.context.currentTime = 10.5;
   handle.fade();
   handle.fade();
   assert.deepEqual(envelope.gain.calls.slice(-3).map(call => call.method),
     ['cancelScheduledValues', 'setValueAtTime', 'linearRampToValueAtTime']);
-  assert.equal(handle.voices[0].end, 10 + STEAL_RELEASE);
+  assert.equal(handle.voices[0].end, 10.5 + STEAL_RELEASE);
   // A note not yet started fades from its start.
   const later = fakeAudio();
   const queued = playInstrumentNote(later.engine, { instrument: 'lute', degree: 0 });

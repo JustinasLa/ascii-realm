@@ -158,6 +158,19 @@ export function stringBuffer(context, instrument, midi) {
   return buffer;
 }
 
+/**
+ * Makes every buffer a note needs before its start time is chosen: string
+ * pitches are rendered (or taken from the cache) and the other voices get
+ * the shared noise, so nothing slow runs once the note is scheduled.
+ */
+export function prepareVoice(context, instrument, midis) {
+  if (!STRING_VOICES.has(instrument.voice)) {
+    noiseBuffer(context);
+    return;
+  }
+  for (const midi of midis) stringBuffer(context, instrument, midi);
+}
+
 /** Renders the given pitches a few at a time, between frames. */
 export function prepareStrings(context, instrument, midis) {
   const pending = [...midis];

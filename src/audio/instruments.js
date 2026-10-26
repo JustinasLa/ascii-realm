@@ -2,7 +2,7 @@
 // played key into notes, and one-shot playback on the records bus. Nothing
 // here touches Web Audio until a note is played, so the server can import
 // the tables and the note check.
-import { buildVoice, prepareStrings, STRING_VOICES } from './instrument-voices.js';
+import { buildVoice, prepareStrings, prepareVoice, STRING_VOICES } from './instrument-voices.js';
 
 // Notes 1-8 are C D E F G A B C, rising from the instrument's first note.
 export const SCALE = Object.freeze([0, 2, 4, 5, 7, 9, 11]);
@@ -14,6 +14,9 @@ export const CHORD_NAMES = Object.freeze(['C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim
 export const MAX_VOICES = 24;
 // How long a stolen voice takes to fade: long enough not to click.
 export const STEAL_RELEASE = 0.04;
+// Notes start this far ahead of the audio clock, so every point of their
+// envelope is still in the future when the audio thread reads it.
+export const START_LEAD = 0.01;
 
 // A note's loudness sets how far it carries: 16 m per unit, linearly to silence.
 const METRES_PER_LOUDNESS = 16;
@@ -134,18 +137,23 @@ export function soundingVoices(engine) {
   return pool;
 }
 
-// Make room for `count` new voices. Stealing fades the oldest voices, which
-// stay counted until their release ends, so the new ones may have to start
-// a little later: never more than STEAL_RELEASE after now.
+// Make room for `count` new voices and return their shared start time.
+// Stealing drops the oldest voices: one still waiting to start is silent and
+// is cancelled outright; one already sounding fades from now and stays
+// counted until its release ends. Every fade so ends by now + STEAL_RELEASE,
+// which is the latest a new note can have to wait.
 function reserve(engine, count, now) {
   const pool = soundingVoices(engine);
-  let steady = pool.filter(voice => !voice.fading);
+  const steady = pool.filter(voice => !voice.fading);
   while (steady.length + count > MAX_VOICES) {
-    steady.shift().fade(now);
+    const oldest = steady.shift();
+    if (oldest.start > now) oldest.cancel();
+    else oldest.fade(now);
   }
   const allowed = MAX_VOICES - steady.length - count;
   const fading = pool.filter(voice => voice.fading).map(voice => voice.end).sort((a, b) => b - a);
-  return fading.length > allowed ? Math.max(now, fading[allowed]) : now;
+  const start = now + START_LEAD;
+  return fading.length > allowed ? Math.max(start, fading[allowed]) : start;
 }
 
 /** Renders an instrument's string buffers ahead of its first note. */
@@ -215,6 +223,11 @@ function startVoice(engine, instrument, midi, at, gain, x, y, company) {
         stop();
       }
     },
+    // A voice that has not started was never heard: drop it without a fade.
+    cancel() {
+      voice.end = voice.start;
+      stop();
+    },
     stop,
   };
   function stop() {
@@ -240,6 +253,13 @@ export function playInstrumentNote(engine, event = {}) {
   if (level <= 0) return null;
   const instrument = INSTRUMENTS[note.instrument];
   const midis = noteMidi(note.instrument, note.degree, note.octave, note.chord);
+  // Render every buffer first; only then read the clock, so all the pitches
+  // share one start time that is still ahead of it.
+  try {
+    prepareVoice(context, instrument, midis);
+  } catch {
+    return null;
+  }
   // Equal power: a chord is about as loud as a single note.
   const gain = level / Math.sqrt(midis.length);
   const at = reserve(engine, midis.length, context.currentTime);
