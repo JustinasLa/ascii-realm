@@ -116,6 +116,12 @@ short version see the [README](../README.md).
   drawn in small letters with its reflection, never stops or hurts anyone,
   and is never saved: each player sees their own, and only they and the
   monsters shove it.
+  Rocks and the stones in a riverbed catch torch, fire and bright spell light
+  by the way they face: the side turned to the light lights up warm, the
+  back keeps its cool moonlit grey, and wet stones (midstream stones, and
+  bed stones breaking the surface) throw small warm glints; stones under
+  the water catch less of it, rocks beside the water a little sheen, dry
+  rocks a faint one.
 
   ![The player wades into a log and shoves it off downstream](media/player-pushes-log.gif)
   ![A skeleton strides through a log and knocks it away](media/skeleton-pushes-log.gif)

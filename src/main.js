@@ -286,7 +286,10 @@ const debug = { player, camera, world, grass, splashes, debris, weather, fog, fi
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
-  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, bubblesMs: 0, intervalMs: 0, rate: 60 } };
+  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, bubblesMs: 0, intervalMs: 0, rate: 60 },
+  // ?pintime=<seconds> freezes the world and holds the render clock there.
+  pinTime: params.has('debug') && params.has('pintime') ? Number(params.get('pintime')) || 0 : null };
+debug.freeze = debug.pinTime !== null;
 if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
@@ -1068,9 +1071,9 @@ function frame(now) {
   // Behind the play card the whole world holds still: every system below
   // steps by zero, so time of day, fires, weather, fog, particles, monsters
   // and the player all wait, while the scene is still drawn.
-  const dt = gate.waiting ? 0 : step;
-  time += dt;
-  updateZoom(dt);
+  const dt = gate.waiting || debug.pinTime !== null ? 0 : step;
+  time = debug.pinTime ?? time + dt;
+  updateZoom(debug.pinTime === null ? dt : step);
   if (debug.freeze || isGameplayBlocked() || player.magicStunned || gate.waiting) cancelActions();
   updateWakeLock();
 

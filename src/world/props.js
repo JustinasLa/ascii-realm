@@ -11,6 +11,7 @@ import { fineOf } from './fine-bakes.js';
 import { shade } from './glow.js';
 import { bakeSurface, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
+import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, VIEW_C, VIEW_S, glossByte } from './surface-light.js';
 import { makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
@@ -78,8 +79,11 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
     const n = dome(u, v).map((x) => x + (rand() - 0.5) * 0.32);
     const k = Math.hypot(...n);
     const lit = Math.max(0, (n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]) / k);
-    return { u, v, lit, up: n[1] / k };
+    return { u, v, lit, up: n[1] / k, n: n.map((x) => x / k) };
   });
+  // Only the fine bake asks for normals (see fineBoulder): torches and
+  // fires rake across a rock's small letters by the way each one faces.
+  const normals = { on: false };
   // Tall faces get proportionally shorter crack segments, so they wander.
   const [crackStep, crackJitter] = crackCount ? [Math.min(0.35, 4 / ry), Math.min(0.2, 2.4 / ry)] : [0.35, 0.2];
   const cracks = Array.from({ length: crackCount ?? (rand() < 0.75 ? 1 + Math.floor(rand() * 2) : 0) }, () => {
@@ -139,14 +143,33 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
       const d = (u - f.u) ** 2 + (v - f.v) ** 2 * 1.4;
       if (d < bestD) { nextD = bestD; next = best; bestD = d; best = f; } else if (d < nextD) { nextD = d; next = f; }
     }
-    const n = dome(u, v);
-    const smooth = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
+    // dome(u, v), written out: this runs for every sample of a bake.
+    const dz = Math.sqrt(Math.max(0.04, 1 - u * u - v * v));
+    const dy = v * 0.85 - 0.35;
+    const dk = Math.hypot(u, dy, dz);
+    const n0 = u / dk, n1 = dy / dk, n2 = dz / dk;
+    const smooth = Math.max(0, n0 * LIGHT[0] + n1 * LIGHT[1] + n2 * LIGHT[2]);
     const grain = (hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 17) - 0.5) * 0.08;
     let l = Math.max(0, Math.min(1, (best.lit * 0.55 + smooth * 0.55 - 0.5) * 1.5 + 0.48 + grain));
     // The face tucks in under itself near the ground, out of the light.
     const low = undercut ? Math.max(0, 1 + py / (ry * 2 * undercut)) : 0;
     if (low > 0) l *= 1 - low * 0.65;
-    const s = { m: 'stone', l, c: stone };
+    let s;
+    if (normals.on) {
+      // The facet's face blended into the dome the way the moon sees it,
+      // with a small bump per small cell, so wet stone sparkles in specks.
+      // This runs for every sample of a fine bake, so it is worldNormal
+      // written out, into fields made with the sample.
+      const fx = Math.floor(px * FINE / ASPECT), fy = Math.floor(py * FINE);
+      const fn = best.n;
+      const bx = fn[0] + n0 + (hash2(fx, fy, seed + 61) - 0.5) * 0.44;
+      const by = fn[1] + n1 + (hash2(fy, fx, seed + 62) - 0.5) * 0.44;
+      const bz = fn[2] + n2;
+      const wy = VIEW_C * by + VIEW_S * bz;
+      const wz = Math.max(0, VIEW_C * bz - VIEW_S * by);
+      const k = Math.sqrt(bx * bx + wy * wy + wz * wz) || 1;
+      s = { m: 'stone', l, c: stone, nx: bx / k, ny: wy / k, nz: wz / k };
+    } else s = { m: 'stone', l, c: stone };
     for (const pts of cracks) {
       for (let i = 1; i < pts.length; i++) {
         const [ax, ay] = pts[i - 1];
@@ -154,7 +177,11 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
         const vx = bx - ax;
         const vy = by - ay;
         const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)));
-        if (Math.hypot(px - ax - vx * t, py - ay - vy * t) < crackWidth) {
+        // A distance is never shorter than either of its legs, so most
+        // samples are ruled out before the square root.
+        const ex = px - ax - vx * t;
+        const ey = py - ay - vy * t;
+        if (Math.abs(ex) < crackWidth && Math.abs(ey) < crackWidth && Math.hypot(ex, ey) < crackWidth) {
           const a = (Math.round(-Math.atan2(vy, vx) / (Math.PI / 4)) + 8) % 4;
           s.acc = { g: fissures[a][i % 2], c: STONE_GAP };
           return s;
@@ -211,7 +238,7 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
     const name = rand() < 0.45 ? `pebble.${Math.floor(rand() * 8)}` : `gravel.${Math.floor(rand() * 8)}`;
     if (!extras.some((e) => e.dx === dx && e.dy === dy)) extras.push({ dx, dy, g: dg(name), c: stone.map((x) => x * light) });
   }
-  return { sample, w: Math.ceil(rx / ASPECT) + 1, top: -Math.ceil(ry * 2) - 1, extras,
+  return { sample, normals, w: Math.ceil(rx / ASPECT) + 1, top: -Math.ceil(ry * 2) - 1, extras,
     shadow: { rx: rx * 1.15, ry: Math.max(1, ry * 0.25), ox: rx * 0.25 } };
 }
 
@@ -223,6 +250,7 @@ function bakeBoulder(rock, seed, bakeFn) {
 // to a cell) for the fine grid. A rock is small enough to bake in one step.
 function fineBoulder(rock, seed, bakeFn) {
   return function* fine() {
+    rock.normals.on = true;
     return bakeFn(rock.w * FINE, rock.top * FINE, 0, (px, py) => rock.sample(px / FINE, py / FINE), seed);
   };
 }
@@ -388,6 +416,15 @@ function makeBuilderBush(x, y, rand, seed, bakeFn = bake) {
 // instead of leaving gaps between its original cells. A spot's layered cells
 // travel with its base cell. The ground anchor stays at (0, 0), just as it
 // does for procedural props.
+// A copy of a cell keeps the way the original faced (see bakeSurface).
+function withNormal(cell, from) {
+  if (from.nx !== undefined) {
+    cell.nx = from.nx;
+    cell.ny = from.ny;
+  }
+  return cell;
+}
+
 function scaleCells(cells, scaleX, scaleY = scaleX) {
   if (scaleX === 1 && scaleY === 1) return cells;
   const source = new Map();
@@ -481,8 +518,8 @@ export function createProp(kind, x, y, options = {}) {
   if (!used.baked) cells = scaleCells(cells, width * scale, height * scale);
   if (variant === 1) {
     const shade = (value, offset = 0) => Math.max(0, Math.min(255, value * brightness + offset));
-    const shadeAll = (list) => list.map((c) => makeCell(c.dx, c.dy, c.g, shade(c.r, warmth), shade(c.gg),
-      shade(c.b, -warmth), c.br, c.bgG, c.bb, c.depth));
+    const shadeAll = (list) => list.map((c) => withNormal(makeCell(c.dx, c.dy, c.g, shade(c.r, warmth), shade(c.gg),
+      shade(c.b, -warmth), c.br, c.bgG, c.bb, c.depth), c));
     cells = shadeAll(cells);
     const fine = fineRecipe(prop);
     if (fine) withFine(prop, function* shaded() { return shadeAll(yield* fine()); });
@@ -772,6 +809,7 @@ function groundShadow(r, view, prop, bx, by) {
 const GROUND_HALO = 1;
 const HALO_RISE = 3;
 const clamp = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const GLOSS_BYTE = [GLOSS_DRY, GLOSS_DAMP, GLOSS_WET].map(glossByte);
 
 // Draws a prop's fine bake (see fine-bakes.js) into the renderer's small
 // cells, with its ground cells beneath it on the ordinary grid.
@@ -798,7 +836,9 @@ function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
   const top = -fy0;
   const bottom = view.rows * FINE - fy0;
   const right = view.cols * FINE - fx0;
-  const { dx: cdx, dy: cdy, g: cg, rustle, color, back, solid, foliage, flex, phaseSin, phaseCos, rows } = p;
+  const { dx: cdx, dy: cdy, g: cg, rustle, color, back, solid, foliage, flex, phaseSin, phaseCos, rows, normal, bump } = p;
+  // How glossy a rock's stone is: wet in a river, damp by the water.
+  const gloss = bump ? GLOSS_BYTE[prop.wet ? 2 : prop.damp ? 1 : 0] : 0;
   let lastDx = 0;
   let lastDy = 0;
   let lastShift = 0;
@@ -837,7 +877,10 @@ function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
       const k = i * 3;
       const br = solid[i] ? back[k] : undefined;
       if (!foliage[i]) {
-        r.fineAt(fx0 + dx, fy0 + y, g, color[k], color[k + 1], color[k + 2], br, back[k + 1], back[k + 2], halo);
+        if (gloss && bump[i]) {
+          r.fineAt(fx0 + dx, fy0 + y, g, color[k], color[k + 1], color[k + 2], br, back[k + 1], back[k + 2], halo,
+            normal[i * 2], normal[i * 2 + 1], gloss, y < 0 ? Math.min(255, -y) : 0);
+        } else r.fineAt(fx0 + dx, fy0 + y, g, color[k], color[k + 1], color[k + 2], br, back[k + 1], back[k + 2], halo);
         continue;
       }
       const flutter = sin * phaseCos[i] + cos * phaseSin[i];

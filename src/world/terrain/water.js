@@ -23,6 +23,7 @@ import { FOAM } from '../../render/palette.js';
 import { ACROSS, WIDTH, screenOrientation, toCells } from '../rivers.js';
 import { ASPECT, WATER, WATER_LEVEL } from '../world.js';
 import { emit } from './cell.js';
+import { GLOSS_SUBMERGED, GLOSS_WET, glossByte, normalByte } from '../surface-light.js';
 
 const N = 64;
 const TAU = Math.PI * 2;
@@ -37,6 +38,10 @@ const CHOP = family('water.chop.');
 const GLINT = family('water.glint.');
 const SAND = family('water.sand.');
 const STONES = family('water.stones.');
+// The bed's stone glyphs: only a cell that ends up showing one is lit as a
+// stone (see stoneLight).
+export const STONE_GLYPH = new Uint8Array(GLYPH_COUNT);
+for (const g of STONES) STONE_GLYPH[g] = 1;
 const WEED = family('water.weed.');
 const CAUSTIC = family('water.caustic.');
 const PAD = family('water.pad.');
@@ -148,6 +153,9 @@ function statics(chunk, seed) {
     risePhase: new Float32Array(n),
     // 1 bubbles rise here now and then; 2 a pond skater rests here.
     life: new Uint8Array(n),
+    // A bed stone's normal, gloss and how clearly light reaches it through
+    // the water, as the renderer keeps them (see surface-light.js).
+    bedLit: new Uint8Array(n * 4),
     river: null,
   };
   if (chunk.flow) riverStatics(s, chunk, seed);
@@ -200,6 +208,7 @@ function statics(chunk, seed) {
           // River beds are gravelly.
           g = STONES[Math.floor(pick * 97) % STONES.length];
           col = STONE_COL;
+          bedNormal(s, i, wx, wy, xs, stones, d, see, seed);
         } else if (pick < 0.55) {
           g = SAND[Math.floor(pick * 31) % SAND.length];
           k *= 0.75;
@@ -218,6 +227,47 @@ function statics(chunk, seed) {
   }
   cache.set(chunk, s);
   return (last = s);
+}
+
+// A bed stone faces the way the stony bed slopes, tipped further by a
+// little jitter so neighbouring pebbles turn different ways.
+const BED_SLOPE = 6;
+const BED_TILT = 1;
+// Light reaching a stone through the water fades with depth as the stone's
+// own colour does, but never below this share.
+const CLEAR_MIN = 0.45;
+const WET_GLOSS = glossByte(GLOSS_WET);
+const SUBMERGED_GLOSS = glossByte(GLOSS_SUBMERGED);
+function bedNormal(s, i, wx, wy, xs, h, d, see, seed) {
+  const hx = valueNoise((xs + 1) * 0.12, wy * 0.2, seed + 1301) - h;
+  const hy = valueNoise(xs * 0.12, (wy + 1) * 0.2, seed + 1301) - h;
+  const nx = -hx * BED_SLOPE + (hash2(wx, wy, seed + 1304) - 0.5) * BED_TILT;
+  const ny = -hy * BED_SLOPE + (hash2(wy, wx, seed + 1305) - 0.5) * BED_TILT;
+  const k = Math.hypot(nx, ny, 1);
+  const o = i * 4;
+  s.bedLit[o] = normalByte(nx / k);
+  s.bedLit[o + 1] = normalByte(ny / k);
+  // A stone breaking the surface is wet; one under it glossy but dimmed.
+  s.bedLit[o + 2] = d < 0.12 ? WET_GLOSS : SUBMERGED_GLOSS;
+  s.bedLit[o + 3] = Math.round(255 * (CLEAR_MIN + (1 - CLEAR_MIN) * see));
+}
+
+// Tells the renderer how a bed cell faces the light: as its stone, if the
+// glyph it ended up showing is the stone, else not at all (sand, weed, or
+// foam or a wavelet over the stone, which take light evenly).
+function stoneLight(out, o, s, i) {
+  const lit = out.cellLit;
+  if (!lit) return;
+  const g = out.fg[o + 3] | ((out.bg[o + 3] & 15) << 8);
+  if (!STONE_GLYPH[g]) {
+    lit[o + 2] = 0;
+    return;
+  }
+  const b = i * 4;
+  lit[o] = s.bedLit[b];
+  lit[o + 1] = s.bedLit[b + 1];
+  lit[o + 2] = s.bedLit[b + 2];
+  lit[o + 3] = s.bedLit[b + 3];
 }
 
 // What the current needs to draw a river cell, fixed per cell: which way
@@ -493,6 +543,7 @@ export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   // animated noise, trigonometry and drifting-leaf lookups entirely.
   if (!moving(s, i)) {
     emit(out, o, s.glyph[i], s.col[i3], s.col[i3 + 1], s.col[i3 + 2], bgR, bgG, bgB);
+    if (kind === BED) stoneLight(out, o, s, i);
     return;
   }
   if (t !== clock) tick(t);
@@ -638,6 +689,7 @@ export function shade(out, o, chunk, i, wx, wy, seed, t, wind = 0) {
   }
 
   emit(out, o, g, cr, cg, cb, bgR, bgG, bgB, lg, lr, lgG, lb);
+  if (kind === BED) stoneLight(out, o, s, i);
 }
 
 // A river cell. Foam is laid out along each lane by the time the water took
@@ -753,6 +805,7 @@ function shadeRiver(out, o, s, chunk, i, wx, wy, seed, t, bgR, bgG, bgB) {
   }
 
   emit(out, o, g, cr, cg, cb, bgR, bgG, bgB, lg, lr, lgG, lb);
+  if (s.kind[i] === BED) stoneLight(out, o, s, i);
 }
 
 // Whether a river cell shows a stone breaking the surface (2), one just

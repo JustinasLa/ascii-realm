@@ -9,6 +9,7 @@ import { dg, glyph, over } from '../render/glyphs.js';
 import { FLAME_STEPS } from '../render/glyph-packs/effects.js';
 import { softLayer, subGlyph, veil } from './glow.js';
 import { ConnectedFire, burnStrength, vegetationFuel } from './fire-spread.js';
+import { GLINT, MIN_LIGHT_HEIGHT, PEBBLE_SHARPNESS, normalOf, shadeFactors } from './surface-light.js';
 import { ASPECT, WATER } from './world.js';
 
 const names = (prefix, n) => Array.from({ length: n }, (_, i) => dg(`${prefix}.${i}`));
@@ -128,13 +129,19 @@ export function flameCell(cells, dx, dy, heat, up, left, right, off, offTop, top
 
 // Warm light is also used by carried and flying torches. Distances are in
 // row units so the glow stays round despite the narrow character cells.
+// Stones (rocks and riverbed stones) that say which way they face take it
+// by facing (see surface-light.js): lit on the side turned to the light,
+// dark behind, and glinting where they are wet.
 export function drawFireLight(r, view, time, source, radius, height = 2) {
   const bx = source.x - view.x0;
   const by = source.y - height - view.y0;
+  // The light's own point on the ground and its height over it.
+  const gy = source.y - view.y0;
+  const lh = Math.max(MIN_LIGHT_HEIGHT, height);
   const pulse = firePulse(source, time);
   const y0 = Math.max(0, Math.floor(by - radius));
   const y1 = Math.min(r.rows - 1, Math.ceil(by + radius));
-  const r2 = radius * radius, fine = r.fineMark;
+  const r2 = radius * radius, fine = r.fineMark, cellLit = r.cellLit, lit = LIT;
   for (let y = y0; y <= y1; y++) {
     // Only the cells of this row that lie inside the disc are visited.
     const dy2 = (y - by) * (y - by);
@@ -147,19 +154,36 @@ export function drawFireLight(r, view, time, source, radius, height = 2) {
       if (distance >= radius) continue;
       const k = pulse * (1 - distance / radius) ** 2;
       const o = (y * r.cols + x) * 4;
-      r.fg[o] += 156 * k;
-      r.fg[o + 1] += 72 * k;
-      r.fg[o + 2] += 12 * k;
+      const gloss = cellLit?.[o + 2];
+      if (gloss) {
+        // A stone's glyph takes the light by facing, dimmed by the water
+        // over it; the surface over it and the ground keep the even light.
+        shadeFactors(normalOf(cellLit[o]), normalOf(cellLit[o + 1]), (bx - x - 0.5) * ASPECT, gy - y - 0.5, lh,
+          gloss, lit, PEBBLE_SHARPNESS);
+        const clear = cellLit[o + 3] / 255;
+        const d = lit.diffuse * clear * k, s = lit.spec * clear * k;
+        r.fg[o] += 156 * d + GLINT[0] * s;
+        r.fg[o + 1] += 72 * d + GLINT[1] * s;
+        r.fg[o + 2] += 12 * d + GLINT[2] * s;
+      } else {
+        r.fg[o] += 156 * k;
+        r.fg[o + 1] += 72 * k;
+        r.fg[o + 2] += 12 * k;
+      }
       r.ov[o] += 156 * k;
       r.ov[o + 1] += 72 * k;
       r.ov[o + 2] += 12 * k;
-      if (fine?.[o >> 2]) r.lightFine(o >> 2, 156 * k, 72 * k, 12 * k);
+      if (fine?.[o >> 2]) {
+        if (r.fineLit) r.lightFineLit(o >> 2, k, bx, gy, lh, 156, 72, 12);
+        else r.lightFine(o >> 2, 156 * k, 72 * k, 12 * k);
+      }
       r.bg[o] += 34 * k;
       r.bg[o + 1] += 16 * k;
       r.bg[o + 2] += 4 * k;
     }
   }
 }
+const LIT = { diffuse: 0, spec: 0 };
 
 export class Fires {
   constructor({ windAt = grassGust, random = Math.random, resourcesIn = () => [], fuelAt = vegetationFuel } = {}) {
