@@ -84,6 +84,11 @@ export class Hud {
       document.body.append(this.root);
     }
     this.canvas = document.getElementById('screen');
+    // The canvas and HUD boxes, read once per screen size: read on every
+    // frame, after its first DOM writes, they would force a style pass.
+    this.boxes = null;
+    this.onResize = () => { this.boxes = null; };
+    globalThis.addEventListener?.('resize', this.onResize);
     this.element = element('div', 'hud');
 
     // Status frames stack down the top-left corner: the player's own, then
@@ -363,8 +368,11 @@ export class Hud {
     if (!this.canvas || !view || !Number.isFinite(view.cellW) || view.cellW <= 0 || !Number.isFinite(view.cellH) || view.cellH <= 0 || !this.canvas.width || !this.canvas.height) {
       return null;
     }
-    const canvas = this.canvas.getBoundingClientRect();
-    const root = this.root.getBoundingClientRect();
+    const { width, height } = this.canvas;
+    if (this.boxes?.width !== width || this.boxes.height !== height) {
+      this.boxes = { width, height, canvas: this.canvas.getBoundingClientRect(), root: this.root.getBoundingClientRect() };
+    }
+    const { canvas, root } = this.boxes;
     const scaleX = canvas.width / this.canvas.width;
     const scaleY = canvas.height / this.canvas.height;
     const left = canvas.left - root.left;
@@ -499,6 +507,7 @@ export class Hud {
 
   destroy() {
     this.destroyed = true;
+    globalThis.removeEventListener?.('resize', this.onResize);
     this.element.remove();
     this.toasts.length = 0;
     this.damageNumbers.length = 0;
