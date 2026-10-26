@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Instruments - Sounds</title>
+<style>
+:root{color-scheme:dark;--accent:#d9b56f}*{box-sizing:border-box}body{margin:0;background:#111312;color:#e3e5dc;font:16px/1.6 system-ui,sans-serif}main{max-width:1050px;margin:auto;padding:48px 24px}a{color:var(--accent)}.eyebrow{color:var(--accent);letter-spacing:.18em;text-transform:uppercase;font-size:12px}h1{font:normal clamp(36px,6vw,64px)/1.1 Georgia,serif;margin:12px 0}p{color:#aeb5aa;max-width:660px}.controls{display:flex;flex-wrap:wrap;gap:20px;align-items:center;margin:28px 0;padding:18px;border:1px solid #354037;border-radius:8px}button{color:#eee;background:#26342d;border:1px solid #4f6757;border-radius:5px;padding:9px 16px;font:inherit;cursor:pointer;min-height:40px}button:hover,button:focus-visible{border-color:var(--accent);background:#33473b}button.lit{border-color:var(--accent);background:#3d5546}label{display:flex;align-items:center;gap:10px}input{accent-color:var(--accent)}#instruments{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:14px}article{background:#181e1a;border:1px solid #303b33;border-radius:8px;padding:22px}h2{font:normal 24px Georgia,serif;margin:0 0 4px}small{color:#919d90;display:block}.row{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;margin-top:14px}.row button{padding:6px 0;min-width:40px;font-size:14px}.row-label{margin-top:16px;font-size:13px;color:#919d90;letter-spacing:.06em;text-transform:uppercase}.extras{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}#status{min-height:26px;color:var(--accent)}footer{margin-top:32px;font-size:14px;color:#929e93}@media (max-width:560px){main{padding:28px 16px}.row{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body><main>
+<a href="../">&lt;- Play ASCII Realm</a>
+<div class="eyebrow" style="margin-top:32px">The instrument sound archive</div>
+<h1>Instruments</h1><p>Nine instruments carried in the off hand. Each has its own synthesised voice: plucked, hammered and bowed strings, a metal tine, free reeds, a chanter and drone, a breathy flute and bright brass. Keys 1-8 play C D E F G A B C; Shift plays the second row.</p>
+<p>Notes ring out to their natural length, so you can play a melody. Stop silences everything.</p>
+<div class="controls"><label>Volume <input id="volume" type="range" min="0" max="100" value="60"><output id="level">60%</output></label><button id="stop" type="button">Stop sound</button></div>
+<p id="status" role="status" aria-live="polite">Loading instruments...</p><section id="instruments" aria-label="Instruments"></section>
+<footer>Preview volume is separate from your saved game settings. No sound on a phone? Check the silent switch.</footer>
+</main>
+<script type="module">
+import { AudioEngine } from '../src/audio/engine.js';
+import { CHORD_NAMES, INSTRUMENT_IDS, INSTRUMENTS, NOTE_LETTERS, layerNote, noteRange, playInstrumentNote,
+  prepareInstrument, secondLayer } from '../src/audio/instruments.js';
+const voices = {
+  accordion: 'Two reeds tuned apart, beating like a musette, through a bellows swell.',
+  bagpipe: 'A nasal chanter opened by a grace note, over a quiet drone on C.',
+  celticHarp: 'Bright plucked strings with a long ring.',
+  dulcimer: 'Three strings to a note, struck with light hammers, shimmering as they beat.',
+  flute: 'A breathy tone with a soft chiff at the start and a late vibrato.',
+  kalimba: 'A short metal tine with a soft inharmonic overtone and a click.',
+  lute: 'Paired gut strings, plucked, through a warm wooden body.',
+  trumpet: 'Bright brass that blooms open as it speaks.',
+  vielle: 'A bowed string with bow hair at the attack and a delayed vibrato.',
+};
+const engine = new AudioEngine({ storage: null });
+engine.setVolume('master', 0.6);
+const status = document.querySelector('#status'), grid = document.querySelector('#instruments');
+const prepared = new Set();
+let active = [], timers = [];
+function stop() {
+  for (const timer of timers) clearTimeout(timer);
+  timers = [];
+  for (const handle of active) handle.stop();
+  active = [];
+}
+document.querySelector('#stop').onclick = () => { stop(); status.textContent = 'Stopped.'; };
+document.querySelector('#volume').oninput = event => {
+  engine.setVolume('master', Number(event.target.value) / 100);
+  document.querySelector('#level').value = event.target.value + '%';
+};
+function flash(button) {
+  button.classList.add('lit');
+  setTimeout(() => button.classList.remove('lit'), 180);
+}
+async function play(id, slot, shifted, button) {
+  // Unlock first, inside the press, so the browser counts the gesture.
+  if (!await engine.unlock()) { status.textContent = 'Audio could not start. Press a note again.'; return; }
+  if (!prepared.has(id)) { prepared.add(id); void prepareInstrument(engine, id); }
+  const handle = playInstrumentNote(engine, { instrument: id, ...layerNote(id, slot, shifted) });
+  if (!handle) { status.textContent = 'That note could not play.'; return; }
+  active = active.filter(item => !item.ended);
+  active.push(handle);
+  if (button) flash(button);
+  status.textContent = INSTRUMENTS[id].name + ' - ' + (shifted ? secondName(id, slot) : 'note ' + slot + ' ' + NOTE_LETTERS[slot - 1]);
+}
+function secondName(id, slot) {
+  return secondLayer(id) === 'chords' ? 'chord ' + CHORD_NAMES[slot - 1] : 'note ' + (slot + 8) + ' ' + NOTE_LETTERS[slot - 1];
+}
+function scale(id, buttons, shifted) {
+  stop();
+  for (let slot = 1; slot <= 8; slot++) {
+    timers.push(setTimeout(() => { void play(id, slot, shifted, buttons[slot - 1]); }, (slot - 1) * 333));
+  }
+}
+function row(id, shifted) {
+  const node = document.createElement('div');
+  node.className = 'row';
+  const buttons = [];
+  for (let slot = 1; slot <= 8; slot++) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = shifted ? (secondLayer(id) === 'chords' ? CHORD_NAMES[slot - 1] : (slot + 8) + ' ' + NOTE_LETTERS[slot - 1])
+      : slot + ' ' + NOTE_LETTERS[slot - 1];
+    button.setAttribute('aria-label', INSTRUMENTS[id].name + ' ' + (shifted ? secondName(id, slot) : 'note ' + slot + ' ' + NOTE_LETTERS[slot - 1]));
+    button.onclick = () => { void play(id, slot, shifted, button).catch(() => { status.textContent = 'Audio playback failed. Try again.'; }); };
+    buttons.push(button);
+  }
+  node.append(...buttons);
+  return { node, buttons };
+}
+for (const id of INSTRUMENT_IDS) {
+  const card = document.createElement('article'), heading = document.createElement('h2');
+  const voice = document.createElement('small'), mode = document.createElement('small');
+  card.id = id;
+  heading.textContent = INSTRUMENTS[id].name;
+  voice.textContent = voices[id];
+  mode.textContent = noteRange(id) + ' - Shift: ' + (secondLayer(id) === 'chords' ? 'chords' : 'notes 9-16');
+  const first = row(id, false), second = row(id, true);
+  const firstLabel = document.createElement('div'), secondLabel = document.createElement('div');
+  firstLabel.className = secondLabel.className = 'row-label';
+  firstLabel.textContent = 'Keys 1-8';
+  secondLabel.textContent = secondLayer(id) === 'chords' ? 'Shift: chords' : 'Shift: notes 9-16';
+  const extras = document.createElement('div');
+  extras.className = 'extras';
+  for (const [label, buttons, shifted] of [['Play 1-8', first.buttons, false], ['Play the Shift row', second.buttons, true]]) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = label;
+    button.onclick = () => scale(id, buttons, shifted);
+    extras.append(button);
+  }
+  card.append(heading, voice, mode, firstLabel, first.node, secondLabel, second.node, extras);
+  grid.append(card);
+}
+status.textContent = INSTRUMENT_IDS.length + ' instruments ready to hear.';
+document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+window.addEventListener('pagehide', () => { stop(); void engine.dispose(); });
+</script>
+</body>
+</html>

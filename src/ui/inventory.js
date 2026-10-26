@@ -1,3 +1,4 @@
+import { noteReference } from '../audio/instruments.js';
 import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
 import { itemArt } from './item-art.js';
 import { CharacterPortrait } from './portrait.js';
@@ -197,6 +198,10 @@ export class InventoryScreen {
     this.itemType = element('p', 'inventory-item-type');
     this.itemName = element('h3', 'inventory-item-name');
     this.description = element('p', 'inventory-description');
+    // The keys an instrument plays; phones play them once there's a keyboard.
+    this.notes = element('div', 'inventory-notes');
+    this.noteLines = [0, 1, 2].map(() => element('p', 'inventory-description'));
+    this.notes.append(...this.noteLines);
     this.stats = element('dl', 'inventory-stats');
     this.itemWeight = element('p', 'inventory-weight');
     this.durability = element('p', 'inventory-durability');
@@ -220,7 +225,7 @@ export class InventoryScreen {
     this.feedback.setAttribute('role', 'status');
     this.feedback.setAttribute('aria-atomic', 'true');
     this.feedback.hidden = true;
-    itemInfo.append(this.itemType, this.itemName, this.description, this.stats, this.itemWeight,
+    itemInfo.append(this.itemType, this.itemName, this.description, this.notes, this.stats, this.itemWeight,
       this.durability, this.assignment, actions, this.feedback);
     this.details.append(this.itemPreview, itemInfo);
     const carried = element('div', 'inventory-carried');
@@ -552,6 +557,13 @@ export class InventoryScreen {
     setText(this.itemType, item ? item.use ? 'Consumable' : item.equipmentSlot ? 'Equipment' : 'Material' : '');
     setText(this.itemName, item ? item.name : carried ? 'Empty slot' : `${SLOT_NAMES[this.selection.slot]} slot`);
     setText(this.description, item?.description || emptySlotHint(carried, this.phone()));
+    const notes = noteReference(item?.id);
+    if (notes.length && this.phone()) notes.push('Played with a keyboard for now.');
+    for (const [index, line] of this.noteLines.entries()) {
+      setText(line, notes[index] ?? '');
+      hidden(line, !notes[index]);
+    }
+    hidden(this.notes, !notes.length);
     const statsSignature = JSON.stringify(item?.stats || {});
     if (statsSignature !== this._statsSignature) {
       this._statsSignature = statsSignature;

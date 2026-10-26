@@ -7,6 +7,7 @@ import { AudioEngine } from './engine.js';
 import { EnvironmentSampler, nightAmount, surfaceAt } from './environment.js';
 import { FireAudio } from './fire.js';
 import { playFootstep } from './footsteps.js';
+import { playInstrumentNote } from './instruments.js';
 import { prepareGrassFootsteps } from './grass-steps.js';
 import { playLightning, prepareLightningSounds } from './lightning.js';
 import { playMovement } from './movement.js';
@@ -74,6 +75,9 @@ export class GameAudio {
         break;
       case 'pickup':
         handles = playPickup(this.engine, event);
+        break;
+      case 'instrument':
+        handles = [playInstrumentNote(this.engine, event)].filter(Boolean);
         break;
       case 'bone-hit': case 'bone-collapse': case 'bone-rise':
         handles = playBones(this.engine, event);

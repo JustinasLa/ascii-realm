@@ -38,6 +38,8 @@ Technical and player documentation for [ASCII Realm](../README.md).
 - [Casting arena](casting-simulation.html) — practise every rune against
   stationary enemy and ally targets.
 - [Tree preview](tree-preview.html) — the tree species rendered on their own.
+- [Instrument sounds](audio-instruments.html) — every note and chord of the
+  nine instruments.
 
 ## Credits
 

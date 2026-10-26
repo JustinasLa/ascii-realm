@@ -1,3 +1,5 @@
+import { INSTRUMENT_ITEMS } from './instrument-items.js';
+
 export const EQUIPMENT_SLOTS = Object.freeze([
   'helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand',
 ]);
@@ -561,6 +563,7 @@ const definitions = [
     weight: 0.9,
     stackLimit: 20,
   },
+  ...INSTRUMENT_ITEMS,
 ];
 
 export const ITEMS = Object.freeze(Object.fromEntries(definitions.map((item) => [

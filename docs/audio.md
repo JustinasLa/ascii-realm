@@ -7,8 +7,8 @@ library dependencies; the recordings are served with the game, without
 requests to third-party sites.
 
 Sound starts after the first keyboard or pointer gesture. `M` toggles mute, and
-the Audio panel offers master, music, effects, sword, ambience and weather
-sliders. The Sword control changes sword effects and charge independently; its bus feeds the
+the Audio panel offers master, music, effects, sword, ambience, weather and
+Jukebox / Instruments sliders. The Sword control changes sword effects and charge independently; its bus feeds the
 Effects bus, so Effects and Master also affect it. Weather feeds Ambience, then
 Master, so all three controls affect weather. The panel shows the current
 song and offers a Skip song button with the `N` shortcut. Mute and
@@ -44,7 +44,10 @@ notes are under `docs/audio-<family>.html` and `docs/audio-<family>.md`.
   music, SFX and ambience gain buses through the master bus. It owns preference
   persistence, listener position, positional routes and context teardown. The
   sword gain bus feeds SFX for both separate sword adjustment and overall effects
-  control. The weather gain bus feeds ambience.
+  control. The weather gain bus feeds ambience. The records bus (Jukebox /
+  Instruments, 0.8 by default) feeds Master, not Music, through a soft ceiling:
+  unity below 0.6, easing to just under 0.9, so stacked instrument voices never pass
+  full scale.
 - `voices.js` provides enveloped oscillator tones, filtered noise bursts,
   sustained noise beds and parameter smoothing. A deterministic, two-second
   noise buffer is shared by voices in each context; short cues start at varied
@@ -330,11 +333,65 @@ filter. This produces the distant stone-room atmosphere without loading an
 impulse-response asset. A skip fades and disposes the retiring pair's room
 along with its notes; pausing or teardown clears both dry and reverberant paths.
 
+## Instruments
+
+Nine instruments are carried in the off hand: accordion, bagpipe, celtic harp,
+dulcimer, flute, kalimba, lute, trumpet and vielle. `src/audio/instruments.js`
+holds them as data (voice, first note, Shift layer, note length, loudness 4 and
+pitch 1) with the pitch maths. Notes 1-8 are C D E F G A B C from the first
+note: C5 on the celtic harp, flute and kalimba, C4 on the others. On the
+accordion, celtic harp, dulcimer, kalimba, lute and vielle, Shift plays the
+chord on each note: root, third and fifth of C major, voiced upwards (C, Dm,
+Em, F, G, Am, Bdim, and C an octave up). On the flute, trumpet and bagpipe,
+Shift plays notes 9-16, the same scale an octave up. Any instrument can sound
+a chord; Shift only decides what the hotbar's second layer plays.
+
+`playInstrumentNote(engine, { instrument, degree, octave, chord, x, y, level })`
+plays a one-shot on the records bus and returns one stoppable handle for the
+note or chord. Notes have a fixed natural length (1.3-2.5 s) and can't be held.
+Each pitch gets its own panned route, whose gain is the note's `level`; a
+chord's three pitches are scaled by 1/sqrt(3), so a chord is about as loud as
+a note. A note carries 16 m per unit of loudness (64 m), fading linearly to
+silence (`hearingRange`, `instrumentFalloff`).
+
+At most 24 pitches sound at once. A new note first makes room: the oldest
+voices fade over 40 ms and still count until their fade ends, so when the pool
+is full the new note starts up to 40 ms later. `GameAudio.play({ type:
+'instrument', ... })` registers the handle with the other effects, so pausing
+stops it and mute silences it.
+
+`src/audio/instrument-voices.js` holds the voices:
+
+- **Lute, celtic harp and dulcimer** are Karplus-Strong strings, rendered in
+  JavaScript at up to 24 kHz into a buffer per pitch and cached per audio
+  context (at most 36 buffers, least recently used dropped first). An all-pass
+  tunes each string exactly, and a per-pitch loop gain gives every pitch the
+  same ring time. The lute has paired courses and a warm body resonance; the
+  harp is brighter and rings longer; the dulcimer's three struck strings beat
+  and partly sound through a soundboard band-pass. `prepareInstrument` renders
+  an instrument's buffers a few at a time between frames.
+- **Kalimba:** a decaying sine tine, a soft partial at 5.95 times the pitch and
+  a short high click.
+- **Vielle:** two close sawtooths through a bridge resonance, bow-hair noise at
+  the attack and a vibrato that fades in.
+- **Accordion:** two reeds 14 cents apart, so the note beats like a musette.
+- **Bagpipe:** a nasal chanter opened by a grace note a fifth above, over a
+  quiet drone on C3. Notes played over other bagpipe notes bring less drone.
+- **Flute:** a near-sine tone, a breath chiff and floor, and a late vibrato.
+- **Trumpet:** two sawtooths with a pitch scoop, through a low-pass that opens
+  as the note speaks.
+
+Each instrument's level is balanced to the same loudness over the first half
+second. Listen to every note and chord on
+[the instrument sound archive](audio-instruments.html). Until instruments can be
+crafted, the `?instruments` query puts one of each in the bag. Each item's
+details list its keys.
+
 ## Authoring synthesized sounds
 
 Use `tone(engine, options)` for a pitched note or `noise(engine, options)` for a
-short texture. Options include `bus` (`music`, `sfx`, `sword`, `ambience` or
-`weather`), `gain`,
+short texture. Options include `bus` (`music`, `sfx`, `sword`, `ambience`,
+`weather` or `records`), `gain`,
 `duration`, `attack`, `decay`, `sustain`, `release`, `cutoff`, `filterType`, `Q`,
 and optional world coordinates `x`/`y`. Tones also accept `frequency`,
 `endFrequency`, `detune` and `type`
@@ -417,6 +474,12 @@ Serve the game locally and verify:
    Weather zero, Ambience zero and Master zero; each should silence weather.
    Reload to check the saved selection and intensity. Hide and restore the tab
    to confirm clean resumption without accumulated impacts or thunder.
+9. Load the game with `?instruments`, open the bag and select each instrument:
+   its details list keys 1-8 and the Shift layer. Equip one: it fills the off
+   hand. With `?debug`, `game.sound.play({ type: 'instrument', instrument:
+   'lute', degree: 0, chord: true })` plays a chord in the game: the Jukebox /
+   Instruments slider, Master and mute control it, and pausing stops it. On
+   [the instrument sound archive](audio-instruments.html), play every row.
 
 With `?debug` in the URL, `window.game.audio` exposes the engine in the browser
 console. `audio.setVolume('music', 0)`, `audio.setMuted(true)` and

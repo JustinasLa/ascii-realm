@@ -173,13 +173,15 @@ test('volume changes and mute controls preserve preview ducking with the real en
     for (const bus of ['music', 'ambience']) assert.equal(engine.buses[bus].gain.value, 0);
   };
   assertDucked();
-  for (const [bus, value] of [['sfx', 50], ['music', 25], ['ambience', 40]]) {
+  assert.equal(sliders.find(slider => slider.dataset.volume === 'records').value, 80);
+  for (const [bus, value] of [['sfx', 50], ['music', 25], ['ambience', 40], ['records', 30]]) {
     const slider = sliders.find(slider => slider.dataset.volume === bus);
     slider.value = value;
     slider.dispatchEvent(new Event('input'));
     assert.equal(engine.volumes[bus], value / 100);
     assertDucked();
   }
+  assert.equal(engine.buses.records.gain.value, 0.3, 'the grass preview leaves instruments alone');
   mute.dispatchEvent(new Event('click'));
   assert.equal(engine.muted, true);
   assertDucked();
