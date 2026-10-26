@@ -8,7 +8,9 @@
 // the difference per scene stage; `night` is the after build's shadow stage.
 // Then the stalls: each round both builds walk into a fresh part of the
 // world (a new scene, nothing baked), at the default zoom and zoomed right
-// out, and every frame's work and night stage counts, not just the medians.
+// out, and every frame's work and night stage counts, not just the medians
+// (`baking` is the bake time alone, in the frames that baked);
+// the run stops if a stamp was baked outside a timed frame.
 import os from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -70,12 +72,15 @@ out.stageDiff = Object.fromEntries(Object.keys(rows.before).filter((k) => !MAIN.
 // round, so every tree in it is new; both builds see the same spots.
 const spikes = {};
 for (const [label, cell] of [['entry', 8], ['widest', WIDEST]]) {
-  const frame = { before: [], after: [] }, stage = [];
+  const frame = { before: [], after: [] }, stage = [], baking = [];
   let bakes = 0;
   for (let round = 0; round < SPIKE_ROUNDS; round++) {
     const at = { x: PLAYER.x + 700 * (round + 1), y: PLAYER.y + 211 * round, cell };
     const fresh = {};
     for (const name of round % 2 ? ['after', 'before'] : ['before', 'after']) fresh[name] = await scenes[name](at);
+    // Every stamp is baked in a timed frame: none before the first.
+    const counted = bakes;
+    if (fresh.after.night?.baked) throw new Error(`${label}: ${fresh.after.night.baked} stamps baked before the first frame`);
     for (let k = 0; k < SPIKE_FRAMES; k++) {
       for (const name of k % 2 ? ['after', 'before'] : ['before', 'after']) {
         const stages = fresh[name].frame();
@@ -83,14 +88,18 @@ for (const [label, cell] of [['entry', 8], ['widest', WIDEST]]) {
         if (name === 'after' && stages.night !== undefined) {
           stage.push(stages.night);
           bakes += fresh.after.night.bakes;
+          if (fresh.after.night.bakes) baking.push(fresh.after.night.bakeMs);
         }
       }
+    }
+    if (fresh.after.night && fresh.after.night.baked !== bakes - counted) {
+      throw new Error(`${label}: ${fresh.after.night.baked} stamps baked, ${bakes - counted} in timed frames`);
     }
   }
   const tail = (list) => ({ p50: ms(quantile(list, 0.5)), p95: ms(quantile(list, 0.95)), p99: ms(quantile(list, 0.99)),
     max: ms(Math.max(...list)) });
   spikes[label] = { cell, frames: SPIKE_ROUNDS * SPIKE_FRAMES, bakes, before: tail(frame.before), after: tail(frame.after),
-    night: stage.length ? tail(stage) : null };
+    night: stage.length ? tail(stage) : null, baking: baking.length ? tail(baking) : null };
 }
 out.spikes = spikes;
 out.load = [ms(loadStart), ms(os.loadavg()[0])];

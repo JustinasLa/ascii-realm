@@ -20,8 +20,9 @@ export const FADE_FRAMES = 24;
 // Footprints baked in one frame, and the work (cells times leaf masses)
 // after which no more are started that frame, so walking into a wood or
 // zooming out never stalls a frame; the rest wait and fade in once baked.
-export const MAX_BAKES_PER_FRAME = 6;
-export const BAKE_WORK = 40000;
+// Most crowns are over BAKE_WORK alone, so it is mostly one a frame.
+export const MAX_BAKES_PER_FRAME = 3;
+export const BAKE_WORK = 16000;
 // The map's margin around the view: blades lean in from roots beside it,
 // the grass's reflections read roots above it and blades rise from roots
 // below it.
@@ -57,9 +58,13 @@ export class NightLight {
     this.dirty = { x0: 0, y0: 0, x1: 0, y1: 0 };
     // Frames each baked footprint has been shown, for its fade.
     this.shown = new WeakMap();
-    // Footprints baked this frame, and their work.
+    // Footprints baked this frame, their work and the time it took (ms).
     this.bakes = 0;
     this.work = 0;
+    this.bakeMs = 0;
+    // Footprints baked since the map was made, so a benchmark can check it
+    // timed the frame of every one.
+    this.baked = 0;
   }
 
   // Builds the map for this frame's view from the trees in `props`.
@@ -69,7 +74,7 @@ export class NightLight {
     for (let y = d.y0; y < d.y1; y++) this.layers.fill(0, y * this.w + d.x0, y * this.w + d.x1);
     d.x0 = d.y0 = d.x1 = d.y1 = 0;
     this.active = false;
-    this.bakes = this.work = 0;
+    this.bakes = this.work = this.bakeMs = 0;
     if (!this.enabled) return;
     this.x0 = view.x0 - PAD_X;
     this.y0 = view.y0 - PAD_TOP;
@@ -86,9 +91,12 @@ export class NightLight {
       if (strength <= 0) continue;
       const baking = !hasStamp(prop);
       if (baking && (this.bakes >= MAX_BAKES_PER_FRAME || this.work >= BAKE_WORK)) continue;
+      const started = baking ? performance.now() : 0;
       const stamp = canopyStamp(prop, seed);
       if (baking) {
+        this.bakeMs += performance.now() - started;
         this.bakes++;
+        this.baked++;
         this.work += stamp?.work ?? 0;
       }
       if (!stamp) continue;

@@ -243,11 +243,21 @@ test('new footprints are baked a few a frame and fade in; a felled tree casts no
   const view = { x0: 0, y0: 0, cols: 200, rows: 60 };
   const props = Array.from({ length: 10 }, (_, i) => plainTree(10.5 + i * 18, 30.5));
   const night = new NightLight();
+  assert.equal(night.baked, 0);
   night.prepare(view, props, { seed: 9 });
   assert.equal(night.bakes, MAX_BAKES_PER_FRAME);
   assert.equal(props.filter(hasStamp).length, MAX_BAKES_PER_FRAME);
+  assert.ok(night.bakeMs > 0);
+  let frames = 1;
+  while (!props.every(hasStamp)) { night.prepare(view, props, { seed: 9 }); frames++; }
+  assert.equal(frames, Math.ceil(10 / MAX_BAKES_PER_FRAME));
+  // The running count adds up every frame's bakes; baked stamps aren't counted again.
+  assert.equal(night.bakes, 10 - (frames - 1) * MAX_BAKES_PER_FRAME);
+  assert.equal(night.baked, 10);
   night.prepare(view, props, { seed: 9 });
-  assert.equal(props.filter(hasStamp).length, 10);
+  assert.equal(night.bakes, 0);
+  assert.equal(night.bakeMs, 0);
+  assert.equal(night.baked, 10);
   // One tree, alone: full strength after exactly FADE_FRAMES frames.
   const one = [plainTree(100.5, 30.5)];
   const fresh = new NightLight();
