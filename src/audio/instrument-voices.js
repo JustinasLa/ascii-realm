@@ -251,8 +251,8 @@ function vibrato(g, at, rate, cents, from, to, targets) {
   for (const target of targets) depth.connect(target.detune);
 }
 
+// How each live voice speaks and lets go.
 const ENVELOPES = {
-  // A short tine: a pure decaying tone, a soft inharmonic partial and a click.
   tine: { attack: 0.002, release: 0.06 },
   reed: { attack: 0.035, sustain: 0.85, release: 0.2 },
   bowed: { attack: 0.09, sustain: 0.85, settle: 0.2, release: 0.35 },
@@ -263,7 +263,8 @@ const ENVELOPES = {
 
 // Each live voice connects its sound into `envelope`, which shapes the note.
 const LIVE = {
-  tine(g, context, f, at, end, envelope) {
+  // A short tine: a pure decaying tone, a soft inharmonic partial and a click.
+  tine(g, context, f, at, envelope) {
     const body = g.gain(0);
     g.chain(g.oscillator('sine', f, at), body, envelope);
     body.gain.setValueAtTime(0, at);
@@ -282,7 +283,7 @@ const LIVE = {
     click.gain.linearRampToValueAtTime(0, at + 0.008);
   },
   // A bowed string: two close sawtooths, a bridge resonance and bow hair.
-  bowed(g, context, f, at, end, envelope) {
+  bowed(g, context, f, at, envelope) {
     const tone = g.filter('lowpass', 2400, 0.7);
     const strings = [g.oscillator('sawtooth', f, at), g.oscillator('sawtooth', f, at)];
     strings[1].detune.setValueAtTime(4, at);
@@ -295,7 +296,7 @@ const LIVE = {
     hair.gain.linearRampToValueAtTime(0.04, at + 0.25);
   },
   // Two reeds tuned apart, so the note beats like a musette accordion.
-  reed(g, context, f, at, end, envelope) {
+  reed(g, context, f, at, envelope) {
     const mix = g.gain(0.5);
     for (const cents of [-7, 7]) {
       const reed = g.oscillator('sawtooth', f, at);
@@ -306,7 +307,7 @@ const LIVE = {
   },
   // A nasal chanter opened by a grace note, over the pipe's quiet drone. A
   // bagpipe has one drone, so notes played over others bring less of it.
-  chanter(g, context, f, at, end, envelope, instrument, company) {
+  chanter(g, context, f, at, envelope, instrument, company) {
     const chanter = g.oscillator('sawtooth', f * 1.5, at);
     chanter.frequency.setValueAtTime(clamp(f, 20, context.sampleRate * 0.45), at + 0.022);
     g.chain(chanter, g.filter('highpass', 350, 0.7), g.filter('peaking', 1300, 2.5, 8), g.gain(0.82), envelope);
@@ -314,7 +315,7 @@ const LIVE = {
     g.chain(drone, g.filter('lowpass', 500, 0.7), g.gain(0.12 / (1 + company)), envelope);
   },
   // A breathy flute: near-sine tone with a chiff at the start and a vibrato.
-  breath(g, context, f, at, end, envelope) {
+  breath(g, context, f, at, envelope) {
     const mix = g.gain(1);
     const tone = g.oscillator('sine', f, at);
     const overtone = g.oscillator('sine', f * 2, at);
@@ -328,7 +329,7 @@ const LIVE = {
     mix.connect(envelope);
   },
   // Bright brass: the filter opens as the lips buzz, after a small pitch scoop.
-  brass(g, context, f, at, end, envelope) {
+  brass(g, context, f, at, envelope) {
     const mix = g.gain(0.5);
     for (const cents of [0, 3]) {
       const horn = g.oscillator('sawtooth', f, at);
@@ -379,7 +380,7 @@ export function buildVoice(context, destination, instrument, midi, at, company =
       STRINGS[instrument.voice](g, source, envelope);
     } else {
       shape(envelope.gain, at, end, instrument.level, ENVELOPES[instrument.voice]);
-      LIVE[instrument.voice](g, context, frequencyOf(midi) * pitch, at, end, envelope, instrument, company);
+      LIVE[instrument.voice](g, context, frequencyOf(midi) * pitch, at, envelope, instrument, company);
     }
     envelope.connect(destination);
     for (const source of g.sources) {
