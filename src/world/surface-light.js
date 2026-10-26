@@ -13,6 +13,11 @@
 // implied: the faces we see never turn down), and how glossy it is in a
 // third, 0 meaning "no normal: light it evenly".
 
+// Where the moon is, in the screen's frame (x right, y down the screen, z
+// toward the viewer; not normalised): up and to the left, in front. The
+// rocks are lit by it, and trees' shadows fall away from it.
+export const MOON = Object.freeze([-0.5, -0.72, 0.48]);
+
 // The share of a light a face turned away from it still gets, and the share
 // a face turns into by facing it. A face turned the way the ground is
 // takes AMBIENT + DIFFUSE = 1, the even light the ground beside it gets.

@@ -338,6 +338,10 @@ export class AsciiRenderer {
     this.gl = gl;
     this.canvas = canvas;
     this.atlas = atlas;
+    // This frame's night light map (see world/night-light.js): how much of
+    // the night's light reaches the ground under the trees. Null draws as
+    // in the open.
+    this.night = null;
     this.restore();
   }
 

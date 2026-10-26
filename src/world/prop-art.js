@@ -42,6 +42,18 @@ export function withFine(prop, bake, source = null) {
 export const fineRecipe = (prop) => fineRecipes.get(prop);
 export const fineSource = (prop) => fineSources.get(prop) ?? null;
 
+// A tree's leaf masses, kept beside it for the same reason: the shadow its
+// crown casts on the ground is made from them (see canopy.js).
+const canopies = new WeakMap();
+
+export function withCanopy(prop, masses) {
+  if (masses?.length) canopies.set(prop, masses);
+  else canopies.delete(prop);
+  return prop;
+}
+
+export const canopyOf = (prop) => canopies.get(prop) ?? null;
+
 // A random stream that remembers what it drew, so the same draws can be
 // replayed to make the same prop again.
 export function recording(rand) {
