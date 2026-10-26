@@ -30,7 +30,8 @@
 // TOGGLE=1 times the after build alone, on one page: every round it times a
 // window with the control on and one with it off, in turns that swap every
 // round, so page-to-page differences (JIT, memory, GPU) drop out, and
-// prints the paired on - off difference with its quartiles and its share.
+// prints the paired on - off difference with its quartiles and its share,
+// and the same for the time of the stages the beams touch (see staged).
 const fs = require('node:fs');
 const os = require('node:os');
 const { join } = require('node:path');
@@ -115,7 +116,10 @@ async function open(browser, name, size, shadows) {
   const entry = { name, shadows, key: `${name}${name === 'after' ? (shadows ? ' on' : ' off') : ''}`,
     base: builds[name], page, cdp, windows: [], frames: [], zoom: [], walk: [], night: [], shaft: [],
     bakes: { entry: 0, zoom: 0 }, recorded: [], worst: [], bakeMs: [], off: [] };
-  if (TOGGLE) await goto(entry, lakeside.PLAYER);
+  if (TOGGLE) {
+    await goto(entry, lakeside.PLAYER);
+    await page.evaluate(`(${staged})()`);
+  }
   else if (!SPIKES) {
     await goto(entry, lakeside.PLAYER);
     await new Promise((r) => setTimeout(r, 3000));
@@ -126,23 +130,46 @@ async function open(browser, name, size, shadows) {
 
 // Times `n` frames after `skip`, one value per frame: the frame's work and
 // its shadow stage.
+// With TOGGLE, also the mean time per frame of the stages the beams touch
+// (see staged).
 const record = (page, skip, n) => page.evaluate((skip, n) => new Promise((resolve) => {
   const work = [], night = [], shaft = [];
-  let last = game.metrics.frames;
+  let last = game.metrics.frames, from = 0;
   const tick = () => {
     if (game.metrics.frames !== last) {
       last = game.metrics.frames;
-      if (skip > 0) skip--;
-      else {
+      if (skip > 0) {
+        if (--skip === 0) from = window.staged?.ms ?? 0;
+      } else {
         work.push(game.metrics.workMs);
         night.push(game.metrics.nightMs ?? 0);
         shaft.push(game.metrics.shaftMs ?? 0);
       }
     }
-    if (work.length >= n) resolve({ work, night, shaft }); else requestAnimationFrame(tick);
+    if (work.length >= n) resolve({ work, night, shaft, stages: ((window.staged?.ms ?? 0) - from) / n });
+    else requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
 }), skip, n);
+
+// Times, inside the page, every stage the moonbeams touch: the night light
+// (prepare, shadeGround, drawShafts) and the grass (drawReflections and
+// drawLayered, which lays rocks' ground cells too). Each is timed alone, so
+// the sum resolves far less than the page's whole frame does. Self-contained.
+function staged() {
+  const t = window.staged = { ms: 0 };
+  const wrap = (proto, names) => {
+    for (const name of names) {
+      const f = proto[name];
+      proto[name] = function (...args) {
+        const start = performance.now();
+        try { return f.apply(this, args); } finally { t.ms += performance.now() - start; }
+      };
+    }
+  };
+  wrap(Object.getPrototypeOf(game.nightLight), ['prepare', 'shadeGround', 'drawShafts']);
+  wrap(Object.getPrototypeOf(game.grass), ['drawReflections', 'drawLayered']);
+}
 
 // Times a window of the one page with the control on and one with it off,
 // in an order that swaps every round. The beams fade back in within the
@@ -155,8 +182,9 @@ async function toggled(entry, round) {
       if (control === 'shadows') night.enabled = on;
       else night.shafts = on;
     }, on, CONTROL);
-    const { work, night, shaft } = await record(entry.page, WARM, FRAMES);
-    (on ? entry.windows : entry.off).push({ median: median(work), p95: quantile(work, 0.95), night: median(night), shaft: median(shaft) });
+    const { work, night, shaft, stages } = await record(entry.page, WARM, FRAMES);
+    (on ? entry.windows : entry.off).push({ median: median(work), p95: quantile(work, 0.95), night: median(night), shaft: median(shaft),
+      mean: work.reduce((a, b) => a + b, 0) / work.length, stages });
   }
 }
 
@@ -292,6 +320,12 @@ let lakeside;
           console.log(size.name, `one page, on - off: median ${median(d).toFixed(2)} ms (IQR ${quantile(d, 0.25).toFixed(2)}..${
             quantile(d, 0.75).toFixed(2)}), ${median(share).toFixed(2)} % (IQR ${quantile(share, 0.25).toFixed(2)}..${
             quantile(share, 0.75).toFixed(2)}), mean ${(d.reduce((a, b) => a + b, 0) / d.length).toFixed(3)} ms;`, grid);
+          const ds = entry.windows.map((w, i) => w.stages - entry.off[i].stages);
+          const of = entry.windows.map((w, i) => (w.stages - entry.off[i].stages) / entry.off[i].mean * 100);
+          console.log(size.name, `one page, the stages the beams touch: on ${median(entry.windows.map((w) => w.stages)).toFixed(3)} ms,`,
+            `off ${median(entry.off.map((w) => w.stages)).toFixed(3)} ms; on - off median ${median(ds).toFixed(3)} ms (IQR ${
+              quantile(ds, 0.25).toFixed(3)}..${quantile(ds, 0.75).toFixed(3)}), ${median(of).toFixed(2)} % of the mean workMs (IQR ${
+              quantile(of, 0.25).toFixed(2)}..${quantile(of, 0.75).toFixed(2)})`);
         } else {
           console.log(size.name, entry.key, `median ${median(entry.windows.map((w) => w.median)).toFixed(2)} ms`,
             `p95 ${median(entry.windows.map((w) => w.p95)).toFixed(2)} ms`,

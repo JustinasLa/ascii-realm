@@ -120,4 +120,6 @@ AFTER_URL=… node bench/night.cjs` does the same in Chrome, with the beams
 switched off as a control (`CONTROL=shadows` switches off the whole night
 light instead; `TIER=desktop|phone|reduced` holds the beams' tier; `SPIKES=1`
 for the stalls and a walk, `THROTTLE=4` for a slow phone, `TOGGLE=1` to time
-the control on and off by turns on one page, free of page-to-page noise).
+the control on and off by turns on one page, free of page-to-page noise, and
+to time the stages the beams touch inside the page, which resolves their
+cost far more finely than the whole frame).
