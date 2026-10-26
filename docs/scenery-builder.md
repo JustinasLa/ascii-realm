@@ -23,6 +23,15 @@ locally for the current world seed. JSON export and import let you transfer a
 scene; imports must match the current seed. **Reset scene** restores the
 generated world and can be undone.
 
+## Standing stone
+
+The **Nature** palette's **Standing stone** (`!`, after Rock) places a tall,
+slender menhir that tapers to a slanted crown and leans slightly. It is drawn in
+small letters on a dark silhouette like rocks, takes torch light on the flank that
+faces it, and reflects in water below it. It is decorative but solid: it blocks
+movement and arrows. It is damp, and glints in torchlight, only when placed on
+a water cell; on a dry shore beside a pool it stays dry.
+
 Add `?builder` to the URL to open the panel automatically. With `?debug`, the
 current scene is available as `window.game.builder.scene` for inspection.
 

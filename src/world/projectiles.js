@@ -1,7 +1,7 @@
 import { solveBallisticShot } from '../core/ballistics.js';
 import { SCALE, TILT } from '../entities/rig.js';
 import { glyph } from '../render/glyphs.js';
-import { blocks } from './props.js';
+import { blocks, isStoneProp } from './props.js';
 import { ASPECT } from './world.js';
 
 const STYLES = {
@@ -217,7 +217,7 @@ export class Projectiles {
       const props = world.propsIn(
         Math.min(p.x, endX) - 12, Math.min(p.y, endY) - 3,
         Math.max(p.x, endX) + 12, Math.max(p.y, endY) + 3,
-      ).filter((prop) => prop.kind === 'tree' || prop.kind === 'rock');
+      ).filter((prop) => prop.kind === 'tree' || isStoneProp(prop));
       // Sub-cell samples prevent a fast arrow crossing a narrow trunk in a
       // single frame. Include vertical travel so a falling shot cannot pass
       // through a low rock between samples either.

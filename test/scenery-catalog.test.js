@@ -9,7 +9,7 @@ import { GRASS, WATER, World } from '../src/world/world.js';
 import { withLayers } from './helpers/renderer.js';
 
 const expectedKinds = [
-  'tree', 'rock', 'bush', 'pine', 'stump', 'log', 'flowers', 'mushrooms', 'reeds',
+  'tree', 'rock', 'standing-stone', 'bush', 'pine', 'stump', 'log', 'flowers', 'mushrooms', 'reeds',
   'crate', 'barrel', 'fence', 'tent', 'campfire', 'signpost',
   'stone-gate', 'stone-tower', 'column-short', 'column-broken', 'column-tall',
   'wall-low', 'wall-broken', 'rubble-small', 'rubble-large',

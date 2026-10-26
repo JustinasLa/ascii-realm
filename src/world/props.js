@@ -255,6 +255,166 @@ function fineBoulder(rock, seed, bakeFn) {
   };
 }
 
+// A standing stone: a tall, slender menhir that tapers to an oblique,
+// rounded crown and leans a little. Its edges are hewn, not ruled. It is
+// shaped like a boulder (see above), so the same bakes draw it, and it
+// keeps its own random draws so boulders stay as they were.
+function standingStone(rand, seed) {
+  const H = 7.5 + rand() * 3;
+  const b = 1.15 + rand() * 0.45;
+  const taper = 0.38 + rand() * 0.17;
+  const lean = (rand() - 0.5) * 0.16;
+  const crownSide = rand() < 0.5 ? -1 : 1;
+  const crownDrop = 0.6 + rand() * 0.8;
+  const colors = [[109, 122, 139], [145, 127, 106], [135, 137, 143], [122, 136, 119]];
+  const stone = colors[Math.floor(rand() * colors.length)].map((v) => Math.min(255, v * ROCK_LIFT));
+  const mossCoverage = (0.15 + rand() * 0.35) * 0.5;
+  // Flakes run up and down the stone, not around it.
+  const facets = Array.from({ length: 5 + Math.floor(rand() * 4) }, () => {
+    const u = (rand() - 0.5) * 1.8;
+    const v = rand();
+    const n = [0.85 * Math.sign(u) * Math.abs(u) ** 1.3 + (rand() - 0.5) * 0.4, -0.12 + (rand() - 0.5) * 0.2,
+      Math.sqrt(Math.max(0.05, 1 - u * u))];
+    const k = Math.hypot(...n);
+    return { u, v, lit: Math.max(0, (n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]) / k), n: n.map((x) => x / k) };
+  });
+  // Fissures run down from the crown.
+  const cracks = Array.from({ length: rand() < 0.6 ? 1 + Math.floor(rand() * 2) : 0 }, () => {
+    const pts = [];
+    let u = (rand() - 0.5) * 0.9;
+    for (let v = 0.95; v > 0.1; v -= 0.12 + rand() * 0.08) {
+      pts.push([u, v]);
+      u += (rand() - 0.5) * 0.3;
+    }
+    return pts;
+  });
+  const half = (h) => {
+    const t = Math.min(1, Math.max(0, h / H));
+    let w = b * (1 - (1 - taper) * t ** 0.85);
+    if (h < 0.6) w *= 1.08;
+    return w;
+  };
+  // The top edge, lower on one shoulder, and its rounded shoulders.
+  const crownAt = (s) => H - crownDrop * (1 - (s * crownSide + 1) / 2);
+  const round = 0.45 * b * taper;
+  const inside = (px, h) => {
+    if (h < 0 || h > H) return null;
+    const cx = lean * h;
+    const w = half(h);
+    const side = px < cx ? 0 : 1;
+    const wobble = (valueNoise(h * 0.6, side, seed + 71) - 0.5) * 0.18 * b;
+    const edge = w + wobble;
+    const u = (px - cx) / edge;
+    if (Math.abs(u) > 1) return null;
+    const crown = crownAt(u);
+    if (h > crown) return null;
+    // Round off the shoulders: inside a quarter circle at each top corner.
+    const dx = Math.abs(px - cx) - (edge - round);
+    const dy = h - (crown - round);
+    if (dx > 0 && dy > 0 && dx * dx + dy * dy > round * round) return null;
+    return { u, crown };
+  };
+  const fissures = [0, 1, 2, 3].map((a) => [0, 1].map((v) => dg(`props.fissure.${a}.${v}`)));
+  const mossGlyphs = [0, 1, 2, 3, 4, 5].map((i) => dg(`props.moss.${i}`));
+  const ridges = [0, 1, 2, 3].map((a) => dg(`props.ridge.${a}`));
+  const lichenGlyphs = [0, 1, 2, 3].map((i) => dg(`props.lichen.${i}`));
+  const lichen = rand() < 0.5 ? [168, 170, 122] : [176, 128, 82];
+  const normals = { on: false };
+  const sample = (px, py) => {
+    const h = -py;
+    const at = inside(px, h);
+    if (!at) return null;
+    const { u, crown } = at;
+    const v = h / H;
+    let best = facets[0];
+    let next = facets[1];
+    let bestD = Infinity;
+    let nextD = Infinity;
+    for (const f of facets) {
+      const d = (u - f.u) ** 2 + (v - f.v) ** 2 * 0.25;
+      if (d < bestD) { nextD = bestD; next = best; bestD = d; best = f; } else if (d < nextD) { nextD = d; next = f; }
+    }
+    // A slab, flatter than a column, leaning back a little with the taper;
+    // the crown band turns up to the moon.
+    const top = Math.max(0, 1 - (crown - h) / 0.8);
+    let n0 = 0.85 * Math.sign(u) * Math.abs(u) ** 1.3 * (1 - top);
+    let n1 = -0.12 * (1 - top) - 0.8 * top;
+    let n2 = Math.sqrt(Math.max(0.05, 1 - u * u)) * (1 - top) + 0.6 * top;
+    const nk = Math.hypot(n0, n1, n2);
+    n0 /= nk; n1 /= nk; n2 /= nk;
+    const smooth = Math.max(0, n0 * LIGHT[0] + n1 * LIGHT[1] + n2 * LIGHT[2]);
+    const grain = (hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 17) - 0.5) * 0.08;
+    let l = Math.max(0, Math.min(1, (best.lit * 0.55 + smooth * 0.55 - 0.5) * 1.5 + 0.48 + grain));
+    l *= 0.75 + 0.25 * Math.min(1, h / 1.5);
+    let s;
+    if (normals.on) {
+      const fx = Math.floor(px * FINE / ASPECT), fy = Math.floor(py * FINE);
+      const fn = best.n;
+      const bx = fn[0] + n0 + (hash2(fx, fy, seed + 61) - 0.5) * 0.44;
+      const by = fn[1] + n1 + (hash2(fy, fx, seed + 62) - 0.5) * 0.44;
+      const bz = fn[2] + n2;
+      const wy = VIEW_C * by + VIEW_S * bz;
+      const wz = Math.max(0, VIEW_C * bz - VIEW_S * by);
+      const k = Math.sqrt(bx * bx + wy * wy + wz * wz) || 1;
+      s = { m: 'stone', l, c: stone, nx: bx / k, ny: wy / k, nz: wz / k };
+    } else s = { m: 'stone', l, c: stone };
+    for (const pts of cracks) {
+      for (let i = 1; i < pts.length; i++) {
+        const [au, av] = pts[i - 1];
+        const [bu, bv] = pts[i];
+        const t = Math.max(0, Math.min(1, (v - av) / (bv - av)));
+        if (v > Math.max(av, bv) || v < Math.min(av, bv)) continue;
+        if (Math.abs(u - (au + (bu - au) * t)) * half(h) < 0.2) {
+          const a = (Math.round(-Math.atan2((bv - av) * H, (bu - au) * half(h)) / (Math.PI / 4)) + 8) % 4;
+          s.acc = { g: fissures[a][i % 2], c: STONE_GAP };
+          return s;
+        }
+      }
+    }
+    const patch = valueNoise(px * 0.7, py * 0.9, seed + 29);
+    if (patch < mossCoverage && (top > 0.3 || (u > 0.3 && h < 1.5))) {
+      const deep = 0.7 + patch * 0.5;
+      s.acc = { g: mossGlyphs[Math.floor(hash2(Math.floor(px * 3), Math.floor(py), seed) * 6)],
+        c: [MOSS[0] * deep * (0.7 + l * 0.6), MOSS[1] * deep * (0.7 + l * 0.6), MOSS[2] * deep * (0.6 + l * 0.5)]
+          .map((x) => Math.min(255, x * ROCK_LIFT)) };
+      return s;
+    }
+    // Where two flakes meet, a vertical ridge.
+    const gap = (nextD - bestD) / (2 * Math.abs(next.u - best.u) || 1);
+    if (gap < 0.05 && Math.abs(best.lit - next.lit) > 0.12) {
+      s.acc = { g: ridges[2], c: stone.map((x) => x * (0.85 + l * 0.55)) };
+    } else if (hash2(Math.floor(px * 1.7), Math.floor(py), seed + 41) < (u < 0 ? 0.1 : 0.05)) {
+      s.acc = { g: lichenGlyphs[Math.floor(hash2(Math.floor(px), Math.floor(py), seed + 43) * 4)],
+        c: lichen.map((x) => Math.min(255, x * ROCK_LIFT) * (0.55 + l * 0.5)) };
+    }
+    return s;
+  };
+  // Pebbles at the foot, as a boulder has.
+  const extras = [];
+  const foot = Math.ceil(b / ASPECT);
+  for (let i = 1 + Math.floor(rand() * 3); i > 0; i--) {
+    const side = rand() < 0.5 ? -1 : 1;
+    const dx = side * (Math.floor(foot * (0.55 + rand() * 0.5)) + 1);
+    const dy = rand() < 0.6 ? 0 : 1;
+    const light = 0.55 + rand() * 0.35;
+    const name = rand() < 0.6 ? `pebble.${Math.floor(rand() * 8)}` : `gravel.${Math.floor(rand() * 8)}`;
+    extras.push({ dx, dy, g: dg(name), c: stone.map((x) => x * light) });
+  }
+  return { sample, normals, b, w: Math.ceil((b + Math.abs(lean) * H + 0.4) / ASPECT) + 1, top: -Math.ceil(H) - 1,
+    extras, shadow: { rx: b * 2.4, ry: 0.9, ox: b * 1.3 } };
+}
+
+// A builder's standing stone: decorative, but solid like a rock.
+function makeStandingStone(x, y, rand, seed, bakeFn = bake) {
+  const rock = standingStone(rand, seed);
+  return withFine({ kind: 'standing-stone', x, y, footW: rock.b * 0.85 / ASPECT, footH: 0.9,
+    cells: bakeBoulder(rock, seed, bakeFn) }, fineBoulder(rock, seed, bakeFn));
+}
+
+// Rocks and standing stones: solid stone that is damp by water, keeps the
+// grass off its face and stops arrows.
+export const isStoneProp = (prop) => prop.kind === 'rock' || prop.kind === 'standing-stone';
+
 function makeRock(x, y, stream, seed = x * 17 + y, bakeFn = bake) {
   const { random: rand, draws } = recording(stream);
   const rx = 2.6 + rand() * 3.2;
@@ -509,7 +669,8 @@ export function createProp(kind, x, y, options = {}) {
   }
   const used = { baked: false };
   const bakeFn = scaledBaker(width * scale, height * scale, used);
-  const make = { tree: makeBuilderTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBuilderBush }[kind];
+  const make = { tree: makeBuilderTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBuilderBush,
+    'standing-stone': makeStandingStone }[kind];
   const prop = make ? make(x, y, rand, seed, bakeFn)
     : makeNaturalProp(kind, x, y, rand, seed, bakeFn) ?? makeCampProp(kind, x, y, rand, seed, bakeFn)
       ?? makeArchitectureProp(kind, x, y, rand, seed, bakeFn, rotation);

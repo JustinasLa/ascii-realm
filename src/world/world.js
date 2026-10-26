@@ -1,7 +1,7 @@
 import { fbm, valueNoise } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { rockTypeAt } from './geology.js';
-import { blocks, generateProps, makeRiverStone } from './props.js';
+import { blocks, generateProps, isStoneProp, makeRiverStone } from './props.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
@@ -267,6 +267,10 @@ export class World {
     }
     this.applyTerrain(c, i, type);
     this.touched(c);
+    // A standing stone follows the ground painted beneath its foot.
+    for (const prop of this.addedPropChunks.get(chunk)?.values() ?? []) {
+      if (prop.kind === 'standing-stone' && Math.floor(prop.x) === x && Math.floor(prop.y) === y) this.wetStone(prop);
+    }
   }
 
   // Sets one cell's terrain and the grass growing on it. Painted meadow
@@ -313,7 +317,7 @@ export class World {
     if (this.addedProps.has(prop.id)) this.deleteProp(prop.id);
     this.addedProps.set(prop.id, prop);
     // A builder's rock beside water is damp, as a generated one is.
-    if (prop.kind === 'rock' && !prop.wet && this.byWater(prop)) prop.damp = true;
+    this.wetStone(prop);
     this.coverGrass(prop, 1);
     this.measureProp(prop);
     const key = chunkKey(Math.floor(prop.x / CHUNK), Math.floor(prop.y / CHUNK));
@@ -350,7 +354,7 @@ export class World {
   coverGrass(prop, change) {
     if (prop.chopped || prop.solid === false || (prop.kind === 'bush' && prop.solid !== true)) return;
     const deadwood = prop.kind === 'deadwood';
-    const rock = prop.kind === 'rock';
+    const rock = isStoneProp(prop);
     const lowStone = rock || prop.kind === 'rubble-small' || prop.kind === 'rubble-large';
     const rx = Math.ceil(deadwood ? DEADWOOD_REACH_X : (prop.footW ?? 0) + (lowStone ? 1 : 0));
     const ry = Math.ceil(deadwood ? DEADWOOD_REACH_Y : prop.footH ?? 0);
@@ -597,7 +601,7 @@ export class World {
         if (this.burntTrees.has(prop.id)) prop.burnt = true;
         const burning = this.burningTrees.get(prop.id);
         if (burning) prop.burning = burning;
-        if (prop.kind === 'rock' && !prop.wet && this.byWater(prop)) prop.damp = true;
+        if (this.dampStone(prop)) prop.damp = true;
         // Grass is only cleared the first time; it stays bare after eviction.
         if (!this.coveredChunks.has(chunkKey(cx, cy))) this.coverGrass(prop, 1);
       });
@@ -622,6 +626,20 @@ export class World {
   // The local surface layer determines which loose stones are scattered here.
   rockTypeAt(x, y) {
     return rockTypeAt(this, x, y);
+  }
+
+  // Whether a stone glints damp in torchlight: a rock by the water, a
+  // standing stone only where it stands in water.
+  dampStone(prop) {
+    if (prop.kind === 'standing-stone') return this.typeAt(Math.floor(prop.x), Math.floor(prop.y)) === WATER;
+    return prop.kind === 'rock' && !prop.wet && this.byWater(prop);
+  }
+
+  // Marks a stone damp where dampStone says so. A rock stays damp once it
+  // is; a standing stone dries again when its cell is no longer water.
+  wetStone(prop) {
+    if (this.dampStone(prop)) prop.damp = true;
+    else if (prop.kind === 'standing-stone') delete prop.damp;
   }
 
   // Whether water lies within DAMP_REACH cells of a prop's foot: a rock
