@@ -10,9 +10,12 @@
 // write wins.
 //
 // Changes this tab couldn't save yet are laid over a newer stored copy, one
-// character at a time, and saved with it once a write works. A record from a
-// newer version is never written over, and neither is one the unsaved
-// changes no longer fit.
+// character at a time, and saved with it once a write works. Their sheets
+// and skins win, but every time keeps the later of the two copies, so an
+// edit never lifts a cooldown or a lock. A record from a newer version is
+// never written over, and neither is one the unsaved changes no longer fit.
+// Nothing is written unless the read just before it worked, since a record
+// that can't be read might be a newer version's.
 
 import { RULES } from './catalog.js';
 import { blankSheet, canChange, cleanSheet, fieldError, nameKey, normalName, nameError, sheetErrors } from './rules.js';
@@ -36,6 +39,7 @@ export function migrate(record, steps = MIGRATIONS, target = ROSTER_VERSION) {
 const ID = /^[a-z0-9-]{4,40}$/i;
 const time = (ms) => Number.isSafeInteger(ms) && ms > 0;
 const plain = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const later = (a, b) => a === null ? b : b === null ? a : Math.max(a, b);
 
 // A saved character with its sheet repaired, or null when it is too broken
 // to keep.
@@ -103,6 +107,8 @@ export class Roster {
     this.onChange = onChange;
     this.readOnly = false;
     this.storageOk = true;
+    // Whether the last read worked.
+    this.readOk = true;
     this.state = this.read() ?? empty();
     // The `rev` last read or written, the ids changed since, and whether the
     // active character changed since.
@@ -123,9 +129,10 @@ export class Roster {
     try {
       raw = this.storage.getItem(ROSTER_KEY);
     } catch {
-      this.storageOk = false;
+      this.storageOk = this.readOk = false;
       return null;
     }
+    this.readOk = true;
     if (raw === null) return null;
     try {
       const record = JSON.parse(raw);
@@ -157,17 +164,27 @@ export class Roster {
     return true;
   }
 
-  // The stored copy with this tab's unsaved characters in place of its own,
+  // The stored copy with this tab's unsaved characters laid over its own,
   // or null when they no longer fit: more than the slots, or a name taken.
+  // Of the two active characters, the one switched to last stays active.
   merge(stored) {
-    const characters = stored.characters.map((character) =>
-      this.unsaved.has(character.id) ? this.find(character.id) : character);
+    const characters = stored.characters.map((character) => {
+      if (!this.unsaved.has(character.id)) return character;
+      const mine = this.find(character.id);
+      return { ...mine, createdAt: Math.max(mine.createdAt, character.createdAt),
+        switchedAt: later(mine.switchedAt, character.switchedAt) };
+    });
     for (const id of this.unsaved) {
       if (!characters.some((character) => character.id === id)) characters.push(this.find(id));
     }
     const names = new Set(characters.map((character) => nameKey(character.sheet.name)));
     if (characters.length > RULES.slots || names.size < characters.length) return null;
-    return { ...stored, active: this.activeUnsaved ? this.state.active : stored.active, characters };
+    const activeAt = (id) => {
+      const character = characters.find((each) => each.id === id);
+      return character ? character.switchedAt ?? character.createdAt : -Infinity;
+    };
+    const mine = this.activeUnsaved && activeAt(this.state.active) >= activeAt(stored.active);
+    return { ...stored, active: mine ? this.state.active : stored.active, characters };
   }
 
   // Why changes aren't being saved, or null when they are.
@@ -183,7 +200,7 @@ export class Roster {
     this.state.rev++;
     this.unsaved.add(id);
     this.activeUnsaved ||= activated;
-    if (this.clash) return;
+    if (this.clash || !this.readOk) return;
     try {
       this.storage.setItem(ROSTER_KEY, JSON.stringify(this.state));
       this.storageOk = true;

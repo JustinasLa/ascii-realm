@@ -288,6 +288,73 @@ test('a newer version’s record saved while writes failed is not written over',
   }
 });
 
+test('nothing is written while reads fail, even once writes work', () => {
+  const storage = memory();
+  const { roster: r } = roster(storage);
+  make(r, 'Kael');
+  // Another tab saves a newer version's record this tab can no longer read.
+  const raw = JSON.stringify({ v: 2, rev: 9, active: 'c0001', characters: [saved('c0001', 'Kael Three')] });
+  storage.map.set(ROSTER_KEY, raw);
+  storage.broken.get = true;
+  assert.equal(r.update('c0001', { name: 'Kael Two' }).ok, true);
+  assert.equal(r.setSkin('c0001', { tone: 'ash' }).ok, true);
+  assert.equal(storage.map.get(ROSTER_KEY), raw, 'the record it could not read is untouched');
+  assert.equal(r.saveError, UNSAVED);
+  assert.deepEqual([r.active.sheet.name, r.active.skin], ['Kael Two', { tone: 'ash' }], 'the change is kept for the visit');
+  // Once reads work, the newer record is seen before anything is written.
+  storage.broken.get = false;
+  assert.deepEqual(r.update('c0001', { gender: 'male' }), { ok: false, reason: NEWER });
+  assert.equal(storage.map.get(ROSTER_KEY), raw);
+});
+
+test('an unsaved edit never takes back another tab’s switch, so the cooldown holds', () => {
+  const storage = memory();
+  const { roster: r, clock } = roster(storage);
+  make(r, 'Kael');
+  clock.now += 5 * DAY;
+  make(r, 'Bryn');
+  clock.now += 5 * DAY;
+  assert.equal(r.switchTo('c0001').ok, true);
+  storage.broken.set = true;
+  assert.equal(r.update('c0002', { name: 'Bryn Two' }).ok, true);
+  // Another tab, whose writes work, switches to Bryn an hour later.
+  clock.now += 60 * 60 * 1000;
+  const other = storage.saved();
+  other.characters[1].switchedAt = clock.now;
+  Object.assign(other, { rev: other.rev + 1, active: 'c0002' });
+  storage.map.set(ROSTER_KEY, JSON.stringify(other));
+  storage.broken.set = false;
+  assert.equal(r.update('c0002', { gender: 'female' }).ok, true);
+  const kept = storage.saved();
+  assert.deepEqual([kept.active, kept.characters[1].switchedAt, kept.characters[1].sheet.name],
+    ['c0002', clock.now, 'Bryn Two']);
+  assert.equal(r.lastSwitchAt, clock.now);
+  assert.equal(r.canSwitch('c0001').ok, false, 'the four-day cooldown still runs from the other tab’s switch');
+  assert.equal(r.canCreate().ok, false);
+});
+
+test('of two tabs’ switches the later one stays active, and created times keep the later', () => {
+  const storage = memory();
+  const { roster: r, clock } = roster(storage, { bypassCooldown: true });
+  make(r, 'Kael');
+  make(r, 'Bryn');
+  storage.broken.set = true;
+  clock.now += DAY;
+  assert.equal(r.switchTo('c0001').ok, true);
+  // Another tab switched to Bryn after this tab's switch, and its copy of
+  // Kael has a later created time.
+  const other = storage.saved();
+  other.characters[0].createdAt = clock.now;
+  other.characters[1].switchedAt = clock.now + 1;
+  Object.assign(other, { rev: other.rev + 1, active: 'c0002' });
+  storage.map.set(ROSTER_KEY, JSON.stringify(other));
+  storage.broken.set = false;
+  assert.equal(r.setSkin('c0001', { tone: 'ash' }).ok, true);
+  const kept = storage.saved();
+  assert.deepEqual([kept.active, kept.characters[0].createdAt, kept.characters[0].switchedAt, kept.characters[0].skin],
+    ['c0002', clock.now, clock.now, { tone: 'ash' }]);
+});
+
 test('another tab saving a newer version’s record is heard as a change', () => {
   const storage = memory();
   const events = new EventTarget();
