@@ -226,14 +226,20 @@ export function columnStamp(shaft, seed) {
     const height = Math.max(0, (cy - wy - 0.5) / -stepY);
     const fade = (1 - height / SHAFT_RISE) ** COLUMN_FALLOFF;
     const axis = cx + stepX * height;
-    x0[i] = Math.floor(axis - half * REACH);
-    const last = Math.floor(axis + half * REACH);
-    for (let wx = x0[i]; wx <= last; wx++) {
+    const first = Math.floor(axis - half * REACH), last = Math.floor(axis + half * REACH);
+    const from = values.length;
+    for (let wx = first; wx <= last; wx++) {
       const across = wx + 0.5 - axis;
       const d = Math.abs(across) / half * (1 + EDGE_JITTER * (2 * valueNoise(wx * ASPECT * 0.2, wy * 0.25, seed + 2295) - 1));
       values.push(d >= 1 ? 0 : COLUMN_PEAK * fade * (1 - smoothstep(0.5, 1, d)) *
         (1 - STREAKS + STREAKS * valueNoise(across * ASPECT * 0.5, height * 0.08, seed + 2300)));
     }
+    // The row's unlit cells at either end are not kept, so not visited.
+    let lead = 0;
+    while (from + lead < values.length && !values[from + lead]) lead++;
+    while (values.length > from + lead && !values[values.length - 1]) values.pop();
+    values.splice(from, lead);
+    x0[i] = first + lead;
     at[i + 1] = values.length;
   }
   shaft.column = { y0, x0, at, k: Float32Array.from(values), work: values.length * 2 };
@@ -269,15 +275,22 @@ export function drawColumn(r, view, shaft, strength, seed) {
   }
 }
 
-// Where mote m of a beam is at `time`: { x, y, height, phase }.
-export function motePosition(shaft, m, n, time, seed) {
+// Where mote m of a beam is at `time`: { x, y, height, phase }, written
+// into `out` if given.
+export function motePosition(shaft, m, n, time, seed, out = {}) {
   const [stepX, stepY] = COLUMN_STEP;
   const phase = (m + 0.6 * hash2(shaft.i * 7 + m, shaft.j, seed + 2296)) / n;
   const f = phase - time * MOTE_SPEED / SHAFT_RISE;
   const height = SHAFT_RISE * (f - Math.floor(f));
   const across = (hash2(shaft.i * 7 + m, shaft.j, seed + 2298) - 0.5) * 1.2 * shaft.half;
-  return { x: shaft.cx + stepX * height + across, y: shaft.cy + stepY * height, height, phase };
+  out.x = shaft.cx + stepX * height + across;
+  out.y = shaft.cy + stepY * height;
+  out.height = height;
+  out.phase = phase;
+  return out;
 }
+
+const MOTE = { x: 0, y: 0, height: 0, phase: 0 };
 
 // Lays a beam's `n` motes of dust over the scene, sinking down its column
 // and now and then catching the moon. They never push out a glyph already
@@ -285,7 +298,7 @@ export function motePosition(shaft, m, n, time, seed) {
 export function drawMotes(r, view, shaft, n, strength, time, seed) {
   const { bg, mask, fineMark } = r;
   for (let m = 0; m < n; m++) {
-    const { x, y, height, phase } = motePosition(shaft, m, n, time, seed);
+    const { x, y, height, phase } = motePosition(shaft, m, n, time, seed, MOTE);
     const sx = Math.floor(x) - view.x0, sy = Math.floor(y) - view.y0;
     if (sx < 0 || sy < 0 || sx >= Math.min(view.cols, r.cols) || sy >= Math.min(view.rows, r.rows)) continue;
     const cell = sy * r.cols + sx;

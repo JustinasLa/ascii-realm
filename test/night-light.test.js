@@ -102,7 +102,7 @@ test('the grass is drawn exactly as before where no shadow falls', () => {
   const plain = draw(null);
   assert.ok(plain.length > 1000);
   assert.deepEqual(draw(new NightLight()), plain, 'an empty map');
-  assert.deepEqual(draw({ rowShaded: () => true, gainAt: () => 1, tintAt: () => 0 }), plain, 'a map that lets all the light through');
+  assert.deepEqual(draw({ rowShaded: () => true, lightAt: () => 1, tint: 0 }), plain, 'a map that lets all the light through');
 });
 
 test('the ground under a crown is darkened, the water and stone lighting are not', () => {
@@ -149,7 +149,7 @@ test('grass rooted in shade is darker, keeps its strokes and loses its pale moon
     return cells;
   };
   const lit = draw(null);
-  const shaded = draw({ rowShaded: () => true, gainAt: () => 0.6, tintAt: () => 0 });
+  const shaded = draw({ rowShaded: () => true, lightAt: () => 0.6, tint: 0 });
   assert.equal(shaded.length, lit.length);
   let exact = 0, tips = 0, heads = 0;
   for (let i = 0; i < lit.length; i++) {
@@ -432,6 +432,13 @@ test('moonbeams are fixed to the world: walking, zooming and the sub-cell offset
     settle(night, view, props, { seed: 5, world });
     const cells = [];
     for (let y = shared.y0; y < shared.y1; y++) for (let x = shared.x0; x < shared.x1; x++) cells.push(night.gainAt(x, y), night.tintAt(x, y));
+    // lightAt reads both at once, on the map and off it.
+    for (let y = shared.y0 - 30; y < shared.y1 + 30; y += 3) {
+      for (let x = shared.x0 - 30; x < shared.x1 + 30; x += 3) {
+        assert.equal(night.lightAt(x, y), night.gainAt(x, y));
+        assert.equal(night.tint, night.tintAt(x, y));
+      }
+    }
     if (!first) first = cells;
     else assert.deepEqual(cells, first);
   }
@@ -591,7 +598,7 @@ test('overlapping beams light a cell with the brighter one, never both', () => {
   }
   // And drawn: each cell of both boxes takes the brighter lift and its
   // tint exactly once, however many boxes it lies in.
-  assert.equal(night.boxes.length, 2);
+  assert.equal(night.boxCount, 2);
   const r = screen(view, Float32Array);
   const base = { fg: [90, 160, 70], bg: [30, 50, 20], ov: [120, 140, 60] };
   for (const [name, c] of Object.entries(base)) for (let o = 0; o < r[name].length; o += 4) r[name].set(c, o);
@@ -648,8 +655,8 @@ test('grass in a beam is brighter and paler, flowers brighter but their own colo
   };
   const gain = 1 + PEAK_LIFT;
   const open = draw(null);
-  const bright = draw({ rowShaded: () => true, gainAt: () => gain, tintAt: () => 0 });
-  const tinted = draw({ rowShaded: () => true, gainAt: () => gain, tintAt: () => TINT });
+  const bright = draw({ rowShaded: () => true, lightAt: () => gain, tint: 0 });
+  const tinted = draw({ rowShaded: () => true, lightAt: () => gain, tint: TINT });
   assert.equal(bright.length, open.length);
   assert.equal(tinted.length, open.length);
   const luma = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];

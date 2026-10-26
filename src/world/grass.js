@@ -669,11 +669,11 @@ export class Grass {
         // A root in a tree's shadow takes less of the night's light, and
         // everything growing from it with it; one in a moonbeam more, its
         // blades paler toward the moonlight (its flowers keep their colour).
-        const gain = night ? night.gainAt(x, y) : 1;
+        const gain = night ? night.lightAt(x, y) : 1;
         if (night) {
           moonlit = gain < 1 ? Math.max(0, (gain - GAIN_FLOOR) / (1 - GAIN_FLOOR)) :
             gain > 1 ? 1 + (gain - 1) / PEAK_LIFT * TIP_BOOST : 1;
-          moontint = night.tintAt(x, y);
+          moontint = night.tint;
         }
         const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.1) *
           (0.82 + variation * 0.36) * (1 - sink * 0.8) * gain;

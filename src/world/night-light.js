@@ -70,6 +70,9 @@ export function beamFactor(weather) {
 }
 
 const MAX_MOTES = Math.floor(SHAFT_RISE / MOTE_GAP);
+// Nearest the view's middle first (`far`, set each frame), then by slot.
+const nearest = (a, b) => a.far - b.far || (a.key < b.key ? -1 : 1);
+const nearestBeam = (a, b) => nearest(a.shaft, b.shaft);
 // Whether world box b (end exclusive) reaches into the view.
 const overlaps = (b, view) =>
   b.x0 < view.x0 + view.cols && b.x1 > view.x0 && b.y0 < view.y0 + view.rows && b.y1 > view.y0;
@@ -105,8 +108,14 @@ export class NightLight {
     // and this frame's ones with any light, nearest the view first.
     this.beams = new Map();
     this.visible = [];
-    // The map boxes (end exclusive) this frame's beams lit, one each.
+    // The map boxes (end exclusive) this frame's beams lit, one each (kept
+    // and reused frame to frame, the first `boxCount` of them this frame's).
     this.boxes = [];
+    this.boxCount = 0;
+    // The tint lightAt found, and lists reused frame to frame.
+    this.tint = 0;
+    this.near = [];
+    this.leaving = [];
     this.world = null;
     this.seed = null;
     this.tierName = null;
@@ -131,7 +140,7 @@ export class NightLight {
     this.active = false;
     this.columns = false;
     this.visible.length = 0;
-    this.boxes.length = 0;
+    this.boxCount = 0;
     this.bakes = this.work = this.bakeMs = 0;
     if (!this.enabled) return;
     this.x0 = view.x0 - PAD_X;
@@ -218,9 +227,9 @@ export class NightLight {
     const x0 = view.x0 - PAD_X - SHAFT_MARGIN_X, x1 = view.x0 + view.cols + PAD_X + SHAFT_MARGIN_X;
     const y0 = view.y0 - PAD_TOP - SHAFT_MARGIN_Y, y1 = view.y0 + view.rows + PAD_BOTTOM + SHAFT_MARGIN_Y;
     const mx = view.x0 + view.cols / 2, my = view.y0 + view.rows / 2;
-    const near = shaftsNear(x0, y0, x1, y1, seed, world, tier.column);
-    const far = (s) => ((s.cx - mx) * ASPECT) ** 2 + (s.cy - my) ** 2;
-    near.sort((a, b) => far(a) - far(b) || (a.key < b.key ? -1 : 1));
+    const near = shaftsNear(x0, y0, x1, y1, seed, world, tier.column, this.near);
+    for (const shaft of near) shaft.far = ((shaft.cx - mx) * ASPECT) ** 2 + (shaft.cy - my) ** 2;
+    near.sort(nearest);
     const beams = this.beams;
     let beamBakes = 0;
     for (const beam of beams.values()) beam.out = true;
@@ -240,7 +249,8 @@ export class NightLight {
       beam.out = false;
       beam.frames = Math.min(FADE_FRAMES, beam.frames + 1);
     }
-    const leaving = [];
+    const leaving = this.leaving;
+    leaving.length = 0;
     for (const beam of beams.values()) {
       if (!beam.out) continue;
       if (--beam.frames <= 0) beams.delete(beam.shaft.key);
@@ -248,7 +258,7 @@ export class NightLight {
     }
     if (leaving.length > tier.max) {
       leaving.sort((a, b) => b.frames - a.frames);
-      for (const beam of leaving.slice(tier.max)) beams.delete(beam.shaft.key);
+      for (let k = tier.max; k < leaving.length; k++) beams.delete(leaving[k].shaft.key);
     }
     const light = tier.intensity * beamFactor(env.weather);
     const mixStep = 1 / FADE_FRAMES, target = tier.column ? 1 : 0;
@@ -276,14 +286,26 @@ export class NightLight {
           if (v > lift[to + x]) lift[to + x] = v;
         }
       }
-      this.boxes.push({ x0: ox + sx0, y0: oy + sy0, x1: ox + sx1, y1: oy + sy1 });
+      const box = this.boxes[this.boxCount] ??= { x0: 0, y0: 0, x1: 0, y1: 0 };
+      this.boxCount++;
+      box.x0 = ox + sx0;
+      box.y0 = oy + sy0;
+      box.x1 = ox + sx1;
+      box.y1 = oy + sy1;
       lx0 = Math.min(lx0, ox + sx0);
       lx1 = Math.max(lx1, ox + sx1);
       ly0 = Math.min(ly0, oy + sy0);
       ly1 = Math.max(ly1, oy + sy1);
     }
-    if (lx0 < lx1) Object.assign(this.lit, { x0: lx0, y0: ly0, x1: lx1, y1: ly1 });
-    this.visible.sort((a, b) => far(a.shaft) - far(b.shaft) || (a.shaft.key < b.shaft.key ? -1 : 1));
+    if (lx0 < lx1) {
+      const l = this.lit;
+      l.x0 = lx0;
+      l.y0 = ly0;
+      l.x1 = lx1;
+      l.y1 = ly1;
+    }
+    near.length = 0;
+    this.visible.sort(nearestBeam);
   }
 
   // The beam in slot (i, j) of the world last prepared, for debugging.
@@ -291,10 +313,15 @@ export class NightLight {
     return this.world ? shaftAt(i, j, this.seed, this.world) : null;
   }
 
-  // Whether the trees or a beam touched world row wy this frame.
+  // Whether the trees or a beam touched world row wy this frame: a row
+  // between two beams' patches, with no tree's shade, is left alone.
   rowShaded(wy) {
+    if (!this.active) return false;
     const y = wy - this.y0;
-    return this.active && ((y >= this.dirty.y0 && y < this.dirty.y1) || (y >= this.lit.y0 && y < this.lit.y1));
+    if (y >= this.dirty.y0 && y < this.dirty.y1) return true;
+    if (y < this.lit.y0 || y >= this.lit.y1) return false;
+    for (let b = 0; b < this.boxCount; b++) if (y >= this.boxes[b].y0 && y < this.boxes[b].y1) return true;
+    return false;
   }
 
   // The share of the night's light that reaches world cell (wx, wy): above
@@ -306,6 +333,20 @@ export class NightLight {
     const v = this.layers[i], lift = this.lift[i];
     const gain = v > 0 ? GAIN[v < 255 / LAYER_UNIT ? (v * LAYER_UNIT) | 0 : 255] : 1;
     return lift > 0 ? gain * (1 + lift) : gain;
+  }
+
+  // gainAt and tintAt in one look: returns the gain at world cell (wx, wy)
+  // and leaves its tint in `tint`.
+  lightAt(wx, wy) {
+    const x = wx - this.x0, y = wy - this.y0;
+    this.tint = 0;
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) return 1;
+    const i = y * this.w + x;
+    const v = this.layers[i], lift = this.lift[i];
+    const gain = v > 0 ? GAIN[v < 255 / LAYER_UNIT ? (v * LAYER_UNIT) | 0 : 255] : 1;
+    if (!(lift > 0)) return gain;
+    this.tint = TINT * lift / PEAK_LIFT;
+    return gain * (1 + lift);
   }
 
   // How far world cell (wx, wy)'s colours turn toward the moonlight: up to
@@ -322,7 +363,7 @@ export class NightLight {
   shadeGround(r, view) {
     if (!this.active) return;
     this.shadeBox(r, view, this.dirty, 0);
-    for (let b = 0; b < this.boxes.length; b++) this.shadeBox(r, view, this.boxes[b], b + 1);
+    for (let b = 0; b < this.boxCount; b++) this.shadeBox(r, view, this.boxes[b], b + 1);
   }
 
   // Shades the cells of map box `box` on screen, skipping those in the

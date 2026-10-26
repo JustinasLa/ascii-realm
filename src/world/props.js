@@ -830,8 +830,8 @@ function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
     const sy = by + c.dy;
     if (sy < 0 || sy >= view.rows) continue;
     const wx = view.x0 + bx + c.dx, wy = view.y0 + sy;
-    const k = night ? night.gainAt(wx, wy) : 1;
-    const t = night ? night.tintAt(wx, wy) : 0;
+    const k = night ? night.lightAt(wx, wy) : 1;
+    const t = night ? night.tint : 0;
     if (k === 1 && t === 0) putCell(r, bx + c.dx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
     else {
       const [cr, cg, cb] = tintRgb(GROUND_FG, c.r * k, c.gg * k, c.b * k, t);
