@@ -4,7 +4,7 @@ import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
 import { prepareSpellSounds } from './audio/spells.js';
 import { bindAudioControls } from './audio/controls.js';
-import { INSTRUMENT_IDS, layerNote, noteMidi, prepareInstrument, secondLayer } from './audio/instruments.js';
+import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer } from './audio/instruments.js';
 import { InstrumentKeys } from './core/instrument-keys.js';
 import { MusicNotes } from './world/music-notes.js';
 import { installTouchControls } from './core/touch.js';
@@ -18,7 +18,7 @@ import { installPinchZoom } from './core/pinch.js';
 import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from './core/native.js';
 import { dressFigure, drawFigure, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
-import { KINDS, Monsters } from './entities/monsters.js';
+import { KINDS, Monsters, toMetres } from './entities/monsters.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
 import { Animals } from './entities/animals.js';
 import { Birds } from './entities/birds.js';
@@ -877,9 +877,28 @@ function playSlot(slot, shifted) {
   if (sound.engine.context?.state === 'running') sound.play(event);
   else void unlocking.then((running) => { if (running) sound.play(event); });
   musicNotes.add({ x: player.x, y: player.y, top: lastOwnTop, midi: noteMidi(id, note.degree, note.octave, note.chord)[0] });
+  // Friends in a lobby hear it too; solo, nothing is sent.
+  multiplayer.sendNote({ instrument: id, ...note });
   inventory.selectHotbar(8);
   hud.flashSlot(slot - 1);
 }
+// A friend's note: heard from where their figure stands, fading to silence at
+// the instrument's range, with the note over their head. Its loudness and pan
+// are set as it starts and stay while it rings.
+function playRemoteNote(from, note) {
+  const peer = remotePlayers.peers.get(from);
+  if (!peer) return;
+  const { x, y } = peer.player;
+  const level = instrumentFalloff(note.instrument, Math.hypot(...toMetres(x - player.x, y - player.y)));
+  if (level <= 0) return;
+  sound.play({ type: 'instrument', ...note, x, y, level });
+  // A background tab's glyphs would all appear at once on its return.
+  if (document.hidden) return;
+  const top = peer.figure ? Math.floor(y + figureTop(peer.figure)) : NaN;
+  musicNotes.add({ x, y, top, midi: noteMidi(note.instrument, note.degree, note.octave, note.chord)[0] });
+}
+multiplayer.onNote = ({ from, note }) => playRemoteNote(from, note);
+debug.playRemoteNote = playRemoteNote;
 const instrumentKeys = new InstrumentKeys(window, {
   instrument: () => isGameplayBlocked() ? null : heldInstrument(),
   canPlay,

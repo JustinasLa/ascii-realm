@@ -13,7 +13,8 @@ import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
-import { INSTRUMENT_IDS, layerNote, noteMidi, prepareInstrument, secondLayer } from '../../src/audio/instruments.js';
+import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer } from '../../src/audio/instruments.js';
+import { toMetres } from '../../src/entities/monsters.js';
 import { InstrumentKeys } from '../../src/core/instrument-keys.js';
 import { MusicNotes } from '../../src/world/music-notes.js';
 import { isBow, isThrown } from '../../src/entities/loadout.js';
@@ -218,7 +219,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     isControlTarget: () => false,
     clearInput: () => { taps.clear(); held.clear(); }, isGameplayBlocked: () => blocked,
     setGameplayBlocked: value => { blocked = value; taps.clear(); held.clear(); },
-    Inventory, ITEMS, INSTRUMENT_IDS, layerNote, noteMidi, prepareInstrument, secondLayer, InstrumentKeys, MusicNotes, Hud: inert(),
+    Inventory, ITEMS, INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer, InstrumentKeys, MusicNotes, Hud: inert(),
     InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
     GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
@@ -288,7 +289,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     drawFigure: noop, drawTrail: noop, putCell: noop, putOutlinedCell: noop,
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
-    MonsterFigures: class {}, KINDS: {},
+    MonsterFigures: class {}, KINDS: {}, toMetres,
     Animals, Birds, Fishes, AnimalFigures: animalFigures, Horses, HorseFigures: horseFigures,
     SceneryBuilder: class {
       constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
@@ -314,7 +315,9 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     // tested on its own.
     bindTintPicker: (client, options) => ({ ...options, renders: 0, render() { this.renders++; } }),
     MultiplayerClient: class {
-      constructor(options) { this.players = []; this.room = null; Object.assign(this, options); }
+      constructor(options) { this.players = []; this.room = null; this.notesSent = []; Object.assign(this, options); }
+      // Records each note offered to the lobby; solo, nothing is sent.
+      sendNote(note) { this.notesSent.push(note); return false; }
       leave() {}
     },
     RemotePlayers: class { constructor() { this.peers = new Map(); } sync() {} update() {} visible() { return []; } },

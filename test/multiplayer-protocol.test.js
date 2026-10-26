@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
-import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, playerState, readMembers,
-  readPlayerState, validCode } from '../src/multiplayer/protocol.js';
+import { INSTRUMENT_IDS } from '../src/audio/instruments.js';
+import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, NOTE_WINDOW_MS, NOTES_PER_SECOND,
+  playerState, readMembers, readNote, readPlayerState, RollingLimit, validCode } from '../src/multiplayer/protocol.js';
 import { blendState, RemotePlayers } from '../src/multiplayer/remote-players.js';
 
 test('player snapshots preserve poses without sharing mutable arrays or private fields', () => {
@@ -128,4 +129,62 @@ test('tags and member colours are cleaned', () => {
   const state = playerState(new Player(0, 0));
   const [member] = readMembers([{ id: 'ab', name: 'Ash', color: 1, tint: '#0000AA', tag: 3, state }]);
   assert.deepEqual([member.tint, member.tag], ['#4a89ff', 3]);
+});
+
+test('readNote accepts every instrument, degree end, octave and chord, as a new object', () => {
+  for (const instrument of INSTRUMENT_IDS) for (const degree of [0, 7]) for (const octave of [-1, 0, 1]) {
+    for (const chord of [true, false]) {
+      const raw = { instrument, degree, octave, chord };
+      const note = readNote(raw);
+      assert.deepEqual(note, raw);
+      assert.notEqual(note, raw);
+    }
+  }
+});
+
+test('readNote takes a chord on any instrument, as every instrument can sound one', () => {
+  for (const instrument of ['flute', 'trumpet']) {
+    assert.deepEqual(readNote({ instrument, degree: 3, octave: 0, chord: true }), { instrument, degree: 3, octave: 0, chord: true });
+  }
+});
+
+test('readNote rejects anything else, and leaves its input alone', () => {
+  const good = { instrument: 'lute', degree: 2, octave: 0, chord: false };
+  const without = (key) => Object.fromEntries(Object.entries(good).filter(([k]) => k !== key));
+  const bad = [
+    ...[-1, 8, 1.5, '1', NaN].map((degree) => ({ ...good, degree })),
+    ...[2, -2, 0.5, '0'].map((octave) => ({ ...good, octave })),
+    ...['true', 1, null].map((chord) => ({ ...good, chord })),
+    ...['woodenBuckler', 'LUTE', '__proto__', 'toString'].map((instrument) => ({ ...good, instrument })),
+    without('octave'), without('chord'), without('instrument'), without('degree'),
+    { ...good, extra: 1 }, JSON.parse('{"instrument":"lute","degree":2,"octave":0,"chord":false,"__proto__":{}}'),
+    JSON.parse('{"instrument":"lute","degree":2,"octave":0,"__proto__":false}'),
+    null, undefined, [], 'lute', 3,
+  ];
+  for (const raw of bad) assert.equal(readNote(raw), null, JSON.stringify(raw));
+  const input = { ...good };
+  readNote(input);
+  assert.deepEqual(input, good);
+});
+
+test('RollingLimit allows 20 in any rolling second, a refusal taking no slot', () => {
+  assert.equal(NOTES_PER_SECOND, 20);
+  assert.equal(NOTE_WINDOW_MS, 1000);
+  const limit = new RollingLimit();
+  for (let i = 0; i < 20; i++) assert.equal(limit.allow(0), true);
+  assert.equal(limit.allow(0), false, 'the 21st in the same moment');
+  assert.equal(limit.allow(999), false);
+  assert.equal(limit.allow(1000), true, 'one slot frees a full second on');
+  assert.equal(limit.allow(1000), true);
+  assert.equal(limit.allow(NaN), false, 'a bad clock refuses');
+  const steady = new RollingLimit();
+  let allowed = 0;
+  for (let t = 0; t < 5000; t += 50) allowed += steady.allow(t);
+  assert.equal(allowed, 100, 'a steady 20 a second all pass');
+  const flood = new RollingLimit();
+  const perSecond = [0, 0, 0];
+  for (let t = 0; t < 3000; t += 25) if (flood.allow(t)) perSecond[Math.floor(t / 1000)]++;
+  assert.deepEqual(perSecond, [20, 20, 20], '40 a second gives exactly 20');
+  const small = new RollingLimit(2, 100);
+  assert.deepEqual([small.allow(0), small.allow(10), small.allow(50), small.allow(100), small.allow(105)], [true, true, false, true, false]);
 });

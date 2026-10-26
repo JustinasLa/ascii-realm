@@ -1,6 +1,7 @@
 import { randomBytes, randomInt } from 'node:crypto';
 import { WebSocket } from 'ws';
 import { createChatRelay } from './chat.js';
+import { createNoteRelay } from './notes.js';
 import { Player } from '../src/entities/player.js';
 import { spellIds } from '../src/spells/catalog.js';
 import { readSpellCast } from '../src/spells/protocol.js';
@@ -35,6 +36,7 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
   }
 
   const chat = createChatRelay({ send });
+  const notes = createNoteRelay({ send });
 
   // Who is in the lobby, in join order, each in the colour everyone sees
   // them in.
@@ -192,6 +194,8 @@ export function attachLobbies(wss, { reconnectMs = 30000, maxRooms = 128, maxPer
         }
       } else if (request.type === 'chat' || request.type === 'chat-toggle') {
         chat.handle(session, request);
+      } else if (request.type === 'note') {
+        notes.handle(session, request);
       } else if (request.type === 'tint' && session.player) {
         // A new name colour, or null for the automatic one. Anything else
         // keeps the colour as it was. The next snapshot carries it.

@@ -1,6 +1,6 @@
 import { readChat, readChatNotice } from './chat.js';
-import { cleanCode, cleanName, cleanSeed, lobbyServerUrl, MAX_PLAYERS, PROTOCOL_VERSION, readMembers,
-  UPDATE_MS, validCode } from './protocol.js';
+import { cleanCode, cleanName, cleanSeed, lobbyServerUrl, MAX_PLAYERS, PROTOCOL_VERSION, readMembers, readNote,
+  RollingLimit, UPDATE_MS, validCode } from './protocol.js';
 import { parseTint } from './tint.js';
 
 const validId = (id) => typeof id === 'string' && /^[0-9a-f]{1,32}$/.test(id);
@@ -17,6 +17,15 @@ export class MultiplayerClient {
   // wasn't sent at all.
   sendChat(channel, text) { return this.sendNow({ type: 'chat', channel, text }); }
   toggleChat(channel) { return this.sendNow({ type: 'chat-toggle', channel }); }
+  // A played note, for friends to hear. The server's 20-a-second window is
+  // kept here too, so a note it would drop is never sent; the window isn't
+  // reset by a reconnect, as the server's isn't. False means not sent.
+  sendNote(note) {
+    const clean = readNote(note);
+    if (!clean || this.status !== 'online' || this.socket?.readyState !== 1 || this.socket.bufferedAmount >= 32768) return false;
+    if (!this.noteLimit.allow(this.now())) return false;
+    return this.sendNow({ type: 'note', note: clean });
+  }
   // The player's name colour, or null for the automatic one. It goes with
   // every join, and straight to the lobby when it changes there.
   setTint(tint) {
@@ -25,8 +34,9 @@ export class MultiplayerClient {
   }
   constructor({ getState, onJoin = () => {}, onSnapshot = () => {}, onChange = () => {},
     WebSocketImpl = globalThis.WebSocket, baseUrl = globalThis.location?.href,
-    connectionTimeout = 8000, retryDelay = 1000 } = {}) {
-    Object.assign(this, { getState, onJoin, onSnapshot, onChange, WebSocketImpl, baseUrl, connectionTimeout, retryDelay });
+    connectionTimeout = 8000, retryDelay = 1000, now = () => performance.now() } = {}) {
+    Object.assign(this, { getState, onJoin, onSnapshot, onChange, WebSocketImpl, baseUrl, connectionTimeout, retryDelay, now });
+    this.noteLimit = new RollingLimit();
     this.status = 'offline';
     this.message = 'Play solo, create a lobby, or join with a code.';
     this.room = null;
@@ -116,6 +126,9 @@ export class MultiplayerClient {
         this.sendState();
       } else if (message.type === 'spellcast' && this.room && typeof message.casterId === 'string') {
         this.onCast?.(message);
+      } else if (message.type === 'note' && this.room && validId(message.from) && message.from !== this.id) {
+        const note = readNote(message.note);
+        if (note) this.onNote?.({ from: message.from, note });
       } else if (message.type === 'chat' && this.room) {
         const line = readChat(message);
         if (line) this.onChat?.(line);

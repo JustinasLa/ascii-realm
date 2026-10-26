@@ -364,3 +364,74 @@ test('a client gives up after five failed reconnects and a connection that canno
   assert.equal(refused.status, 'error');
   assert.match(refused.message, /Could not reach the lobby server/);
 });
+
+const LUTE_C = { instrument: 'lute', degree: 0, octave: 0, chord: false };
+const notesOf = (socket) => socket.sent.filter((m) => m.type === 'note');
+
+test('a note is sent only while online, not backed up and well formed', (t) => {
+  let time = 0;
+  const client = setup(t, { now: () => time });
+  assert.equal(client.sendNote(LUTE_C), false, 'solo');
+  client.connect({ mode: 'create', name: 'Kael', seed: 7 });
+  const socket = Socket.instances[0];
+  assert.equal(client.sendNote(LUTE_C), false, 'connecting');
+  socket.open();
+  socket.message(joined());
+  assert.equal(client.sendNote({ ...LUTE_C, extra: 1 }), false);
+  assert.equal(client.sendNote({ ...LUTE_C, degree: 8 }), false);
+  socket.bufferedAmount = 32768;
+  assert.equal(client.sendNote(LUTE_C), false, 'backed up');
+  socket.bufferedAmount = 0;
+  assert.equal(client.sendNote({ ...LUTE_C, chord: true }), true);
+  assert.deepEqual(notesOf(socket), [{ type: 'note', note: { ...LUTE_C, chord: true } }]);
+  socket.readyState = 2;
+  assert.equal(client.sendNote(LUTE_C), false, 'closing');
+});
+
+test('the page keeps the 20-a-second window too, through a reconnect', async (t) => {
+  let time = 0;
+  const client = setup(t, { now: () => time, retryDelay: 5 });
+  client.connect({ mode: 'create', name: 'Kael', seed: 7 });
+  const first = Socket.instances[0];
+  first.open();
+  first.message(joined());
+  const results = Array.from({ length: 21 }, () => client.sendNote(LUTE_C));
+  assert.equal(results.filter(Boolean).length, 20);
+  assert.equal(results[20], false);
+  first.close();
+  await delay(20);
+  const second = Socket.instances[1];
+  second.open();
+  second.message({ ...joined(), resumed: true });
+  time = 500;
+  assert.equal(client.sendNote(LUTE_C), false, 'a reconnect does not refill it');
+  time = 1000;
+  assert.equal(client.sendNote(LUTE_C), true);
+  assert.equal(notesOf(first).length + notesOf(second).length, 21);
+});
+
+test("friends' notes reach onNote only when well formed, from someone else, in a lobby", (t) => {
+  const heard = [];
+  const client = setup(t);
+  client.onNote = (event) => heard.push(event);
+  client.connect({ mode: 'create', name: 'Kael', seed: 7 });
+  const socket = Socket.instances[0];
+  socket.open();
+  socket.message({ type: 'note', from: 'b2', note: LUTE_C });
+  assert.equal(heard.length, 0, 'not before joining');
+  socket.message(joined());
+  socket.message({ type: 'note', from: 'b2', note: LUTE_C });
+  socket.message({ type: 'note', from: 'a1', note: LUTE_C });
+  socket.message({ type: 'note', from: 'XYZ', note: LUTE_C });
+  socket.message({ type: 'note', from: 'f'.repeat(40), note: LUTE_C });
+  socket.message({ type: 'note', from: 'b2', note: { ...LUTE_C, octave: 2 } });
+  socket.message({ type: 'note', from: 'b2' });
+  socket.message({ type: 'note2', from: 'b2', note: LUTE_C });
+  assert.deepEqual(heard, [{ from: 'b2', note: LUTE_C }]);
+  assert.equal(client.status, 'online');
+});
+
+test('the page clock is the monotonic one by default', (t) => {
+  const client = setup(t);
+  assert.equal(typeof client.now(), 'number');
+});

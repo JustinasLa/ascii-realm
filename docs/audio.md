@@ -413,6 +413,26 @@ a top panel (the status, target or menu frames), it is drawn on the first row
 clear of them while the head is in view on or below that row; otherwise it is
 not drawn.
 
+In a lobby, friends hear what you play (`server/notes.js`). Each note or
+chord goes to the lobby server as `{ instrument, degree, octave, chord }`,
+which is checked by `readNote` in `src/multiplayer/protocol.js` on the page
+and again on the server: a known instrument, degree 0-7, octave -1, 0 or 1 and
+a boolean chord on any instrument, every field present and nothing else. The
+server relays it to everyone else in the lobby, never back to you, at most 20
+notes per player in any rolling second (`RollingLimit`). That budget is kept
+on the player, so reconnecting doesn't refill it; past it, notes are dropped
+silently, and the page keeps the same window so it never sends one the server
+would drop. You always hear your own notes. A listener plays a friend's note
+where the friend's figure is drawn (interpolated 100 ms behind the network),
+on their own records bus with the same voice: full loudness at the friend,
+fading linearly to silence 64 m away, measured in metres from the listener's
+player, and panned like every positioned sound. From 64 m on nothing plays at
+all. Loudness and pan are set when the note starts and stay while it rings,
+even if either player moves. Friends' notes share the 24-voice pool with your
+own. The note glyph shows over the friend's head while the tab is visible.
+Notes from players the page doesn't know (not yet arrived, or gone) are
+ignored.
+
 ## Authoring synthesized sounds
 
 Use `tone(engine, options)` for a pitched note or `noise(engine, options)` for a

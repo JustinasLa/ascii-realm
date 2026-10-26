@@ -3,6 +3,8 @@ import { test } from 'node:test';
 import { dressFigure, drawFigure } from '../src/entities/figure.js';
 import { MATERIALS } from '../src/entities/materials.js';
 import { Player } from '../src/entities/player.js';
+import { ellipse } from '../src/entities/shapes.js';
+import { getWeapon } from '../src/entities/weapons.js';
 import { buildRig, project } from '../src/entities/rig.js';
 import { Inventory } from '../src/inventory/inventory.js';
 import { ASPECT } from '../src/world/world.js';
@@ -119,4 +121,29 @@ test('an unequipped outlaw still renders its head, torso, hands, and every leg s
     assert.ok(parts.some((part) => part.mat === mat));
   }
   assert.equal(parts.some((part) => part.mat === MATERIALS.blade), false);
+});
+
+test('a weapon other than the short sword is drawn from its sprite parts in the hand', () => {
+  for (const id of ['hammer', 'greatsword']) {
+    const player = outlaw();
+    player.equipment = { ...new Inventory({ starter: false }).equipment, mainHand: { id: 'woodenClub', count: 1 } };
+    // Drawn, so the hand holds it.
+    player.combat.active = 1;
+    player.combat.inHand = true;
+    const bare = dressFigure(player);
+    // A friend's state, carrying the weapon in their hand.
+    const weapon = getWeapon(id, 'iron');
+    const parts = dressFigure(Object.create(player, { weapon: { value: weapon } }));
+    assert.ok(parts.length > bare.length, id);
+    assert.ok(parts.some((part) => part.mat?.color?.join() === weapon.materialColor.join()), `${id}'s blade takes its metal`);
+    if (id === 'hammer') assert.ok(parts.some((part) => part.glyph !== undefined), 'a sprite part may set its own glyph');
+  }
+});
+
+test('a figure larger than the raster has room for grows it, and draws every cell', () => {
+  const big = Object.assign(ellipse(0, -60, 200, 60), { mat: MATERIALS.wood, z: 0 });
+  const player = outlaw();
+  let cells = 0;
+  drawFigure({}, { x0: -200, y0: -200, cols: 400, rows: 400 }, player, [big], () => { cells++; });
+  assert.ok(cells > 2048, `${cells} cells`);
 });
