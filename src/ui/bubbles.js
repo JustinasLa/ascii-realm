@@ -8,13 +8,15 @@ import { SCALE } from '../entities/rig.js';
 import { CHAT_CHANNELS } from '../multiplayer/chat.js';
 
 // Distances in metres, times in seconds. `rows` caps how many rows a stack
-// may stand, frame and rules included, per form factor; `covered` is the
-// opacity of a bubble whose speaker stands under a tree's crown.
+// may stand, frame and rules included, per form factor; a stack also never
+// stands taller than the room between the screen's top and its speaker's
+// head. `covered` is the opacity of a bubble whose speaker stands under a
+// tree's crown; `edge` keeps a box that many CSS px inside the safe area.
 export const BUBBLES = Object.freeze({
   lineChars: 32, maxUtterances: 5, lifetime: 5, fade: 0.4,
   lift: 2.18, bob: 0.12, bobPeriod: 60, bobStep: 8, tickRate: 20, follow: 0.35,
   rows: Object.freeze({ desktop: 20, portrait: 14, landscape: 9 }),
-  minWidth: 8, covered: 0.6, edge: 4, stall: 0.25,
+  minWidth: 8, minRows: 3, covered: 0.6, edge: 4, stall: 0.25, settle: 500,
 });
 
 const CUT = '...';
@@ -102,15 +104,36 @@ export const followShare = (dt) => 1 - (1 - BUBBLES.follow) ** (dt * BUBBLES.tic
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
+// How many rows a stack may stand when its tail tip can rise to `tipY` CSS
+// px below the top of the safe area: every text row fits, and only the top
+// rule may leave the screen at the top of the bob. Never over the form's cap.
+export function rowBudget(tipY, lineH, cap) {
+  return clamp(Math.floor(tipY / lineH) + 1, BUBBLES.minRows, cap);
+}
+
 export class SpeechBubbles {
-  constructor({ doc = document, root, now = () => performance.now(), reducedMotion = () => false,
-    pixelRatio = () => globalThis.devicePixelRatio || 1, measure = null } = {}) {
-    Object.assign(this, { doc, root, now, reducedMotion, pixelRatio });
+  constructor({ doc = document, win = doc.defaultView, root, now = () => performance.now(), reducedMotion = () => false,
+    pixelRatio = () => globalThis.devicePixelRatio || 1, measure = null, insets = null } = {}) {
+    Object.assign(this, { doc, win, root, now, reducedMotion, pixelRatio });
     this.measure = measure ?? ((form) => this.probe(form));
+    this.insets = insets ?? (() => this.probeInsets());
     this.stacks = new Map();
     this.metrics = null;
+    this.box = null;
+    this.settleUntil = -Infinity;
     this.form = null;
     this.last = null;
+    // A phone turned from one landscape to the other keeps its size but
+    // swaps its notch's side, so the safe area is read again for a moment
+    // after any turn or resize. The layer itself can settle on its new size
+    // later than the event, so its own resizes count too.
+    const unsettle = () => {
+      this.box = null;
+      this.settleUntil = this.now() + BUBBLES.settle;
+    };
+    win?.addEventListener?.('resize', unsettle);
+    win?.addEventListener?.('orientationchange', unsettle);
+    if (win?.ResizeObserver && root) new win.ResizeObserver(unsettle).observe(root);
   }
 
   get size() { return this.stacks.size; }
@@ -124,7 +147,7 @@ export class SpeechBubbles {
     const key = message.from === selfId ? 'self' : message.from;
     let stack = this.stacks.get(key);
     if (!stack) {
-      stack = { utterances: [], node: null, at: null, dirty: true, tail: -1, rows: [], opacity: [], z: '',
+      stack = { utterances: [], node: null, at: null, dirty: true, budget: 0, tail: -1, rows: [], slots: [], opacity: [], z: '',
         transform: '', covered: false, hidden: true };
       this.stacks.set(key, stack);
     }
@@ -165,6 +188,30 @@ export class SpeechBubbles {
     return { form, charW: plain.width / 32, lineH: plain.height, boldKeepsWidth: Math.abs(bold.width - plain.width) <= 0.5 };
   }
 
+  // The screen's safe-area insets in CSS px (a notch, rounded corners, the
+  // home bar), from a hidden probe padded by `env(safe-area-inset-*)`.
+  probeInsets() {
+    const span = this.doc.createElement('span');
+    span.className = 'bubble-safe';
+    this.root.append(span);
+    const style = this.win.getComputedStyle(span);
+    const px = (value) => Number.parseFloat(value) || 0;
+    const insets = { top: px(style.paddingTop), left: px(style.paddingLeft), right: px(style.paddingRight) };
+    span.remove();
+    return insets;
+  }
+
+  // The layer's box and the screen's safe area, read once and then again
+  // on every frame while a turn or resize settles: read on every frame,
+  // after the frame's first DOM writes, they would force a style pass.
+  layout(now) {
+    if (!this.box || now <= this.settleUntil) {
+      const { left, top, width, height } = this.root.getBoundingClientRect();
+      this.box = { left, top, width, height, safe: this.insets() };
+    }
+    return this.box;
+  }
+
   // `anchors` maps a speaker to `{ x, feetY, nameRow, depth, covered }` in
   // world cells; `projection` turns world cells into CSS pixels (or is null);
   // `form` is 'desktop', 'portrait' or 'landscape'.
@@ -179,10 +226,11 @@ export class SpeechBubbles {
     }
     const life = BUBBLES.lifetime * 1000;
     for (const [key, stack] of this.stacks) {
-      const before = stack.utterances.length;
+      // The oldest goes first, so only a stack whose oldest is due changes.
+      if (now - stack.utterances[0].born < life) continue;
       stack.utterances = stack.utterances.filter((u) => now - u.born < life);
       if (!stack.utterances.length) this.remove(key);
-      else if (stack.utterances.length !== before) stack.dirty = true;
+      else stack.dirty = true;
     }
     if (!this.stacks.size) return;
     const reduced = this.reducedMotion();
@@ -207,18 +255,25 @@ export class SpeechBubbles {
     }
     if (!showing.length) return;
     this.metrics ??= this.measure(form);
-    const box = this.root.getBoundingClientRect();
+    const box = this.layout(now);
+    const { safe } = box;
     const dpr = this.pixelRatio();
     const snap = (v) => Math.round(v * dpr) / dpr;
+    const cap = BUBBLES.rows[form] ?? BUBBLES.rows.desktop;
+    // The highest the tip rises over standing feet, so a stack keeps its rows
+    // through the bob and through a jump (which lifts the nameplate, not the
+    // feet).
+    const rise = (BUBBLES.lift + (reduced ? 0 : BUBBLES.bob)) * SCALE;
     showing.sort((a, b) => a.anchor.depth - b.anchor.depth);
     showing.forEach(({ stack, anchor, tip }, rank) => {
-      if (stack.dirty) this.build(stack, form);
       const { charW, lineH } = this.metrics;
+      const budget = rowBudget(projection.project(anchor.x, anchor.feetY - rise).y - box.top - safe.top, lineH, cap);
+      if (stack.dirty || budget !== stack.budget) this.build(stack, budget);
       const p = projection.project(stack.at.x, tip);
       const columns = stack.width + 4;
       const boxW = columns * charW;
       const px = p.x - box.left;
-      const left = clamp(px - boxW / 2, BUBBLES.edge, box.width - BUBBLES.edge - boxW);
+      const left = clamp(px - boxW / 2, safe.left + BUBBLES.edge, box.width - safe.right - BUBBLES.edge - boxW);
       const tail = clamp(Math.floor((px - left) / charW), 1, stack.width + 2);
       if (tail !== stack.tail) this.setTail(stack, tail);
       this.fade(stack, now);
@@ -241,16 +296,31 @@ export class SpeechBubbles {
     if (stack.node) stack.node.hidden = hidden;
   }
 
-  span(text, className) {
-    const node = this.doc.createElement('span');
-    node.className = className;
-    node.textContent = text;
-    return node;
+  // A row of the box: three spans (frame, text or tail, frame) that are
+  // kept and rewritten, never rebuilt, so a new line costs a few text writes.
+  slot(stack, index) {
+    let slot = stack.slots[index];
+    if (!slot) {
+      const node = this.doc.createElement('span');
+      const parts = [0, 1, 2].map(() => this.doc.createElement('span'));
+      node.append(...parts);
+      slot = { node, parts, className: null, texts: ['', '', ''], classes: ['', '', ''], opacity: '' };
+      stack.slots.push(slot);
+    }
+    return slot;
   }
 
-  // Lays the stack's rows out afresh, for a new or expired line or another
-  // form factor.
-  build(stack, form) {
+  write(slot, className, texts, classes) {
+    if (slot.className !== className) slot.node.className = slot.className = className;
+    for (let i = 0; i < 3; i++) {
+      if (slot.texts[i] !== texts[i]) slot.parts[i].textContent = slot.texts[i] = texts[i];
+      if (slot.classes[i] !== classes[i]) slot.parts[i].className = slot.classes[i] = classes[i];
+    }
+  }
+
+  // Lays the stack's rows out within `budget` rows, for a new or expired
+  // line, another form factor or more or less room overhead.
+  build(stack, budget) {
     if (!stack.node) {
       stack.node = this.doc.createElement('div');
       stack.node.className = 'bubble';
@@ -258,22 +328,22 @@ export class SpeechBubbles {
       this.root.append(stack.node);
     }
     stack.node.classList.toggle('bubble-no-bold', !this.metrics.boldKeepsWidth);
-    const { rows, width } = bubbleRows(stack.utterances, BUBBLES.rows[form] ?? BUBBLES.rows.desktop);
-    stack.node.textContent = '';
-    stack.rows = rows.map((row) => {
-      const node = this.doc.createElement('span');
+    const { rows, width } = bubbleRows(stack.utterances, budget);
+    stack.rows = rows.map((row, i) => {
+      const slot = this.slot(stack, i);
       if (row.kind === 'text') {
         const { channel, muffled } = row.utterance;
-        node.className = `bubble-row bubble-${channel}${muffled ? ' bubble-muffled' : ''}`;
-        node.append(this.span('| ', 'bubble-frame'), this.span(row.text, 'bubble-text'), this.span(' |', 'bubble-frame'));
+        this.write(slot, `bubble-row bubble-${channel}${muffled ? ' bubble-muffled' : ''}`, ['| ', row.text, ' |'],
+          ['bubble-frame', 'bubble-text', 'bubble-frame']);
       } else {
-        node.className = 'bubble-row bubble-frame';
-        if (row.text !== null) node.textContent = row.text;
+        this.write(slot, 'bubble-row bubble-frame', [row.text ?? '', '', ''], ['bubble-frame', '', 'bubble-frame']);
       }
-      stack.node.append(node);
-      return { ...row, node, opacity: '' };
+      if (slot.node.parentNode !== stack.node) stack.node.append(slot.node);
+      return { ...row, slot };
     });
+    for (const spare of stack.slots.splice(rows.length)) spare.node.remove();
     stack.width = width;
+    stack.budget = budget;
     stack.tail = -1;
     stack.dirty = false;
   }
@@ -282,21 +352,23 @@ export class SpeechBubbles {
   // a box held inside the screen.
   setTail(stack, tail) {
     stack.tail = tail;
-    const [left, , right] = bottomRule(stack.width, tail);
-    const bottom = stack.rows.at(-1).node;
-    bottom.textContent = '';
-    bottom.append(this.span(left, 'bubble-frame'), this.span('v', 'bubble-tail'), this.span(right, 'bubble-frame'));
+    this.write(stack.rows.at(-1).slot, 'bubble-row bubble-frame', bottomRule(stack.width, tail),
+      ['bubble-frame', 'bubble-tail', 'bubble-frame']);
   }
 
   // Each utterance fades over its last moments; the frame goes with the
-  // newest.
+  // newest. A fading row is lifted onto a layer of its own (`bubble-fading`),
+  // so its opacity changes without drawing the box again.
   fade(stack, now) {
     const life = BUBBLES.lifetime * 1000;
     const fadeMs = BUBBLES.fade * 1000;
     for (const row of stack.rows) {
       const left = clamp((life - (now - row.utterance.born)) / fadeMs, 0, 1);
       const opacity = left < 1 ? String(Math.round(left * 100) / 100) : '';
-      if (opacity !== row.opacity) row.node.style.opacity = row.opacity = opacity;
+      const { slot } = row;
+      if (opacity === slot.opacity) continue;
+      if (!opacity !== !slot.opacity) slot.node.classList.toggle('bubble-fading', opacity !== '');
+      slot.node.style.opacity = slot.opacity = opacity;
     }
   }
 }

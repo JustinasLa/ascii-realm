@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { drawNameTag } from '../src/entities/figure.js';
 import { SCALE } from '../src/entities/rig.js';
 import { MAX_CHAT_LENGTH } from '../src/multiplayer/chat.js';
-import { anchorRow, bobRows, bottomRule, BUBBLES, bubbleRows, figureTop, followShare, SpeechBubbles,
+import { anchorRow, bobRows, bottomRule, BUBBLES, bubbleRows, figureTop, followShare, rowBudget, SpeechBubbles,
   wrapBubble } from '../src/ui/bubbles.js';
 
 // Just enough DOM for the bubbles: elements with children, classes, a style
@@ -55,15 +55,39 @@ const projection = {
   project: (x, y) => ({ x: x * CELL.w, y: y * CELL.h, visible: x >= 0 && x <= 320 && y >= 0 && y <= 90 }),
 };
 
+// A window whose safe-area insets the test sets; `getComputedStyle` gives
+// them as the probe's padding, the way `env(safe-area-inset-*)` does.
+function fakeWindow() {
+  const listeners = {};
+  const win = {
+    safe: { top: 0, right: 0, left: 0 }, reads: 0, listeners, resized: null,
+    // Calls `resized()` when the layer settles on a new size after layout.
+    ResizeObserver: class {
+      constructor(fn) { this.fn = fn; }
+      observe(node) { win.resized = () => this.fn([{ target: node }]); }
+    },
+    addEventListener: (type, fn) => { (listeners[type] ??= []).push(fn); },
+    fire: (type) => { for (const fn of listeners[type] ?? []) fn(); },
+    getComputedStyle: (node) => {
+      assert.ok(node.className.includes('bubble-safe') && node.parentNode, 'read from a probe in the layer');
+      win.reads++;
+      const { top, right, left } = win.safe;
+      return { paddingTop: `${top}px`, paddingRight: `${right}px`, paddingLeft: left ? `${left}px` : '', paddingBottom: '0px' };
+    },
+  };
+  return win;
+}
+
 function setup({ reduced = false, measure, dpr = 1 } = {}) {
-  const doc = { createElement: (tag) => new El(tag) };
+  const win = fakeWindow();
+  const doc = { createElement: (tag) => new El(tag), defaultView: win };
   const root = new El('div');
   root.rect = { left: 0, top: 0, width: 1280, height: 720 };
   let time = 1000;
   const bubbles = new SpeechBubbles({ doc, root, now: () => time, reducedMotion: () => reduced, pixelRatio: () => dpr,
     measure: measure === undefined ? (() => ({ charW: CHAR_W, lineH: LINE_H, boldKeepsWidth: true })) : measure });
   const boxes = () => root.children;
-  return { doc, root, bubbles, boxes, tick: (ms) => { time += ms; }, at: () => time };
+  return { doc, win, root, bubbles, boxes, tick: (ms) => { time += ms; }, at: () => time };
 }
 
 const line = (text, { from = 'b2', channel = 'rp', muffled = false } = {}) => ({ seq: 1, channel, from, name: 'Bryn',
@@ -241,6 +265,14 @@ test('an utterance is opaque for 4.6 s and fades over its last 0.4 s', () => {
   tick(1);
   bubbles.update(where, projection);
   assert.equal(opacity(1), '0.5', 'written only when it changes');
+  const fading = () => rows().map((row) => row.classList.contains('bubble-fading'));
+  assert.deepEqual(fading(), [false, true, true, false, false], 'only fading rows get a layer of their own');
+  // The first line goes; its rows now hold the second line, opaque again.
+  tick(200);
+  bubbles.update(where, projection);
+  assert.deepEqual(boxes()[0].rows.map((r) => r.trim()), ['.----------.', '| second   |', "'-----v----'"]);
+  assert.deepEqual(fading(), [false, false, false]);
+  assert.equal(opacity(1), '');
 });
 
 test('leaving the lobby clears the bubbles; a player leaving takes theirs', () => {
@@ -438,4 +470,161 @@ test('nothing is laid out while no speaker is in view, and a cleared page stays 
   bubbles.update(anchors([['b2', speaker()]]), projection);
   assert.equal(boxes().length, 0);
   assert.equal(bubbles.size, 0);
+});
+
+test('a landscape phone keeps the box out of its notch, either way round and after a turn', () => {
+  const { bubbles, boxes, root, win, tick } = setup({ reduced: true });
+  root.rect = { left: 0, top: 0, width: 852, height: 393 };
+  win.safe = { top: 0, left: 59, right: 0 };
+  bubbles.receive(line('well met, traveller'), 'a1');
+  const width = (19 + 4) * CHAR_W;
+  // Settles the anchor over a speaker at column `x` and gives the box's
+  // left edge and the length of the bottom rule before the `v`.
+  const place = (x) => {
+    bubbles.update(anchors([['b2', speaker(x, 60)]]), projection, 'landscape');
+    bubbles.stacks.get('b2').at.x = x;
+    bubbles.update(anchors([['b2', speaker(x, 60)]]), projection, 'landscape');
+    tick(16);
+    const node = boxes()[0];
+    return { left: translate(node)[0], before: node.children.at(-1).children[0].textContent.length };
+  };
+  // The notch on the left: a speaker under it has the box beside it, the
+  // v at the box's corner, as near the speaker as it can be.
+  assert.deepEqual(place(2), { left: 59 + BUBBLES.edge, before: 1 });
+  assert.equal(place(40).left, Math.round(40 * CELL.w - width / 2), 'clear of the notch, centred again');
+  assert.equal(place(212).left, 852 - BUBBLES.edge - width, 'the right edge has no notch');
+  // Turned the other way: the same size, the notch now on the right.
+  win.safe = { top: 0, left: 0, right: 59 };
+  win.fire('orientationchange');
+  tick(100);
+  assert.equal(place(2).left, BUBBLES.edge, 'the left edge is free now');
+  const right = place(212);
+  assert.equal(right.left, 852 - 59 - BUBBLES.edge - width);
+  assert.equal(right.before, 21, 'the v at the far corner, toward the speaker');
+  // Turned upright, the layer settling on its new size well after the
+  // resize event.
+  win.fire('resize');
+  tick(BUBBLES.settle * 2);
+  place(97);
+  root.rect = { left: 0, top: 0, width: 393, height: 852 };
+  win.safe = { top: 59, left: 0, right: 0 };
+  win.resized();
+  assert.equal(place(1).left, BUBBLES.edge);
+  assert.equal(place(97).left, 393 - BUBBLES.edge - width);
+  assert.equal(root.children.some((node) => node.className.includes('bubble-safe')), false, 'the probe is gone again');
+});
+
+test('the screen box and safe area are read once, and on every frame while a turn settles', () => {
+  const { bubbles, win, tick, root } = setup({ reduced: true });
+  let boxReads = 0;
+  root.getBoundingClientRect = () => { boxReads++; return root.rect; };
+  bubbles.receive(line('hello'), 'a1');
+  const where = anchors([['b2', speaker()]]);
+  bubbles.update(where, projection);
+  bubbles.update(where, projection);
+  assert.equal(win.reads, 1, 'read once while nothing changes');
+  win.fire('resize');
+  for (let i = 0; i < 3; i++) {
+    tick(BUBBLES.settle / 4);
+    bubbles.update(where, projection);
+  }
+  assert.equal(win.reads, 4, 'read on each frame of the turn');
+  tick(BUBBLES.settle);
+  bubbles.update(where, projection);
+  assert.equal(win.reads, 4, 'settled');
+  assert.equal(boxReads, 4, 'the box with it');
+  // Turned while nobody speaks: the next bubble still reads the new screen.
+  tick(BUBBLES.lifetime * 1000);
+  bubbles.update(where, projection);
+  assert.equal(bubbles.size, 0);
+  root.rect = { left: 0, top: 0, width: 600, height: 900 };
+  win.fire('orientationchange');
+  tick(BUBBLES.settle * 2);
+  bubbles.receive(line('hello again'), 'a1');
+  bubbles.update(where, projection);
+  assert.equal(bubbles.box.width, 600);
+  assert.equal(win.reads, 5);
+  assert.deepEqual(new SpeechBubbles({ doc: { defaultView: null }, root: new El('div') }).box, null, 'no window, no listeners');
+});
+
+test('a stack stands only as tall as the room over its speaker, within the form cap', () => {
+  const { bubbles, boxes, win } = setup({ reduced: true });
+  // Nine lines of five-letter words.
+  bubbles.receive(line('word '.repeat(50).trim()), 'a1');
+  const rise = BUBBLES.lift * SCALE;
+  // Feet that put the highest tip `px` CSS px under the screen's top.
+  const feetFor = (px) => rise + px / CELL.h;
+  const show = (feetY, form = 'desktop', extra = {}) => {
+    bubbles.update(anchors([['b2', speaker(160, feetY, extra)]]), projection, form);
+    const node = boxes()[0];
+    return { rows: node.rows, top: translate(node)[1] };
+  };
+  const roomy = show(70);
+  assert.equal(roomy.rows.length, 11, 'all nine lines with room to spare');
+  assert.ok(roomy.rows[1].includes('word word'));
+  const six = show(feetFor(5 * LINE_H + 5));
+  assert.equal(six.rows.length, 6, 'room for five rows and the top rule: four lines');
+  assert.ok(six.rows[4].includes('word...'), 'cut at the end, never at the start');
+  assert.ok(six.rows[1].startsWith('| word word'));
+  assert.ok(six.top + LINE_H >= 0, `the first line is on the screen (${six.top})`);
+  // With the tip at full height (no nameplate under it), only the top rule
+  // may be over the screen's edge.
+  bubbles.stacks.get('b2').at = null;
+  const high = show(feetFor(5 * LINE_H + 5), 'desktop', { nameRow: Infinity });
+  assert.equal(high.rows.length, 6);
+  assert.ok(high.top < 0 && high.top + LINE_H >= 0, `the top rule over the edge, the text under it (${high.top})`);
+  assert.equal(show(feetFor(30 * LINE_H), 'landscape').rows.length, 9, 'never over the form cap');
+  assert.equal(show(feetFor(-50)).rows.length, BUBBLES.minRows, 'a head over the top still shows its first line');
+  // A jump lifts the nameplate, not the feet: the rows stay and the box
+  // still clears the nameplate.
+  const feet = feetFor(5 * LINE_H + 5);
+  show(feet);
+  const nameRow = feet - 40;
+  const jumping = show(feet, 'desktop', { nameRow });
+  assert.equal(jumping.rows.length, 6);
+  assert.ok(jumping.top + 6 * LINE_H <= (nameRow - 1) * CELL.h + 0.5, 'above the nameplate mid-jump');
+  // A notch or status bar over the top takes its rows.
+  win.safe = { top: 28, left: 0, right: 0 };
+  win.fire('resize');
+  assert.equal(show(feet).rows.length, 4);
+  assert.equal(rowBudget(6 * LINE_H, LINE_H, 9), 7);
+  assert.equal(rowBudget(20 * LINE_H, LINE_H, 9), 9);
+  assert.equal(rowBudget(-1, LINE_H, 9), BUBBLES.minRows);
+});
+
+test('a new or expired line rewrites the rows in place instead of building them again', () => {
+  const { doc, bubbles, boxes, tick } = setup({ reduced: true });
+  let made = 0;
+  const create = doc.createElement;
+  doc.createElement = (tag) => { made++; return create(tag); };
+  const where = anchors([['b2', speaker()]]);
+  bubbles.receive(line('one'), 'a1');
+  bubbles.update(where, projection);
+  const first = [...boxes()[0].children];
+  assert.deepEqual(boxes()[0].rows, ['.----------.', '| one      |', "'-----v----'"]);
+  tick(1000);
+  bubbles.receive(line('two', { channel: 'yell' }), 'a1');
+  made = 0;
+  bubbles.update(where, projection);
+  const node = boxes()[0];
+  assert.deepEqual(node.rows, ['.----------.', '| one      |', '|----------|', '| two      |', "'-----v----'"]);
+  assert.equal(made, 8, 'two new rows of three spans');
+  assert.deepEqual(node.children.slice(0, 3), first, 'the old rows are kept');
+  const rule = node.children[2];
+  assert.equal(rule.className, 'bubble-row bubble-frame');
+  assert.deepEqual(rule.children.map((c) => c.className), ['bubble-frame', '', 'bubble-frame'], 'the tail became a rule');
+  assert.equal(node.children[3].className, 'bubble-row bubble-yell');
+  assert.equal(node.children[4].children[1].className, 'bubble-tail');
+  // The first line goes: the rows shrink and the spares leave the box.
+  const grown = [...node.children];
+  tick(4000);
+  made = 0;
+  bubbles.update(where, projection);
+  assert.deepEqual(node.rows, ['.----------.', '| two      |', "'-----v----'"]);
+  assert.equal(made, 0);
+  assert.equal(node.children.length, 3);
+  assert.deepEqual(node.children, grown.slice(0, 3));
+  assert.equal(grown[3].parentNode, null);
+  assert.equal(grown[4].parentNode, null);
+  assert.equal(node.children[1].className, 'bubble-row bubble-yell');
 });

@@ -460,7 +460,9 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 #bubble-root { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; contain: strict; }
 .bubble { position: absolute; left: 0; top: 0; font: 12px/14px var(--font); white-space: pre; font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; will-change: transform; contain: layout style; }
 .bubble-covered { opacity: 0.6; }
+.bubble-fading { will-change: opacity; }
 .bubble-probe { visibility: hidden; }
+.bubble-safe { position: absolute; visibility: hidden; padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 .bubble-bold { font-weight: 700; }
 .bubble-row { display: block; background: rgba(6, 9, 10, 0.25); }
 .bubble-frame { color: var(--quiet); }

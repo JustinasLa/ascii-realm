@@ -286,7 +286,7 @@ const debug = { player, camera, world, grass, splashes, debris, weather, fog, fi
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
-  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, intervalMs: 0, rate: 60 } };
+  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, bubblesMs: 0, intervalMs: 0, rate: 60 } };
 if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
@@ -424,9 +424,13 @@ const chat = new ChatUi({ doc: document, win: window, phone: device, client: mul
   colorOf: (member) => colorOf(member.color) });
 debug.chat = chat;
 // What players say floats over their heads, above the scene and below the HUD.
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+// The reduced-motion setting is kept from its change events: reading the
+// query on every frame costs a style check.
+const reducedMotionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+let reducedMotion = reducedMotionQuery.matches;
+reducedMotionQuery.addEventListener('change', (event) => { reducedMotion = event.matches; });
 const bubbles = new SpeechBubbles({ doc: document, root: document.getElementById('bubble-root'),
-  reducedMotion: () => reducedMotion.matches });
+  reducedMotion: () => reducedMotion });
 debug.bubbles = bubbles;
 multiplayer.onChat = (message) => {
   chat.receive(message, multiplayer.players);
@@ -1531,7 +1535,15 @@ function frame(now) {
     drawTrail(renderer, view, peer.player.trail, peer.trailTime);
     drawNameTag(renderer, view, peer.player, peer.figure, peer.name, colorOf(peer.color));
   }
-  const speakers = bubbles.size ? bubbleAnchors(view, model ? model.top : Math.floor(player.y + figureTop(figure)), peers) : null;
+  // Speech bubbles are placed before this frame's HUD writes, so reading
+  // the screen's layout for them costs no extra style pass.
+  const hudView = { ...view, cellW: renderer.cellW, cellH: renderer.cellH };
+  const bubblesStarted = performance.now();
+  if (bubbles.size) {
+    bubbles.update(bubbleAnchors(view, model ? model.top : Math.floor(player.y + figureTop(figure)), peers),
+      hud.projector(hudView), device.phone ? layout.orientation : 'desktop');
+  }
+  const bubblesMs = performance.now() - bubblesStarted;
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view);
@@ -1562,10 +1574,8 @@ function frame(now) {
   hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
   touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
-  const hudView = { ...view, cellW: renderer.cellW, cellH: renderer.cellH };
   hud.update(dt, hudView);
   chat.update(dt);
-  if (speakers) bubbles.update(speakers, hud.projector(hudView), device.phone ? layout.orientation : 'desktop');
   inventoryScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;
@@ -1578,6 +1588,7 @@ function frame(now) {
   if (quality.sample(workMs, clock.rawMs / 1000, clock.period) || paced.cells) resize();
   debug.metrics.frames++;
   debug.metrics.workMs = workMs;
+  debug.metrics.bubblesMs = bubblesMs;
   debug.metrics.intervalMs = clock.rawMs;
   debug.metrics.rate = pacer.rate;
   schedule();

@@ -148,6 +148,8 @@ test('each frame with bubbles gives them every speaker in view, their nameplate 
     nameRow: Math.floor(near.player.y - 20.5) - 2, covered: true });
   const top = Math.floor(near.player.y - 20.5);
   assert.deepEqual(hidden, [[Math.floor(near.player.x), top + 1]], 'the head under the nameplate, first match wins');
+  assert.ok(Number.isFinite(game.metrics.bubblesMs) && game.metrics.bubblesMs >= 0, 'the frame times the bubbles\' share');
+  assert.ok(game.metrics.bubblesMs <= game.metrics.workMs);
 });
 
 test('phones give the bubbles their orientation', async () => {
