@@ -3,8 +3,8 @@ import { dryLand, toCells } from './monsters.js';
 
 // Saddled horses with a rider sitting them, standing idle. This first look
 // has no mounting and no travel: a horse stands where it was placed, breathes
-// and swishes its tail, and every so often shifts its weight from hoof to
-// hoof. A horse with nobody on it may also put its head down to graze; one
+// and swishes its tail, and every so often shifts its weight and paws the
+// ground once with a hind hoof. A horse with nobody on it may also put its head down to graze; one
 // being ridden never does.
 
 export const HORSE = Object.freeze({

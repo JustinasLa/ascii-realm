@@ -7,8 +7,8 @@ the world unless asked for.
 ## What you see
 
 - **The horse** is a rigged model playing its own idle: it breathes and
-  swishes its tail, and every 8 to 20 seconds it shifts its weight from hoof
-  to hoof. A horse being ridden never puts its head down to graze. The top of
+  swishes its tail, and every 8 to 20 seconds it shifts its weight and paws
+  the ground once with a hind hoof. A horse being ridden never puts its head down to graze. The top of
   its back, where the saddle sits, stands 1.5 m high and its withers about
   1.6 m, a riding horse of 15 to 16 hands. It is 2.4 m from nose to rump.
 - **The rider** is a stand-in dressed as a fresh outlaw: hood, cloak (taken
@@ -25,8 +25,8 @@ the world unless asked for.
   legs hides the hind hooves but not the front legs, and the rider's boots
   layer with the horse's barrel.
 - Horses are drawn like the animals, a little dimmer than the player, so the
-  player stays the brightest figure on screen. At most 4 are drawn (2 on
-  phones), the nearest the player first.
+  player stays the brightest figure on screen. At most 2 are drawn, on
+  phones too, the nearest the player first; any others stand unseen.
 
 The player walks through a horse, as through a deer. The rider is the
 outlaw's figure until riding arrives, when the player takes the seat.

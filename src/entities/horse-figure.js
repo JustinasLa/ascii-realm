@@ -11,12 +11,15 @@ import { getWeapon } from './weapons.js';
 // A saddled horse and the rider sitting it, drawn as one figure. Both are
 // rigged models playing their own clips: the horse its idles, the rider the
 // outlaw's own seated loop. They are rendered together from the game's
-// camera into slots of one offscreen image, and drawn a second time as
-// depth into the slots above, so a single read brings back how far each
-// pixel is from the camera too. A horse is long, and grass rooted between
-// its legs must hide the hind hooves but not the front ones, so its cells
-// are sorted into bands by the ground row under each one and drawn among
-// the grass rows band by band.
+// camera into slots of one offscreen image, and the horse is drawn a
+// second time as depth into the slots above, so a single read brings back
+// how far each pixel is from the camera too. A horse is long, and grass
+// rooted between its legs must hide the hind hooves but not the front
+// ones, so its cells are sorted into bands by the ground row under each one
+// and drawn among the grass rows band by band. The rider is left out of the
+// depth: their cells take the depth of the horse behind them (their legs
+// layer with its barrel) or else the horse's own row, and leaving out the
+// rider's many triangles keeps the second pass cheap.
 
 const SX = 4;
 const SY = 6;
@@ -24,8 +27,9 @@ const N = SX * SY;
 const MAX_COLS = 120;
 const MAX_ROWS = 64;
 const PAD = 2;
-// At most this many are drawn, the nearest the player first.
-export const MAX_DRAWN = 4;
+// At most this many are drawn, the nearest the player first: each costs
+// two renders of the image.
+export const MAX_DRAWN = 2;
 export const MAX_DRAWN_PHONE = 2;
 const COS = Math.sqrt(1 - TILT * TILT);
 // The camera stands this far from the figure and sees depth only between
@@ -51,13 +55,14 @@ const CLOAK_TO_SADDLE = 0.55;
 
 // The rider: the outlaw's seated loop from the waist up, legs set astride
 // the barrel with their feet in the stirrups. Metres, measured on the
-// horse as it stands: the seat on the back above the seat bone (sinking a
-// little into it), the stirrups below the top of the back, a little ahead
-// of the hips and out beyond the barrel, and where the knee is turned to
-// before the leg reaches for its stirrup.
+// horse as it stands: the seat on the back ahead of the seat bone, just
+// behind the withers so the lower leg hangs at the girth (sinking a little
+// into the back), the stirrups below the top of the back, a little ahead
+// of the hips and out beyond the barrel, and where the knee is turned to,
+// out round the barrel, before the leg reaches for its stirrup.
 export const RIDER = Object.freeze({
   clip: 'Sitting_Idle_Loop',
-  seat: { z: 0, sink: 0.02 },
+  seat: { z: 0.4, sink: 0.02 },
   stirrup: { drop: 0.64, forward: 0.02, out: 0.06 },
   knee: { drop: 0.28, forward: 0.32, out: 0.16 },
 });
@@ -202,10 +207,10 @@ class HorseRig {
     this.sit.play();
     this.model.add(model);
 
-    // Every mesh's own material and a depth one with the same sidedness, so
-    // a cloak seen from behind still has its depth.
+    // Every mesh of the horse's own material and a depth one with the same
+    // sidedness, so a surface seen from behind still has its depth.
     this.surfaces = [];
-    this.model.traverse((o) => {
+    this.inner.traverse((o) => {
       if (!o.isMesh) return;
       const colour = o.material;
       const depth = Array.isArray(colour) ? colour.map((m) => figures.depthFor(m)) : figures.depthFor(colour);
@@ -214,9 +219,11 @@ class HorseRig {
     this.ground = 0;
   }
 
-  // Draws with the depth materials, or back with the colours.
+  // Draws the horse with the depth materials and hides the rider, or brings
+  // both back.
   showDepth(on) {
     for (const s of this.surfaces) s.mesh.material = on ? s.depth : s.colour;
+    this.rider.visible = !on;
   }
 
   // The horse's clip weights for what it is doing, eased as for the

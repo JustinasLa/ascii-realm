@@ -90,7 +90,7 @@ function horsePoints(rig, keep) {
 function fakeGPU(figs, depthOf = () => 128) {
   const slots = [];
   const gpu = {
-    slots, reads: 0, log: [],
+    slots, reads: 0, log: [], riders: [],
     setPixelRatio() {}, setSize() {}, setClearColor() {}, setScissorTest() {}, clear() {}, setScissor() {},
     setViewport(x, y, w, h) { this.last = { x, y, w, h }; },
     render() {
@@ -98,6 +98,7 @@ function fakeGPU(figs, depthOf = () => 128) {
       const depth = [...f.rigs.values()].every((rig) => rig.surfaces.every((s) => [s.depth].flat()
         .every((m, i) => [s.mesh.material].flat()[i] === m)));
       gpu.log.push(depth ? 'depth' : 'colour');
+      gpu.riders.push([...f.rigs.values()].every((rig) => rig.rider.visible));
       slots.push({ ...this.last, depth });
     },
     getContext() {
@@ -176,6 +177,40 @@ test('the lowest hoof stays on the ground through every idle the horse plays', (
     // The clip played is the one asked for.
     assert.ok(f.rigs.get(h).weights[clip] > 0.99);
   }
+});
+
+test('a planted hoof holds still through the idle and the weight shift', () => {
+  const f = figures();
+  const h = new Horse(0, 0, { heading: -0.7 });
+  f.update(0, [h]);
+  const rig = f.rigs.get(h);
+  const tracks = rig.tips.map(() => []);
+  for (let i = 0; i < 240; i++) {
+    if (i === 30) h.play('shift');
+    f.update(dt, [h]);
+    rig.model.updateMatrixWorld(true);
+    rig.tips.forEach((t, k) => tracks[k].push(t.getWorldPosition(V())));
+  }
+  let moved = 0;
+  for (const pts of tracks) {
+    // Planted: on the ground and at rest. The shift paws with one hind
+    // hoof, lifting it, setting it down ahead and scraping it back; that is
+    // the clip's own and is not held to the limit.
+    let from = null;
+    pts.forEach((p, i) => {
+      const q = pts[Math.max(0, i - 1)];
+      const r = pts[Math.min(pts.length - 1, i + 1)];
+      const speed = Math.max(Math.hypot(p.x - q.x, p.z - q.z), Math.hypot(r.x - p.x, r.z - p.z)) / dt;
+      if (p.y > 0.015 || speed > 0.1) {
+        from = null;
+        return;
+      }
+      from ??= p;
+      assert.ok(Math.hypot(p.x - from.x, p.z - from.z) < 0.02, `planted hoof slid at frame ${i}`);
+    });
+    moved = Math.max(moved, Math.max(...pts.map((p) => Math.hypot(p.x - pts[0].x, p.z - pts[0].z))));
+  }
+  assert.ok(moved > 0.1, 'the shift moves a hoof');
 });
 
 test('the rider sits the back with their feet in the stirrups at every heading', () => {
@@ -297,16 +332,18 @@ test('a horse is drawn in bands: the near legs in a later band than the far ones
   assert.ok(written.every((w) => w[7] === flat.base));
 });
 
-test('one readback serves every horse drawn; the depth pass keeps sidedness and is undone', () => {
+test('one readback serves every horse drawn; the depth pass keeps sidedness, leaves out the rider and is undone', () => {
   let f;
   const gpu = fakeGPU(() => f);
   f = figures({ renderer: gpu });
-  const herd = [0, 1, 2, 3].map((i) => new Horse(i * 60, 0));
+  const herd = [0, 1].map((i) => new Horse(i * 60, 0));
   f.update(dt, herd);
   const drawn = f.rasterise(view, herd, { x: 0, y: 0 });
-  assert.equal(drawn.length, 4);
+  assert.equal(drawn.length, 2);
   assert.equal(gpu.reads, 1);
-  assert.deepEqual(gpu.log, ['colour', 'colour', 'colour', 'colour', 'depth', 'depth', 'depth', 'depth']);
+  assert.deepEqual(gpu.log, ['colour', 'colour', 'depth', 'depth']);
+  // The riders are drawn in colour only.
+  assert.deepEqual(gpu.riders, [true, true, false, false]);
   for (const rig of f.rigs.values()) {
     for (const s of rig.surfaces) {
       same(s.mesh.material, s.colour, 'colours are back');
@@ -316,10 +353,12 @@ test('one readback serves every horse drawn; the depth pass keeps sidedness and 
       }
     }
     assert.ok(rig.model.visible);
+    assert.ok(rig.rider.visible);
   }
-  // The rider's cloak and hood are double-sided, and so is their depth.
-  const rig = f.rigs.get(herd[0]);
-  assert.ok(rig.surfaces.some((s) => s.colour.side === THREE.DoubleSide && s.depth.side === THREE.DoubleSide));
+  // A double-sided surface gets a double-sided depth, one shared by all.
+  const twoSided = f.depthFor(new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }));
+  assert.equal(twoSided.side, THREE.DoubleSide);
+  same(f.depthFor(new THREE.MeshLambertMaterial({ side: THREE.DoubleSide })), twoSided, 'shared');
   // Every figure carries what the animals' shadow needs.
   for (const d of drawn) {
     same(d.animal, d.horse, 'the shadow finds the horse');
@@ -331,15 +370,15 @@ test('one readback serves every horse drawn; the depth pass keeps sidedness and 
   assert.equal(f.pixels.length, f.width * f.height * 4);
 });
 
-test('at most four are drawn, two on phones, nearest the player first; none out of view', () => {
+test('at most two are drawn, on phones too, nearest the player first; none out of view', () => {
   let phone = false;
   let f;
   f = figures({ renderer: fakeGPU(() => f), phone: () => phone });
   const herd = [5, 1, 4, 0, 3, 2].map((i) => new Horse(i * 50, 0));
   f.update(dt, herd);
   const near = { x: 0, y: 0 };
-  assert.equal(MAX_DRAWN, 4);
-  assert.deepEqual(f.rasterise(view, herd, near).map((d) => d.horse.x), [0, 50, 100, 150]);
+  assert.equal(MAX_DRAWN, 2);
+  assert.deepEqual(f.rasterise(view, herd, near).map((d) => d.horse.x), [0, 50]);
   phone = true;
   assert.equal(MAX_DRAWN_PHONE, 2);
   assert.deepEqual(f.rasterise(view, herd, near).map((d) => d.horse.x), [0, 50]);
@@ -402,7 +441,11 @@ test('the rider is dressed as the outlaw is', () => {
   const rig = f.spare[0];
   assert.ok(Math.abs(rig.gear.cloak.scale.y / gear.cloak.scale.y - 0.55) < 1e-9);
   assert.equal(rig.gear.cloak.scale.x, gear.cloak.scale.x);
-  assert.ok(rig.surfaces.length > 8);
+  // Only the horse is drawn as depth.
+  let horseMeshes = 0;
+  rig.inner.traverse((o) => { if (o.isMesh) horseMeshes++; });
+  assert.ok(horseMeshes >= 8);
+  assert.equal(rig.surfaces.length, horseMeshes);
 });
 
 test('the horse model is credited, CC0, as published bar its duplicate clips, and light', () => {
