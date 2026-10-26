@@ -469,6 +469,8 @@ test('a beam\'s column of air is fixed to the world too', () => {
     }
   }
   assert.ok(changed > 100, `${changed} cells lit`);
+  // Only the glyphs are lit: the overlay's colours are never shown.
+  assert.ok(ra.ov.every((v, i) => i % 4 === 3 || v === 40));
 });
 
 test('a column in view is drawn though its patch lies beyond the map: walking and zooming across never pop it', () => {
@@ -521,6 +523,59 @@ test('a column in view is drawn though its patch lies beyond the map: walking an
   assert.deepEqual(r.fg, before);
 });
 
+test('the beams\' map is kept while the view and the beams rest, and is laid afresh on any change', () => {
+  // Each its own world, so neither finds the other's patches baked.
+  const props = [plainTree(560.5, 440.5)];
+  const kept = new NightLight(), fresh = new NightLight();
+  const worlds = new Map([[kept, meadow()], [fresh, meadow()]]);
+  fresh.stillLaid = () => false;
+  let lays = 0;
+  const lay = kept.layBeams;
+  kept.layBeams = function () { lays++; return lay.call(this); };
+  // Six beams, two of them only once the view is 100 rows tall.
+  const base = { x0: 500, y0: 400, cols: 200, rows: 60 };
+  const steps = [];
+  for (let k = 0; k < 40; k++) steps.push({ view: base });
+  for (let k = 0; k < 6; k++) steps.push({ view: { ...base, x0: base.x0 + 3 * k, y0: base.y0 + k } });
+  // Taller, then shorter while the beams change (laid clipped), then taller
+  // again with nothing else changed; then a step north alone, and east.
+  steps.push({ view: { ...base, rows: 100 } }, { view: { ...base, rows: 100 } },
+    { view: { ...base, rows: 40 }, weather: { preset: 'clear', intensity: 0, flash: 0.3 } }, { view: { ...base, rows: 40 } },
+    { view: { ...base, rows: 100 } }, { view: base }, { view: { ...base, y0: base.y0 - 2 } }, { view: { ...base, y0: base.y0 - 2 } },
+    { view: base }, { view: { ...base, x0: base.x0 + 2 } }, { view: { ...base, x0: base.x0 + 2 } });
+  steps.push({ view: base, weather: { preset: 'storm', intensity: 0.1 } }, { view: base, weather: { preset: 'storm', intensity: 0.1 } });
+  steps.push({ view: base, weather: { preset: 'clear', intensity: 0, flash: 0.5 } }, { view: base });
+  steps.push({ view: base, shafts: false }, { view: base, shafts: false }, { view: base }, { view: base });
+  steps.push({ view: base, enabled: false }, { view: base }, { view: base, tier: 'reduced' }, { view: base, tier: 'reduced' });
+  steps.push({ view: { x0: -900, y0: -700, cols: 260, rows: 120 } }, { view: { x0: -900, y0: -700, cols: 260, rows: 120 } });
+  let before = 0;
+  for (const [n, step] of steps.entries()) {
+    for (const night of [kept, fresh]) {
+      night.shafts = step.shafts ?? true;
+      night.enabled = step.enabled ?? true;
+      night.tier = step.tier ?? null;
+      night.prepare(step.view, props, { seed: 4, world: worlds.get(night), weather: step.weather });
+    }
+    const v = step.view, read = (night) => {
+      const cells = [night.active, night.columns, night.boxCount, { ...night.lit }];
+      for (let y = v.y0 - PAD_TOP - 2; y < v.y0 + v.rows + PAD_BOTTOM + 2; y++) {
+        cells.push(night.rowShaded(y));
+        for (let x = v.x0 - PAD_X - 2; x < v.x0 + v.cols + PAD_X + 2; x += 2) cells.push(night.gainAt(x, y), night.tintAt(x, y));
+      }
+      return cells;
+    };
+    assert.deepEqual(read(kept), read(fresh), `step ${n}`);
+    const r1 = screen(v, Float32Array), r2 = screen(v, Float32Array);
+    kept.shadeGround(r1, v);
+    fresh.shadeGround(r2, v);
+    assert.deepEqual([r1.fg, r1.bg, r1.ov], [r2.fg, r2.bg, r2.ov], `step ${n} drawn`);
+    // One beam is baked a frame, so the sixth has faded in by frame 30.
+    if (n === 33) before = lays;
+    if (n === 39) assert.equal(lays, before, 'faded in and standing still, nothing is laid again');
+    if (n === 39) assert.ok(kept.boxCount >= 3, `${kept.boxCount} patches on the map`);
+  }
+});
+
 test('with beams switched off, or none in the world, nothing changes', () => {
   const view = { x0: 0, y0: 0, cols: 80, rows: 40 };
   const props = [plainTree(40.5, 20.5)];
@@ -565,11 +620,13 @@ test('the ground in a beam is brighter and paler, each cell once; the water and 
     return [...c];
   };
   const o = cell * 4;
-  for (const [arr, base] of [[r.fg, 200], [r.bg, 100], [r.ov, 150]]) {
+  for (const [arr, base] of [[r.fg, 200], [r.bg, 100]]) {
     const want = expect(base);
     for (let k = 0; k < 3; k++) assert.ok(Math.abs(arr[o + k] - want[k]) <= 1, `${base}: ${arr[o + k]} vs ${want[k]}`);
     assert.ok(arr[o + 2] > arr[o], 'paler blue');
   }
+  // The overlay's colours are never shown; the beam leaves them be.
+  assert.deepEqual([...r.ov.slice(o, o + 3)], [150, 150, 150]);
   assert.deepEqual([r.fg[o + 4], r.bg[o + 4], r.ov[o + 4]], [200, 100, 150], 'water shows the sky');
   assert.ok(r.cellLit.every((v) => v === 7));
 });
@@ -610,7 +667,7 @@ test('overlapping beams light a cell with the brighter one, never both', () => {
       const o = ((y - view.y0) * view.cols + x - view.x0) * 4;
       for (const [name, c] of Object.entries(base)) {
         const want = Float32Array.from(c);
-        if (m > 0) {
+        if (m > 0 && name !== 'ov') {
           for (let k = 0; k < 3; k++) want[k] *= 1 + m;
           moonTint(want, 0, TINT * m / PEAK_LIFT);
         }

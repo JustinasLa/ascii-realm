@@ -116,6 +116,14 @@ export class NightLight {
     this.tint = 0;
     this.near = [];
     this.leaving = [];
+    // What the beams' map was last laid from: the map's place and size, and
+    // each beam's shaft and strength in turn. While all of it holds (the view
+    // and the beams at rest) the map is kept as it is, not laid again.
+    this.laid = [];
+    this.laidX0 = 0;
+    this.laidY0 = 0;
+    this.laidW = 0;
+    this.laidH = 0;
     this.world = null;
     this.seed = null;
     this.tierName = null;
@@ -134,15 +142,15 @@ export class NightLight {
   prepare(view, props, env = {}) {
     const d = this.dirty, l = this.lit;
     for (let y = d.y0; y < d.y1; y++) this.layers.fill(0, y * this.w + d.x0, y * this.w + d.x1);
-    for (let y = l.y0; y < l.y1; y++) this.lift.fill(0, y * this.w + l.x0, y * this.w + l.x1);
     d.x0 = d.y0 = d.x1 = d.y1 = 0;
-    l.x0 = l.y0 = l.x1 = l.y1 = 0;
     this.active = false;
     this.columns = false;
     this.visible.length = 0;
-    this.boxCount = 0;
     this.bakes = this.work = this.bakeMs = 0;
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      this.clearLift();
+      return;
+    }
     this.x0 = view.x0 - PAD_X;
     this.y0 = view.y0 - PAD_TOP;
     this.w = view.cols + 2 * PAD_X;
@@ -150,13 +158,37 @@ export class NightLight {
     if (this.layers.length < this.w * this.h) {
       this.layers = new Float32Array(this.w * this.h);
       this.lift = new Float32Array(this.w * this.h);
+      this.clearLift();
     }
     const seed = env.seed ?? 1;
     const sky = skyFactor(env.weather);
     if (sky > 0) this.shadeTrees(props, sky, seed);
     if (this.shafts && env.world) this.lightBeams(view, env, seed);
-    else this.beams.clear();
+    else {
+      this.beams.clear();
+      this.clearLift();
+    }
     this.active = d.x1 > d.x0 || l.x1 > l.x0;
+  }
+
+  // Empties the beams' map where it was last laid.
+  clearLift() {
+    const l = this.lit, w = this.laidW;
+    for (let y = l.y0; y < l.y1; y++) this.lift.fill(0, y * w + l.x0, y * w + l.x1);
+    l.x0 = l.y0 = l.x1 = l.y1 = 0;
+    this.boxCount = 0;
+    this.laid.length = 0;
+  }
+
+  // Whether this frame's beams would lay the map exactly as it lies.
+  stillLaid() {
+    const { laid, visible } = this;
+    if (laid.length !== visible.length * 2 || this.laidX0 !== this.x0 || this.laidY0 !== this.y0 ||
+      this.laidW !== this.w || this.laidH !== this.h) return false;
+    for (let b = 0; b < visible.length; b++) {
+      if (laid[b * 2] !== visible[b].shaft || laid[b * 2 + 1] !== visible[b].s) return false;
+    }
+    return true;
   }
 
   shadeTrees(props, sky, seed) {
@@ -262,14 +294,26 @@ export class NightLight {
     }
     const light = tier.intensity * beamFactor(env.weather);
     const mixStep = 1 / FADE_FRAMES, target = tier.column ? 1 : 0;
-    let lx0 = this.w, ly0 = this.h, lx1 = 0, ly1 = 0;
     for (const beam of beams.values()) {
       beam.mix = target > beam.mix ? Math.min(target, beam.mix + mixStep) : Math.max(target, beam.mix - mixStep);
       beam.s = light * beam.frames / FADE_FRAMES;
       if (!(beam.s > 0)) continue;
       this.visible.push(beam);
+      if (beam.mix > 0 && overlaps(beam.shaft.reach, view)) this.columns = true;
+    }
+    near.length = 0;
+    if (!this.stillLaid()) this.layBeams();
+    this.visible.sort(nearestBeam);
+  }
+
+  // Lays this frame's beams' patches on the map afresh.
+  layBeams() {
+    this.clearLift();
+    const { laid } = this;
+    let lx0 = this.w, ly0 = this.h, lx1 = 0, ly1 = 0;
+    for (const beam of this.visible) {
+      laid.push(beam.shaft, beam.s);
       const { shaft } = beam, stamp = shaft.stamp;
-      if (beam.mix > 0 && overlaps(shaft.reach, view)) this.columns = true;
       const ox = Math.floor(shaft.cx) + stamp.x0 - this.x0;
       const oy = Math.floor(shaft.cy) + stamp.y0 - this.y0;
       const sx0 = Math.max(0, -ox), sx1 = Math.min(stamp.w, this.w - ox);
@@ -304,8 +348,10 @@ export class NightLight {
       l.x1 = lx1;
       l.y1 = ly1;
     }
-    near.length = 0;
-    this.visible.sort(nearestBeam);
+    this.laidX0 = this.x0;
+    this.laidY0 = this.y0;
+    this.laidW = this.w;
+    this.laidH = this.h;
   }
 
   // The beam in slot (i, j) of the world last prepared, for debugging.
@@ -392,17 +438,18 @@ export class NightLight {
         }
         const cell = sy * r.cols + sx;
         if (mask[cell] === WATER) continue;
-        let k = v > 0 ? GAIN[v < 255 / LAYER_UNIT ? (v * LAYER_UNIT) | 0 : 255] : 1;
-        if (up > 0) k *= 1 + up;
+        const gain = v > 0 ? GAIN[v < 255 / LAYER_UNIT ? (v * LAYER_UNIT) | 0 : 255] : 1;
         const o = cell * 4;
+        // `ov`'s colours are never shown, only its layer flag: the shade
+        // keeps it in step as it always has, the beams leave it be.
+        if (gain !== 1) { ov[o] *= gain; ov[o + 1] *= gain; ov[o + 2] *= gain; }
+        const k = up > 0 ? gain * (1 + up) : gain;
         fg[o] *= k; fg[o + 1] *= k; fg[o + 2] *= k;
         bg[o] *= k; bg[o + 1] *= k; bg[o + 2] *= k;
-        ov[o] *= k; ov[o + 1] *= k; ov[o + 2] *= k;
         if (up > 0) {
           const t = TINT * up / PEAK_LIFT;
           moonTint(fg, o, t);
           moonTint(bg, o, t);
-          moonTint(ov, o, t);
         }
       }
     }

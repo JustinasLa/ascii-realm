@@ -248,10 +248,11 @@ export function columnStamp(shaft, seed) {
 
 // Lightens the glyphs in a beam's column of air by `strength` (1 at full),
 // all but the water's and the sprites': fixed to the world, it lies over the
-// same cells however the view moves.
+// same cells however the view moves. Only `fg` is lit: a layered glyph is
+// drawn into it, and `ov`'s colours are never shown (only its layer flag).
 export function drawColumn(r, view, shaft, strength, seed) {
   const { y0, x0, at, k } = columnStamp(shaft, seed);
-  const { fg, ov, mask, fineMark } = r;
+  const { fg, mask, fineMark } = r;
   const cols = Math.min(view.cols, r.cols);
   const first = Math.max(0, view.y0 - y0), last = Math.min(x0.length, view.y0 + Math.min(view.rows, r.rows) - y0);
   const [mr, mg, mb] = MOONLIGHT;
@@ -268,9 +269,6 @@ export function drawColumn(r, view, shaft, strength, seed) {
       fg[o] += mr * kk;
       fg[o + 1] += mg * kk;
       fg[o + 2] += mb * kk;
-      ov[o] += mr * kk;
-      ov[o + 1] += mg * kk;
-      ov[o + 2] += mb * kk;
     }
   }
 }
