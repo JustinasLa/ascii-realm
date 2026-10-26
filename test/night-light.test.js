@@ -589,6 +589,30 @@ test('overlapping beams light a cell with the brighter one, never both', () => {
       assert.ok(Math.abs(night.gainAt(x, y) - (1 + Math.max(a, b))) < 1e-6, `${x},${y}`);
     }
   }
+  // And drawn: each cell of both boxes takes the brighter lift and its
+  // tint exactly once, however many boxes it lies in.
+  assert.equal(night.boxes.length, 2);
+  const r = screen(view, Float32Array);
+  const base = { fg: [90, 160, 70], bg: [30, 50, 20], ov: [120, 140, 60] };
+  for (const [name, c] of Object.entries(base)) for (let o = 0; o < r[name].length; o += 4) r[name].set(c, o);
+  night.shadeGround(r, view);
+  let lit = 0;
+  for (let y = shaft.box.y0; y < shaft.box.y1; y++) {
+    for (let x = shaft.box.x0; x < shaft.box.x1 + 6; x++) {
+      const m = Math.max(at(shaft.cx, x, y, 1), at(twin.cx, x, y, (FADE_FRAMES - 1) / FADE_FRAMES));
+      const o = ((y - view.y0) * view.cols + x - view.x0) * 4;
+      for (const [name, c] of Object.entries(base)) {
+        const want = Float32Array.from(c);
+        if (m > 0) {
+          for (let k = 0; k < 3; k++) want[k] *= 1 + m;
+          moonTint(want, 0, TINT * m / PEAK_LIFT);
+        }
+        assert.deepEqual([...r[name].slice(o, o + 3)], [...want], `${name} ${x},${y}`);
+      }
+      if (m > 0) lit++;
+    }
+  }
+  assert.ok(lit > both);
   assert.ok(both > 50);
 });
 
