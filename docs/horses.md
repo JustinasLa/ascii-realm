@@ -23,10 +23,19 @@ the world unless asked for.
   long, so it is drawn in bands, one for each ground row under it: grass
   rooted in front of the front hooves covers them, grass growing between the
   legs hides the hind hooves but not the front legs, and the rider's boots
-  layer with the horse's barrel.
+  layer with the horse's barrel. The rider's own cells stand on the ground
+  rows under the seat, so someone standing beside the horse is in front of
+  or behind the rider as they are in front of or behind the saddle.
 - Horses are drawn like the animals, a little dimmer than the player, so the
-  player stays the brightest figure on screen. At most 2 are drawn, on
-  phones too, the nearest the player first; any others stand unseen.
+  player stays the brightest figure on screen. At most 4 are drawn (2 on
+  phones), the nearest the player first; any others stand unseen.
+- A horse with no rider shows no rider: it is drawn, shadowed and layered
+  as the horse alone.
+- A horse costs about what a deer does to draw. The rider is drawn from a
+  coarser copy of the outlaw's body, which is never seen at a size where
+  the difference shows, and horse and rider are each drawn in one go. A
+  horse that has moved less than a pixel since it was last drawn keeps the
+  cells it had.
 
 The player walks through a horse, as through a deer. The rider is the
 outlaw's figure until riding arrives, when the player takes the seat.

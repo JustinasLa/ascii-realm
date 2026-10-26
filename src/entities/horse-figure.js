@@ -11,15 +11,19 @@ import { getWeapon } from './weapons.js';
 // A saddled horse and the rider sitting it, drawn as one figure. Both are
 // rigged models playing their own clips: the horse its idles, the rider the
 // outlaw's own seated loop. They are rendered together from the game's
-// camera into slots of one offscreen image, and the horse is drawn a
-// second time as depth into the slots above, so a single read brings back
-// how far each pixel is from the camera too. A horse is long, and grass
+// camera into slots of one offscreen image. Every surface also writes how
+// far it is from the camera into the image's alpha, so the one render and
+// the one read bring back depth with the colour, for horse and rider alike
+// and from whichever side a surface is seen. A horse is long, and grass
 // rooted between its legs must hide the hind hooves but not the front
 // ones, so its cells are sorted into bands by the ground row under each one
-// and drawn among the grass rows band by band. The rider is left out of the
-// depth: their cells take the depth of the horse behind them (their legs
-// layer with its barrel) or else the horse's own row, and leaving out the
-// rider's many triangles keeps the second pass cheap.
+// and drawn among the grass rows band by band.
+//
+// Drawing is costly where the GPU is emulated, so the figure is kept cheap:
+// the rider's body is a coarser copy of the outlaw's (the figure is a few
+// dozen cells tall, and detail finer than a cell is never seen), and a
+// horse whose pose has moved less than a pixel since it was last drawn
+// keeps the cells it had.
 
 const SX = 4;
 const SY = 6;
@@ -27,16 +31,21 @@ const N = SX * SY;
 const MAX_COLS = 120;
 const MAX_ROWS = 64;
 const PAD = 2;
-// At most this many are drawn, the nearest the player first: each costs
-// two renders of the image.
-export const MAX_DRAWN = 2;
+// At most this many are drawn, the nearest the player first.
+export const MAX_DRAWN = 4;
 export const MAX_DRAWN_PHONE = 2;
 const COS = Math.sqrt(1 - TILT * TILT);
-// The camera stands this far from the figure and sees depth only between
-// NEAR and FAR, so one byte of depth tells points 4.7 cm apart.
+// The camera stands this far from the figure. Depth is written into alpha
+// from 128 at NEAR to 255 at FAR, so a drawn pixel still reads as covered
+// and 127 steps tell points 3.9 cm apart, under a third of a ground row.
 const D = 20;
-export const NEAR = 14;
-export const FAR = 26;
+export const NEAR = 17;
+export const FAR = 22;
+// Metres: the rider's body is merged to one vertex per cube this size, and
+// a figure whose bones have all moved less than STILL (about a pixel)
+// since it was drawn is not drawn again.
+export const DETAIL = 0.02;
+export const STILL = 0.01;
 
 // Drawn like the animals: a softer rim and gain than the player's.
 const RAMP = [...' .:-=+*#%@'].map(glyph);
@@ -96,14 +105,167 @@ function inRoot(node, root, out = new THREE.Vector3()) {
   return out;
 }
 
-// The ground row of a depth sample: `byte` is the depth read back, and
+// The alpha a surface `t` metres from the camera writes, as the shader
+// below does it.
+export function depthAlpha(t) {
+  return 128 + Math.floor(Math.min(1, Math.max(0, (t - NEAR) / (FAR - NEAR))) * 127 + 0.5);
+}
+
+// Makes an opaque material write its depth into alpha (see depthAlpha);
+// opaque, it is not blended, so the alpha lands in the image as written.
+export function writeDepth(material) {
+  material.userData.writesDepth = true;
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = `varying float vDepth;\n${shader.vertexShader}`
+      .replace('#include <project_vertex>', '#include <project_vertex>\n\tvDepth = -mvPosition.z;');
+    shader.fragmentShader = `varying float vDepth;\n${shader.fragmentShader}`
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+\tgl_FragColor.a = (128.0 + floor(clamp((vDepth - ${NEAR.toFixed(1)}) / ${(FAR - NEAR).toFixed(1)}, 0.0, 1.0) * 127.0 + 0.5)) / 255.0;`);
+  };
+  return material;
+}
+
+// A coarser copy of a geometry: its vertices merged to one for each cube
+// `size` across that they fall in, the one nearest the middle of those
+// merged, with every attribute (skin weights and painted colours too) as
+// that vertex has it, and the triangles that collapse dropped.
+export function coarsen(geometry, size) {
+  const pos = geometry.attributes.position;
+  const cubes = new Map();
+  const into = new Int32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    const key = `${Math.floor(pos.getX(i) / size)} ${Math.floor(pos.getY(i) / size)} ${Math.floor(pos.getZ(i) / size)}`;
+    let cube = cubes.get(key);
+    if (!cube) cubes.set(key, cube = { at: cubes.size, members: [] });
+    cube.members.push(i);
+    into[i] = cube.at;
+  }
+  const kept = [...cubes.values()].map(({ members }) => {
+    const mid = [0, 0, 0];
+    for (const i of members) { mid[0] += pos.getX(i); mid[1] += pos.getY(i); mid[2] += pos.getZ(i); }
+    const far = (i) => (pos.getX(i) - mid[0] / members.length) ** 2 + (pos.getY(i) - mid[1] / members.length) ** 2
+      + (pos.getZ(i) - mid[2] / members.length) ** 2;
+    return members.reduce((best, i) => (far(i) < far(best) ? i : best));
+  });
+  const out = new THREE.BufferGeometry();
+  for (const [name, a] of Object.entries(geometry.attributes)) {
+    const array = new a.array.constructor(kept.length * a.itemSize);
+    kept.forEach((i, k) => { for (let c = 0; c < a.itemSize; c++) array[k * a.itemSize + c] = a.array[i * a.itemSize + c]; });
+    out.setAttribute(name, new THREE.BufferAttribute(array, a.itemSize, a.normalized));
+  }
+  const index = geometry.index?.array ?? Array.from({ length: pos.count }, (_, i) => i);
+  const tris = [];
+  const seen = new Set();
+  for (let t = 0; t < index.length; t += 3) {
+    const [a, b, c] = [into[index[t]], into[index[t + 1]], into[index[t + 2]]];
+    if (a === b || b === c || a === c) continue;
+    const first = Math.min(a, b, c);
+    const key = first === a ? `${a} ${b} ${c}` : first === b ? `${b} ${c} ${a}` : `${c} ${a} ${b}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tris.push(a, b, c);
+  }
+  out.setIndex(tris);
+  return out;
+}
+
+// Skinned meshes in place of every mesh shown under `root`, one for the
+// surfaces seen from the front only and one for those seen from both
+// sides (a cloak), so a figure is drawn in a call or two and its closed
+// surfaces keep their back faces culled. Each surface's colour is painted
+// into its vertices; a rigid piece hung on a bone (a hood, a bow) is
+// skinned wholly to that bone, so it moves exactly as it did; skinned
+// surfaces are made coarser by `size` (see coarsen) when it is given.
+// Hidden pieces are left out. Taken in the pose the figure stands in now.
+export function mergeFigure(root, size = 0) {
+  root.updateMatrixWorld(true);
+  const parts = [];
+  root.traverse((o) => {
+    if (!o.isMesh) return;
+    for (let p = o; p !== root; p = p.parent) if (!p.visible) return;
+    parts.push(o);
+  });
+  const base = parts.find((o) => o.isSkinnedMesh);
+  const { skeleton, bindMatrix } = base;
+  const index = new Map(skeleton.bones.map((b, i) => [b, i]));
+  const unbind = bindMatrix.clone().invert();
+  const v = new THREE.Vector3();
+  const tint = new THREE.Color();
+  const paint = new THREE.Color();
+  const sides = new Map();
+  // A piece drawn through a mirroring transform has its triangles wound the
+  // other way round; they are turned back where the new mesh's is not.
+  const mirrored = (o) => o.matrixWorld.determinant() < 0;
+  for (const o of parts) {
+    const material = o.material;
+    let into = sides.get(material.side);
+    if (!into) sides.set(material.side, into = { position: [], normal: [], color: [], skinIndex: [], skinWeight: [], triangles: [] });
+    let geometry = o.geometry;
+    // Skinned: the same skin as the base's, bone for bone. Rigid: from its
+    // place now, through its bone, back to where the skin is bound.
+    let toSkin;
+    let bones;
+    if (o.isSkinnedMesh) {
+      geometry = size ? coarsen(geometry, size) : geometry;
+      toSkin = unbind.clone().multiply(o.bindMatrix);
+      bones = o.skeleton.bones.map((b) => index.get(b));
+    } else {
+      let at = o.parent;
+      while (at && !index.has(at)) at = at.parent;
+      if (!at) throw new Error(`${o.name || 'A piece'} hangs from no bone`);
+      const b = index.get(at);
+      toSkin = new THREE.Matrix4().multiplyMatrices(at.matrixWorld, skeleton.boneInverses[b])
+        .multiply(bindMatrix).invert().multiply(o.matrixWorld);
+      bones = [b];
+    }
+    const turn = new THREE.Matrix3().getNormalMatrix(toSkin);
+    const { attributes } = geometry;
+    const first = into.position.length / 3;
+    const painted = material.vertexColors && attributes.color;
+    for (let i = 0; i < attributes.position.count; i++) {
+      v.fromBufferAttribute(attributes.position, i).applyMatrix4(toSkin);
+      into.position.push(v.x, v.y, v.z);
+      v.fromBufferAttribute(attributes.normal, i).applyMatrix3(turn).normalize();
+      into.normal.push(v.x, v.y, v.z);
+      tint.copy(material.color);
+      if (painted) tint.multiply(paint.fromBufferAttribute(attributes.color, i));
+      into.color.push(tint.r, tint.g, tint.b);
+      for (let k = 0; k < 4; k++) {
+        into.skinIndex.push(o.isSkinnedMesh ? bones[attributes.skinIndex.getComponent(i, k)] : k ? 0 : bones[0]);
+        into.skinWeight.push(o.isSkinnedMesh ? attributes.skinWeight.getComponent(i, k) : k ? 0 : 1);
+      }
+    }
+    const order = geometry.index?.array ?? Array.from({ length: attributes.position.count }, (_, i) => i);
+    const turnBack = mirrored(o) !== mirrored(root);
+    for (let t = 0; t < order.length; t += 3) {
+      into.triangles.push(first + order[t], first + order[turnBack ? t + 2 : t + 1], first + order[turnBack ? t + 1 : t + 2]);
+    }
+    o.removeFromParent();
+  }
+  return [...sides].map(([side, into]) => {
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(into.position, 3));
+    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(into.normal, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(into.color, 3));
+    geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(into.skinIndex, 4));
+    geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(into.skinWeight, 4));
+    geometry.setIndex(into.triangles);
+    const mesh = new THREE.SkinnedMesh(geometry, writeDepth(new THREE.MeshLambertMaterial({ vertexColors: true, side })));
+    mesh.frustumCulled = false;
+    root.add(mesh);
+    mesh.bind(skeleton, bindMatrix.clone());
+    return mesh;
+  });
+}
+
+// The ground row of a depth sample: `byte` is the alpha read back, and
 // `pixelRow` its row down the slot, which is `frame.pxHeight` pixels tall
 // and spans `frame.top` to `frame.bottom` metres on the camera's plane. The
 // camera is D metres from the figure, so a point (y up, z toward the
 // camera) is t = D - TILT·y - COS·z deep and u = COS·y - TILT·z up the
 // plane; z follows from t and u.
 export function groundRowOf(byte, pixelRow, frame) {
-  const t = NEAR + (1 - byte / 255) * (FAR - NEAR);
+  const t = NEAR + ((byte - 128) / 127) * (FAR - NEAR);
   const u = frame.top - ((pixelRow + 0.5) / frame.pxHeight) * (frame.top - frame.bottom);
   const z = COS * (D - t) - TILT * u;
   return frame.y + z * SCALE * TILT;
@@ -207,23 +369,26 @@ class HorseRig {
     this.sit.play();
     this.model.add(model);
 
-    // Every mesh of the horse's own material and a depth one with the same
-    // sidedness, so a surface seen from behind still has its depth.
-    this.surfaces = [];
-    this.inner.traverse((o) => {
-      if (!o.isMesh) return;
-      const colour = o.material;
-      const depth = Array.isArray(colour) ? colour.map((m) => figures.depthFor(m)) : figures.depthFor(colour);
-      this.surfaces.push({ mesh: o, colour, depth });
-    });
+    // The bones that bend the skins, to tell how far a pose has moved.
+    const skinned = (root) => {
+      const out = new Set();
+      root.traverse((o) => { if (o.isSkinnedMesh) for (const b of o.skeleton.bones) out.add(b); });
+      return [...out];
+    };
+    this.joints = skinned(this.inner);
+    this.riderJoints = skinned(model);
     this.ground = 0;
+    // What was last drawn: where, the pose then, and the cells.
+    this.raster = null;
   }
 
-  // Draws the horse with the depth materials and hides the rider, or brings
-  // both back.
-  showDepth(on) {
-    for (const s of this.surfaces) s.mesh.material = on ? s.depth : s.colour;
-    this.rider.visible = !on;
+  // Readies the rig to be drawn cheaply, once it has been measured: horse
+  // and rider each become one mesh, the rider's body a coarser one.
+  simplify() {
+    this.model.updateMatrixWorld(true);
+    mergeFigure(this.inner);
+    mergeFigure(this.rider, DETAIL);
+    return this;
   }
 
   // The horse's clip weights for what it is doing, eased as for the
@@ -268,22 +433,64 @@ class HorseRig {
     this.rider.updateWorldMatrix(false, true);
   }
 
+  // A horse without a rider is posed, measured and drawn alone.
   update(dt, horse) {
     this.poseHorse(dt, horse);
     this.model.rotation.y = horse.heading;
     this.plant();
-    this.rmixer.update(dt);
-    this.seat();
-    riderLegs(this);
+    this.rider.visible = Boolean(horse.rider);
+    if (this.rider.visible) {
+      this.rmixer.update(dt);
+      this.seat();
+      riderLegs(this);
+    }
+    this.model.updateMatrixWorld(true);
+  }
+
+  // The bones shown, horse and rider.
+  shown() {
+    return this.rider.visible ? [...this.joints, ...this.riderJoints] : this.joints;
+  }
+
+  // Where every bone shown is, three numbers each.
+  pose() {
+    const bones = this.shown();
+    const out = new Float32Array(bones.length * 3);
+    bones.forEach((o, i) => {
+      const e = o.matrixWorld.elements;
+      out[i * 3] = e[12];
+      out[i * 3 + 1] = e[13];
+      out[i * 3 + 2] = e[14];
+    });
+    return out;
+  }
+
+  // Whether the cells last drawn still serve: the horse where it was, its
+  // slot within the one drawn, and no bone moved STILL or more since.
+  fresh(horse, slot) {
+    const r = this.raster;
+    if (!r || r.x !== horse.x || r.y !== horse.y) return false;
+    const was = r.slot;
+    if (slot.cx0 < was.cx0 || slot.cy0 < was.cy0 || slot.cx0 + slot.cols > was.cx0 + was.cols
+      || slot.cy0 + slot.rows > was.cy0 + was.rows) return false;
+    const bones = this.shown();
+    if (bones.length * 3 !== r.pose.length) return false;
+    for (let i = 0; i < bones.length; i++) {
+      const e = bones[i].matrixWorld.elements;
+      const o = i * 3;
+      if ((e[12] - r.pose[o]) ** 2 + (e[13] - r.pose[o + 1]) ** 2 + (e[14] - r.pose[o + 2]) ** 2 >= STILL * STILL) return false;
+    }
+    return true;
   }
 
   // How far horse and rider reach round the hooves on screen, in metres:
-  // left, right, up and down, from their bones and the flesh on them.
+  // left, right, up and down, from their bones (as last posed) and the
+  // flesh on them.
   reach() {
     const box = { left: Infinity, right: -Infinity, up: -Infinity, down: Infinity };
     const v = new THREE.Vector3();
     const add = (o, pad) => {
-      o.getWorldPosition(v);
+      v.setFromMatrixPosition(o.matrixWorld);
       const up = v.y * COS - v.z * TILT;
       box.left = Math.min(box.left, v.x - pad);
       box.right = Math.max(box.right, v.x + pad);
@@ -291,7 +498,7 @@ class HorseRig {
       box.down = Math.min(box.down, up - pad);
     };
     for (const o of Object.values(this.hbones)) add(o, LOOK.flesh);
-    for (const o of Object.values(this.rbones)) add(o, 0.2);
+    if (this.rider.visible) for (const o of this.riderJoints) add(o, 0.2);
     return box;
   }
 }
@@ -320,12 +527,11 @@ export class HorseFigures {
     }));
     this.riderClip = rider.animations.find((c) => c.name === RIDER.clip);
     if (!this.riderClip) throw new Error(`Missing clip ${RIDER.clip}`);
-    this.depths = new Map();
     // Roughly to size by the withers first, then exactly by the back.
     this.fit = measure(horse.scene, LOOK, HORSE.withers);
     this.phone = phone;
     this.rigs = new Map();
-    this.spare = [this.calibrate(new HorseRig(this))];
+    this.spare = [this.calibrate(new HorseRig(this)).simplify()];
     this.flat = false;
     this.scene = new THREE.Scene();
     const moon = new THREE.DirectionalLight(0xd8e0ff, 3.2);
@@ -333,11 +539,17 @@ export class HorseFigures {
     const rim = new THREE.DirectionalLight(0x9fb8ff, 1.8);
     rim.position.set(2, 3, -5);
     this.scene.add(moon, rim, new THREE.HemisphereLight(0x8090b0, 0x202418, 1.4));
-    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, NEAR, FAR);
+    // Each rig's matrices are brought up to date as it is posed, so drawing
+    // one horse doesn't walk every rig again.
+    this.scene.updateMatrixWorld();
+    this.scene.matrixWorldAutoUpdate = false;
+    // The camera sees a little beyond the depth written, so nothing of the
+    // figure is cut off; what lies outside reads as NEAR or FAR.
+    this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, D - 6, D + 6);
     this.camera.position.set(0, TILT * D, COS * D);
     this.camera.lookAt(0, 0, 0);
     this.width = 56 * SX * MAX_DRAWN;
-    this.height = 2 * 48 * SY;
+    this.height = 48 * SY;
     this.pixels = new Uint8Array(this.width * this.height * 4);
     this.readWidth = this.width;
     if (renderer) this.renderer = renderer;
@@ -351,16 +563,6 @@ export class HorseFigures {
     this.renderer.autoClear = false;
     this.ground = [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.02)];
     this.drawn = [];
-  }
-
-  // The depth material for a colour one: one for each sidedness.
-  depthFor(material) {
-    let depth = this.depths.get(material.side);
-    if (!depth) {
-      depth = new THREE.MeshDepthMaterial({ side: material.side });
-      this.depths.set(material.side, depth);
-    }
-    return depth;
   }
 
   // Measures the first rig standing in its idle, facing +z: the scale that
@@ -410,10 +612,12 @@ export class HorseFigures {
   rigOf(horse) {
     let rig = this.rigs.get(horse);
     if (rig) return rig;
-    rig = this.spare.pop() ?? new HorseRig(this);
+    rig = this.spare.pop() ?? new HorseRig(this).simplify();
     rig.plays = null;
+    rig.raster = null;
     this.rigs.set(horse, rig);
     this.scene.add(rig.model);
+    rig.model.updateMatrixWorld(true);
     return rig;
   }
 
@@ -429,9 +633,9 @@ export class HorseFigures {
     for (const horse of horses) this.rigOf(horse).update(dt, horse);
   }
 
-  // The horses in view, nearest the player first, drawn into slots along
-  // the bottom of one image and as depth into the same slots above, read
-  // back at once and turned into cells banded by the ground under them.
+  // The horses in view, nearest the player first, as cells banded by the
+  // ground under them. Those that moved since they were last drawn are
+  // drawn into slots along one image, read back at once.
   rasterise(view, horses, near) {
     const inView = [];
     for (const horse of horses) {
@@ -440,16 +644,33 @@ export class HorseFigures {
     }
     inView.sort((a, b) => Math.hypot(a.horse.x - near.x, a.horse.y - near.y) - Math.hypot(b.horse.x - near.x, b.horse.y - near.y));
     const drawn = inView.slice(0, this.phone() ? MAX_DRAWN_PHONE : MAX_DRAWN);
+    const moved = drawn.filter(({ horse, slot }) => !this.rigs.get(horse).fresh(horse, slot));
+    if (moved.length) this.paint(moved);
     this.drawn = [];
-    if (!drawn.length) return this.drawn;
+    for (const { horse } of drawn) {
+      const { cells, top } = this.rigs.get(horse).raster;
+      for (const c of cells) {
+        c.sx = c.cx - view.x0;
+        c.sy = c.cy - view.y0;
+      }
+      const base = Math.floor(horse.y) - view.y0;
+      const bands = this.flat ? [{ y: horse.y, cells, base }] : bandCells(cells, horse.y, base);
+      this.drawn.push({ horse, animal: horse, cells, bands, depth: horse.y, shadow: HORSE.shadow, top, base });
+    }
+    return this.drawn;
+  }
+
+  // Draws these horses, each alone in its slot, reads the image back once
+  // and keeps each one's cells with the pose they were drawn in.
+  paint(list) {
     let width = 0;
     let height = 0;
-    for (const { slot } of drawn) {
+    for (const { slot } of list) {
       slot.x = width;
       width += slot.cols * SX;
       height = Math.max(height, slot.rows * SY);
     }
-    this.grow(width, height * 2);
+    this.grow(width, height);
     this.readWidth = width;
     const r = this.renderer;
     r.setScissorTest(false);
@@ -457,30 +678,21 @@ export class HorseFigures {
     r.clear();
     r.setScissorTest(true);
     r.clippingPlanes = this.ground;
-    for (const depth of [false, true]) {
-      for (const rig of this.rigs.values()) rig.showDepth(depth);
-      for (const { horse, slot } of drawn) {
-        for (const [other, rig] of this.rigs) rig.model.visible = other === horse;
-        this.frame(horse.x, horse.y, slot);
-        const y = depth ? height : 0;
-        r.setViewport(slot.x, y, slot.cols * SX, slot.rows * SY);
-        r.setScissor(slot.x, y, slot.cols * SX, slot.rows * SY);
-        r.render(this.scene, this.camera);
-      }
+    for (const { horse, slot } of list) {
+      for (const [other, rig] of this.rigs) rig.model.visible = other === horse;
+      this.frame(horse.x, horse.y, slot);
+      r.setViewport(slot.x, 0, slot.cols * SX, slot.rows * SY);
+      r.setScissor(slot.x, 0, slot.cols * SX, slot.rows * SY);
+      r.render(this.scene, this.camera);
     }
     r.setScissorTest(false);
-    for (const rig of this.rigs.values()) {
-      rig.showDepth(false);
-      rig.model.visible = true;
-    }
+    for (const rig of this.rigs.values()) rig.model.visible = true;
     const gl = r.getContext();
-    gl.readPixels(0, 0, width, height * 2, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
-    for (const { horse, slot } of drawn) {
-      const { cells, top, base } = this.cellsOf(slot, horse, view, height);
-      const bands = this.flat ? [{ y: horse.y, cells, base }] : bandCells(cells, horse.y, base);
-      this.drawn.push({ horse, animal: horse, cells, bands, depth: horse.y, shadow: HORSE.shadow, top, base });
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
+    for (const { horse, slot } of list) {
+      const rig = this.rigs.get(horse);
+      rig.raster = { x: horse.x, y: horse.y, slot, pose: rig.pose(), ...this.cellsOf(slot, horse) };
     }
-    return this.drawn;
   }
 
   // The cells a horse and its rider cover on screen.
@@ -514,16 +726,21 @@ export class HorseFigures {
     cam.updateProjectionMatrix();
   }
 
-  // The slot's pixels as cells, styled as the animals are: outline glyphs
-  // round the edge lit by a soft rim, a density ramp inside. Each cell also
-  // takes the ground row under the nearest of its samples, from the depth
-  // drawn `lift` pixels above it.
-  cellsOf(slot, horse, view, lift) {
+  // The slot's pixels as cells at their place in the world, styled as the
+  // animals are: outline glyphs round the edge lit by a soft rim, a density
+  // ramp inside. Each cell also takes the ground row under the nearest of
+  // its samples, from the depth in their alpha.
+  cellsOf(slot, horse) {
     const { cx0, cy0 } = slot;
     const w = this.readWidth;
     const h = slot.rows * SY;
     const px = this.pixels;
     const frame = { top: (horse.y - cy0) / SCALE, bottom: (horse.y - cy0 - slot.rows) / SCALE, pxHeight: h, y: horse.y };
+    // The ground row is linear in the depth byte and the pixel row, so it
+    // is found from the steps of each.
+    const ground0 = groundRowOf(128, 0, frame);
+    const perByte = groundRowOf(129, 0, frame) - ground0;
+    const perRow = groundRowOf(128, 1, frame) - ground0;
     const cells = [];
     let top = Infinity;
     for (let cy = 0; cy < slot.rows; cy++) {
@@ -534,7 +751,7 @@ export class HorseFigures {
         let b = 0;
         let mx = 0;
         let my = 0;
-        let ground = -Infinity;
+        let near = -Infinity;
         for (let j = 0; j < SY; j++) {
           const row = h - 1 - (cy * SY + j);
           for (let i = 0; i < SX; i++) {
@@ -546,8 +763,8 @@ export class HorseFigures {
             b += px[o + 2];
             mx += (i + 0.5) / SX - 0.5;
             my += (j + 0.5) / SY - 0.5;
-            const d = o + lift * w * 4;
-            if (px[d + 3] >= 128) ground = Math.max(ground, groundRowOf(px[d], cy * SY + j, frame));
+            const at = perByte * (px[o + 3] - 128) + perRow * (cy * SY + j);
+            if (at > near) near = at;
           }
         }
         if (hits < 3) continue;
@@ -555,23 +772,21 @@ export class HorseFigures {
         r /= hits;
         g /= hits;
         b /= hits;
-        const sx = cx0 + cx - view.x0;
-        const sy = cy0 + cy - view.y0;
-        const at = ground === -Infinity ? horse.y : ground;
+        const at = { cx: cx0 + cx, cy: cy0 + cy, sx: 0, sy: 0, row: ground0 + near };
         if (hits < N - 4) {
           const o = outline(mx, my, hits / N);
           const t = Math.min(1, 0.25 + o.rim * 0.5);
-          cells.push({ sx, sy, row: at, g: o.g, r: r + (RIM[0] - r) * t, gg: g + (RIM[1] - g) * t, b: b + (RIM[2] - b) * t,
+          cells.push({ ...at, g: o.g, r: r + (RIM[0] - r) * t, gg: g + (RIM[1] - g) * t, b: b + (RIM[2] - b) * t,
             br: 4, bgG: 4, bb: 6 });
           continue;
         }
         const lum = (r * 0.3 + g * 0.55 + b * 0.15) / 255;
         const ch = RAMP[Math.min(RAMP.length - 1, 3 + Math.floor(lum * 2.2 * (RAMP.length - 3)))];
-        cells.push({ sx, sy, row: at, g: ch, r: Math.min(255, 30 + r * GAIN), gg: Math.min(255, 28 + g * GAIN),
+        cells.push({ ...at, g: ch, r: Math.min(255, 30 + r * GAIN), gg: Math.min(255, 28 + g * GAIN),
           b: Math.min(255, 24 + b * GAIN), br: 4 + r * 0.04, bgG: 4 + g * 0.04, bb: 5 + b * 0.04 });
       }
     }
-    return { cells, top: top === Infinity ? null : cy0 + top, base: Math.floor(horse.y) - view.y0 };
+    return { cells, top: top === Infinity ? null : cy0 + top };
   }
 
   // Draws a figure, or one of its bands, through a writer (see cells.js).

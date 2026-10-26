@@ -875,7 +875,8 @@ function fogWalkers(view, missiles) {
   const wild = animals.list.filter((a) => a.alive).sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
   for (const a of wild) walkers.push({ id: a, x: a.x, y: a.y, size: a.kind.height / 1.8 });
   const ridden = [...horses.list].sort((a, b) => near(a) - near(b)).slice(0, Math.max(0, MAX_WALKERS - walkers.length));
-  for (const h of ridden) walkers.push({ id: h, x: h.x, y: h.y, size: 2.45 / 1.8 });
+  // Horse and rider stand 2.45 m; a horse alone, to the top of its head, 2 m.
+  for (const h of ridden) walkers.push({ id: h, x: h.x, y: h.y, size: (h.rider ? 2.45 : 2) / 1.8 });
   return walkers;
 }
 
