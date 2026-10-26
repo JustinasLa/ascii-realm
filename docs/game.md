@@ -155,7 +155,7 @@ short version see the [README](../README.md).
   a charged spinning slash, all with glowing swing trails. Footsteps kick up
   dust and grass and leave prints in dirt and sand.
 - **Nameplate.** The outlaw's name floats above the hood; add `?name=...` to
-  the URL to choose it.
+  the URL to choose it. Its colour is your name colour (see Multiplayer).
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 - **Status frames and quick slots.** A party-style frame in the top-left
   corner shows the outlaw's name, segmented HP and MP bars and the satchel's weight.
@@ -290,11 +290,21 @@ short version see the [README](../README.md).
 - **Multiplayer lobbies.** Create a lobby and share its six-character code;
   friends enter the code to join the same seeded world. Movement, jumps, swings,
   rune casts, gear, weapons, nameplates and reflections are visible to everyone, and each
-  friend's health appears in the party frames under your own. Players
-  have distinct nameplate colours, and brief connection drops reconnect
-  automatically. The lobby keeps working when its creator leaves.
+  friend's health appears in the party frames under your own. Brief
+  connection drops reconnect automatically. The lobby keeps working when its creator leaves.
 - **Chat.** In a lobby, `Enter` opens a chat bar (a **CHAT** button on
   phones). Local speech carries 15 m and blurs with distance; shouts, yells,
   whispers, emotes, scene lines and local out-of-character chat have their own
   reach, and `/ooc` reaches the whole lobby. Spoken lines float above the
   speaker's head for a few seconds. See [controls](controls.md#chat).
+- **Name colours.** Each player picks a name colour under **Multiplayer →
+  Name colour**, or keeps **Auto**, the distinct colour the lobby gives them.
+  It colours their nameplate, party frame, place in the player list and name
+  in chat, for everyone in the lobby, and players who join later see it at
+  once. The choice is kept in the browser and shows on your own nameplate when
+  playing solo too. On offer are Auto, fifteen named colours and **Custom…**
+  (any colour). Colours too dark to read on the night or on the panels are
+  lightened until they reach a 4.5:1 contrast, keeping their hue. Friends may
+  share a colour. Players with the same name are numbered by when they joined
+  (`Ash`, `Ash (2)`), everywhere their name shows, and never share a
+  look-alike colour: the later one shows an automatic colour instead.
