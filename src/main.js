@@ -4,7 +4,9 @@ import { SceneryBuilder } from './editor/builder.js';
 import { GameAudio } from './audio/audio.js';
 import { prepareSpellSounds } from './audio/spells.js';
 import { bindAudioControls } from './audio/controls.js';
-import { INSTRUMENT_IDS } from './audio/instruments.js';
+import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer } from './audio/instruments.js';
+import { InstrumentKeys } from './core/instrument-keys.js';
+import { MusicNotes } from './world/music-notes.js';
 import { installTouchControls } from './core/touch.js';
 import { assistTarget, castAssist, strikeAssist } from './core/aim-assist.js';
 import { pickStruck, TargetTracker, targetId } from './core/target.js';
@@ -16,7 +18,7 @@ import { installPinchZoom } from './core/pinch.js';
 import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from './core/native.js';
 import { dressFigure, drawFigure, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
-import { KINDS, Monsters } from './entities/monsters.js';
+import { KINDS, Monsters, toMetres } from './entities/monsters.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
 import { Animals } from './entities/animals.js';
 import { Birds } from './entities/birds.js';
@@ -366,7 +368,16 @@ debug.native = { gate, wakeLock, pacer, get clock() { return clock; }, get fulls
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
   player, inventory, name, wallet,
-  onSelect: (index) => { selectHotbar(index); canvas.focus({ preventScroll: true }); },
+  // The page's own top-corner panels, which a note glyph keeps clear of.
+  covers: [document.getElementById('panel-dock'), document.getElementById('phone-menu'), document.getElementById('zoom-controls')],
+  // With an instrument in the off hand, clicking a note slot plays it
+  // (Shift-click the second layer) and never equips the slot's gear.
+  onSelect: (index, event) => {
+    if (index < 8 && heldInstrument()) {
+      if (canPlay()) playSlot(index + 1, Boolean(event?.shiftKey));
+    } else selectHotbar(index);
+    canvas.focus({ preventScroll: true });
+  },
   onInventory: () => inventoryScreen.toggle(),
 });
 const inventoryScreen = new InventoryScreen({
@@ -831,6 +842,71 @@ const spellControls = new SpellControls(casting, { surface: canvas,
   onFocus: () => canvas.focus({ preventScroll: true }), restore: !params.has('spell'), castKey,
   isPhone: () => device.phone });
 debug.spellControls = spellControls;
+
+// An instrument in the off hand plays on keys 1-8, Shift+1-8 for its second
+// layer, and on clicks on its note slots. Phones keep their quick slots and
+// play nothing until they get an on-screen keyboard.
+const musicNotes = new MusicNotes();
+debug.musicNotes = musicNotes;
+function heldInstrument() {
+  const id = inventory.equipment.offHand?.id;
+  return !device.phone && secondLayer(id) ? id : null;
+}
+// Typing in a field, as in the chat, keeps the number keys for the text.
+function typing() {
+  const active = document.activeElement;
+  return Boolean(active?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(active?.tagName?.toUpperCase?.()));
+}
+// The one check for every way of playing a note. Blocked gameplay covers an
+// open inventory, chat or phone menu.
+function canPlay() {
+  return Boolean(heldInstrument()) && !builder.enabled && !typing() && !isGameplayBlocked()
+    && !spellControls.menu?.isOpen && !gate.waiting && !debug.freeze && player.vitals.health > 0;
+}
+// The figure's top row in the last frame, where the note glyph starts from.
+let lastOwnTop = NaN;
+let preparedInstrument = null;
+// Where every local note is born: the sound, the glyph over the head, the
+// selection back on slot 9 (shown only, equipping nothing) and the flash.
+function playSlot(slot, shifted) {
+  const id = heldInstrument();
+  const note = layerNote(id, slot, shifted);
+  const event = { type: 'instrument', instrument: id, ...note, x: player.x, y: player.y };
+  // A claimed key never reaches the page's own unlock listener, so resume
+  // sound here, inside the key press, before the note is scheduled.
+  const unlocking = sound.engine.unlock();
+  if (sound.engine.context?.state === 'running') sound.play(event);
+  else void unlocking.then((running) => { if (running) sound.play(event); });
+  musicNotes.add({ x: player.x, y: player.y, top: lastOwnTop, midi: noteMidi(id, note.degree, note.octave, note.chord)[0] });
+  // Friends in a lobby hear it too; solo, nothing is sent.
+  multiplayer.sendNote({ instrument: id, ...note });
+  inventory.selectHotbar(8);
+  hud.flashSlot(slot - 1);
+}
+// A friend's note: heard from where their figure stands, fading to silence at
+// the instrument's range, with the note over their head. Its loudness and pan
+// are set as it starts and stay while it rings.
+function playRemoteNote(from, note) {
+  const peer = remotePlayers.peers.get(from);
+  if (!peer) return;
+  const { x, y } = peer.player;
+  const level = instrumentFalloff(note.instrument, Math.hypot(...toMetres(x - player.x, y - player.y)));
+  if (level <= 0) return;
+  sound.play({ type: 'instrument', ...note, x, y, level });
+  // A background tab's glyphs would all appear at once on its return.
+  if (document.hidden) return;
+  const top = peer.figure ? Math.floor(y + figureTop(peer.figure)) : NaN;
+  musicNotes.add({ x, y, top, midi: noteMidi(note.instrument, note.degree, note.octave, note.chord)[0] });
+}
+multiplayer.onNote = ({ from, note }) => playRemoteNote(from, note);
+debug.playRemoteNote = playRemoteNote;
+const instrumentKeys = new InstrumentKeys(window, {
+  instrument: () => isGameplayBlocked() ? null : heldInstrument(),
+  canPlay,
+  isControl: isControlTarget,
+  onNote: playSlot,
+});
+debug.instrumentKeys = instrumentKeys;
 touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap),
   (pointerId) => spellControls.dropTouch(pointerId));
 // What the contextual touch button can reach. Ground items appear once the
@@ -1099,8 +1175,19 @@ function frame(now) {
   if (debug.freeze || isGameplayBlocked() || player.magicStunned || gate.waiting) cancelActions();
   updateWakeLock();
 
+  // Keys 1-8 are notes while an instrument is carried; a tap that slipped
+  // past the note keys is dropped rather than equipping slot gear.
+  const instrument = heldInstrument();
   for (let index = 0; index < 9; index++) {
-    if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`)) selectHotbar(index);
+    if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`) && !(index < 8 && instrument)) selectHotbar(index);
+  }
+  hud.setInstrument(instrument ? { id: instrument, shifted: isDown('ShiftLeft', 'ShiftRight') } : null);
+  // Render the instrument's string buffers once per audio context, ahead of its first note.
+  const audioContext = sound.engine.context;
+  if (instrument && audioContext?.state === 'running'
+    && (preparedInstrument?.id !== instrument || preparedInstrument.context !== audioContext)) {
+    preparedInstrument = { id: instrument, context: audioContext };
+    void prepareInstrument(sound.engine, instrument);
   }
   if (wasTapped('KeyQ')) useHotbar();
   // Changing or taking off the weapon puts the last one away at once.
@@ -1211,6 +1298,7 @@ function frame(now) {
   }
   if (!paused) grass.update(world, player, time);
   if (!paused) mushrooms.update(playerDt, player, fromX, fromY);
+  if (!paused) musicNotes.update(dt);
   if (!gate.waiting) remotePlayers.update(dt, now);
   if (!paused) fires.pass(world, player, fromX, fromY, fromAir);
   for (const e of player.events) {
@@ -1502,6 +1590,11 @@ function frame(now) {
   for (const spore of [...mushrooms.ambient, ...mushrooms.spores]) {
     drawables.push({ y: spore.y, draw: () => mushrooms.drawSpore(renderer, view, spore) });
   }
+  // A note glyph is kept below the panels over the top of the screen.
+  const noteCover = musicNotes.list.length ? hud.topCover({ ...view, cellW: renderer.cellW, cellH: renderer.cellH }) : null;
+  for (const note of musicNotes.list) {
+    drawables.push({ y: note.y + 0.001, draw: () => musicNotes.draw(renderer, view, note, noteCover) });
+  }
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
@@ -1590,6 +1683,7 @@ function frame(now) {
   const hudView = { ...view, cellW: renderer.cellW, cellH: renderer.cellH };
   const projection = hud.projector(hudView);
   const ownTop = model ? model.top : Math.floor(player.y + figureTop(figure));
+  lastOwnTop = ownTop;
   const self = selfMember();
   const plates = Number.isFinite(ownTop) ? [{ key: 'self', x: player.x, row: ownTop - 2, depth: player.y,
     name: self ? self.name : name, tag: self?.tag ?? null,

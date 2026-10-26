@@ -618,3 +618,16 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-target { top: calc(max(6px, env(safe-area-inset-top)) + 46px); left: max(8px, env(safe-area-inset-left)); right: auto; width: min(46vw, 200px); }
   .hud:has(.hud-target:not([hidden])) .hud-toasts { margin-top: 30px; }
 }
+
+/* An off-hand instrument turns slots 1-8 into its notes: the letter or chord
+   name over the exact pitch, lit for a moment when played. */
+.hud-slot.note { align-content: center; gap: 2px; color: var(--ink); }
+.hud-slot.note .hud-slot-glyph { display: none; }
+.hud-slot-note { font-size: 15px; font-weight: 600; line-height: 1; }
+.hud-slot-pitch { color: var(--muted); font-size: 8px; line-height: 1; white-space: nowrap; }
+.hud-slot.note-flash { color: var(--solid); background: var(--ink); border-color: var(--ink); }
+.hud-slot.note-flash .hud-slot-pitch { color: var(--solid); }
+@media (max-width: 680px) {
+  .hud-slot-note { font-size: 13px; }
+  .hud-slot-pitch { font-size: 7px; }
+}

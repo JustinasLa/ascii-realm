@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
-import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, playerState, readMembers,
-  readPlayerState, validCode } from '../src/multiplayer/protocol.js';
+import { INSTRUMENT_IDS } from '../src/audio/instruments.js';
+import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, NOTE_SLACK, NOTE_WINDOW_MS,
+  NOTES_PER_SECOND, playerState, RateBudget, readMembers, readNote, readPlayerState, RollingLimit,
+  validCode } from '../src/multiplayer/protocol.js';
 import { blendState, RemotePlayers } from '../src/multiplayer/remote-players.js';
 
 test('player snapshots preserve poses without sharing mutable arrays or private fields', () => {
@@ -128,4 +130,113 @@ test('tags and member colours are cleaned', () => {
   const state = playerState(new Player(0, 0));
   const [member] = readMembers([{ id: 'ab', name: 'Ash', color: 1, tint: '#0000AA', tag: 3, state }]);
   assert.deepEqual([member.tint, member.tag], ['#4a89ff', 3]);
+});
+
+test('readNote accepts every instrument, degree end, octave and chord, as a new object', () => {
+  for (const instrument of INSTRUMENT_IDS) for (const degree of [0, 7]) for (const octave of [-1, 0, 1]) {
+    for (const chord of [true, false]) {
+      const raw = { instrument, degree, octave, chord };
+      const note = readNote(raw);
+      assert.deepEqual(note, raw);
+      assert.notEqual(note, raw);
+    }
+  }
+});
+
+test('readNote takes a chord on any instrument, as every instrument can sound one', () => {
+  for (const instrument of ['flute', 'trumpet']) {
+    assert.deepEqual(readNote({ instrument, degree: 3, octave: 0, chord: true }), { instrument, degree: 3, octave: 0, chord: true });
+  }
+});
+
+test('readNote rejects anything else, and leaves its input alone', () => {
+  const good = { instrument: 'lute', degree: 2, octave: 0, chord: false };
+  const without = (key) => Object.fromEntries(Object.entries(good).filter(([k]) => k !== key));
+  const bad = [
+    ...[-1, 8, 1.5, '1', NaN].map((degree) => ({ ...good, degree })),
+    ...[2, -2, 0.5, '0'].map((octave) => ({ ...good, octave })),
+    ...['true', 1, null].map((chord) => ({ ...good, chord })),
+    ...['woodenBuckler', 'LUTE', '__proto__', 'toString'].map((instrument) => ({ ...good, instrument })),
+    without('octave'), without('chord'), without('instrument'), without('degree'),
+    { ...good, extra: 1 }, JSON.parse('{"instrument":"lute","degree":2,"octave":0,"chord":false,"__proto__":{}}'),
+    JSON.parse('{"instrument":"lute","degree":2,"octave":0,"__proto__":false}'),
+    null, undefined, [], 'lute', 3,
+  ];
+  for (const raw of bad) assert.equal(readNote(raw), null, JSON.stringify(raw));
+  const input = { ...good };
+  readNote(input);
+  assert.deepEqual(input, good);
+});
+
+test('RollingLimit allows 20 in any rolling second, a refusal taking no slot', () => {
+  assert.equal(NOTES_PER_SECOND, 20);
+  assert.equal(NOTE_WINDOW_MS, 1000);
+  const limit = new RollingLimit();
+  for (let i = 0; i < 20; i++) assert.equal(limit.allow(0), true);
+  assert.equal(limit.allow(0), false, 'the 21st in the same moment');
+  assert.equal(limit.allow(999), false);
+  assert.equal(limit.allow(1000), true, 'one slot frees a full second on');
+  assert.equal(limit.allow(1000), true);
+  assert.equal(limit.allow(NaN), false, 'a bad clock refuses');
+  const steady = new RollingLimit();
+  let allowed = 0;
+  for (let t = 0; t < 5000; t += 50) allowed += steady.allow(t);
+  assert.equal(allowed, 100, 'a steady 20 a second all pass');
+  const flood = new RollingLimit();
+  const perSecond = [0, 0, 0];
+  for (let t = 0; t < 3000; t += 25) if (flood.allow(t)) perSecond[Math.floor(t / 1000)]++;
+  assert.deepEqual(perSecond, [20, 20, 20], '40 a second gives exactly 20');
+  const small = new RollingLimit(2, 100);
+  assert.deepEqual([small.allow(0), small.allow(10), small.allow(50), small.allow(100), small.allow(105)], [true, true, false, true, false]);
+});
+
+test('RateBudget takes 23 at once and 20 a second after, a refusal booking nothing', () => {
+  assert.equal(NOTE_SLACK, 3);
+  const budget = new RateBudget();
+  for (let i = 0; i < 23; i++) assert.equal(budget.allow(0), true);
+  assert.equal(budget.allow(0), false, 'the 24th in the same moment');
+  assert.equal(budget.allow(49), false);
+  assert.equal(budget.allow(50), true, 'one more every 50 ms');
+  assert.equal(budget.allow(50), false);
+  assert.equal(budget.allow(NaN), false, 'a bad clock refuses');
+  assert.equal(budget.allow(100), true, 'and the refusals cost nothing');
+  const small = new RateBudget(2, 10);
+  assert.deepEqual([0, 0, 0, 99, 100, 300, 300, 300].map((t) => small.allow(t)),
+    [true, true, false, false, true, true, true, false]);
+});
+
+test('a flood at 25 a second is cut to exactly 20 a second once its burst is spent', () => {
+  const budget = new RateBudget();
+  const perSecond = new Array(20).fill(0);
+  for (let t = 0; t < 20000; t += 40) if (budget.allow(t)) perSecond[Math.floor(t / 1000)]++;
+  // The 23 at hand drain at 5 a second, then only the 20 a second remain.
+  assert.deepEqual(perSecond.slice(0, 5), [25, 25, 25, 25, 22]);
+  assert.deepEqual(perSecond.slice(5), new Array(15).fill(20));
+  for (let seconds = 1; seconds <= 20; seconds++) {
+    const total = perSecond.slice(0, seconds).reduce((a, b) => a + b, 0);
+    assert.ok(total <= 23 + 20 * seconds, `${total} in ${seconds} s`);
+  }
+});
+
+test('a steady 20 a second passes RateBudget with 400 ms of jitter, and so does the page window delayed up to 150 ms', () => {
+  let seed = 7;
+  const random = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  // Exactly 20 a second on average, each note up to 400 ms off its beat.
+  const steady = new RateBudget();
+  const beats = Array.from({ length: 400 }, (_, i) => i * 50 + random() * 400).sort((a, b) => a - b);
+  assert.ok(beats.every((t) => steady.allow(t)));
+  // A performer hammering keys in bursts, limited by the page's window, then
+  // delayed on the way by 0-150 ms each.
+  for (let run = 0; run < 20; run++) {
+    const page = new RollingLimit();
+    const arrivals = [];
+    let t = 0;
+    for (let i = 0; i < 600; i++) {
+      t += random() < 0.3 ? 0 : Math.floor(random() * 120);
+      if (page.allow(t)) arrivals.push(t + Math.floor(random() * 151));
+    }
+    assert.ok(arrivals.length > 200);
+    const server = new RateBudget();
+    assert.deepEqual(arrivals.sort((a, b) => a - b).filter((at) => !server.allow(at)), [], `run ${run}`);
+  }
 });

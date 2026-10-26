@@ -1,3 +1,4 @@
+import { isInstrumentNote } from '../audio/instruments.js';
 import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
 import { parseTint } from './tint.js';
 
@@ -5,6 +6,12 @@ export { PLAYER_COLORS } from './tint.js';
 export const PROTOCOL_VERSION = 4;
 export const MAX_PLAYERS = 8;
 export const UPDATE_MS = 50;
+// A player plays at most NOTES_PER_SECOND notes in any rolling window of
+// NOTE_WINDOW_MS. The server allows NOTE_SLACK more at once, so network
+// jitter bunching a steady performer's notes doesn't cost any.
+export const NOTES_PER_SECOND = 20;
+export const NOTE_WINDOW_MS = 1000;
+export const NOTE_SLACK = 3;
 
 // Only these fields cross the network. Cape physics and blade trails are local.
 export const STATE_RANGES = {
@@ -31,6 +38,55 @@ export function readEquipment(raw) {
     equipment[slot] = { id, count: 1, ...(MATERIALS.includes(stack.material) ? { material: stack.material } : {}) };
   }
   return equipment;
+}
+
+// A played note as it crosses the network: a known instrument, degree 0-7,
+// octave -1, 0 or 1 and a boolean chord, every field present and nothing
+// else. Any instrument may sound a chord. The result is always a new object.
+export function readNote(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (Object.keys(raw).length !== 4 || !Number.isInteger(raw.octave) || typeof raw.chord !== 'boolean') return null;
+  if (!isInstrumentNote(raw)) return null;
+  return { instrument: raw.instrument, degree: raw.degree, octave: raw.octave, chord: raw.chord };
+}
+
+// At most `count` events in any rolling window: a ring of the last accepted
+// times, each slot reusable once its time is a full window old. A refused
+// event takes no slot.
+export class RollingLimit {
+  constructor(count = NOTES_PER_SECOND, windowMs = NOTE_WINDOW_MS) {
+    this.windowMs = windowMs;
+    this.times = new Array(count).fill(-Infinity);
+    this.next = 0;
+  }
+
+  allow(now) {
+    // Written so a NaN clock refuses.
+    if (!(now - this.times[this.next] >= this.windowMs)) return false;
+    this.times[this.next] = now;
+    this.next = (this.next + 1) % this.times.length;
+    return true;
+  }
+}
+
+// A sustained `perSecond` events with room for `burst` at once. Each accepted
+// event books the next 1/perSecond of a second, from now or from the end of
+// what is already booked, and is refused if that would book more than
+// `burst` of them ahead of now. A refused event books nothing.
+export class RateBudget {
+  constructor(burst = NOTES_PER_SECOND + NOTE_SLACK, perSecond = NOTES_PER_SECOND) {
+    this.interval = 1000 / perSecond;
+    this.ahead = burst * this.interval;
+    this.booked = -Infinity;
+  }
+
+  allow(now) {
+    const booked = Math.max(this.booked, now) + this.interval;
+    // Written so a NaN clock refuses.
+    if (!(booked - now <= this.ahead)) return false;
+    this.booked = booked;
+    return true;
+  }
 }
 
 const POSE_RANGES = { twist: [-4, 4], lean: [-2, 2], crouch: [0, 2], off: [0, 1] };

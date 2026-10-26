@@ -1,3 +1,5 @@
+import { INSTRUMENTS } from '../audio/instruments.js';
+import { ITEMS } from '../inventory/items.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
 import { ASPECT, WATER } from '../world/world.js';
@@ -86,8 +88,9 @@ const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 // forest green and worn leather, a longbow and quiver on the back and a
 // short sword at the hip.
 // `equipment` is the inventory's worn gear, slot by slot; without one the
-// outlaw is fully dressed. The clothes are always worn for now; a missing
-// weapon or buckler simply is not drawn.
+// outlaw is fully dressed. The clothes are always worn for now (see `wears`),
+// so the hood, boots and gloves are always drawn; a missing weapon or buckler
+// simply is not drawn.
 function dress(rig, capeSim, equipment, weapon = null) {
   const d = new Dresser();
   const wearing = (slot) => wears(equipment, slot);
@@ -96,17 +99,11 @@ function dress(rig, capeSim, equipment, weapon = null) {
   for (const l of rig.legs) {
     d.limb(l.hip, l.knee, 0.074, 0.058, 'hose');
     d.limb(l.knee, l.ankle, 0.056, 0.048, 'hose');
-    if (wearing('legs')) {
-      // Tall soft boots turned down in a cuff below the knee.
-      const top = lerp3(l.knee, l.ankle, 0.3);
-      d.limb(top, l.ankle, 0.062, 0.054, 'boot', 0.005);
-      d.limb(top, lerp3(l.knee, l.ankle, 0.42), 0.07, 0.066, 'leather', 0.01);
-      d.limb(l.ankle, l.toe, 0.056, 0.042, 'boot', 0.01);
-    } else {
-      // Low turnshoes.
-      d.limb(lerp3(l.knee, l.ankle, 0.85), l.ankle, 0.05, 0.05, 'leather', 0.005);
-      d.limb(l.ankle, l.toe, 0.05, 0.038, 'leather', 0.01);
-    }
+    // Tall soft boots turned down in a cuff below the knee.
+    const top = lerp3(l.knee, l.ankle, 0.3);
+    d.limb(top, l.ankle, 0.062, 0.054, 'boot', 0.005);
+    d.limb(top, lerp3(l.knee, l.ankle, 0.42), 0.07, 0.066, 'leather', 0.01);
+    d.limb(l.ankle, l.toe, 0.056, 0.042, 'boot', 0.01);
   }
 
   quiverAndBow(d, rig);
@@ -115,20 +112,16 @@ function dress(rig, capeSim, equipment, weapon = null) {
   else if (weapon && rig.sword) heldWeapon(d, rig.sword, weapon);
 
   for (const a of rig.arms) {
-    // Loose sleeves, then bracers and gloves or bare forearms and hands.
+    // Loose sleeves, then bracers and gloves.
     d.limb(a.shoulder, a.elbow, 0.062, 0.054, wearing('chest') ? 'sleeve' : 'linen');
     d.limb(a.elbow, a.wrist, 0.05, 0.046, wearing('chest') ? 'sleeve' : 'linen');
-    if (wearing('hands')) {
-      d.limb(lerp3(a.elbow, a.wrist, 0.3), a.wrist, 0.054, 0.05, 'bracer', 0.01);
-      d.limb(a.wrist, a.hand, 0.046, 0.042, 'leather', 0.015);
-    } else {
-      d.limb(a.wrist, a.hand, 0.042, 0.038, 'skin', 0.015);
-    }
+    d.limb(lerp3(a.elbow, a.wrist, 0.3), a.wrist, 0.054, 0.05, 'bracer', 0.01);
+    d.limb(a.wrist, a.hand, 0.046, 0.042, 'leather', 0.015);
   }
   if (equipment?.offHand?.id === 'woodenBuckler') buckler(d, rig);
+  else if (instrumentFamily(equipment?.offHand?.id)) heldInstrument(d, rig, equipment.offHand.id);
 
-  if (wearing('helm')) hood(d, rig);
-  else bareHead(d, rig);
+  hood(d, rig);
 
   return d.sorted();
 }
@@ -180,20 +173,64 @@ function buckler(d, rig) {
   d.blob(center, across(rig, 0.03, 0.02), 0.03, 'iron', 0.027);
 }
 
-// With the hood down: cropped dark hair over a weathered face.
-function bareHead(d, rig) {
-  const h = rig.headAt;
-  const head = h([0, 0, 0]);
-  const z = project(head)[2];
-  const front = (p) => (project(p)[2] > z ? 0.3 : -0.3);
-  d.limb(rig.neck, head, 0.05, 0.06, 'skin');
-  d.blob(head, 0.12, 0.145, 'skin');
-  d.blob(h([0, 0.05, -0.02]), 0.125, 0.11, 'hair', 0.01);
-  if (rig.eyes > 0.05) {
-    for (const s of [-1, 1]) {
-      const eye = h([s * 0.04, -0.01, 0.115]);
-      d.blob(eye, 0.016, 0.009 * rig.eyes, 'void', front(eye));
-    }
+// What a held instrument looks like on a shape-built figure, by how its
+// voice is played: 'strings', 'wind', 'brass' or 'tines', or null for an
+// item that isn't an instrument.
+const FAMILIES = { pluck: 'strings', harp: 'strings', hammered: 'strings', bowed: 'strings',
+  breath: 'wind', chanter: 'wind', reed: 'wind', brass: 'brass', tine: 'tines' };
+export function instrumentFamily(id) {
+  if (typeof id !== 'string' || !Object.hasOwn(ITEMS, id) || !ITEMS[id].tags?.includes('instrument')) return null;
+  return FAMILIES[INSTRUMENTS[id]?.voice] ?? 'strings';
+}
+
+// An instrument's materials: its own colour, and the trims, each marked with
+// its family.
+const instrumentMats = new Map();
+function instrumentMat(id, family, part) {
+  const key = `${id}:${part}`;
+  if (!instrumentMats.has(key)) {
+    const colour = ITEMS[id].colour;
+    const mats = {
+      body: { ...MATERIALS[family === 'brass' ? 'iron' : 'wood'], color: colour },
+      dark: { ...MATERIALS.wood, color: colour.map((c) => c * 0.45) },
+      hole: MATERIALS.void,
+      cap: MATERIALS.leather,
+      tine: MATERIALS.iron,
+    };
+    instrumentMats.set(key, { ...mats[part], family });
+  }
+  return instrumentMats.get(key);
+}
+
+// The off-hand instrument, carried as the buckler is: hanging from the hand
+// opposite the sword, its long side down the forearm, one simple silhouette
+// per family in the item's colour.
+function heldInstrument(d, rig, id) {
+  const family = instrumentFamily(id);
+  const mat = (part) => instrumentMat(id, family, part);
+  const arm = rig.arms.find((a) => a.s !== SWORD_SIDE);
+  const along = unit(sub(arm.wrist, arm.elbow));
+  const forward = rotY([0, 0, 1], rig.heading);
+  const side = rotY([1, 0, 0], rig.heading);
+  const at = (down, out = 0, across = 0) => add(add(add(arm.hand, mul(along, down)), mul(forward, out)), mul(side, across));
+  if (family === 'strings') {
+    // A pear body by the hand and a neck running on down.
+    const body = at(0.12, 0.07);
+    d.limb(body, at(0.44, 0.07), 0.03, 0.024, mat('dark'), 0.025);
+    d.blob(body, across(rig, 0.12, 0.06), 0.13, mat('body'), 0.026);
+    d.blob(at(0.1, 0.08), across(rig, 0.035, 0.025), 0.035, mat('hole'), 0.027);
+  } else if (family === 'wind') {
+    // A slim pipe held at the side, capped at its foot.
+    d.limb(at(-0.06, 0.04), at(0.42, 0.04), 0.034, 0.03, mat('body'), 0.025);
+    d.blob(at(0.42, 0.04), 0.04, 0.04, mat('cap'), 0.026);
+  } else if (family === 'brass') {
+    // A short tube flaring to a bell.
+    d.limb(at(-0.04, 0.05), at(0.26, 0.05), 0.026, 0.034, mat('body'), 0.025);
+    d.blob(at(0.31, 0.05), across(rig, 0.1, 0.05), 0.1, mat('body'), 0.026);
+  } else {
+    // A small box with iron tines.
+    d.blob(at(0.08, 0.06), across(rig, 0.1, 0.06), 0.08, mat('body'), 0.025);
+    for (const offset of [-0.045, 0, 0.045]) d.limb(at(0.02, 0.1, offset), at(0.1, 0.1, offset), 0.012, 0.012, mat('tine'), 0.027);
   }
 }
 

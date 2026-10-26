@@ -315,6 +315,11 @@ short version see the [README](../README.md).
   whispers, emotes, scene lines and local out-of-character chat have their own
   reach, and `/ooc` reaches the whole lobby. Spoken lines float above the
   speaker's head for a few seconds. See [controls](controls.md#chat).
+- **Playing together.** In a lobby, friends hear the notes and chords you
+  play from where you stand, panned to your side and fading to silence 64 m
+  away, and see each note's glyph over your head. They see the instrument in
+  your hand too: a stringed body and neck, a pipe, a horn or a box of tines.
+  Phones hear and see friends play, though they can't play yet.
 - **Name colours.** Each player picks a name colour under **Multiplayer →
   Name colour**, or keeps **Auto**, the distinct colour the lobby gives them.
   It colours their nameplate, party frame, place in the player list and name
