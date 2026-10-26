@@ -464,6 +464,56 @@ test('a beam\'s column of air is fixed to the world too', () => {
   assert.ok(changed > 100, `${changed} cells lit`);
 });
 
+test('a column in view is drawn though its patch lies beyond the map: walking and zooming across never pop it', () => {
+  const { world, shaft } = oneBeam(5);
+  const draw = (night, view) => {
+    const r = screenRenderer(view);
+    night.drawShafts(r, view, 4.2);
+    return r;
+  };
+  // Everything in one view: the patch on the map, the whole column above it.
+  const whole = { x0: Math.floor(shaft.cx) - 90, y0: shaft.reach.y0 - 40, cols: 150, rows: shaft.box.y1 - shaft.reach.y0 + 44 };
+  const all = new NightLight();
+  settle(all, whole, [], { seed: 5, world });
+  const ref = draw(all, whole);
+  // Then walk north from where the patch's top rows are on the map until
+  // only the column's top is in view, a row a frame, zoomed in and out by
+  // turns, with no tree to shade anything.
+  const night = new NightLight();
+  const sizes = [{ cols: 100, rows: 30 }, { cols: 80, rows: 24 }];
+  const start = shaft.box.y0 - 30 - PAD_BOTTOM + 4;
+  let beyond = 0, onMap = 0;
+  for (let y0 = start, step = 0; y0 + 24 > shaft.reach.y0 + 2; y0--, step++) {
+    const { cols, rows } = sizes[step % 2];
+    const view = { x0: Math.floor(shaft.cx) - 70, y0, cols, rows };
+    if (step === 0) settle(night, view, [], { seed: 5, world });
+    else night.prepare(view, [], { seed: 5, world });
+    const r = draw(night, view);
+    let lit = 0;
+    for (let sy = 0; sy < rows; sy++) {
+      for (let sx = 0; sx < cols; sx++) {
+        const o = (sy * cols + sx) * 4, oo = ((y0 + sy - whole.y0) * whole.cols + view.x0 + sx - whole.x0) * 4;
+        assert.deepEqual([...r.fg.slice(o, o + 4), ...r.ov.slice(o, o + 4)],
+          [...ref.fg.slice(oo, oo + 4), ...ref.ov.slice(oo, oo + 4)], `y0 ${y0}: ${view.x0 + sx},${y0 + sy}`);
+        if (r.fg[o] !== 60) lit++;
+      }
+    }
+    if (!night.active) {
+      assert.ok(lit > 0, `y0 ${y0}: the column shows with no patch on the map`);
+      assert.equal(night.columns, true);
+      beyond++;
+    } else onMap++;
+  }
+  assert.ok(beyond > 5 && onMap > 0, `${onMap} frames with the patch on the map, ${beyond} with only the column`);
+  // Once the column is out of view too, nothing is drawn.
+  const past = { x0: Math.floor(shaft.cx) - 70, y0: shaft.reach.y0 - 40, cols: 100, rows: 30 };
+  night.prepare(past, [], { seed: 5, world });
+  assert.equal(night.columns, false);
+  const r = screenRenderer(past), before = r.fg.slice();
+  night.drawShafts(r, past, 4.2);
+  assert.deepEqual(r.fg, before);
+});
+
 test('with beams switched off, or none in the world, nothing changes', () => {
   const view = { x0: 0, y0: 0, cols: 80, rows: 40 };
   const props = [plainTree(40.5, 20.5)];

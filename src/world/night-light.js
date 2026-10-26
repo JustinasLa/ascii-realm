@@ -70,6 +70,9 @@ export function beamFactor(weather) {
 }
 
 const MAX_MOTES = Math.floor(SHAFT_RISE / MOTE_GAP);
+// Whether world box b (end exclusive) reaches into the view.
+const overlaps = (b, view) =>
+  b.x0 < view.x0 + view.cols && b.x1 > view.x0 && b.y0 < view.y0 + view.rows && b.y1 > view.y0;
 
 export class NightLight {
   constructor() {
@@ -78,8 +81,11 @@ export class NightLight {
     // SHAFT_TIERS); null takes the device's, given to prepare.
     this.shafts = true;
     this.tier = null;
-    // Whether any tree shades the map this frame, or any beam lights it.
+    // Whether any tree shades the map this frame, or any beam lights it;
+    // and, apart from that, whether any beam's column of air (and its
+    // motes) reaches into the view, though its patch may lie beyond the map.
     this.active = false;
+    this.columns = false;
     // The map: world cells x0.. and rows y0.., w by h, in leaf layers, and
     // the extra light beams let through (0 .. PEAK_LIFT).
     this.x0 = 0;
@@ -123,6 +129,7 @@ export class NightLight {
     d.x0 = d.y0 = d.x1 = d.y1 = 0;
     l.x0 = l.y0 = l.x1 = l.y1 = 0;
     this.active = false;
+    this.columns = false;
     this.visible.length = 0;
     this.boxes.length = 0;
     this.bakes = this.work = this.bakeMs = 0;
@@ -252,6 +259,7 @@ export class NightLight {
       if (!(beam.s > 0)) continue;
       this.visible.push(beam);
       const { shaft } = beam, stamp = shaft.stamp;
+      if (beam.mix > 0 && overlaps(shaft.reach, view)) this.columns = true;
       const ox = Math.floor(shaft.cx) + stamp.x0 - this.x0;
       const oy = Math.floor(shaft.cy) + stamp.y0 - this.y0;
       const sx0 = Math.max(0, -ox), sx1 = Math.min(stamp.w, this.w - ox);
@@ -360,12 +368,13 @@ export class NightLight {
   }
 
   // The beams' columns of lit air and their motes, over everything drawn
-  // so far but the warm light, the weather and what flies.
+  // so far but the warm light, the weather and what flies. A column is
+  // drawn wherever it meets the view, whether or not its patch does.
   drawShafts(r, view, time) {
-    if (!this.active) return;
+    if (!this.columns) return;
     for (const beam of this.visible) {
       const k = beam.s * beam.mix;
-      if (!(k > 0)) continue;
+      if (!(k > 0) || !overlaps(beam.shaft.reach, view)) continue;
       drawColumn(r, view, beam.shaft, k, this.seed);
       if (beam.motes) drawMotes(r, view, beam.shaft, beam.motes, k, time, this.seed);
     }
