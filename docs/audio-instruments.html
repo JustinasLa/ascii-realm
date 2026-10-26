@@ -18,102 +18,10 @@
 </main>
 <script type="module">
 import { AudioEngine } from '../src/audio/engine.js';
-import { CHORD_NAMES, INSTRUMENT_IDS, INSTRUMENTS, NOTE_LETTERS, layerNote, noteRange, playInstrumentNote,
-  prepareInstrument, secondLayer } from '../src/audio/instruments.js';
-const voices = {
-  accordion: 'Two reeds tuned apart, beating like a musette, through a bellows swell.',
-  bagpipe: 'A nasal chanter opened by a grace note, over a quiet drone on C.',
-  celticHarp: 'Bright plucked strings with a long ring.',
-  dulcimer: 'Three strings to a note, struck with light hammers, shimmering as they beat.',
-  flute: 'A breathy tone with a soft chiff at the start and a late vibrato.',
-  kalimba: 'A short metal tine with a soft inharmonic overtone and a click.',
-  lute: 'Paired gut strings, plucked, through a warm wooden body.',
-  trumpet: 'Bright brass that blooms open as it speaks.',
-  vielle: 'A bowed string with bow hair at the attack and a delayed vibrato.',
-};
+import { mountInstrumentPreview } from '../src/audio/instrument-preview.js';
 const engine = new AudioEngine({ storage: null });
 engine.setVolume('master', 0.6);
-const status = document.querySelector('#status'), grid = document.querySelector('#instruments');
-const prepared = new Set();
-let active = [], timers = [];
-function stop() {
-  for (const timer of timers) clearTimeout(timer);
-  timers = [];
-  for (const handle of active) handle.stop();
-  active = [];
-}
-document.querySelector('#stop').onclick = () => { stop(); status.textContent = 'Stopped.'; };
-document.querySelector('#volume').oninput = event => {
-  engine.setVolume('master', Number(event.target.value) / 100);
-  document.querySelector('#level').value = event.target.value + '%';
-};
-function flash(button) {
-  button.classList.add('lit');
-  setTimeout(() => button.classList.remove('lit'), 180);
-}
-async function play(id, slot, shifted, button) {
-  // Unlock first, inside the press, so the browser counts the gesture.
-  if (!await engine.unlock()) { status.textContent = 'Audio could not start. Press a note again.'; return; }
-  if (!prepared.has(id)) { prepared.add(id); void prepareInstrument(engine, id); }
-  const handle = playInstrumentNote(engine, { instrument: id, ...layerNote(id, slot, shifted) });
-  if (!handle) { status.textContent = 'That note could not play.'; return; }
-  active = active.filter(item => !item.ended);
-  active.push(handle);
-  if (button) flash(button);
-  status.textContent = INSTRUMENTS[id].name + ' - ' + (shifted ? secondName(id, slot) : 'note ' + slot + ' ' + NOTE_LETTERS[slot - 1]);
-}
-function secondName(id, slot) {
-  return secondLayer(id) === 'chords' ? 'chord ' + CHORD_NAMES[slot - 1] : 'note ' + (slot + 8) + ' ' + NOTE_LETTERS[slot - 1];
-}
-function scale(id, buttons, shifted) {
-  stop();
-  for (let slot = 1; slot <= 8; slot++) {
-    timers.push(setTimeout(() => { void play(id, slot, shifted, buttons[slot - 1]); }, (slot - 1) * 333));
-  }
-}
-function row(id, shifted) {
-  const node = document.createElement('div');
-  node.className = 'row';
-  const buttons = [];
-  for (let slot = 1; slot <= 8; slot++) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = shifted ? (secondLayer(id) === 'chords' ? CHORD_NAMES[slot - 1] : (slot + 8) + ' ' + NOTE_LETTERS[slot - 1])
-      : slot + ' ' + NOTE_LETTERS[slot - 1];
-    button.setAttribute('aria-label', INSTRUMENTS[id].name + ' ' + (shifted ? secondName(id, slot) : 'note ' + slot + ' ' + NOTE_LETTERS[slot - 1]));
-    button.onclick = () => { void play(id, slot, shifted, button).catch(() => { status.textContent = 'Audio playback failed. Try again.'; }); };
-    buttons.push(button);
-  }
-  node.append(...buttons);
-  return { node, buttons };
-}
-for (const id of INSTRUMENT_IDS) {
-  const card = document.createElement('article'), heading = document.createElement('h2');
-  const voice = document.createElement('small'), mode = document.createElement('small');
-  card.id = id;
-  heading.textContent = INSTRUMENTS[id].name;
-  voice.textContent = voices[id];
-  mode.textContent = noteRange(id) + ' - Shift: ' + (secondLayer(id) === 'chords' ? 'chords' : 'notes 9-16');
-  const first = row(id, false), second = row(id, true);
-  const firstLabel = document.createElement('div'), secondLabel = document.createElement('div');
-  firstLabel.className = secondLabel.className = 'row-label';
-  firstLabel.textContent = 'Keys 1-8';
-  secondLabel.textContent = secondLayer(id) === 'chords' ? 'Shift: chords' : 'Shift: notes 9-16';
-  const extras = document.createElement('div');
-  extras.className = 'extras';
-  for (const [label, buttons, shifted] of [['Play 1-8', first.buttons, false], ['Play the Shift row', second.buttons, true]]) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.textContent = label;
-    button.onclick = () => scale(id, buttons, shifted);
-    extras.append(button);
-  }
-  card.append(heading, voice, mode, firstLabel, first.node, secondLabel, second.node, extras);
-  grid.append(card);
-}
-status.textContent = INSTRUMENT_IDS.length + ' instruments ready to hear.';
-document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
-window.addEventListener('pagehide', () => { stop(); void engine.dispose(); });
+mountInstrumentPreview(engine);
 </script>
 </body>
 </html>

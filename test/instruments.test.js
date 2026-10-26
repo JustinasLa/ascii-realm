@@ -132,7 +132,7 @@ test('instrument text, art and source are plain ASCII', () => {
   }
   for (const text of strings) assert.match(text, ascii, text);
   for (const file of ['src/audio/instruments.js', 'src/audio/instrument-voices.js',
-    'src/inventory/instrument-items.js', 'docs/audio-instruments.html']) {
+    'src/inventory/instrument-items.js', 'src/audio/instrument-preview.js', 'docs/audio-instruments.html']) {
     const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
     const bad = [...source].find(char => !/[\x20-\x7e\n]/.test(char));
     assert.equal(bad, undefined, `${file} has a non-ASCII character`);

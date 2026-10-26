@@ -389,7 +389,11 @@ stops it and mute silences it.
 
 Each instrument's level is balanced to the same loudness over the first half
 second. Listen to every note and chord on
-[the instrument sound archive](audio-instruments.html). Until instruments can be
+[the instrument sound archive](audio-instruments.html), built by
+`src/audio/instrument-preview.js`. Every key and row button there starts
+unlocking audio inside the click itself, before anything waits or is
+scheduled, so phone browsers that only allow sound from a gesture still play
+the first note. Until instruments can be
 crafted, the `?instruments` query puts one of each in the bag. Each item's
 details list its keys.
 
