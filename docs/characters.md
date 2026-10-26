@@ -113,12 +113,17 @@ switched to, the sheet and a skin slot (empty, meaning today's outfit).
   character is refused.
 - **Storage that fails** (private browsing, a full disk) is ignored: the
   characters last for the visit, and the next write that works saves every
-  change made meanwhile.
+  change made meanwhile. Before that write the roster reads the record
+  again. If another tab saved meanwhile, the characters changed here replace
+  their stored copies and the rest are kept. If the two no longer fit (a
+  name taken or the slots full), nothing is written and the changes stay for
+  the visit. `saveError` says why changes aren't being saved.
 - **A corrupt record** gives an empty roster. A character that is broken
   beyond repair is dropped; one that only breaks a rule (say, after a rule
   change) is kept and reported when it is next edited.
 - **A record from a newer version** of the game is left untouched and the
-  roster refuses changes, rather than overwrite it.
+  roster refuses changes, rather than overwrite it, even when it is saved
+  while this tab's writes are failing.
 - **Other tabs:** the roster re-reads the record before each change and when
   another tab saves, so changes made one after another in several tabs all
   survive. Two tabs changing at the same instant can lose one change: the

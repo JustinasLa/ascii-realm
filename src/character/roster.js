@@ -8,9 +8,14 @@
 // newer, so changes made one after another in two tabs both survive. Two
 // tabs changing at the same instant can still lose one change: the last
 // write wins.
+//
+// Changes this tab couldn't save yet are laid over a newer stored copy, one
+// character at a time, and saved with it once a write works. A record from a
+// newer version is never written over, and neither is one the unsaved
+// changes no longer fit.
 
 import { RULES } from './catalog.js';
-import { blankSheet, canChange, cleanSheet, fieldError, normalName, nameError, sheetErrors } from './rules.js';
+import { blankSheet, canChange, cleanSheet, fieldError, nameKey, normalName, nameError, sheetErrors } from './rules.js';
 
 export const ROSTER_KEY = 'ascii-realm-characters';
 export const ROSTER_VERSION = 1;
@@ -80,6 +85,8 @@ const SHEET_FIELDS = ['name', 'gender', 'race', 'birthday', 'class', 'attributes
 const CHECKS = { race: ['race', 'birthday'] };
 const NEWER = 'Characters were saved by a newer version of the game.';
 const MISSING = 'No such character.';
+const CLASH = 'Characters changed in another tab clash with the ones made here, so these stay for this visit only.';
+const UNSAVED = 'Characters cannot be saved on this device, so changes last for this visit only.';
 
 export class Roster {
   // `events` is the window, to hear other tabs change the roster; `onChange`
@@ -97,9 +104,15 @@ export class Roster {
     this.readOnly = false;
     this.storageOk = true;
     this.state = this.read() ?? empty();
+    // The `rev` last read or written, the ids changed since, and whether the
+    // active character changed since.
+    this.syncedRev = this.state.rev;
+    this.unsaved = new Set();
+    this.activeUnsaved = false;
+    this.clash = false;
     this.legacyName = this.readLegacyName();
     events?.addEventListener('storage', (event) => {
-      if (event.key === ROSTER_KEY && this.adoptNewer()) this.onChange?.();
+      if (event.key === ROSTER_KEY && this.sync()) this.onChange?.();
     });
   }
 
@@ -127,19 +140,56 @@ export class Roster {
     }
   }
 
-  // Takes the stored copy when another tab saved a newer one.
-  adoptNewer() {
-    const stored = this.storageOk ? this.read() : null;
-    if (!stored || stored.rev <= this.state.rev) return false;
-    this.state = stored;
+  // Takes what another tab saved since this one last read or wrote, keeping
+  // this tab's unsaved changes on top. It reads even after failed writes, so
+  // a newer version's record is seen before anything is written over it.
+  // Returns whether the roster changed.
+  sync() {
+    const wasReadOnly = this.readOnly;
+    const stored = this.read();
+    if (this.readOnly !== wasReadOnly) return true;
+    if (!stored || stored.rev <= this.syncedRev) return false;
+    const merged = this.unsaved.size ? this.merge(stored) : stored;
+    this.clash = !merged;
+    if (this.clash) return false;
+    this.state = merged;
+    this.syncedRev = stored.rev;
     return true;
   }
 
-  save() {
+  // The stored copy with this tab's unsaved characters in place of its own,
+  // or null when they no longer fit: more than the slots, or a name taken.
+  merge(stored) {
+    const characters = stored.characters.map((character) =>
+      this.unsaved.has(character.id) ? this.find(character.id) : character);
+    for (const id of this.unsaved) {
+      if (!characters.some((character) => character.id === id)) characters.push(this.find(id));
+    }
+    const names = new Set(characters.map((character) => nameKey(character.sheet.name)));
+    if (characters.length > RULES.slots || names.size < characters.length) return null;
+    return { ...stored, active: this.activeUnsaved ? this.state.active : stored.active, characters };
+  }
+
+  // Why changes aren't being saved, or null when they are.
+  get saveError() {
+    if (this.readOnly) return NEWER;
+    if (this.clash) return CLASH;
+    return this.storageOk ? null : UNSAVED;
+  }
+
+  // Saves after a change to character `id`, which made it active if
+  // `activated`.
+  save(id, activated = false) {
     this.state.rev++;
+    this.unsaved.add(id);
+    this.activeUnsaved ||= activated;
+    if (this.clash) return;
     try {
       this.storage.setItem(ROSTER_KEY, JSON.stringify(this.state));
       this.storageOk = true;
+      this.syncedRev = this.state.rev;
+      this.unsaved.clear();
+      this.activeUnsaved = false;
     } catch {
       // Full or disabled storage keeps the roster for this visit.
       this.storageOk = false;
@@ -203,7 +253,7 @@ export class Roster {
   }
 
   create(draft) {
-    this.adoptNewer();
+    this.sync();
     const allowed = this.canCreate();
     if (!allowed.ok) return allowed;
     if (typeof draft?.id !== 'string' || !ID.test(draft.id) || this.find(draft.id)) {
@@ -217,14 +267,14 @@ export class Roster {
       sheet: cleanSheet(sheet), skin: plain(draft.skin) ? structuredClone(draft.skin) : null };
     this.state.characters.push(character);
     this.state.active = character.id;
-    this.save();
+    this.save(character.id, true);
     return { ok: true, character: structuredClone(character) };
   }
 
   // Changes some of a character's sheet. Locked fields are refused, and only
   // the changed fields are checked.
   update(id, changes) {
-    this.adoptNewer();
+    this.sync();
     if (this.readOnly) return { ok: false, reason: NEWER };
     const character = this.find(id);
     if (!character) return { ok: false, reason: MISSING };
@@ -241,7 +291,7 @@ export class Roster {
       .filter((error) => error.message);
     if (errors.length) return { ok: false, errors };
     character.sheet = cleaned;
-    this.save();
+    this.save(id);
     return { ok: true, character: structuredClone(character) };
   }
 
@@ -252,24 +302,24 @@ export class Roster {
   }
 
   switchTo(id) {
-    this.adoptNewer();
+    this.sync();
     if (this.readOnly) return { ok: false, reason: NEWER };
     const allowed = this.canSwitch(id);
     if (!allowed.ok || id === this.state.active) return allowed;
     this.find(id).switchedAt = this.now();
     this.state.active = id;
-    this.save();
+    this.save(id, true);
     return { ok: true };
   }
 
   // The skin can always change; its contents are the skin's own to check.
   setSkin(id, skin) {
-    this.adoptNewer();
+    this.sync();
     if (this.readOnly) return { ok: false, reason: NEWER };
     const character = this.find(id);
     if (!character) return { ok: false, reason: MISSING };
     character.skin = plain(skin) ? structuredClone(skin) : null;
-    this.save();
+    this.save(id);
     return { ok: true };
   }
 }

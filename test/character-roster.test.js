@@ -263,6 +263,108 @@ test('changes made while writes fail stick, and the next good write saves them a
   assert.equal(new Roster({ storage }).active.sheet.description, 'A wiry outlaw who never sits with his back to a door.');
 });
 
+const NEWER = 'Characters were saved by a newer version of the game.';
+const CLASH = 'Characters changed in another tab clash with the ones made here, so these stay for this visit only.';
+const UNSAVED = 'Characters cannot be saved on this device, so changes last for this visit only.';
+
+test('a newer version’s record saved while writes failed is not written over', () => {
+  for (const broken of [['set'], ['get', 'set']]) {
+    const storage = memory();
+    const { roster: r } = roster(storage);
+    make(r, 'Kael');
+    for (const kind of broken) storage.broken[kind] = true;
+    assert.equal(r.update('c0001', { name: 'Kael Two' }).ok, true);
+    assert.equal(r.saveError, UNSAVED);
+    // A newer build in another tab saves while this tab's writes fail.
+    const raw = JSON.stringify({ v: 2, rev: 9, active: 'c0001', characters: [saved('c0001', 'Kael Three')] });
+    storage.map.set(ROSTER_KEY, raw);
+    storage.broken.get = storage.broken.set = false;
+    assert.deepEqual(r.update('c0001', { gender: 'male' }), { ok: false, reason: NEWER }, broken);
+    assert.deepEqual(make(r, 'Bryn'), { ok: false, reason: NEWER });
+    assert.equal(storage.map.get(ROSTER_KEY), raw, 'the newer record is untouched');
+    assert.equal(r.readOnly, true);
+    assert.equal(r.saveError, NEWER);
+    assert.equal(r.active.sheet.name, 'Kael Two', 'this visit’s change is kept');
+  }
+});
+
+test('another tab saving a newer version’s record is heard as a change', () => {
+  const storage = memory();
+  const events = new EventTarget();
+  let changes = 0;
+  const { roster: r } = roster(storage, { events, onChange: () => changes++ });
+  assert.equal(r.saveError, null);
+  storage.map.set(ROSTER_KEY, JSON.stringify({ v: 2, characters: [] }));
+  events.dispatchEvent(Object.assign(new Event('storage'), { key: ROSTER_KEY }));
+  assert.equal(changes, 1);
+  assert.equal(r.saveError, NEWER);
+  events.dispatchEvent(Object.assign(new Event('storage'), { key: ROSTER_KEY }));
+  assert.equal(changes, 1);
+});
+
+test('changes kept while writes fail are laid over what another tab saved meanwhile', () => {
+  const storage = memory();
+  const { roster: r } = roster(storage, { bypassCooldown: true });
+  make(r, 'Kael');
+  make(r, 'Bryn');
+  storage.broken.set = true;
+  assert.equal(r.update('c0001', { name: 'Kael Two' }).ok, true);
+  // Another tab, whose writes work, edits Bryn, adds Ash and plays Ash.
+  const other = storage.saved();
+  other.characters[1].sheet.gender = 'female';
+  other.characters.push(saved('c0009', 'Ash'));
+  Object.assign(other, { rev: 5, active: 'c0009' });
+  storage.map.set(ROSTER_KEY, JSON.stringify(other));
+  assert.equal(r.characters[1].sheet.gender, null, 'nothing is taken before the next change');
+  storage.broken.set = false;
+  assert.equal(r.setSkin('c0001', { tone: 'ash' }).ok, true);
+  const kept = storage.saved();
+  assert.equal(kept.rev, 6);
+  assert.deepEqual(kept.characters.map((c) => c.sheet.name), ['Kael Two', 'Bryn', 'Ash']);
+  assert.deepEqual([kept.characters[0].skin, kept.characters[1].sheet.gender, kept.active], [{ tone: 'ash' }, 'female', 'c0009']);
+  assert.deepEqual(r.characters, kept.characters);
+  assert.equal(r.saveError, null);
+});
+
+test('unsaved characters that clash with another tab’s stay here and are not saved over it', () => {
+  const others = [
+    [saved('c0001', 'Kael'), saved('c0009', 'bryn')],
+    [saved('c0001', 'Kael'), saved('c0008', 'Ash'), saved('c0009', 'Dara')],
+  ];
+  for (const characters of others) {
+    const storage = memory();
+    const { roster: r } = roster(storage, { bypassCooldown: true });
+    make(r, 'Kael');
+    storage.broken.set = true;
+    make(r, 'Bryn');
+    const raw = stored(characters, { rev: 4, active: 'c0009' });
+    storage.map.set(ROSTER_KEY, raw);
+    storage.broken.set = false;
+    assert.equal(r.update('c0002', { gender: 'male' }).ok, true);
+    assert.equal(storage.map.get(ROSTER_KEY), raw, 'a name taken or the slots full: nothing is written');
+    assert.equal(r.saveError, CLASH);
+    assert.deepEqual(r.characters.map((c) => [c.sheet.name, c.sheet.gender]), [['Kael', null], ['Bryn', 'male']]);
+    assert.equal(r.active.id, 'c0002');
+  }
+  // Once the other tab's characters leave room, both are saved, and the
+  // character this tab made stays the one it plays.
+  const storage = memory();
+  const { roster: r } = roster(storage, { bypassCooldown: true });
+  make(r, 'Kael');
+  storage.broken.set = true;
+  make(r, 'Bryn');
+  storage.map.set(ROSTER_KEY, stored([saved('c0001', 'Kael'), saved('c0009', 'bryn')], { rev: 4, active: 'c0009' }));
+  storage.broken.set = false;
+  r.update('c0002', { gender: 'male' });
+  assert.equal(r.saveError, CLASH);
+  storage.map.set(ROSTER_KEY, stored([saved('c0001', 'Kael'), saved('c0009', 'Ash')], { rev: 5, active: 'c0009' }));
+  assert.equal(r.update('c0002', { description: 'A quiet trapper who counts every arrow twice.' }).ok, true);
+  const kept = storage.saved();
+  assert.deepEqual(kept.characters.map((c) => c.sheet.name), ['Kael', 'Ash', 'Bryn']);
+  assert.deepEqual([kept.rev, kept.active, kept.characters[2].sheet.gender], [6, 'c0002', 'male']);
+  assert.equal(r.saveError, null);
+});
+
 test('the default storage is localStorage, when there is one', () => {
   const storage = memory();
   globalThis.localStorage = storage;
@@ -396,7 +498,7 @@ test('a roster whose writes failed does not take an older stored copy', () => {
   storage.broken.set = true;
   r.update('c0001', { name: 'Kael Two' });
   storage.broken.get = false;
-  assert.equal(r.adoptNewer(), false);
+  assert.equal(r.sync(), false);
   assert.equal(r.active.sheet.name, 'Kael Two');
 });
 
