@@ -65,7 +65,7 @@ function makeVital(label, kind, short) {
 
 /** Persistent ASCII controls and short-lived feedback from real game events. */
 export class Hud {
-  constructor({ player, inventory, name, onSelect, onInventory, wallet = null }) {
+  constructor({ player, inventory, name, onSelect, onInventory, wallet = null, covers = [] }) {
     this.player = player;
     this.inventory = inventory;
     this.wallet = wallet;
@@ -96,7 +96,9 @@ export class Hud {
     // The canvas and HUD boxes, read once per screen size: read on every
     // frame, after its first DOM writes, they would force a style pass.
     this.boxes = null;
-    this.onResize = () => { this.boxes = null; };
+    // The top panels' boxes on the canvas, read again only when one changes.
+    this.coverBoxes = null;
+    this.onResize = () => { this.boxes = null; this.coverBoxes = null; };
     globalThis.addEventListener?.('resize', this.onResize);
     this.element = element('div', 'hud');
 
@@ -138,6 +140,11 @@ export class Hud {
     this.targetHealth = makeVital('Target health', 'health hud-target-health', 'HP');
     this.targetFrame.append(targetHeading, this.targetHealth.node);
     this.element.append(this.targetFrame);
+    // What sits over the top of the scene: the status frames, the target
+    // frame and any panels the page adds (`covers`).
+    this.covers = [this.frames, this.targetFrame, ...covers].filter(Boolean);
+    this.coverObserver = globalThis.ResizeObserver ? new globalThis.ResizeObserver(() => { this.coverBoxes = null; }) : null;
+    for (const node of this.covers) this.coverObserver?.observe(node);
 
     const hotbarWrap = element('div', 'hud-hotbar-wrap');
     const hotbarHeading = element('div', 'hud-hotbar-heading');
@@ -446,6 +453,50 @@ export class Hud {
     }
   }
 
+  layout() {
+    const { width, height } = this.canvas;
+    if (this.boxes?.width !== width || this.boxes.height !== height) {
+      this.boxes = { width, height, canvas: this.canvas.getBoundingClientRect(), root: this.root.getBoundingClientRect() };
+    }
+    return this.boxes;
+  }
+
+  /**
+   * The first screen row clear of the top panels, per screen column of this
+   * frame's view (0 where none covers it), or null if the view or canvas has
+   * no size yet. Panel boxes are read once and again after one changes size,
+   * shows or hides, or the screen is resized.
+   */
+  topCover(view) {
+    if (!this.canvas || !(view?.cellW > 0) || !(view.cellH > 0) || !this.canvas.width || !this.canvas.height) return null;
+    const shown = this.covers.map((node) => !node.hidden).join();
+    if (!this.coverObserver || this.coverBoxes?.shown !== shown) {
+      const { canvas } = this.layout();
+      // CSS pixels to the canvas's device pixels.
+      const scaleX = this.canvas.width / canvas.width;
+      const scaleY = this.canvas.height / canvas.height;
+      const boxes = [];
+      for (const node of this.covers) {
+        if (node.hidden) continue;
+        const { left, top, width, height } = node.getBoundingClientRect();
+        if (width > 0 && height > 0) {
+          boxes.push({ left: (left - canvas.left) * scaleX, right: (left + width - canvas.left) * scaleX,
+            bottom: (top + height - canvas.top) * scaleY });
+        }
+      }
+      this.coverBoxes = { shown, boxes };
+    }
+    const rows = new Array(view.cols).fill(0);
+    for (const box of this.coverBoxes.boxes) {
+      const below = Math.ceil((box.bottom + view.offY) / view.cellH);
+      const to = Math.min(view.cols, Math.ceil((box.right + view.offX) / view.cellW));
+      for (let col = Math.max(0, Math.floor((box.left + view.offX) / view.cellW)); col < to; col++) {
+        rows[col] = Math.max(rows[col], below);
+      }
+    }
+    return rows;
+  }
+
   // Maps world cells to CSS pixels in the HUD for this frame's view, or
   // null if the view or canvas has no size yet. Camera offsets and cell
   // dimensions are device pixels, while DOM positions are CSS pixels.
@@ -453,11 +504,7 @@ export class Hud {
     if (!this.canvas || !view || !Number.isFinite(view.cellW) || view.cellW <= 0 || !Number.isFinite(view.cellH) || view.cellH <= 0 || !this.canvas.width || !this.canvas.height) {
       return null;
     }
-    const { width, height } = this.canvas;
-    if (this.boxes?.width !== width || this.boxes.height !== height) {
-      this.boxes = { width, height, canvas: this.canvas.getBoundingClientRect(), root: this.root.getBoundingClientRect() };
-    }
-    const { canvas, root } = this.boxes;
+    const { canvas, root } = this.layout();
     const scaleX = canvas.width / this.canvas.width;
     const scaleY = canvas.height / this.canvas.height;
     const left = canvas.left - root.left;
@@ -604,6 +651,7 @@ export class Hud {
   destroy() {
     this.destroyed = true;
     globalThis.removeEventListener?.('resize', this.onResize);
+    this.coverObserver?.disconnect();
     this.element.remove();
     this.toasts.length = 0;
     this.damageNumbers.length = 0;

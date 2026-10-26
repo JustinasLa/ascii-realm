@@ -65,20 +65,25 @@ export class MusicNotes {
   }
 
   /**
-   * The screen row the glyph is drawn on. On a short screen 2 m above the
-   * head can be above the top edge: while the head itself is in view, the
-   * glyph is drawn on the top whole row instead. Its world row is unchanged.
+   * The screen row the glyph is drawn on, or -1 for none. On a short screen
+   * 2 m above the head can be above the top edge, or the glyph can sit under
+   * a top panel (`cover`: the first clear row per screen column, or null).
+   * While the head itself is in view, on or below that clear row, the glyph
+   * is drawn on the clear row instead; with the head out of view, or covered,
+   * it is not drawn. Its world row is unchanged.
    */
-  screenRow(view, note) {
+  screenRow(view, note, rows, cover = null) {
     const y0 = Math.floor(view.y0);
     const y = this.rowOf(note) - y0;
-    const top = view.offY > 0 ? 1 : 0;
-    return y < top && note.row + NOTE_HEIGHT * SCALE - y0 >= top ? top : y;
+    const top = Math.max(view.offY > 0 ? 1 : 0, cover?.[note.x - Math.floor(view.x0)] ?? 0);
+    if (y >= top) return y;
+    const head = note.row + NOTE_HEIGHT * SCALE - y0;
+    return head >= top && head < rows ? top : -1;
   }
 
-  draw(r, view, note) {
+  draw(r, view, note, cover = null) {
     const x = note.x - Math.floor(view.x0);
-    const y = this.screenRow(view, note);
+    const y = this.screenRow(view, note, r.rows, cover);
     if (x < 0 || y < 0 || x >= r.cols || y >= r.rows) return;
     r.layer(x, y, NOTE, ...note.colour);
   }

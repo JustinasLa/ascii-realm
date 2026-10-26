@@ -367,6 +367,8 @@ debug.native = { gate, wakeLock, pacer, get clock() { return clock; }, get fulls
 // The status frames, quick slots and the inventory screen.
 const hud = new Hud({
   player, inventory, name, wallet,
+  // The page's own top-corner panels, which a note glyph keeps clear of.
+  covers: [document.getElementById('panel-dock'), document.getElementById('phone-menu'), document.getElementById('zoom-controls')],
   // With an instrument in the off hand, clicking a note slot plays it
   // (Shift-click the second layer) and never equips the slot's gear.
   onSelect: (index, event) => {
@@ -1566,8 +1568,10 @@ function frame(now) {
   for (const spore of [...mushrooms.ambient, ...mushrooms.spores]) {
     drawables.push({ y: spore.y, draw: () => mushrooms.drawSpore(renderer, view, spore) });
   }
+  // A note glyph is kept below the panels over the top of the screen.
+  const noteCover = musicNotes.list.length ? hud.topCover({ ...view, cellW: renderer.cellW, cellH: renderer.cellH }) : null;
   for (const note of musicNotes.list) {
-    drawables.push({ y: note.y + 0.001, draw: () => musicNotes.draw(renderer, view, note) });
+    drawables.push({ y: note.y + 0.001, draw: () => musicNotes.draw(renderer, view, note, noteCover) });
   }
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });

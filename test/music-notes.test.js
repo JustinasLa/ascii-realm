@@ -135,6 +135,53 @@ test('on a short screen the glyph is drawn on the top row while the head is in v
   assert.deepEqual(drawn({ x0: 0, y0: 5 }), [[5, 0]]);
 });
 
+test('a glyph above the view is not drawn while the head is below it', () => {
+  const notes = new MusicNotes();
+  notes.add({ x: 5, y: 40, top: 30, midi: 60 });
+  const [note] = notes.list;
+  const drawn = (view, rows) => {
+    const r = recorder(40, rows);
+    notes.draw(r, view, note);
+    return r.writes.map(([x, y]) => [x, y]);
+  };
+  // Row 4 is above a view from row 5, whose 20 rows end above the head at row 25.
+  assert.equal(note.row, 4);
+  assert.deepEqual(drawn({ x0: 0, y0: 5 }, 20), []);
+  assert.deepEqual(drawn({ x0: 0, y0: 5, offY: 12 }, 20), []);
+  // The head on the last row is in view, one row lower is not.
+  assert.deepEqual(drawn({ x0: 0, y0: 11 }, 20), [[5, 0]]);
+  assert.deepEqual(drawn({ x0: 0, y0: 10 }, 20), []);
+  assert.equal(notes.screenRow({ x0: 0, y0: 5 }, note, 20), -1);
+});
+
+test('a glyph under a top panel is drawn on the first row clear of it, above the head', () => {
+  const notes = new MusicNotes();
+  notes.add({ x: 5, y: 40, top: 30, midi: 60 });
+  const [note] = notes.list;
+  const drawn = (view, cover) => {
+    const r = recorder();
+    notes.draw(r, view, note, cover);
+    return r.writes.map(([x, y]) => [x, y]);
+  };
+  // Clear from row 3 over the glyph's column (5), from row 9 beside it.
+  const cover = [9, 9, 9, 9, 0, 3, 0];
+  // Above the view: held on the clear row rather than the top row.
+  assert.deepEqual(drawn({ x0: 0, y0: 5 }, cover), [[5, 3]]);
+  // In view but under the panel: moved down to the clear row.
+  assert.deepEqual(drawn({ x0: 0, y0: 2 }, cover), [[5, 3]]);
+  // Clear of it already: unchanged.
+  assert.deepEqual(drawn({ x0: 0, y0: 0 }, cover), [[5, 4]]);
+  // A scrolled top row still needs row 1 where no panel covers the column.
+  assert.deepEqual(drawn({ x0: 0, y0: 5, offY: 12 }, [0, 0, 0, 0, 0, 0]), [[5, 1]]);
+  // The panel's covered column moves with the view.
+  assert.deepEqual(drawn({ x0: -1, y0: 5 }, cover), [[6, 0]]);
+  // The clear row on the head still draws; below the head, nothing is drawn.
+  assert.deepEqual(drawn({ x0: 0, y0: 5 }, [0, 0, 0, 0, 0, 25]), [[5, 25]]);
+  assert.deepEqual(drawn({ x0: 0, y0: 5 }, [0, 0, 0, 0, 0, 26]), []);
+  // A column the cover does not list counts as clear.
+  assert.deepEqual(drawn({ x0: 0, y0: 5 }, [3]), [[5, 0]]);
+});
+
 test('glyphs are capped, oldest first', () => {
   const notes = new MusicNotes();
   for (let i = 0; i < 60; i++) notes.add({ x: i, y: 40, top: 30, midi: 60 + i });
