@@ -95,7 +95,7 @@ export function anchorRow(feetY, nameRow, t, index = 0, reduced = false) {
 }
 
 // The top row of a shape-built figure, relative to its feet; its nameplate
-// is two rows over it (see drawNameTag).
+// is two rows over it (see the frame in main.js and ui/nameplates.js).
 export const figureTop = (parts) => parts.reduce((top, part) => Math.min(top, part.y0), 0);
 
 // How far the anchor moves toward its target after `dt` seconds: 0.35 of

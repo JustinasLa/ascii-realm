@@ -16,6 +16,7 @@
   </head>
   <body>
     <canvas id="screen" tabindex="0" aria-label="Game scene. Press B to build scenery."></canvas>
+    <div id="nameplate-root" aria-hidden="true"></div>
     <div id="bubble-root" aria-hidden="true"></div>
     <div id="hud-root"></div>
     <section id="chat" data-game-ui hidden aria-label="Chat">
@@ -142,6 +143,13 @@
         <p class="lobby-label">Players</p>
         <ul id="lobby-players" aria-label="Players in your lobby"></ul>
       </div>
+      <fieldset id="lobby-tint">
+        <legend>Name colour<span id="lobby-tint-label"></span></legend>
+        <div id="lobby-tint-swatches" role="radiogroup" aria-label="Name colour"></div>
+        <input id="lobby-tint-custom" type="color" aria-label="Custom name colour" tabindex="-1" />
+        <p id="lobby-tint-preview" aria-hidden="true"></p>
+        <p id="lobby-tint-status" role="status" aria-live="polite"></p>
+      </fieldset>
       <button id="lobby-leave" type="button" hidden>Leave lobby</button>
     </details>
     <details id="audio-controls">

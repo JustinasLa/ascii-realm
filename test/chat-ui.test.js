@@ -438,8 +438,14 @@ test('every channel reads as it should, with the speaker\'s tint, and text stays
   assert.equal(rp.className, 'chat-line chat-rp');
   assert.equal(rp.children[0].className, 'chat-name');
   assert.equal(rp.children[0].style.color, 'rgb(169, 212, 174)');
+  const nameOf = (index) => ui.ids['chat-log'].children[index].children.find((child) => child.className === 'chat-name');
+  assert.equal(nameOf(4).style.color, undefined, 'LOOC names are uncoloured');
+  assert.equal(nameOf(5).style.color, undefined, 'OOC names are uncoloured');
+  for (const index of [1, 2, 3, 6, 7]) assert.equal(nameOf(index).style.color, 'rgb(169, 212, 174)');
   line('rp', 'hey', { from: 'b2', name: 'Bryn' });
   assert.equal(ui.ids['chat-log'].children.at(-1).children[0].style.color, 'rgb(146, 198, 235)');
+  for (const channel of ['rp', 'ooc']) line(channel, 'which?', { from: 'b2', name: 'Ash', tag: 2 });
+  assert.deepEqual(ui.lines().slice(-2), ['Ash (2): "which?"', '[OOC] Ash (2): which?'], 'a tag shows on every channel');
   line('rp', 'gone', { from: 'ff', name: 'Old' });
   assert.equal(ui.ids['chat-log'].children.at(-1).children[0].style.color, undefined, 'no tint for someone who left');
   ui.chat.receive({ seq: 2, channel: 'rp', from: 'ff', name: 'Old', text: 'no roster', clarity: 1, muffled: false });
@@ -461,9 +467,10 @@ test('server notices, joins and leaves become quiet lines', () => {
   ui.chat.roster({ self: true, code: 'ABC234', resumed: false });
   ui.chat.roster({ self: true, code: 'ABC234', resumed: true });
   ui.chat.roster({ joined: [{ id: 'b2', name: 'Bryn' }], left: [{ id: 'c3', name: 'Cai' }] });
+  ui.chat.roster({ joined: [{ id: 'd4', name: 'Bryn', tag: 2 }] });
   ui.chat.roster({});
   assert.deepEqual(ui.lines().slice(5), ['· Joined lobby ABC234.', '· Reconnected to lobby ABC234.',
-    '· Bryn joined the lobby.', '· Cai left the lobby.']);
+    '· Bryn joined the lobby.', '· Cai left the lobby.', '· Bryn (2) joined the lobby.']);
   ui.key('Enter');
   ui.type('/channel yell');
   ui.chat.notice({ code: 'toggled', channel: 'looc', hidden: true });

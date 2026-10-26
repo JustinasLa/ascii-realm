@@ -4,6 +4,7 @@
 // types can become part of the page.
 import { CHAT_CHANNELS, CHAT_LOG_LINES, DEFAULT_CHANNEL, HELP_LINES, noticeText, parseChatInput,
   SWITCHABLE } from '../multiplayer/chat.js';
+import { displayName } from '../multiplayer/protocol.js';
 
 // Seconds a line stays fully visible while the bar is closed, and the second
 // over which it then fades away.
@@ -20,14 +21,15 @@ const GESTURE_TAIL = 500;
 const GESTURE_EVENTS = ['mousedown', 'mouseup', 'click', 'auxclick', 'contextmenu'];
 
 // How each channel's line reads: an optional [tag], a lead before the name,
-// the words after it and a close after the message.
+// the words after it and a close after the message. Out-of-character lines
+// show the name uncoloured.
 const FORMATS = {
   rp: { after: ': "', close: '"' },
   shout: { after: ' shouts: "', close: '"' },
   yell: { after: ' yells: "', close: '"' },
   whisper: { after: ' whispers: "', close: '"' },
-  looc: { tag: 'LOOC', after: ': ' },
-  ooc: { tag: 'OOC', after: ': ' },
+  looc: { tag: 'LOOC', after: ': ', plainName: true },
+  ooc: { tag: 'OOC', after: ': ', plainName: true },
   action: { lead: '* ', after: ' ' },
   scene: { tag: 'Scene', after: ': *', close: '*' },
 };
@@ -246,7 +248,8 @@ export class ChatUi {
     return line;
   }
 
-  // A relayed line. `roster` gives the speaker's tint.
+  // A relayed line. `roster` gives the speaker's name colour; the line keeps
+  // the colour it was written in.
   receive(message, roster = []) {
     const item = this.doc.createElement('li');
     item.className = `chat-line chat-${message.channel}`;
@@ -260,8 +263,8 @@ export class ChatUi {
       item.append(this.span('[', 'chat-bracket'), this.span(format.tag, 'chat-tag'), this.span('] ', 'chat-bracket'));
     }
     if (format.lead) item.append(this.span(format.lead, 'chat-lead'));
-    const name = this.span(message.name, 'chat-name');
-    const member = roster.find((m) => m.id === message.from);
+    const name = this.span(displayName(message), 'chat-name');
+    const member = format.plainName ? null : roster.find((m) => m.id === message.from);
     const tint = member ? this.colorOf(member) : null;
     if (tint) name.style.color = `rgb(${tint[0]}, ${tint[1]}, ${tint[2]})`;
     item.append(name, this.span(format.after, 'chat-punct'), this.span(message.text, 'chat-text'));
@@ -298,8 +301,8 @@ export class ChatUi {
       this.reset();
       return;
     }
-    for (const member of change.joined ?? []) this.system(`${member.name} joined the lobby.`);
-    for (const member of change.left ?? []) this.system(`${member.name} left the lobby.`);
+    for (const member of change.joined ?? []) this.system(`${displayName(member)} joined the lobby.`);
+    for (const member of change.left ?? []) this.system(`${displayName(member)} left the lobby.`);
   }
 
   // A new lobby starts on the default channel with nothing hidden.
