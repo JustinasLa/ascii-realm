@@ -49,9 +49,11 @@ export function bindTintPicker(client, { doc = document, params = new URLSearchP
   });
 
   // A ?tint= in the address (a hex or a colour's id) wins for this visit and
-  // isn't kept; otherwise the colour kept from last time.
+  // isn't kept; otherwise the colour kept from last time. Hex typed loosely
+  // (no #, capitals, spaces) is tidied here: the lobby takes only '#rrggbb'.
   const asked = params.get('tint');
-  let tint = (asked === null ? null : parseTint(asked) ?? tintFromAlias(asked)) ?? parseTint(storage.get());
+  const typed = (raw) => parseTint(normalHex(raw));
+  let tint = (asked === null ? null : typed(asked) ?? tintFromAlias(asked)) ?? typed(storage.get());
   let customTint = selectedId() === 'custom' ? tint : null;
 
   function selectedId() {
@@ -78,7 +80,7 @@ export function bindTintPicker(client, { doc = document, params = new URLSearchP
   // `send` is false while the custom picker is still being dragged: the
   // colour shows here at once and goes to the lobby when it is let go.
   function choose(next, { raw = next, send = true } = {}) {
-    tint = parseTint(next);
+    tint = typed(next);
     if (selectedId() === 'custom') customTint = tint;
     onTint(tint);
     render();

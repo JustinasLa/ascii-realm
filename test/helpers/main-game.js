@@ -186,6 +186,12 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       roster(change) { this.rostered.push(change); }
       update(anchors, projection, form) { this.updates.push({ anchors, projection, form }); }
     },
+    // What the nameplates are given each frame; the real ones are tested on
+    // their own.
+    Nameplates: class {
+      constructor(options) { Object.assign(this, options); this.updates = []; }
+      update(plates, projection) { this.updates.push({ plates, projection }); }
+    },
     figureTop,
     metresBetween,
     Grass: inert(),
@@ -265,7 +271,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     buildAtlas: noop, glyph: noop, drawGround: noop, drawSkyReflection: noop,
     drawShadow: noop, drawProp: noop, fineOf: noop, fineBakesPending: () => false, bakeFine: noop, startFineWorkers: noop,
     reflector: noop, dressFigure: noop,
-    drawFigure: noop, drawNameTag: noop, drawTrail: noop, putCell: noop, putOutlinedCell: noop,
+    drawFigure: noop, drawTrail: noop, putCell: noop, putOutlinedCell: noop,
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},

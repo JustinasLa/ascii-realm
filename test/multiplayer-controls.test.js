@@ -145,6 +145,12 @@ test('in a lobby the panel lists everyone by name, tag and name colour', (t) => 
   const names = items.map((item) => item.children[0]);
   assert.ok(names.every((name) => name.className === 'lobby-player-name'));
   assert.deepEqual(names.map((name) => name.style.color), ['rgb(146, 198, 235)', 'rgb(255, 85, 85)']);
+  assert.deepEqual(names.map((name) => name.textContent), ['Ash', 'Ash']);
+  assert.ok(!items[0].children.some((child) => child.className === 'lobby-player-tag'), 'a unique name has no tag');
+  const tag = items[1].children[1];
+  assert.equal(tag.className, 'lobby-player-tag', 'the tag is its own element after the name');
+  assert.equal(tag.textContent, ' (2)');
+  assert.equal(tag.style.color, 'rgb(255, 85, 85)');
   assert.equal(new URL(page.urls.at(-1)).searchParams.get('room'), 'ABC234', 'a refresh keeps the code');
   assert.equal(new URL(page.urls.at(-1)).searchParams.get('server'), null);
   ids['lobby-server'].value = 'wss://lobby.example';

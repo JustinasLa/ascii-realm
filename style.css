@@ -43,6 +43,13 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-frames { top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); width: 244px; display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
 .hud-frame { padding: 5px 8px 6px; color: var(--ink); background: var(--surface); border: 1px solid var(--frame); font-size: 12px; }
 .hud-name { margin: 0 0 3px; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A party member's name is cut short before its tag, "(2)", which always
+   shows whole; the distance after it gives way first. */
+.hud-member .hud-name { display: flex; min-width: 0; }
+.hud-member :is(.hud-name-text, .hud-name-note) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hud-member .hud-name-text { flex: 0 1 auto; }
+.hud-member .hud-name-tag { flex: none; }
+.hud-member .hud-name-note { flex: 0 1000 auto; }
 .hud-vital { display: grid; grid-template-columns: 18px 1fr 64px; align-items: center; gap: 6px; margin-top: 1px; }
 .hud-vital-label, .hud-vital-value { font-size: 11px; font-variant-numeric: tabular-nums; }
 .hud-vital-value { text-align: right; }
@@ -175,6 +182,7 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 #lobby-players { list-style: none; padding: 0; margin: 4px 0 8px; }
 #lobby-players li { margin: 4px 0; overflow-wrap: anywhere; }
 #lobby-players li::before { content: "> "; color: var(--quiet); }
+.lobby-player-tag { white-space: nowrap; }
 /* Name colours: each a framed cell of letters in that colour on the dark,
    as a name is seen; the chosen one is bracketed. */
 #lobby-tint { min-width: 0; padding: 5px 0 0; border: 0; border-top: 1px solid var(--line); }
@@ -474,6 +482,12 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 /* Speech bubbles: plain ASCII boxes over the speakers' heads, on a light
    shade so the grass shows through. Above the scene and its fog, below
    every HUD layer, never in the way of a click or a tap. */
+/* Nameplates: a player's name over their head, a cell tall, on an opaque
+   backdrop (multiplayer/tint.js NAMEPLATE_BACKDROP) over the scene's fog
+   and darkened edges, below the bubbles. Font size is set per frame. */
+#nameplate-root { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; contain: strict; }
+.nameplate { position: absolute; left: 0; top: 0; padding: 0 0.25em; font-family: var(--font); line-height: 1; white-space: pre; font-variant-ligatures: none; font-kerning: none; background: rgb(10, 9, 19); will-change: transform; }
+.nameplate-probe { visibility: hidden; letter-spacing: 0; padding: 0; }
 #bubble-root { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; contain: strict; }
 .bubble { position: absolute; left: 0; top: 0; font: 12px/14px var(--font); white-space: pre; font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; will-change: transform; contain: layout style; }
 .bubble-covered { opacity: 0.6; }

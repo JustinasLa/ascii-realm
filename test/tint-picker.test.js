@@ -105,6 +105,8 @@ test('?tint= in the address wins for this visit and is not kept', () => {
   let page = mount({ search: '?tint=ffaa00', stored: '#00aaaa' });
   assert.deepEqual(page.checked(), ['gold']);
   assert.equal(page.items.get(TINT_KEY), '#00aaaa');
+  page = mount({ search: '?tint=%20FFAA00%20' });
+  assert.deepEqual(page.client.sent, ['#ffaa00'], 'loosely typed hex is tidied on the page, before it is sent');
   page = mount({ search: '?tint=dark_aqua' });
   assert.deepEqual(page.checked(), ['dark_aqua']);
   assert.deepEqual(page.client.sent, ['#00aaaa'], 'only hex reaches the lobby');

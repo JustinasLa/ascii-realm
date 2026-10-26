@@ -38,7 +38,7 @@ export class RemotePlayers {
       present.add(member.id);
       let peer = this.peers.get(member.id);
       if (!peer) {
-        peer = { player: new Player(state.x, state.y), samples: [] };
+        peer = { id: member.id, player: new Player(state.x, state.y), samples: [] };
         this.peers.set(member.id, peer);
         this.apply(peer.player, state);
         peer.player.settleCape();

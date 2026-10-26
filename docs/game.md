@@ -306,5 +306,11 @@ short version see the [README](../README.md).
   (any colour). Colours too dark to read on the night or on the panels are
   lightened until they reach a 4.5:1 contrast, keeping their hue. Friends may
   share a colour. Players with the same name are numbered by when they joined
-  (`Ash`, `Ash (2)`), everywhere their name shows, and never share a
-  look-alike colour: the later one shows an automatic colour instead.
+  (`Ash`, `Ash (2)`), everywhere their name shows; a long name is cut short
+  before its number, never through it. They never share a look-alike colour
+  either: the later one shows another automatic or named colour instead. No
+  two automatic colours look alike, so a whole lobby of one name on Auto keeps
+  them. In the rare crowd where every such colour looks like one already shown,
+  the least alike is used and the number tells them apart.
+- **Nameplates** float over the scene on a dark backdrop of their own, so fog
+  and the darker screen edges never wash a name out.

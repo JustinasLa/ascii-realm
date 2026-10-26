@@ -3,17 +3,19 @@
 // this module, so both clean a colour the same way and make it readable on
 // every surface that shows it.
 
-// The automatic colours, one per lobby slot.
+// The automatic colours, one per lobby slot. No two are closer than
+// MIN_DELTA_E, so players who keep theirs never look alike.
 export const PLAYER_COLORS = [
   [169, 212, 174], [146, 198, 235], [224, 176, 229], [239, 207, 151],
-  [237, 162, 155], [149, 220, 208], [183, 180, 237], [224, 222, 174],
+  [237, 162, 155], [149, 220, 208], [183, 180, 237], [220, 230, 145],
 ];
 // Your own nameplate's colour while playing solo.
 export const SOLO_COLOR = [212, 218, 228];
 
 export const MIN_CONTRAST = 4.5;
-// The night (render/palette.js NIGHT) mixed with the nameplate's cell
-// backdrop, putBg(8, 10, 14), at the renderer's BG_KEEP of 0.12.
+// style.css .nameplate: the opaque backdrop of a nameplate. Nameplates are
+// text in a layer over the scene, so the fog and the darkened screen edges
+// never reach them and this is the only colour behind their letters.
 export const NAMEPLATE_BACKDROP = [10, 9, 19];
 // The brightest colour the renderer draws: the white ends of the frost and
 // water spells' colour ramps (spells/presentations: frozen-tomb.js,
@@ -38,6 +40,8 @@ export const SURFACES = Object.freeze({
 });
 
 const HEX = /^[0-9a-f]{6}$/;
+// The one form a colour takes on the network.
+const WIRE = /^#[0-9a-f]{6}$/i;
 
 export function hexRgb(hex) {
   return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
@@ -103,18 +107,18 @@ export function readableTint(hex) {
 }
 
 // A hex colour as players type it: six hex digits, with or without a
-// leading #, any case, spaces around it. Anything else is no colour.
+// leading #, any case, spaces around it, as '#rrggbb'. Anything else is no
+// colour. Only the page uses it, before a colour is sent.
 export function normalHex(raw) {
   if (typeof raw !== 'string' || raw.length > 16) return null;
   const digits = raw.trim().replace(/^#/, '').toLowerCase();
   return HEX.test(digits) ? `#${digits}` : null;
 }
 
-// The one parser for colours that cross the network: a readable '#rrggbb',
-// or null for the automatic colour.
+// The one parser for colours that cross the network: exactly '#rrggbb' (in
+// either case), made readable, or null for the automatic colour.
 export function parseTint(raw) {
-  const hex = normalHex(raw);
-  return hex && readableTint(hex);
+  return typeof raw === 'string' && WIRE.test(raw) ? readableTint(raw.toLowerCase()) : null;
 }
 
 // The named colours, in the order the picker shows them. Black is left out:
@@ -192,12 +196,19 @@ export function deltaE2000(rgbA, rgbB) {
 export const MIN_DELTA_E = 10;
 const tooClose = (a, b) => deltaE2000(a, b) < MIN_DELTA_E;
 
+// The colours a same-named player may be moved to: the automatic ones
+// first, then the named ones.
+const SPARES = [...PLAYER_COLORS, ...NAME_COLOURS.map((colour) => hexRgb(colour.hex))];
+
 // The colour each lobby member is shown in, for `players` in join order. A
 // member who shares an earlier member's name (in any case) and whose colour
-// would look the same as theirs is shown in the first automatic colour that
-// looks different from every earlier member of that name. Everyone else
-// keeps their own: friends may share a colour. Returns, per member, the hex
-// to show, or null for their own automatic colour.
+// would look the same as theirs is shown in the first spare colour that
+// looks different from every earlier member of that name. Should every
+// spare look like one of them (custom colours can crowd them out), the one
+// least like them all is used, and the member's name tag, "Ash (2)", is
+// what tells them apart. Everyone else keeps their own: friends may share a
+// colour. Returns, per member, the hex to show, or null for their own
+// automatic colour.
 export function resolveTints(players) {
   const shown = [];
   return players.map((player) => {
@@ -206,7 +217,10 @@ export function resolveTints(players) {
     let rgb = memberColour(player);
     let tint = player.tint;
     if (earlier.some((other) => tooClose(rgb, other))) {
-      rgb = PLAYER_COLORS.find((auto) => !earlier.some((other) => tooClose(auto, other))) ?? rgb;
+      const nearest = (colour) => Math.min(...earlier.map((other) => deltaE2000(colour, other)));
+      const distances = SPARES.map(nearest);
+      const free = distances.findIndex((distance) => distance >= MIN_DELTA_E);
+      rgb = SPARES[free >= 0 ? free : distances.indexOf(Math.max(...distances))];
       tint = rgbHex(rgb);
     }
     shown.push({ name, rgb });

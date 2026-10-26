@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { after, before, test } from 'node:test';
 import { WebSocket } from 'ws';
 import { PROTOCOL_VERSION } from '../src/multiplayer/protocol.js';
-import { PLAYER_COLORS, rgbHex } from '../src/multiplayer/tint.js';
+import { deltaE2000, MIN_DELTA_E, PLAYER_COLORS, rgbHex } from '../src/multiplayer/tint.js';
 import { createGameServer } from '../server/index.js';
 import { peer } from './helpers/lobby.js';
 
@@ -56,7 +56,7 @@ test('friends see a chosen colour, a change and a clear, and a newcomer sees the
 
 test('anything but a hex colour or null leaves the colour as it was', async (t) => {
   const bryn = await enter(t, 'Bryn', '#ff5555');
-  for (const tint of ['red', 'dark_aqua', 42, '#zzzzzz', { hex: '#00aaaa' }, ['#00aaaa'], true]) {
+  for (const tint of ['red', 'dark_aqua', '00aaaa', ' #00aaaa ', '#00aaaa\n', 42, '#zzzzzz', { hex: '#00aaaa' }, ['#00aaaa'], true]) {
     bryn.client.send({ type: 'tint', tint });
   }
   bryn.client.send({ type: 'tint' });
@@ -117,6 +117,21 @@ test('players sharing a name get a lasting tag and never a look-alike colour', a
   assert.equal(ash4.joined.self.tag, null, '"Ash" itself is free again');
   const ash5 = await enter(t, 'Ash');
   assert.equal(ash5.joined.self.tag, 4);
+});
+
+test('a full lobby of one name on Auto keeps every automatic colour, each one distinct, and numbers them', async (t) => {
+  // The host holds one place; seven Ashes take the rest, slots 1 to 7.
+  const ashes = [];
+  for (let i = 0; i < 7; i++) ashes.push(await enter(t, 'Ash'));
+  const roster = ashes.at(-1).joined.players;
+  assert.equal(roster.length, 8);
+  const mine = ashes.map((ash) => member(ashes.at(-1).joined, ash.id));
+  assert.deepEqual(mine.map((p) => p.tint), Array(7).fill(null), 'nobody is moved off their own colour');
+  assert.deepEqual(mine.map((p) => p.tag), [null, 2, 3, 4, 5, 6, 7]);
+  const colours = mine.map((p) => PLAYER_COLORS[p.color]);
+  for (let i = 0; i < colours.length; i++) {
+    for (let j = i + 1; j < colours.length; j++) assert.ok(deltaE2000(colours[i], colours[j]) >= MIN_DELTA_E);
+  }
 });
 
 test('a page from before name colours is told to refresh', async () => {

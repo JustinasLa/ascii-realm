@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PLAYER_COLORS as PROTOCOL_COLORS } from '../src/multiplayer/protocol.js';
-import { NIGHT } from '../src/render/palette.js';
+import { FOG, FOG_PILED, FOG_THIN, NIGHT, VIGNETTE } from '../src/render/palette.js';
 import { autoColour, BRIGHTEST_SCENE, contrast, deltaE2000, fromOklab, hexRgb, labDeltaE2000, luminance,
   memberColour, MIN_CONTRAST, MIN_DELTA_E, NAME_COLOURS, NAMEPLATE_BACKDROP, normalHex, OPEN_PANEL_SHADE,
   PANEL_SHADE, parseTint, PLAYER_COLORS, readableTint, resolveTints, rgbHex, SOLO_COLOR, SURFACES, tintFromAlias,
@@ -9,11 +9,18 @@ import { autoColour, BRIGHTEST_SCENE, contrast, deltaE2000, fromOklab, hexRgb, l
 
 const hue = ([, a, b]) => Math.atan2(b, a) * 180 / Math.PI;
 
-test('typed colours are cleaned to #rrggbb, and nothing else is a colour', () => {
-  for (const raw of ['#FF5555', 'ff5555', ' #ff5555 ', '\t#Ff5555\n']) assert.equal(parseTint(raw), '#ff5555', raw);
-  for (const raw of ['fff', '#ff55', '#ff55551', '#gg0000', '', '#', '##ff5555', 'red', 'dark_aqua', '__proto__',
-    ' '.repeat(5) + '#ff5555' + ' '.repeat(5), null, undefined, 42, 0xff5555, {}, [], ['#ff5555'], true]) {
-    assert.equal(parseTint(raw), null, String(raw));
+test('the network takes a colour only as exactly #rrggbb, in either case', () => {
+  for (const raw of ['#ff5555', '#FF5555', '#Ff5555']) assert.equal(parseTint(raw), '#ff5555', raw);
+  for (const raw of ['ff5555', ' #ff5555 ', '\t#Ff5555\n', '#ff5555 ', ' #ff5555', 'fff', '#ff55', '#ff55551', '#gg0000',
+    '', '#', '##ff5555', 'red', 'dark_aqua', '__proto__', null, undefined, 42, 0xff5555, {}, [], ['#ff5555'], true]) {
+    assert.equal(parseTint(raw), null, JSON.stringify(raw) ?? String(raw));
+  }
+});
+
+test('the page tidies a colour typed loosely before it is sent', () => {
+  for (const raw of ['#FF5555', 'ff5555', ' #ff5555 ', '\t#Ff5555\n']) assert.equal(normalHex(raw), '#ff5555', raw);
+  for (const raw of ['fff', '#ff55', '##ff5555', 'red', ' '.repeat(5) + '#ff5555' + ' '.repeat(5), null, 42]) {
+    assert.equal(normalHex(raw), null, String(raw));
   }
   assert.equal(normalHex('#AbCdEf'), '#abcdef', 'normalHex only cleans; it never lightens');
   assert.equal(normalHex('#000000'), '#000000');
@@ -57,9 +64,8 @@ test('every colour that can be chosen reads at 4.5:1 on every surface that shows
   }
 });
 
-test('the surfaces are the real ones: the nameplate over the night and the panels over the brightest scene', () => {
-  const mix = NIGHT.map((c, i) => c * 0.88 + [8, 10, 14][i] * 0.12);
-  NAMEPLATE_BACKDROP.forEach((c, i) => assert.ok(Math.abs(c - mix[i]) <= 1));
+test('the surfaces are the real ones: the nameplate\'s own backdrop and the panels over the brightest scene', () => {
+  assert.deepEqual(NAMEPLATE_BACKDROP, [10, 9, 19], 'style.css .nameplate, over the scene (see nameplates.test.js)');
   assert.deepEqual(BRIGHTEST_SCENE, [255, 255, 255]);
   assert.deepEqual(PANEL_SHADE, [6, 9, 10, 0.88], 'style.css --surface');
   assert.deepEqual(OPEN_PANEL_SHADE, [6, 9, 10, 0.97], 'an open panel in style.css');
@@ -70,6 +76,23 @@ test('the surfaces are the real ones: the nameplate over the night and the panel
   assert.equal(luminance([0, 0, 0]), 0);
   assert.equal(contrast([255, 255, 255], [0, 0, 0]), 21);
   assert.equal(contrast([0, 0, 0], [255, 255, 255]), 21, 'either order');
+});
+
+test('names read on every panel over whatever the scene shows behind it, fog and dark edges included', () => {
+  // A panel's shade over each colour the scene ends on: the night, the
+  // darkened corners, the fog from thin to piled up, and pure white.
+  const scenes = [NIGHT, VIGNETTE, FOG_THIN, FOG, FOG_PILED, [0, 0, 0], BRIGHTEST_SCENE];
+  const over = ([r, g, b, alpha], under) => [r, g, b].map((c, i) => c * alpha + under[i] * (1 - alpha));
+  const colours = [...PLAYER_COLORS, SOLO_COLOR, ...NAME_COLOURS.map((c) => hexRgb(c.hex)), hexRgb(parseTint('#000000'))];
+  for (const colour of colours) {
+    assert.ok(contrast(colour, NAMEPLATE_BACKDROP) >= MIN_CONTRAST, `${rgbHex(colour)} on a nameplate`);
+    for (const shade of [PANEL_SHADE, OPEN_PANEL_SHADE]) {
+      for (const scene of scenes) {
+        assert.ok(contrast(colour, over(shade, scene)) >= MIN_CONTRAST, `${rgbHex(colour)} over ${scene}`);
+      }
+    }
+  }
+  assert.equal(parseTint('#000000'), '#8d8d8d');
 });
 
 test('the named colours come in the picker\'s order, without Black, each told apart', () => {
@@ -131,8 +154,44 @@ test('players may share a colour, but never a name and a look-alike colour', () 
   const shown = three.map((tint, i) => tint ? hexRgb(tint) : PLAYER_COLORS[i]);
   for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) assert.ok(deltaE2000(shown[i], shown[j]) >= MIN_DELTA_E);
   assert.deepEqual(resolveTints([ash(1, '#ff5555')]), ['#ff5555'], 'once the first Ash leaves, the second gets theirs back');
-  // Every automatic colour taken by same-named players: the last one keeps
-  // its own colour, and its tag tells it apart.
-  const crowd = [...PLAYER_COLORS.map((c, i) => ash(i, rgbHex(c))), ash(3, null)];
-  assert.equal(resolveTints(crowd).at(-1), rgbHex(PLAYER_COLORS[3]));
+});
+
+// Every pair of colours a crowd is shown in.
+const apart = (colours) => colours.flatMap((a, i) => colours.slice(i + 1).map((b) => deltaE2000(a, b)));
+const shownIn = (players, tints) => tints.map((tint, i) => tint ? hexRgb(tint) : memberColour(players[i]));
+
+test('no two automatic colours look alike, so a lobby of one name on Auto keeps them all', () => {
+  assert.equal(PLAYER_COLORS.length, 8);
+  assert.ok(Math.min(...apart(PLAYER_COLORS)) >= MIN_DELTA_E, 'every pair at least ΔE 10 apart');
+  const ashes = PLAYER_COLORS.map((_, color) => ({ name: 'Ash', color, tint: null }));
+  assert.deepEqual(resolveTints(ashes), Array(8).fill(null));
+  // In any join order.
+  const reversed = [...ashes].reverse();
+  assert.deepEqual(resolveTints(reversed), Array(8).fill(null));
+});
+
+test('eight of one name are told apart by colour, whatever they choose', () => {
+  const crowds = [
+    PLAYER_COLORS.map((_, color) => ({ name: 'Ash', color, tint: '#ff5555' })),
+    PLAYER_COLORS.map((_, color) => ({ name: 'Ash', color, tint: rgbHex(PLAYER_COLORS[(color + 3) % 8]) })),
+    PLAYER_COLORS.map((_, color) => ({ name: 'Ash', color, tint: color % 2 ? null : '#efcf97' })),
+    PLAYER_COLORS.map((_, color) => ({ name: 'Ash', color, tint: NAME_COLOURS[color].hex })),
+  ];
+  for (const players of crowds) {
+    assert.ok(Math.min(...apart(shownIn(players, resolveTints(players)))) >= MIN_DELTA_E, JSON.stringify(players));
+  }
+});
+
+test('a crowd past every spare colour gets the one least like the rest, and its tag tells it apart', () => {
+  // More same-named players than the lobby holds, each choosing a spare
+  // colour: the automatic ones and the named ones.
+  const spares = [...PLAYER_COLORS, ...NAME_COLOURS.map((c) => hexRgb(c.hex))];
+  const players = [...spares.map((c, i) => ({ name: 'Ash', color: i % 8, tint: rgbHex(c) })), { name: 'Ash', color: 3, tint: null }];
+  const shown = shownIn(players, resolveTints(players));
+  const last = shown.at(-1);
+  const nearest = (colour) => Math.min(...shown.slice(0, -1).map((other) => deltaE2000(colour, other)));
+  assert.ok(nearest(last) < MIN_DELTA_E, 'no colour is far enough from them all');
+  assert.ok(spares.some((c) => rgbHex(c) === rgbHex(last)), 'a spare colour');
+  assert.equal(nearest(last), Math.max(...spares.map(nearest)), 'the one least like any of them');
+  assert.notEqual(rgbHex(last), rgbHex(PLAYER_COLORS[3]), 'never its own look-alike colour');
 });

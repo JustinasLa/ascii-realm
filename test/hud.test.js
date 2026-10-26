@@ -324,10 +324,22 @@ test('the prompt, extra frame notes, name and party frames show what they are gi
   assert.equal(byClass(document.body, 'hud-member')[0], members[0], 'the same frames are reused');
   assert.equal(name.style.color, 'rgb(255, 85, 85)', 'the name shows in its name colour');
   assert.equal(byClass(members[0], 'hud-name')[0].textContent, 'Marian', 'no note, no dot');
-  hud.setParty([{ id: 'a', name: 'Marian (2)', colour: [0, 170, 170], health: 30, maxHealth: 100 }, { id: 'b', health: 10, maxHealth: 100 }]);
+  assert.equal(byClass(members[0], 'hud-name-tag')[0].textContent, '', 'no tag for a unique name');
+  // A same-named player's tag has an element of its own after the name, so
+  // a long name is cut short without hiding it.
+  const long = 'Abcdefghijklmnopqrstuvwx';
+  hud.setParty([{ id: 'a', name: long, tag: 2, colour: [0, 170, 170], health: 30, maxHealth: 100, note: '3m' },
+    { id: 'b', health: 10, maxHealth: 100 }]);
   members = byClass(document.body, 'hud-member');
-  assert.equal(byClass(members[0], 'hud-name-text')[0].textContent, 'Marian (2)');
-  assert.equal(byClass(members[0], 'hud-name-text')[0].style.color, 'rgb(0, 170, 170)');
+  assert.notEqual(members[0], name.parentNode.parentNode, 'a new tag builds new frames');
+  const [text, tag, distance] = byClass(members[0], 'hud-name')[0].children;
+  assert.deepEqual([text.className, tag.className, distance.className], ['hud-name-text', 'hud-name-tag', 'hud-name-note']);
+  assert.deepEqual([text.textContent, tag.textContent, distance.textContent], [long, ' (2)', ' · 3m']);
+  assert.equal(text.style.color, 'rgb(0, 170, 170)');
+  assert.equal(tag.style.color, 'rgb(0, 170, 170)', 'the tag in the name\'s colour');
+  assert.equal(byClass(members[0], 'hud-vital')[0].getAttribute('aria-label'), `${long} (2) health`);
+  hud.setParty([{ id: 'a', name: `${long}yz`, tag: 2, health: 30, maxHealth: 100 }, { id: 'b', health: 10, maxHealth: 100 }]);
+  assert.equal(byClass(document.body, 'hud-name-text')[0].textContent, long, 'names are 24 characters at most');
   hud.setParty('nobody');
   members = byClass(document.body, 'hud-member');
   assert.equal(members.length, 0);
