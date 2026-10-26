@@ -10,6 +10,8 @@ export async function createScene(root = new URL('../', import.meta.url), option
     load('world/camera'), load('render/renderer'), load('world/trees'), load('world/leaves'),
   ]);
   const { width = 390, height = 844, cell = 8, seed = 1 } = options;
+  // The moonbeams' tier (see moon-shafts.js): a phone's unless it is wide.
+  const tier = options.tier ?? (width > 600 ? 'desktop' : 'phone');
   const world = new worldModule.World(seed);
   const player = new Player(world.spawn.x, world.spawn.y);
   if (options.x !== undefined) { player.x = options.x; player.y = options.y; }
@@ -20,7 +22,7 @@ export async function createScene(root = new URL('../', import.meta.url), option
   const { drawProp } = propsModule;
   // Older checkouts have no fine bakes.
   const { bakeFine } = await import(new URL('src/world/fine-bakes.js', root)).catch(() => ({}));
-  // Nor trees' shadows.
+  // Nor trees' shadows, nor moonbeams (drawShafts).
   const { NightLight } = await import(new URL('src/world/night-light.js', root)).catch(() => ({}));
   const night = NightLight ? new NightLight() : null;
   const r = Object.assign(Object.create(AsciiRenderer.prototype), {
@@ -65,7 +67,7 @@ export async function createScene(root = new URL('../', import.meta.url), option
     drawables.sort((a, b) => a.y - b.y);
     mark('prepareSprites');
     if (night) {
-      night.prepare(view, props, { seed: world.seed });
+      night.prepare(view, props, { seed: world.seed, world, tier });
       night.shadeGround(r, view);
       r.night = night.active ? night : null;
       mark('night');
@@ -76,6 +78,10 @@ export async function createScene(root = new URL('../', import.meta.url), option
     figure.drawTrail(r, view, player.trail, player.time);
     figure.drawNameTag(r, view, player, parts, 'Kael');
     mark('grassAndSprites');
+    if (night?.drawShafts) {
+      night.drawShafts(r, view, time);
+      mark('shafts');
+    }
     // Fine bakes queued by this frame finish before the next one, so every
     // run draws the same frames. Older checkouts have none.
     if (bakeFine) {

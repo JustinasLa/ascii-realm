@@ -12,6 +12,7 @@ import { shade } from './glow.js';
 import { bakeSurface, canopyOf, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withCanopy, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
 import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, MOON, VIEW_C, VIEW_S, glossByte } from './surface-light.js';
+import { tintRgb } from './moon-tint.js';
 import { makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
@@ -813,6 +814,8 @@ const GROUND_HALO = 1;
 const HALO_RISE = 3;
 const clamp = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const GLOSS_BYTE = [GLOSS_DRY, GLOSS_DAMP, GLOSS_WET].map(glossByte);
+const GROUND_FG = [0, 0, 0];
+const GROUND_BG = [0, 0, 0];
 
 // Draws a prop's fine bake (see fine-bakes.js) into the renderer's small
 // cells, with its ground cells beneath it on the ordinary grid.
@@ -820,17 +823,23 @@ function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
   const { cells: p, ground } = baked;
   if (prop.kind === 'tree') groundShadow(r, view, prop, bx, by);
   // The prop's ground cells (its pebbles, its baked contact shadow) replace
-  // ground a tree's shadow has already darkened: they take the same shade
-  // as they go down, once (see night-light.js).
+  // ground a tree's shadow has already darkened or a moonbeam lit: they
+  // take the same light as they go down, once (see night-light.js).
   const night = r.night;
   for (const c of ground) {
     const sy = by + c.dy;
     if (sy < 0 || sy >= view.rows) continue;
-    const k = night ? night.gainAt(view.x0 + bx + c.dx, view.y0 + sy) : 1;
-    if (k === 1) putCell(r, bx + c.dx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
+    const wx = view.x0 + bx + c.dx, wy = view.y0 + sy;
+    const k = night ? night.lightAt(wx, wy) : 1;
+    const t = night ? night.tint : 0;
+    if (k === 1 && t === 0) putCell(r, bx + c.dx, sy, c.g, c.r, c.gg, c.b, by, c.br, c.bgG, c.bb);
     else {
-      putCell(r, bx + c.dx, sy, c.g, c.r * k, c.gg * k, c.b * k, by,
-        c.br === undefined ? undefined : c.br * k, c.bgG * k, c.bb * k);
+      const [cr, cg, cb] = tintRgb(GROUND_FG, c.r * k, c.gg * k, c.b * k, t);
+      if (c.br === undefined) putCell(r, bx + c.dx, sy, c.g, cr, cg, cb, by, undefined, c.bgG * k, c.bb * k);
+      else {
+        const [br, bgG, bb] = tintRgb(GROUND_BG, c.br * k, c.bgG * k, c.bb * k, t);
+        putCell(r, bx + c.dx, sy, c.g, cr, cg, cb, by, br, bgG, bb);
+      }
     }
   }
   const tree = prop.kind === 'tree' || prop.kind === 'bush';

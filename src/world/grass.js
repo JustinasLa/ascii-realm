@@ -9,6 +9,7 @@ import {
   FOXGLOVE, LUPIN, PALETTES, POPPY, THISTLE, YARROW, extraAt,
 } from './grass-roots.js';
 import { GAIN_FLOOR } from './canopy.js';
+import { PEAK_LIFT, tintRgb } from './moon-tint.js';
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
 
 // Terrain grows blades up to five cells high; drawn blades are longer than
@@ -97,8 +98,18 @@ let tipAt = 0.5;
 let bladeRows = 0;
 const ROW_X = new Int16Array(16);
 // How much of the moon reaches the root being drawn: 1 in the open, 0
-// deep under a tree's crown, where blade tips no longer pale toward it.
+// deep under a tree's crown, where blade tips no longer pale toward it,
+// and more in a moonbeam, up to 1 + TIP_BOOST, where they pale more.
 let moonlit = 1;
+export const TIP_BOOST = 0.5;
+// How far a moonbeam turns the blades' colours toward the moonlight.
+let moontint = 0;
+const TINTED = [0, 0, 0];
+// A dew glint in a moonbeam is brighter, to this many times its open glint.
+export const DEW_CAP = 1.6;
+// And a flower, to this many times its open glow, so pale petals keep
+// their colour rather than turn white.
+export const FLOWER_CAP = 1.3;
 const ROW_P = new Uint8Array(16);
 const TONE = [0, 0, 0];
 const STALK = [0, 0, 0];
@@ -154,10 +165,15 @@ function drawBlade(r, view, write, x, y, height, lean, flat, light, tone, phase 
       // tall blades do not line up into horizontal bands of brightness.
       const u = Math.min(1, (j + 0.5) / rows + phase);
       const l = lit * (0.66 + u * 0.6);
-      const pale = u > 0.6 ? Math.min(1, (u - 0.6) * moon) * moonlit : 0;
-      const cr = (tr + (TIP[0] - tr) * pale) * l;
-      const cg = (tg + (TIP[1] - tg) * pale) * l;
-      const cb = (tb + (TIP[2] - tb) * pale) * l;
+      // Never past the tip's own colour, however bright the moon.
+      const pale = u > 0.6 ? Math.min(1, Math.min(1, (u - 0.6) * moon) * moonlit) : 0;
+      let cr = (tr + (TIP[0] - tr) * pale) * l;
+      let cg = (tg + (TIP[1] - tg) * pale) * l;
+      let cb = (tb + (TIP[2] - tb) * pale) * l;
+      if (moontint > 0) {
+        tintRgb(TINTED, cr, cg, cb, moontint);
+        cr = TINTED[0]; cg = TINTED[1]; cb = TINTED[2];
+      }
       // A steeply leaning segment crosses into the next column: give each
       // column it passes through its own part, so the blade has no gaps.
       const from = Math.floor(Math.min(bottom, top) + 0.25);
@@ -195,10 +211,14 @@ function drawBlade(r, view, write, x, y, height, lean, flat, light, tone, phase 
     const a = step(1 - (h0 - row), 3);
     const b = step(1 - (h1 - row), 3);
     const l = light * (0.4 + (k + 0.5) / cols * 0.4) * dim;
-    write(r, sx + side * k, base - row, side > 0 ? flatGlyph(a, b) : flatGlyph(b, a),
-      (tone[0] + (MAT[0] - tone[0]) * mat) * l,
-      (tone[1] + (MAT[1] - tone[1]) * mat) * l,
-      (tone[2] + (MAT[2] - tone[2]) * mat) * l, base);
+    let cr = (tone[0] + (MAT[0] - tone[0]) * mat) * l;
+    let cg = (tone[1] + (MAT[1] - tone[1]) * mat) * l;
+    let cb = (tone[2] + (MAT[2] - tone[2]) * mat) * l;
+    if (moontint > 0) {
+      tintRgb(TINTED, cr, cg, cb, moontint);
+      cr = TINTED[0]; cg = TINTED[1]; cb = TINTED[2];
+    }
+    write(r, sx + side * k, base - row, side > 0 ? flatGlyph(a, b) : flatGlyph(b, a), cr, cg, cb, base);
   }
   tipX = sx + side * cols;
   tipY = base - Math.floor(0.3 + rise);
@@ -597,9 +617,10 @@ export class Grass {
     };
     const left = view.x0 - SIDE_PAD;
     const right = view.x0 + view.cols + SIDE_PAD;
-    // Trees' shadows on this row, if any (see night-light.js).
+    // Trees' shadows and moonbeams on this row, if any (see night-light.js).
     const night = r.night?.rowShaded(y) ? r.night : null;
     moonlit = 1;
+    moontint = 0;
     const windNoise = valueNoiseRow(y * 0.045 + t * 0.03, world.seed + 900);
     for (let cx = Math.floor(left / CHUNK_SIZE); cx <= Math.floor((right - 1) / CHUNK_SIZE); cx++) {
       const chunk = world.chunk(cx, cy);
@@ -646,9 +667,14 @@ export class Grass {
         // Gusts lay blades over to show their lit sides; the parted hollow
         // under a figure stays in shadow.
         // A root in a tree's shadow takes less of the night's light, and
-        // everything growing from it with it.
-        const gain = night ? night.gainAt(x, y) : 1;
-        if (night) moonlit = gain < 1 ? Math.max(0, (gain - GAIN_FLOOR) / (1 - GAIN_FLOOR)) : 1;
+        // everything growing from it with it; one in a moonbeam more, its
+        // blades paler toward the moonlight (its flowers keep their colour).
+        const gain = night ? night.lightAt(x, y) : 1;
+        if (night) {
+          moonlit = gain < 1 ? Math.max(0, (gain - GAIN_FLOOR) / (1 - GAIN_FLOOR)) :
+            gain > 1 ? 1 + (gain - 1) / PEAK_LIFT * TIP_BOOST : 1;
+          moontint = night.tint;
+        }
         const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.1) *
           (0.82 + variation * 0.36) * (1 - sink * 0.8) * gain;
         let tone = PALETTES[style];
@@ -686,7 +712,8 @@ export class Grass {
           drawBlade(r, view, paint, x, y, length, lean, flat, light, tone, (variation - 0.5) * 0.4);
         }
         if (flower) {
-          const glow = (0.78 + chunk.shade[i] * 0.35 + variation * 0.2) * (1 - sink * 0.45) * (1 - flat * 0.4) * gain;
+          const glow = (0.78 + chunk.shade[i] * 0.35 + variation * 0.2) * (1 - sink * 0.45) * (1 - flat * 0.4) *
+            (gain > FLOWER_CAP ? FLOWER_CAP : gain);
           drawFlower(r, paint, SPECIES[flower], base, glow, flat, variation);
         } else if (extra && flat < 0.5) {
           if (extra === DEW) {
@@ -696,7 +723,7 @@ export class Grass {
             if (bladeRows > 1 && glint > 0.5) {
               const j = bladeRows >> 1;
               // A glint is the moon's own reflection: shade all but hides it.
-              const g = (glint - 0.5) * 2 * (1 - sink) * gain * gain;
+              const g = (glint - 0.5) * 2 * (1 - sink) * Math.min(DEW_CAP, gain * gain);
               paint(r, ROW_X[j], base - j, DEWDROPS[(variation * 40) & 3],
                 DEW_LIGHT[0] * g, DEW_LIGHT[1] * g, DEW_LIGHT[2] * g, base);
             }

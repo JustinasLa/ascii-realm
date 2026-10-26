@@ -81,7 +81,16 @@ short version see the [README](../README.md).
   Bare winter crowns cast only a thin shadow, burning trees less as they
   burn, and felled or burnt ones none; cloud thins them and lightning lifts
   them for its flash. Water, torchlight, firelight and spell light are not
-  dimmed by them. Leaves and blossoms
+  dimmed by them. Here and there a pale moonbeam reaches the meadow: the
+  ground and grass where it lands are brighter and paler, toward the
+  moonlight's blue-white, in a soft lobed patch, and above it a faint column
+  of lit air leans up toward the moon with a few motes of dust sinking
+  down it. Beams stay put as you walk and zoom, are the same on every
+  device, never land on water, fade under cloud, wash out in a lightning
+  flash and are dimmed under trees. Flowers in a beam brighten but keep
+  their colours. Desktops show up to six at once, phones up to four, and a
+  phone running at its reduced cell budget up to two, with the patches but
+  not the columns. Leaves and blossoms
   drift down, and foliage thins around the warrior when it would hide them.
   Add `?season=spring`, `?season=autumn` or `?season=winter` for seasonal
   palettes and snow-tipped evergreens. Summer is the default; the season

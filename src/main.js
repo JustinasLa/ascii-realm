@@ -63,6 +63,7 @@ import { Fires } from './world/fire.js';
 import { Fireflies } from './world/fireflies.js';
 import { Fog } from './world/fog.js';
 import { NightLight } from './world/night-light.js';
+import { shaftTier } from './world/moon-shafts.js';
 import { SpellFogStirs } from './world/fog-spells.js';
 import { MAX_WALKERS } from './world/fog-wake.js';
 import { Footprints } from './world/footprints.js';
@@ -301,7 +302,7 @@ const debug = { player, camera, world, grass, splashes, debris, weather, fog, ni
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
-  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, bubblesMs: 0, intervalMs: 0, rate: 60, nightMs: 0 },
+  audio: sound.engine, sound, get time() { return time; }, freeze: false, metrics: { frames: 0, workMs: 0, bubblesMs: 0, intervalMs: 0, rate: 60, nightMs: 0, shaftMs: 0 },
   // ?pintime=<seconds> freezes the world and holds the render clock there.
   pinTime: params.has('debug') && params.has('pintime') ? Number(params.get('pintime')) || 0 : null };
 debug.freeze = debug.pinTime !== null;
@@ -1505,9 +1506,11 @@ function frame(now) {
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
     view.x0 + view.cols + marginX, view.y0 + view.rows + tall, wide);
   // Trees' shadows darken the ground drawn so far, and the grass and rocks'
-  // ground cells as they are drawn; warm light is added over them later.
+  // ground cells as they are drawn, and moonbeams light them; warm light is
+  // added over them later.
   const nightStart = performance.now();
-  nightLight.prepare(view, props, { weather, seed: world.seed });
+  nightLight.prepare(view, props, { weather, seed: world.seed, world,
+    tier: shaftTier({ phone: device.phone, reduced: pacer.reduced }) });
   nightLight.shadeGround(renderer, view);
   renderer.night = nightLight.active ? nightLight : null;
   debug.metrics.nightMs = performance.now() - nightStart;
@@ -1662,6 +1665,11 @@ function frame(now) {
   grass.drawLayered(renderer, world, view, time, drawables);
   mushrooms.drawGlow(renderer, view, visibleMushrooms);
   splashes.drawContacts(renderer, view, time, contacts);
+  // The moonbeams' columns of lit air, under the warm light.
+  const shaftStart = performance.now();
+  nightLight.drawShafts(renderer, view, time);
+  debug.metrics.shaftMs = performance.now() - shaftStart;
+  debug.metrics.nightMs += debug.metrics.shaftMs;
   fires.light(renderer, view, time, visibleFires);
   torches.light(renderer, view, time, visibleTorches);
   weather.drawAtmosphere(renderer, view, time);
