@@ -5,6 +5,7 @@ import { Player } from '../../src/entities/player.js';
 import { Animals } from '../../src/entities/animals.js';
 import { Birds } from '../../src/entities/birds.js';
 import { Fishes } from '../../src/entities/fish.js';
+import { Horses } from '../../src/entities/horses.js';
 import { HuntDrops } from '../../src/entities/hunt-drops.js';
 import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/loot.js';
 import { Wallet } from '../../src/inventory/wallet.js';
@@ -143,6 +144,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     drawShadow: noop,
     drawSubmerged: noop,
   };
+  // The horses' figures, likewise; every load asked for is noted.
+  let horsesLoaded;
+  const horsesReady = new Promise(resolve => { horsesLoaded = resolve; });
+  const horseLoads = [];
+  const horseDraws = [];
+  const horseFigures = {
+    load: (options) => { horseLoads.push(options); return horsesReady; },
+    draw: (r, figure, write) => horseDraws.push(figure),
+  };
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
   const context = {
     console: { ...console, error: (...args) => startupErrors.push(args) }, URL, URLSearchParams, window,
@@ -276,7 +286,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
     MonsterFigures: class {}, KINDS: {},
-    Animals, Birds, Fishes, AnimalFigures: animalFigures,
+    Animals, Birds, Fishes, AnimalFigures: animalFigures, Horses, HorseFigures: horseFigures,
     SceneryBuilder: class {
       constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }
       setEnabled(value) { this.enabled = value; this.onModeChange(); }
@@ -367,6 +377,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       await Promise.resolve();
       await Promise.resolve();
     },
+    // Hands the game a stand-in for the horses' figures (or null, as when
+    // there is no WebGL for them).
+    loadHorseFigures: async (figures) => {
+      horsesLoaded(figures);
+      await Promise.resolve();
+      await Promise.resolve();
+    },
+    horseLoads,
+    horseDraws,
     touch,
     vibrations,
     pointer(type, button = 0, pointerType = 'mouse') {
