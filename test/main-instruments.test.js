@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { INSTRUMENT_IDS } from '../src/audio/instruments.js';
+import { INSTRUMENT_IDS, noteMidi } from '../src/audio/instruments.js';
+import { SCALE, TILT } from '../src/entities/rig.js';
+import { ASPECT } from '../src/world/world.js';
+import { HEAD_ROWS, noteColour } from '../src/world/music-notes.js';
 import { ITEMS } from '../src/inventory/items.js';
 import { loadGame } from './helpers/main-game.js';
 
@@ -305,4 +308,98 @@ test('Shift still runs while chords play', async () => {
   assert.equal(instrumentNotes().length, 4);
   assert.ok(instrumentNotes().every(event => event.chord));
   assert.ok(game.player.run > 0.6, `running (${game.player.run})`);
+});
+
+// --- Friends' notes ---------------------------------------------------------
+
+test('every played note is offered to the lobby, and a refused one is not', async () => {
+  const { game, keydown } = await performer('lute');
+  keydown(undefined, { code: 'Digit1' });
+  keydown(undefined, { code: 'Digit3', shiftKey: true });
+  assert.deepEqual(game.multiplayer.notesSent.map(note => ({ ...note })), [
+    { instrument: 'lute', degree: 0, octave: 0, chord: false },
+    { instrument: 'lute', degree: 2, octave: 0, chord: true },
+  ]);
+  game.builder.enabled = true;
+  keydown(undefined, { code: 'Digit2' });
+  assert.equal(game.multiplayer.notesSent.length, 2, 'nothing is sent that was not played');
+});
+
+// A friend `metres` away along a direction, built with the inverse of
+// toMetres so the screen's tilt is part of the sum.
+const offset = (metres, [ex, ez]) => [metres * ex * SCALE / ASPECT, metres * ez * SCALE * TILT];
+
+async function listener(options) {
+  const loaded = await performer(null, options);
+  const peers = loaded.game.remotePlayers.peers;
+  const at = (id, metres, direction = [1, 0], figure) => {
+    const [dx, dy] = offset(metres, direction);
+    peers.set(id, { id, player: { x: loaded.game.player.x + dx, y: loaded.game.player.y + dy }, figure });
+    return peers.get(id).player;
+  };
+  return { ...loaded, at };
+}
+
+const C = { instrument: 'lute', degree: 0, octave: 0, chord: false };
+
+test("a friend's note plays from their figure, fading linearly to silence at 64 m", async () => {
+  const { game, at, instrumentNotes } = await listener();
+  const near = at('a1', 0);
+  game.multiplayer.onNote({ from: 'a1', note: C });
+  assert.deepEqual({ ...instrumentNotes()[0] }, { type: 'instrument', ...C, x: near.x, y: near.y, level: 1 });
+  at('a1', 32);
+  game.multiplayer.onNote({ from: 'a1', note: { ...C, degree: 4, chord: true } });
+  assert.ok(Math.abs(instrumentNotes()[1].level - 0.5) < 1e-9);
+  assert.equal(instrumentNotes()[1].chord, true);
+  at('a1', 32, [0, 1]);
+  game.playRemoteNote('a1', C);
+  assert.ok(Math.abs(instrumentNotes()[2].level - 0.5) < 1e-9, 'north and south are measured in metres too');
+  const glyphs = game.musicNotes.list.length;
+  for (const metres of [64, 70]) {
+    at('a1', metres);
+    game.multiplayer.onNote({ from: 'a1', note: C });
+  }
+  assert.equal(instrumentNotes().length, 3, 'nothing is played from 64 m on');
+  assert.equal(game.musicNotes.list.length, glyphs, 'and no glyph is shown');
+});
+
+test("a friend's note shows its glyph over their head, coloured by the root", async () => {
+  const { game, at } = await listener();
+  const friend = at('a1', 5, [1, 0], [{ y0: -30 }, { y0: -10 }]);
+  game.multiplayer.onNote({ from: 'a1', note: { ...C, degree: 4 } });
+  const [glyph] = game.musicNotes.list;
+  assert.equal(glyph.x, Math.floor(friend.x));
+  assert.equal(glyph.row, Math.floor(friend.y - 30) - 2 * SCALE);
+  assert.deepEqual([...glyph.colour], noteColour(noteMidi('lute', 4, 0, false)[0]));
+  // A friend not yet drawn still gets a glyph, from the assumed head.
+  const unseen = at('b2', 5);
+  game.multiplayer.onNote({ from: 'b2', note: C });
+  assert.equal(game.musicNotes.list[1].row, Math.floor(unseen.y) - HEAD_ROWS - 2 * SCALE);
+});
+
+test('a hidden tab hears the note but piles up no glyphs', async () => {
+  const { game, at, instrumentNotes, setHidden } = await listener();
+  at('a1', 3);
+  setHidden(true);
+  game.multiplayer.onNote({ from: 'a1', note: C });
+  assert.equal(instrumentNotes().length, 1);
+  assert.equal(game.musicNotes.list.length, 0);
+});
+
+test('notes from unknown or departed friends are ignored', async () => {
+  const { game, at, instrumentNotes } = await listener();
+  game.multiplayer.onNote({ from: 'ffff', note: C });
+  at('a1', 3);
+  game.remotePlayers.peers.delete('a1');
+  game.multiplayer.onNote({ from: 'a1', note: C });
+  assert.equal(instrumentNotes().length, 0);
+  assert.equal(game.musicNotes.list.length, 0);
+});
+
+test('phones hear and see friends play, though they cannot play themselves', async () => {
+  const { game, at, instrumentNotes } = await listener({ phone: true });
+  at('a1', 10);
+  game.multiplayer.onNote({ from: 'a1', note: C });
+  assert.equal(instrumentNotes().length, 1);
+  assert.equal(game.musicNotes.list.length, 1);
 });
