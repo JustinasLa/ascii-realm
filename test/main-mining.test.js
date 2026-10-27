@@ -43,4 +43,16 @@ test('swinging a pickaxe at ore mines it, and the ore lies with the loot', async
   assert.ok(block.mined);
   assert.ok(game.huntDrops.all().some((s) => s.id === 'rawIron'));
   assert.equal(game.mining.nearby(game.player, 'stone'), null);
+  frame();
+  assert.equal(prompts.at(-1), '', 'no ore left to offer');
+});
+
+test('a glowcap in reach takes the prompt over the ore', async () => {
+  const { game, frame, prompts } = await start();
+  game.mushrooms.nearby = () => ({ cooldown: 0 });
+  frame();
+  assert.equal(prompts.at(-1), '[E] Disturb glowcap · release spores');
+  game.mushrooms.nearby = () => ({ cooldown: game.mushrooms.time + 5 });
+  frame();
+  assert.equal(prompts.at(-1), 'Glowcap · spores settling…');
 });

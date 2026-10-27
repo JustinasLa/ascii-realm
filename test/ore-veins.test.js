@@ -86,11 +86,31 @@ test('a candidate is checked where it snaps: its whole foot and the rows beside 
         for (let gx = Math.floor(b.x - foot); gx <= Math.floor(b.x + foot); gx++) assert.equal(world.typeAt(gx, gy), GRASS);
       }
       assert.ok(b.x - foot >= cx * CHUNK_SIZE + 4 && b.x + foot < (cx + 1) * CHUNK_SIZE - 4, 'inside the chunk');
-      assert.ok(b.y >= cy * CHUNK_SIZE + 2 && b.y < (cy + 1) * CHUNK_SIZE - 2);
+      assert.ok(Math.floor(b.y - 0.9) >= cy * CHUNK_SIZE + 2 && Math.floor(b.y + 0.9) < (cy + 1) * CHUNK_SIZE - 2);
       assert.ok(Math.hypot((b.x - world.spawn.x) * ASPECT, b.y - world.spawn.y) >= 40, 'clear of spawn');
     }
   }
   assert.ok(placed > 100);
+});
+
+test('a block whose foot would reach into the top or bottom margin is dropped, right at the edge', () => {
+  // A big rock whose side anchors snap to `y`: the foot spans the rows
+  // floor(y - 0.9) to floor(y + 0.9), so 2.5 rows in reaches into the
+  // two-row margin and 3.5 is the first base that clears it.
+  const world = open(3);
+  const rows = { top: new Set(), bottom: new Set() };
+  for (let i = 0; i < 400; i++) {
+    const cx = (i % 20) - 10, cy = Math.floor(i / 20) - 10, y0 = cy * CHUNK_SIZE, y1 = (cy + 1) * CHUNK_SIZE;
+    for (const [side, base] of [['top', y0 + 2.5], ['top', y0 + 3.5], ['bottom', y1 - 2.5], ['bottom', y1 - 3.5]]) {
+      const rock = { kind: 'rock', x: cx * CHUNK_SIZE + 32, y: base - 1, footW: 9, footH: 0.9 };
+      for (const b of placeVeins(world, cx, cy, CHUNK_SIZE, [rock])) {
+        assert.ok(Math.floor(b.y - 0.9) >= y0 + 2 && Math.floor(b.y + 0.9) < y1 - 2, `${b.x},${b.y} in chunk ${cx},${cy}`);
+        rows[side].add(side === 'top' ? b.y - y0 : y1 - b.y);
+      }
+    }
+  }
+  assert.equal(Math.min(...rows.top), 3.5, 'the first clear row is used');
+  assert.equal(Math.min(...rows.bottom), 3.5);
 });
 
 test('veins keep clear of scenery here and across the seams, and of the spawn clearing', () => {

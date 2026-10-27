@@ -7,6 +7,9 @@ import { Harvesting } from '../src/world/harvesting.js';
 import { layLoot } from '../src/world/loot.js';
 import { blowsFor, canHarvest, Mining, OTHER_BLOWS, rollDrops, toolOf } from '../src/world/mining.js';
 import { minedKey, ORES } from '../src/world/ore-veins.js';
+import { SCALE, TILT } from '../src/entities/rig.js';
+import { WEAPONS } from '../src/entities/weapons.js';
+import { ASPECT } from '../src/world/world.js';
 import { mulberry32 } from '../src/core/rng.js';
 import { World } from '../src/world/world.js';
 
@@ -126,6 +129,30 @@ test('the prompt names the block the player faces and what it needs', () => {
   const facing = { x: tin.x + 6, y: tin.y, heading: -Math.PI / 2 };
   assert.equal(mining.nearby(facing, null).prompt, 'Tin ore · needs a stone pickaxe');
   assert.equal(mining.nearby(facing, 'stone').prompt, 'Tin ore · stone pickaxe');
+});
+
+test('the prompt reaches as far as the swing does, to the edge of its reach', () => {
+  const { ores, mining } = field();
+  const front = ores.filter((b) => b.ore === 'coal').sort((a, b) => a.y - b.y || a.x - b.x).at(-1);
+  const reach = WEAPONS.pickaxe.reach;
+  // The strike point exactly as the player's swing emits it.
+  const strike = (p) => ({ type: 'strike', x: p.x + Math.sin(p.heading) * reach * SCALE / ASPECT,
+    y: p.y + Math.cos(p.heading) * reach * SCALE * TILT });
+  const edge = reach * SCALE * TILT + 3.5;
+  for (const [rows, hit] of [[edge - 0.1, true], [edge + 0.1, false]]) {
+    const player = { ...below(front, rows), feel: { reach } };
+    assert.ok(rows > 6, 'past the old fixed cutoff');
+    assert.equal(mining.nearby(player, 'stone')?.block ?? null, hit ? front : null, `${rows} rows`);
+    assert.equal(mining.react(strike(player), player, 'stone')[0]?.block ?? null, hit ? front : null, `${rows} rows`);
+  }
+  // Facing west, the blade reaches further across than down the screen.
+  const lone = new Mining({ propsIn: () => [front] });
+  for (const [far, hit] of [[3.4, front], [3.6, null]]) {
+    const side = { x: front.x + (reach * SCALE + far) / ASPECT, y: front.y, heading: -Math.PI / 2, feel: { reach } };
+    assert.ok(reach * SCALE + far > 6);
+    assert.equal(lone.nearby(side, 'stone')?.block ?? null, hit);
+    assert.equal(lone.react(strike(side), side, 'stone')[0]?.block ?? null, hit);
+  }
 });
 
 test('mined ore lies with the loot; a full bag leaves it there until there is room', () => {

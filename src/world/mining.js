@@ -12,7 +12,6 @@ export const PICKAXES = Object.freeze({
   stone: { name: 'stone pickaxe', blows: 3, level: 1 },
 });
 export const OTHER_BLOWS = 40;
-const INTERACT_REACH = 6;
 const STRIKE_RADIUS = 3.5;
 
 // The pickaxe tier in the main hand, or null for any other tool.
@@ -59,13 +58,14 @@ export class Mining {
     return best;
   }
 
-  // The block the player faces and would hit, with its prompt.
+  // The block the next swing would hit, by the strike's own reach and
+  // corridor, with its prompt.
   nearby(player, tier) {
     const reach = (player.feel?.reach ?? 0.95) * SCALE;
     const heading = player.heading ?? 0;
     const aim = { x: player.x + Math.sin(heading) * reach / ASPECT, y: player.y + Math.cos(heading) * reach * TILT };
     const block = this.target(player, aim);
-    if (!block || distance(player, block) > INTERACT_REACH) return null;
+    if (!block) return null;
     const name = ORES[block.ore].name;
     const ok = canHarvest(tier, block.ore);
     return { block, name, ok, prompt: ok ? `${name} · ${PICKAXES[tier].name}` : `${name} · needs ${needs(block.ore)}` };

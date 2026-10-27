@@ -76,9 +76,11 @@ export function placeVeins(world, cx, cy, size, props) {
     const seed = oreSeed(world, x, y);
     const foot = oreFoot(seed);
     if (x - foot < cx * size + 4 || x + foot >= (cx + 1) * size - 4) return null;
-    if (y < cy * size + 2 || y >= (cy + 1) * size - 2) return null;
+    // The foot's rows (footH 0.9 each way), its lower edge included.
+    const top = Math.floor(y - 0.9), bottom = Math.floor(y + 0.9);
+    if (top < cy * size + 2 || bottom >= (cy + 1) * size - 2) return null;
     if (world.spawn && Math.hypot((x - world.spawn.x) * ASPECT, y - world.spawn.y) < SPAWN_CLEAR) return null;
-    for (let gy = Math.floor(y) - 1; gy <= Math.floor(y) + 1; gy++) {
+    for (let gy = top; gy <= bottom; gy++) {
       for (let gx = Math.floor(x - foot); gx <= Math.floor(x + foot); gx++) if (world.typeAt(gx, gy) !== GRASS) return null;
     }
     if (nearSolid(x, y)) return null;
