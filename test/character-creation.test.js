@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DAY } from '../src/character/catalog.js';
 import { formatBirthday } from '../src/character/calendar.js';
-import { Creation, PAGES, sampleDraft, wantsCreator } from '../src/character/creation.js';
+import { Creation, LOCKED, PAGES, sampleDraft, wantsCreator } from '../src/character/creation.js';
 import { Roster } from '../src/character/roster.js';
 import { sheetErrors } from '../src/character/rules.js';
-import { DEFAULT_SKIN } from '../src/character/skin.js';
+import { cleanSkin, DEFAULT_SKIN } from '../src/character/skin.js';
 
 const START = new Date(2026, 9, 26, 12).getTime();
 
@@ -362,4 +362,115 @@ test('a tone the player picks is kept through race changes', () => {
   assert.equal(f.draft.skin.tone, 'ember');
   f.wearPreset('reaver');
   assert.equal(f.draft.skin.tone, 'ember', 'and presets keep it');
+});
+
+// A saved character (Arwen, an elf, in olive) and an edit of it.
+function editing(r = roster()) {
+  const draft = { ...sampleDraft(r, START), skin: cleanSkin({ tone: 'olive' }) };
+  assert.ok(r.create(draft).ok);
+  return { r, edit: () => flow({ roster: r, edit: r.active }) };
+}
+
+test('Edit starts on the Summary with the saved sheet and skin', () => {
+  const { r, edit } = editing();
+  const f = edit();
+  assert.equal(f.page.id, 'summary');
+  assert.equal(f.editing, true);
+  assert.equal(f.counter, null);
+  assert.deepEqual(f.sheet, r.active.sheet);
+  assert.notEqual(f.sheet, r.active.sheet);
+  assert.deepEqual(f.draft.skin, cleanSkin({ tone: 'olive' }));
+  assert.equal(f.draft.toneChosen, true, 'olive is not the elf tone, so it was picked');
+  r.setSkin(r.active.id, null);
+  assert.equal(edit().draft.toneChosen, false);
+  assert.equal(f.changed, false);
+  assert.deepEqual(f.changes, {});
+  assert.equal(flow().editing, false);
+});
+
+test('locked steps: race after a day; class, age and attributes after five; the rest never', () => {
+  const { r, edit } = editing();
+  const at = (ms) => { r.clock.now = ms; return edit(); };
+  for (const [step, lock] of [['race', DAY], ['class', 5 * DAY], ['age', 5 * DAY], ['attributes', 5 * DAY]]) {
+    assert.deepEqual(at(START + lock - 1).locked(step), { locked: false, at: START + lock }, step);
+    assert.deepEqual(at(START + lock).locked(step), { locked: true, at: START + lock }, step);
+  }
+  const f = at(START + DAY);
+  for (const step of ['name', 'gender', 'description', 'clues', 'skin']) assert.equal(f.locked(step), null, step);
+  assert.equal(flow().locked('race'), null, 'a new character has no locks');
+  assert.deepEqual(f.rows.map((row) => row.lock?.locked ?? null), [null, null, false, true, false, false, null, null, null]);
+  assert.equal(f.edit('race'), LOCKED);
+  assert.equal(f.page.id, 'summary');
+  assert.equal(f.edit('class'), null);
+  assert.equal(f.page.id, 'class');
+  assert.ok(f.next());
+  assert.equal(f.page.id, 'summary');
+  f.edit('gender');
+  assert.equal(f.page.id, 'description');
+});
+
+test('an edit checks only what it changes, and never the creation cooldown', () => {
+  const r = roster();
+  // An elf made long ago: the switch cooldown runs, and every lock has passed.
+  const { edit } = editing(r);
+  r.state.characters[0].switchedAt = START;
+  r.clock.now = START + DAY;
+  const f = edit();
+  assert.equal(r.canCreate().ok, false);
+  assert.deepEqual(f.allowed, { ok: true }, 'no creation cooldown when editing');
+  assert.equal(f.error, null);
+  f.set('name', 'A');
+  assert.deepEqual(f.review, [{ step: 'name', label: 'Name', message: 'Name must be at least 3 characters.' }]);
+  f.set('name', 'Arwen Brook');
+  f.set('gender', 'nope');
+  assert.equal(f.review[0].step, 'description', 'gender is reviewed on the Description step');
+  f.set('gender', 'male');
+  assert.deepEqual(f.changes, { name: 'Arwen Brook', gender: 'male' });
+  assert.equal(f.changed, true);
+  // A lock that passed while editing.
+  f.set('race', 'human');
+  assert.deepEqual(f.allowed, { ok: false, reason: 'Race is locked.' });
+  assert.equal(f.error, 'Race is locked.');
+  assert.deepEqual(f.save(), { ok: false, reason: 'Race is locked.' });
+});
+
+test('an age change on an edit is reviewed on the Age step', () => {
+  const { r, edit } = editing();
+  const f = edit();
+  r.clock.now = START + 1000;
+  f.edit('age');
+  f.sheet.birthday = '0100-01-01';
+  assert.deepEqual(f.review.map((e) => [e.step, e.label]), [['age', 'Age']]);
+});
+
+test('Save writes only what changed: nothing, the sheet fields, or the skin', () => {
+  const { r, edit } = editing();
+  const writes = () => r.state.rev;
+  let f = edit();
+  const rev = writes();
+  assert.deepEqual(f.save(), { ok: true, character: r.characters[0] });
+  assert.equal(writes(), rev, 'no change writes nothing');
+  const calls = [];
+  const update = r.update.bind(r);
+  const setSkin = r.setSkin.bind(r);
+  Object.assign(r, { update: (id, changes) => { calls.push(['update', changes]); return update(id, changes); },
+    setSkin: (id, skin) => { calls.push(['skin', skin.tone]); return setSkin(id, skin); } });
+  f = edit();
+  f.set('name', 'Arwen Brook');
+  const saved = f.save();
+  assert.equal(saved.character.sheet.name, 'Arwen Brook');
+  assert.deepEqual(calls, [['update', { name: 'Arwen Brook' }]]);
+  calls.length = 0;
+  f = edit();
+  f.setRegion('tone', 'ember');
+  assert.equal(f.changed, true);
+  assert.ok(f.save().ok);
+  assert.deepEqual(calls, [['skin', 'ember']]);
+  assert.equal(r.active.skin.tone, 'ember');
+  // A skin the roster refuses.
+  f = edit();
+  f.setRegion('tone', 'olive');
+  r.readOnly = true;
+  assert.deepEqual(f.save(), { ok: false, reason: 'Characters were saved by a newer version of the game.' });
+  assert.equal(f.allowed.reason, 'Characters were saved by a newer version of the game.');
 });

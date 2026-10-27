@@ -6,10 +6,9 @@ to three characters, one of them active. The rules, the skins and the saved
 roster live in `src/character/`. A first visit opens the
 [creator](#the-creator). The active character is played everywhere: its name
 in the HUD, over the outlaw, in the inventory and in lobbies, and its skin on
-the outlaw and the inventory portrait. Its sheet shows on the inventory's
-[Character page](#the-character-menu). Making more characters, switching and
-editing can be reached only from the console with `?debug`, as
-`game.characters`, for now.
+the outlaw and the inventory portrait. The inventory's
+[character menu](#the-character-menu) shows its sheet, edits it, switches
+characters and makes more.
 
 ## Races
 
@@ -154,15 +153,16 @@ and comes back afterwards (it snaps with reduced motion). Trees, rocks and
 ruins in front of the outlaw that would hide it are left out until play
 starts, wherever it stands, since the player can't step clear. On phones the
 panel keeps above the on-screen keyboard. The rest of the screen is inert,
-every key stays in the panel (Esc doesn't close it), monsters and animals
-hold still, nothing can hurt the player, and a lobby join waits for Create.
+every key stays in the panel (Esc closes only an edit or a new character),
+monsters and animals hold still, nothing can hurt the player, and a lobby join waits for Create.
 If the new character couldn't be saved, that join is dropped with a notice:
 a lobby on another world reloads the page, which would lose it.
 A draft isn't saved: a reload starts again.
 
 ## The character menu
 
-The inventory has page tabs: **Inventory** and **Character**. With the
+The inventory has page tabs: **Inventory**, **Character** and
+**Characters**. With the
 inventory open, `C` turns to the next page, and the arrow keys, Home and End
 move along the focused tabs. On phones the menu's Inventory row reaches them.
 
@@ -174,7 +174,39 @@ when it has been locked ("Locked since" the date). A `?name=` visit says the
 name it shows instead. In a lobby the page says that a new name or character
 shows to the others at the next join, and a roster that can't save says why.
 With no character (say with `?nocreator` on a fresh profile) it reads "You
-have no character yet."
+have no character yet. Make one on the Characters page."
+
+**Edit** reopens the creator on the Summary, titled "Edit {name}", with the
+outlaw framed and previewing as in creation. A locked step has no Edit and
+says "Locked since" the date; a step that will lock says "Locks in …". Name,
+gender, description, clues and skin can always be changed. **Save** checks
+and stores only the fields that changed (and the skin if it changed), so an
+edit made meanwhile in another tab to other fields survives, and a
+character who has aged past the race's maximum can still be renamed.
+**Cancel** or Esc closes without saving and puts the saved skin back. Either
+way the Character page comes back.
+
+The **Characters** page lists the roster, most recently played first: each
+character's portrait in its own skin, its name, "race · class · age", and
+**Playing now** on the active one. **Play as** switches at once, without a
+reload: the HUD, the inventory, the nameplate, the portrait and the
+outlaw's skin change on the next frame. During the switch cooldown it is
+dimmed, and the row says why and when switching opens ("Opens in 3d 4h
+12m, on" the date and time). **Create character** shows the slots used ("2
+of 3 character slots used") and opens the creator at "Character creation"
+for a new character while a slot is free and the cooldown allows; otherwise
+it says why. A new character can be cancelled with **Cancel** or Esc: an
+untouched one closes at once, and one the player has started on asks
+"Discard this character?" with **Keep creating** and **Discard draft**.
+Create makes it active and starts play. The first character can't be
+cancelled.
+
+Edit, Create character and Play as wait until the player hasn't been hurt
+for 10 seconds of play ("You were hurt recently. Try again in 4 s."), so the
+menu can't pause a fight; the refusal shows on the page and nothing else
+happens. In a lobby a rename or switch reaches the others at the next join,
+and the notice says so. The bag, pouch, position and health are shared by
+every character.
 
 A change another tab saves to the roster shows here at once: the name in the
 HUD, over the outlaw and in the inventory, the skin and the Character page.
@@ -189,7 +221,7 @@ skin is repaired by `cleanSkin` whenever it is stored or read, so a stored
 skin is always well formed.
 
 - **Switching** the active character is allowed 4 days after the last
-  switch. `?debug` skips the wait.
+  switch. `?debug` skips the wait, but not the recently-hurt wait.
 - **Creating** a character makes it active, so once a character exists, a
   new one counts as a switch and waits for the same cooldown. A fourth
   character is refused.

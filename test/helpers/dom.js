@@ -65,6 +65,7 @@ class Element {
     return this.attributes.get(name) ?? null;
   }
   getBoundingClientRect() { return { left: 0, top: 0, width: 800, height: 400 }; }
+  focus() { globalThis.document.activeElement = this; }
   addEventListener(type, listener) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type).push(listener);

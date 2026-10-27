@@ -215,9 +215,13 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     CharacterCreator: class {
       constructor(options) { Object.assign(this, options); this.flow = null; this.opened = []; this.refits = 0; }
       get isOpen() { return this.flow !== null; }
-      open(options) { this.opened.push(options); if (creator) this.flow = options; }
+      open(options) {
+        this.opened.push(options);
+        this.mode = options.edit ? 'edit' : options.mode ?? 'first';
+        if (creator) this.flow = options;
+      }
       refit() { this.refits++; }
-      close(character = null) { this.flow = null; this.onClose(character); }
+      close(character = null) { this.flow = null; this.onClose(character, this.mode); }
     },
     sampleDraft, wantsCreator, hidesPreview,
     // What reaches the speech bubbles; the real ones are tested on their own.
@@ -255,11 +259,20 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     InventoryScreen: class extends inert() {
       constructor(options) { super(); Object.assign(this, options); this.opened = []; }
       setName(name) { this.name = name; }
-      setOpen(open, page) { this.opened.push([open, page]); }
+      setOpen(open, page) {
+        this.opened.push([open, page]);
+        if (open === (this.isOpen === true)) return;
+        this.isOpen = open;
+        this.onToggle(open);
+      }
     },
-    // The character pages count their renders.
+    // The character pages count their renders and the buttons focused.
     CharacterPages: class {
-      constructor(options) { Object.assign(this, options); this.sheet = {}; this.renders = 0; }
+      constructor(options) {
+        Object.assign(this, options);
+        Object.assign(this, { sheet: {}, list: {}, renders: 0, focused: [] });
+        for (const id of ['edit', 'create']) this[id] = { focus: () => this.focused.push(id) };
+      }
       render() { this.renders++; }
     },
     nameError, normalName,

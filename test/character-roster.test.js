@@ -582,3 +582,20 @@ test('ids are c and 16 hex digits from getRandomValues', () => {
   assert.notEqual(randomId(), id);
   assert.match(new Roster({ storage: null }).newDraft().id, /^c[0-9a-f]{16}$/);
 });
+
+test('check() gives update\'s refusal, or null, and never writes', () => {
+  const storage = memory();
+  const { roster: r, clock } = roster(storage);
+  make(r, 'Kael');
+  const before = storage.map.get(ROSTER_KEY);
+  clock.now = START + DAY;
+  for (const [id, changes] of [['nope', { name: 'Bryn' }], ['c0001', { race: 'elf' }], ['c0001', { name: '' }]]) {
+    const refused = r.check(id, changes);
+    assert.deepEqual({ ok: false, ...refused }, r.update(id, changes));
+  }
+  assert.equal(r.check('c0001', { name: 'Kael the Grey' }), null);
+  assert.equal(r.check('c0001', {}), null);
+  assert.equal(storage.map.get(ROSTER_KEY), before, 'nothing written');
+  r.readOnly = true;
+  assert.deepEqual(r.check('c0001', { name: 'Bryn' }), { reason: 'Characters were saved by a newer version of the game.' });
+});

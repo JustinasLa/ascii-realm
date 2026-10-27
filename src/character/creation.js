@@ -8,6 +8,8 @@ import { formatBirthday } from './calendar.js';
 import { ageOf, attributeCost, attributesSpent, attributeTotals, cluesError, setAge, setBirthday,
   sheetErrors, stepError } from './rules.js';
 import { cleanSkin, DEFAULT_SKIN, LAYERS, PALETTES, PRESETS, skinKey, toneForRace, wearPreset } from './skin.js';
+import { lockState } from './menu.js';
+import { SHEET_FIELDS } from './roster.js';
 
 const info = (id, title, ...lines) => ({ id, kind: 'info', title, lines });
 const step = (id, title) => ({ id, kind: 'step', step: id, title });
@@ -42,6 +44,10 @@ const pageOf = (id) => PAGES.findIndex((page) => page.id === id);
 const SUMMARY = pageOf('summary');
 const nameOf = (region, id) => PALETTES[region].find((swatch) => swatch.id === id).name;
 const LAYER_OFF = Object.freeze({ hood: 'Hood down', jerkin: 'No jerkin', cloak: 'No cloak' });
+// The steps that lock, and the step a sheet field is changed on.
+const LOCKS = Object.freeze({ race: 'race', class: 'class', age: 'age', attributes: 'attributes' });
+const STEP_OF = Object.freeze({ birthday: 'age', gender: 'description' });
+export const LOCKED = 'That choice is locked and can no longer be edited.';
 
 // Whether start-up opens the creator: always with ?creator, never for tools
 // (?nocreator, ?nogate), and otherwise on a first visit, while there is no
@@ -63,12 +69,23 @@ export function sampleDraft(roster, now) {
 }
 
 export class Creation {
-  constructor({ roster, now = () => Date.now(), start = 'welcome', draft = null }) {
-    Object.assign(this, { roster, now });
+  // With `edit`, a saved character is changed instead, from the Summary.
+  constructor({ roster, now = () => Date.now(), start = 'welcome', draft = null, edit = null }) {
+    Object.assign(this, { roster, now, original: edit });
+    if (edit) {
+      const skin = cleanSkin(edit.skin);
+      draft = { id: edit.id, sheet: structuredClone(edit.sheet), skin,
+        toneChosen: skin.tone !== (toneForRace(edit.sheet.race) ?? DEFAULT_SKIN.tone) };
+    }
     this.draft = draft ?? { ...roster.newDraft(), skin: DEFAULT_SKIN, toneChosen: false };
     if (!draft) this.draft.sheet.name = roster.suggestedName;
-    this.go(Math.max(0, pageOf(start)));
+    this.go(edit ? SUMMARY : Math.max(0, pageOf(start)));
   }
+
+  get editing() { return this.original !== null; }
+
+  // An edited step's lock, `{ locked, at }`, or null for one that never locks.
+  locked(step) { return this.editing && step in LOCKS ? lockState(this.original, LOCKS[step], this.now()) : null; }
 
   get page() { return PAGES[this.index]; }
   get sheet() { return this.draft.sheet; }
@@ -111,8 +128,12 @@ export class Creation {
   }
 
   // Opens a step from the Summary; Next and Back return there. Gender is set
-  // on the Description step.
-  edit(step) { this.go(pageOf(step === 'gender' ? 'description' : step), true); }
+  // on the Description step. A locked step stays shut, with why.
+  edit(step) {
+    if (this.locked(step)?.locked) return LOCKED;
+    this.go(pageOf(STEP_OF[step] ?? step), true);
+    return null;
+  }
 
   // Sets 'name', 'class', 'race', 'gender' or 'description'. A new race
   // brings its skin tone until the player picks one, and keeps the age even
@@ -204,15 +225,52 @@ export class Creation {
       ['age', 'Age', `${this.age} (born ${formatBirthday(s.birthday)})`],
       ['attributes', 'Attributes', ATTRIBUTES.map((key) => `${ATTRIBUTE_NAMES[key]} ${totals[key]}`).join('\n')],
       ['description', 'Description', s.description], ['clues', 'Clues', s.clues.join('\n')], ['skin', 'Skin', this.skinText],
-    ].map(([step, label, value]) => ({ step, label, value }));
+    ].map(([step, label, value]) => ({ step, label, value, lock: this.locked(step) }));
   }
 
-  // Every step checked again, as Create does.
+  // The sheet fields this edit changes, and whether it changes anything.
+  get changes() {
+    const changes = {};
+    for (const field of SHEET_FIELDS) {
+      if (JSON.stringify(this.sheet[field]) !== JSON.stringify(this.original.sheet[field])) changes[field] = this.sheet[field];
+    }
+    return changes;
+  }
+
+  get changed() {
+    return Object.keys(this.changes).length > 0 || skinKey(this.draft.skin) !== skinKey(cleanSkin(this.original.skin));
+  }
+
+  // Every step checked again, as Create does. An edit checks only what it
+  // changes, as saving does.
   get review() {
-    return sheetErrors(this.draft, this.ctx).map((e) => ({ ...e, label: PAGES[pageOf(e.step)].title }));
+    const errors = this.editing ? this.roster.check(this.draft.id, this.changes)?.errors ?? []
+      : sheetErrors(this.draft, this.ctx);
+    return errors.map(({ step, field, message }) => {
+      const at = step ?? STEP_OF[field] ?? field;
+      return { step: at, message, label: PAGES[pageOf(at)].title };
+    });
   }
 
-  get allowed() { return this.roster.canCreate(); }
+  // Whether a character can be made now, or this edit saved.
+  get allowed() {
+    if (!this.editing) return this.roster.canCreate();
+    const reason = this.roster.check(this.draft.id, this.changes)?.reason;
+    return reason ? { ok: false, reason } : { ok: true };
+  }
 
   create() { return this.roster.create(this.draft); }
+
+  // Saves the changed fields, then the skin if it changed.
+  save() {
+    const { id, skin } = this.draft;
+    const changes = this.changes;
+    const steps = [Object.keys(changes).length && (() => this.roster.update(id, changes)),
+      skinKey(skin) !== skinKey(cleanSkin(this.original.skin)) && (() => this.roster.setSkin(id, skin))];
+    for (const run of steps.filter(Boolean)) {
+      const result = run();
+      if (!result.ok) return result;
+    }
+    return { ok: true, character: this.roster.characters.find((character) => character.id === id) };
+  }
 }

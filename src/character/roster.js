@@ -85,7 +85,7 @@ export function randomId() {
 }
 
 const FIELD_NAMES = { race: 'Race', class: 'Class', birthday: 'Age', attributes: 'Attributes' };
-const SHEET_FIELDS = ['name', 'gender', 'race', 'birthday', 'class', 'attributes', 'description', 'clues'];
+export const SHEET_FIELDS = ['name', 'gender', 'race', 'birthday', 'class', 'attributes', 'description', 'clues'];
 // Fields checked when a field changes: a new race must still allow the age.
 const CHECKS = { race: ['race', 'birthday'] };
 const NEWER = 'Characters were saved by a newer version of the game.';
@@ -289,26 +289,34 @@ export class Roster {
     return { ok: true, character: structuredClone(character) };
   }
 
-  // Changes some of a character's sheet. Locked fields are refused, and only
-  // the changed fields are checked.
-  update(id, changes) {
-    this.sync();
-    if (this.readOnly) return { ok: false, reason: NEWER };
+  // Why `update(id, changes)` would refuse now, without writing: `{ reason }`,
+  // `{ errors }`, or null when it would save. Locked fields are refused, and
+  // only the changed fields are checked.
+  check(id, changes) {
+    if (this.readOnly) return { reason: NEWER };
     const character = this.find(id);
-    if (!character) return { ok: false, reason: MISSING };
+    if (!character) return { reason: MISSING };
     const sheet = { ...character.sheet, ...changes };
     const cleaned = cleanSheet(sheet);
     const changed = SHEET_FIELDS.filter((field) =>
       JSON.stringify(cleaned[field]) !== JSON.stringify(character.sheet[field]));
     const now = this.now();
     const locked = changed.find((field) => !canChange(character, field, now));
-    if (locked) return { ok: false, reason: `${FIELD_NAMES[locked]} is locked.` };
+    if (locked) return { reason: `${FIELD_NAMES[locked]} is locked.` };
     const ctx = { others: this.state.characters, selfId: id, now };
     const errors = [...new Set(changed.flatMap((field) => CHECKS[field] ?? [field]))]
       .map((field) => ({ field, message: fieldError(field, { id, sheet }, ctx) }))
       .filter((error) => error.message);
-    if (errors.length) return { ok: false, errors };
-    character.sheet = cleaned;
+    return errors.length ? { errors } : null;
+  }
+
+  // Changes some of a character's sheet, if `check` allows.
+  update(id, changes) {
+    this.sync();
+    const refused = this.check(id, changes);
+    if (refused) return { ok: false, ...refused };
+    const character = this.find(id);
+    character.sheet = cleanSheet({ ...character.sheet, ...changes });
     this.save(id);
     return { ok: true, character: structuredClone(character) };
   }

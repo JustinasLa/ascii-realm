@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { DAY } from '../src/character/catalog.js';
 import { sampleDraft } from '../src/character/creation.js';
 import { Roster } from '../src/character/roster.js';
 import { DEFAULT_SKIN } from '../src/character/skin.js';
@@ -92,9 +93,10 @@ function setup({ start = 'welcome', sample = start !== 'welcome', storage = new 
   const created = [];
   const turns = [];
   let closed = 0;
+  const modes = [];
   const creator = new CharacterCreator({ root, outside: [canvas], win, doc, cells: [4.5, 24],
     onPreview: (skin) => previews.push(skin), onFrame: (framing) => frames.push(framing), onTurn: (by) => turns.push(by),
-    onClose: (character) => { closed++; created.push(character); } });
+    onClose: (character, mode) => { closed++; created.push(character); modes.push(mode); } });
   const roster = new Roster({ storage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v) },
     now: () => START, randomId: () => 'c0001' });
   const press = (key, target = doc.activeElement, extra = {}) => {
@@ -104,7 +106,7 @@ function setup({ start = 'welcome', sample = start !== 'welcome', storage = new 
     return event;
   };
   const ui = {
-    creator, root, canvas, doc, previews, frames, created, turns, vars, win, roster, press, timers, closed: () => closed,
+    creator, root, canvas, doc, previews, frames, created, modes, turns, vars, win, roster, press, timers, closed: () => closed,
     open: () => creator.open({ roster, now: () => START, start, draft: sample ? sampleDraft(roster, START) : null }),
     title: () => doc.getElementById('creator-title').textContent,
     buttons: () => creator.form.find((node) => node.tagName === 'BUTTON'),
@@ -739,4 +741,142 @@ test('the turn buttons and a drag across the free area turn the outlaw', () => {
   ui.doc.panel = { left: 424, top: 0, width: 420, height: 390 };
   ui.creator.refit();
   assert.equal(stage.style, 'width: 424px; height: 844px', 'left of a side panel');
+});
+
+// A saved character, then an edit of it at `now`.
+function edited(now = START + DAY) {
+  const ui = setup({ start: 'summary' });
+  assert.ok(ui.roster.create({ ...sampleDraft(ui.roster, START), skin: DEFAULT_SKIN }).ok);
+  ui.creator.open({ roster: ui.roster, now: () => now, edit: ui.roster.active });
+  return ui;
+}
+
+const locks = (ui) => ui.creator.form.find((node) => node.className === 'creator-lock').map((node) => node.textContent);
+
+test('Edit opens on the Summary: locked rows say since when and have no Edit', () => {
+  const ui = edited();
+  assert.equal(ui.creator.mode, 'edit');
+  assert.equal(ui.title(), 'Edit Arwen Vale');
+  assert.equal(ui.doc.getElementById('creator-title').getAttribute('dir'), 'auto');
+  assert.equal(ui.live(), 'Edit Arwen Vale');
+  assert.equal(ui.button('Save').type, 'submit');
+  assert.equal(ui.button('Back'), undefined, 'the Summary has no Back');
+  assert.equal(ui.button('Cancel').getAttribute('aria-label'), 'Cancel editing');
+  const labels = ui.buttons().map((node) => node.getAttribute('aria-label')).filter((label) => label?.startsWith('Edit'));
+  assert.deepEqual(labels, ['Edit name', 'Edit gender', 'Edit class', 'Edit age', 'Edit attributes', 'Edit description', 'Edit clues', 'Edit skin']);
+  assert.deepEqual(locks(ui), ['Locks in 4d', `Locked since ${new Date(START + DAY).toLocaleDateString()}`, 'Locks in 4d', 'Locks in 4d']);
+  // Six days on, only the open steps keep their Edit.
+  const late = edited(START + 6 * DAY);
+  assert.equal(late.buttons().filter((node) => node.textContent === 'Edit').length, 5);
+  assert.equal(locks(late).length, 4);
+});
+
+test('Edit: a step opened from the Summary returns there, and Save closes with the character', () => {
+  const ui = edited();
+  ui.buttons().find((node) => node.getAttribute('aria-label') === 'Edit name').click();
+  assert.equal(ui.title(), 'Name');
+  ui.doc.getElementById('creator-name').enter('Arwen Brook');
+  ui.submit();
+  assert.equal(ui.title(), 'Edit Arwen Vale');
+  assert.equal(ui.doc.activeElement.getAttribute('aria-label'), 'Edit name', 'focus returns to the row edited');
+  ui.buttons().find((node) => node.getAttribute('aria-label') === 'Edit skin').click();
+  ui.doc.getElementById('creator-tone-ember').onchange();
+  assert.equal(ui.previews.at(-1).tone, 'ember', 'the outlaw previews the new skin');
+  ui.submit();
+  ui.submit();
+  assert.deepEqual(ui.modes, ['edit']);
+  assert.equal(ui.created[0].sheet.name, 'Arwen Brook');
+  assert.equal(ui.roster.active.skin.tone, 'ember');
+});
+
+test('Edit: a refusal shows on the Summary, and a lock passing hides its Edit', () => {
+  const ui = edited();
+  ui.creator.flow.set('name', 'Al');
+  ui.creator.render();
+  assert.match(ui.creator.form.textContent, /Review these steps before saving:Review Name Name must be at least 3 characters\./);
+  ui.submit();
+  assert.equal(ui.creator.isOpen, true);
+  // Another tab made the roster read-only meanwhile: Save says why.
+  ui.creator.flow.set('name', 'Arwen Brook');
+  ui.creator.render();
+  ui.roster.readOnly = true;
+  ui.creator.create();
+  assert.equal(ui.message().textContent, 'Characters were saved by a newer version of the game.');
+  ui.roster.readOnly = false;
+  // A lock that passes while the Summary shows refuses its Edit.
+  const race = { locked: false, at: START };
+  ui.creator.flow.locked = (step) => (step === 'race' ? race : null);
+  ui.creator.render();
+  race.locked = true;
+  ui.buttons().find((node) => node.getAttribute('aria-label') === 'Edit race').click();
+  assert.equal(ui.message().textContent, 'That choice is locked and can no longer be edited.');
+  assert.equal(ui.creator.flow.page.id, 'summary');
+});
+
+test('Edit: Cancel and Esc close at once, without saving', () => {
+  const ui = edited();
+  ui.buttons().find((node) => node.getAttribute('aria-label') === 'Edit name').click();
+  ui.doc.getElementById('creator-name').enter('Arwen Brook');
+  const esc = ui.press('Escape');
+  assert.equal(esc.defaultPrevented, true);
+  assert.deepEqual([ui.created, ui.modes], [[null], ['edit']]);
+  assert.equal(ui.roster.active.sheet.name, 'Arwen Vale');
+  ui.creator.open({ roster: ui.roster, now: () => START, edit: ui.roster.active });
+  ui.button('Cancel').click();
+  assert.deepEqual(ui.modes, ['edit', 'edit']);
+});
+
+test('a new character: Cancel shuts an untouched draft, else asks first', () => {
+  const ui = setup();
+  const open = () => ui.creator.open({ roster: ui.roster, now: () => START, start: 'creation', mode: 'new' });
+  open();
+  assert.equal(ui.creator.mode, 'new');
+  assert.equal(ui.title(), 'Character creation');
+  assert.equal(ui.button('Cancel').getAttribute('aria-label'), 'Cancel new character');
+  ui.submit();
+  ui.button('Cancel').click();
+  assert.deepEqual(ui.modes, ['new'], 'untouched: closed at once');
+  open();
+  ui.submit();
+  ui.submit();
+  ui.doc.getElementById('creator-name').enter('Brann');
+  ui.press('Escape');
+  const prompt = ui.creator.asking;
+  assert.equal(prompt.getAttribute('role'), 'alertdialog');
+  assert.equal(prompt.textContent, 'Discard this character?Your unfinished choices will be lost.Keep creatingDiscard draft');
+  assert.equal(ui.doc.activeElement.textContent, 'Keep creating');
+  assert.equal(ui.creator.form.find((node) => node.tagName === 'FOOTER').length, 0, 'the prompt stands in for the footer');
+  ui.doc.activeElement.click();
+  assert.equal(ui.creator.asking, null);
+  assert.equal(ui.doc.activeElement, ui.creator.next);
+  assert.equal(ui.creator.isOpen, true);
+  ui.button('Cancel').click();
+  ui.press('Escape');
+  assert.equal(ui.creator.asking, null, 'Esc on the prompt keeps creating');
+  ui.button('Cancel').click();
+  ui.creator.asking.children.find((node) => node.textContent === 'Discard draft').click();
+  assert.deepEqual([ui.created, ui.modes], [[null, null], ['new', 'new']]);
+  // The next session starts clean: passing a step counts as started.
+  open();
+  assert.equal(ui.creator.asking, null);
+  ui.submit();
+  ui.submit();
+  ui.doc.getElementById('creator-name').enter('Brann');
+  ui.submit();
+  ui.submit();
+  ui.button('Cancel').click();
+  assert.ok(ui.creator.asking, 'a passed step asks');
+  ui.creator.asking.children.at(-1).click();
+  open();
+  ui.button('Cancel').click();
+  assert.equal(ui.creator.isOpen, false, 'a fresh session is untouched again');
+});
+
+test('the first character has no Cancel, and Esc does nothing', () => {
+  const ui = setup();
+  ui.open();
+  assert.equal(ui.creator.mode, 'first');
+  assert.equal(ui.button('Cancel'), undefined);
+  ui.press('Escape');
+  assert.equal(ui.creator.isOpen, true);
 });

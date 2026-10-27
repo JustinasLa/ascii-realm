@@ -33,7 +33,8 @@
 | `Enter`, with inventory open | Use or equip a satchel item, or take off selected gear |
 | `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
 | `1`–`9`, with inventory open | Assign the selected item to a quick slot |
-| `C`, with inventory open | Turn to the next page (Inventory, Character) |
+| `C`, with inventory open | Turn to the next page (Inventory, Character, Characters) |
+| `Escape`, in the character creator | Cancel an edit or a new character (a started one asks first); the first character can't be cancelled |
 | `Left` / `Right` / `Home` / `End`, on a page tab | Move between the inventory's pages |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
 | `Enter` / `/`, in a lobby | Open the chat bar (`/` starts a command); `Enter` sends, `Escape` or a click on the scene cancels (the click does nothing else; with the builder open over the chat, `Escape` closes the builder first), `Up` / `Down` recall what you sent |
