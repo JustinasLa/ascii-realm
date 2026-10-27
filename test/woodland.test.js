@@ -468,44 +468,43 @@ test('phantom neighbours cover every big rock and fragment a neighbouring chunk 
 });
 
 test('a boulder at the edge of the next chunk keeps grove trees and caps off its foot', () => {
-  // Look for a chunk whose boulder is about the largest a chunk can grow,
-  // based as near its west edge as one can be.
+  // Chunks whose boulder is about the largest a chunk can grow, based as near
+  // its west edge as one can be, found by search. Grown without the boulder's
+  // phantom footprint, the chunk to the west would stand a grove tree on the
+  // first and a clump of caps on the second.
   const grove = { ...GROVE2, forestFrom: -1, chanceMax: 1 };
-  let found;
-  for (let seed = 1; !found && seed < 40; seed++) {
-    for (let cx = -60; !found && cx < 60; cx++) {
-      for (let cy = -60; !found && cy < 60; cy++) {
-        const rand = mulberry32(rngSeed(cx, cy, seed + 2203));
-        if (rand() >= 0.3) continue;
-        const x = 12 + Math.floor(rand() * (S - 24));
-        rand();
-        if (x <= 13 && 12 + rand() * 8 >= 18.5) found = { seed, cx, cy };
-      }
-    }
-  }
-  assert.ok(found, 'such a boulder exists');
-  const world = meadowWorld(found.seed, grove);
-  const rock = generateProps(world, found.cx, found.cy, S);
-  const boulder = rock[0];
-  assert.ok(boulder.footW > 26 && Math.floor(boulder.x) - found.cx * S <= 13, `${boulder.footW} wide at ${boulder.x}`);
-  const west = found.cx - 1;
-  const props = generateProps(world, west, found.cy, S);
-  const added = groveProps(world, west, found.cy, S, props);
-  assert.ok(added.some((p) => p.kind === 'pale-caps') || added.length >= 0);
-  for (const p of added) {
-    for (const r of rock) {
-      if (p.kind === 'tree') {
-        for (let k = 0; k < 16; k++) {
-          const x = p.x + Math.cos(k * Math.PI / 8) * p.footW, y = p.y + Math.sin(k * Math.PI / 8) * p.footH;
-          assert.equal(blocks(r, x, y), false, `grove tree ${p.x},${p.y} on ${r.x},${r.y}`);
-        }
-      } else {
-        for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [-1, -1], [1, -1]]) {
-          assert.equal(blocks(r, p.x + dx * p.footW, p.y + dy * p.footH), false, `clump ${p.x},${p.y} on ${r.x},${r.y}`);
+  let near = 0;
+  for (const { seed, cx, cy } of [{ seed: 39, cx: -11, cy: -35 }, { seed: 39, cx: 26, cy: 4 }]) {
+    const world = meadowWorld(seed, grove);
+    const rock = generateProps(world, cx, cy, S);
+    const boulder = rock[0];
+    assert.ok(boulder.footW > 26 && Math.floor(boulder.x) - cx * S <= 13, `${boulder.footW} wide at ${boulder.x}`);
+    const west = cx - 1;
+    const box = neighbourSolids(world, west, cy, S)
+      .find((s) => s.box && s.x0 < boulder.x && s.x1 > boulder.x && s.y0 <= boulder.y && s.y1 >= boulder.y);
+    assert.ok(box && box.x0 < cx * S, 'the boulder\'s footprint reaches into the chunk to the west');
+    const added = groveProps(world, west, cy, S, generateProps(world, west, cy, S));
+    assert.ok(added.some((p) => p.kind === 'pale-caps'), `seed ${seed} ${cx},${cy} grows caps`);
+    // Additions that grow right up against the footprint: under or over it, a
+    // few rows from its edge.
+    near += added.filter((p) => p.x + p.footW > box.x0 && p.x - p.footW < box.x1
+      && p.y > box.y0 - 6 && p.y - p.footH < box.y1 + 6).length;
+    for (const p of added) {
+      for (const r of rock) {
+        if (p.kind === 'tree') {
+          for (let k = 0; k < 16; k++) {
+            const x = p.x + Math.cos(k * Math.PI / 8) * p.footW, y = p.y + Math.sin(k * Math.PI / 8) * p.footH;
+            assert.equal(blocks(r, x, y), false, `grove tree ${p.x},${p.y} on ${r.x},${r.y}`);
+          }
+        } else {
+          for (const [dx, dy] of [[0, 0], [-1, 0], [1, 0], [-1, -1], [1, -1]]) {
+            assert.equal(blocks(r, p.x + dx * p.footW, p.y + dy * p.footH), false, `clump ${p.x},${p.y} on ${r.x},${r.y}`);
+          }
         }
       }
     }
   }
+  assert.ok(near > 0, 'something grows against a boulder\'s footprint');
 });
 
 test('as shipped, dense woods grow no extra trees: a sward and pale caps around the sparse ones', () => {
