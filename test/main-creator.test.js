@@ -265,3 +265,26 @@ test('a resize, a turn or a phone change while open refits the creator, and the 
   harness.setPhone(true);
   assert.equal(game.creator.refits, 4, 'closed, nothing to refit');
 });
+
+test('the creator turns the outlaw: gliding on a desktop, at once with reduced motion', async () => {
+  const harness = await loadGame(undefined, { href: 'http://localhost/?debug', creator: true });
+  const { game, frame } = harness;
+  game.creator.onFrame({ cell: 18, bias: 0, biasX: -0.17 });
+  assert.equal(game.player.heading, 0.3);
+  game.creator.onTurn(Math.PI / 4);
+  frame();
+  assert.ok(game.player.heading > 0.3 && game.player.heading < 0.3 + Math.PI / 4, 'it turns smoothly');
+  for (let i = 0; i < 120; i++) frame();
+  assert.ok(Math.abs(game.player.heading - (0.3 + Math.PI / 4)) < 1e-6);
+  game.creator.onFrame({ cell: 18, bias: 0, biasX: -0.17 });
+  assert.ok(Math.abs(game.player.heading - (0.3 + Math.PI / 4)) < 1e-6, 'a refit keeps the turn');
+  game.creator.onTurn(2 * Math.PI);
+  for (let i = 0; i < 240; i++) frame();
+  assert.ok(game.player.heading > 2 * Math.PI, 'a long drag turns all the way round');
+  game.creator.close();
+  assert.ok(Math.abs(game.player.heading - (0.3 + Math.PI / 4)) < 1e-6, 'play starts facing the same way');
+  const phone = await loadGame(undefined, { phone: true, href: 'http://localhost/?debug', creator: true });
+  phone.game.creator.onFrame({ cell: 9.7, bias: -0.25, biasX: 0 });
+  phone.game.creator.onTurn(-Math.PI / 4);
+  assert.equal(phone.game.player.heading, 0.3 - Math.PI / 4, 'reduced motion snaps the turn');
+});

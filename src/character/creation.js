@@ -7,7 +7,7 @@ import { ATTRIBUTE_NAMES, ATTRIBUTES, classOf, genderOf, raceOf, RULES, UNSET } 
 import { formatBirthday } from './calendar.js';
 import { ageOf, attributeCost, attributesSpent, attributeTotals, cluesError, setAge, setBirthday,
   sheetErrors, stepError } from './rules.js';
-import { cleanSkin, DEFAULT_SKIN, toneForRace } from './skin.js';
+import { cleanSkin, DEFAULT_SKIN, LAYERS, PALETTES, PRESETS, skinKey, toneForRace, wearPreset } from './skin.js';
 
 const info = (id, title, ...lines) => ({ id, kind: 'info', title, lines });
 const step = (id, title) => ({ id, kind: 'step', step: id, title });
@@ -33,12 +33,15 @@ export const PAGES = Object.freeze([
   info('clues-info', 'Clues', 'Clues are how others recognise you: looks, smell, habits.',
     'Write at least 2, each 12 to 48 characters.'),
   step('clues', 'Clues'),
+  step('skin', 'Skin'),
   { id: 'summary', kind: 'summary', title: 'Review your character' },
 ].map((page) => Object.freeze(page)));
 
 const STEP_PAGES = PAGES.filter((page) => page.kind === 'step');
 const pageOf = (id) => PAGES.findIndex((page) => page.id === id);
 const SUMMARY = pageOf('summary');
+const nameOf = (region, id) => PALETTES[region].find((swatch) => swatch.id === id).name;
+const LAYER_OFF = Object.freeze({ hood: 'Hood down', jerkin: 'No jerkin', cloak: 'No cloak' });
 
 // Whether start-up opens the creator: always with ?creator, never for tools
 // (?nocreator, ?nogate), and otherwise on a first visit, while there is no
@@ -168,6 +171,29 @@ export class Creation {
 
   removeClue(index) { this.sheet.clues = this.sheet.clues.filter((_, i) => i !== index); }
 
+  // The skin: a preset's outfit keeps the tone and hair; a tone the player
+  // picks is kept through later race changes.
+  wearPreset(id) { this.draft.skin = wearPreset(this.draft.skin, id); }
+
+  setRegion(region, id) {
+    this.draft.skin = cleanSkin({ ...this.draft.skin, [region]: id });
+    if (region === 'tone') this.draft.toneChosen = true;
+  }
+
+  setLayer(layer, on) { this.draft.skin = cleanSkin({ ...this.draft.skin, layers: { ...this.draft.skin.layers, [layer]: on } }); }
+
+  // The preset the skin's outfit matches, or null for a custom one.
+  get preset() {
+    const { skin } = this.draft;
+    return PRESETS.find((p) => skinKey(wearPreset(skin, p.id)) === skinKey(skin)) ?? null;
+  }
+
+  get skinText() {
+    const { skin } = this.draft;
+    return [this.preset?.name ?? 'Custom', `${nameOf('tone', skin.tone)} skin`, `${nameOf('hair', skin.hair)} hair`,
+      ...LAYERS.filter((layer) => !skin.layers[layer]).map((layer) => LAYER_OFF[layer])].join(' · ');
+  }
+
   // The Summary's rows, each with the step its Edit opens.
   get rows() {
     const s = this.sheet;
@@ -177,7 +203,7 @@ export class Creation {
       ['class', 'Class', classOf(s.class)?.name ?? ''], ['race', 'Race', raceOf(s.race)?.name ?? ''],
       ['age', 'Age', `${this.age} (born ${formatBirthday(s.birthday)})`],
       ['attributes', 'Attributes', ATTRIBUTES.map((key) => `${ATTRIBUTE_NAMES[key]} ${totals[key]}`).join('\n')],
-      ['description', 'Description', s.description], ['clues', 'Clues', s.clues.join('\n')],
+      ['description', 'Description', s.description], ['clues', 'Clues', s.clues.join('\n')], ['skin', 'Skin', this.skinText],
     ].map(([step, label, value]) => ({ step, label, value }));
   }
 

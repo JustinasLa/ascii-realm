@@ -212,7 +212,9 @@ export function fieldError(field, draft, { others = [], selfId = draft.id, now =
 
 // The creator's steps and the fields each one sets.
 const STEP_FIELDS = { name: ['name'], class: ['class'], race: ['race'], age: ['birthday'],
-  attributes: ['attributes'], description: ['description', 'gender'], clues: ['clues'] };
+  attributes: ['attributes'], description: ['description', 'gender'], clues: ['clues'],
+  // The skin always passes: any skin is cleaned to a valid one.
+  skin: [] };
 
 // The first problem with one step of `draft`, or null.
 export function stepError(step, draft, ctx) {

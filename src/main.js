@@ -247,15 +247,17 @@ player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
 // While the creator is open the camera zooms in and frames the outlaw in
 // the free part of the screen; the zoom and framing glide there and back,
-// or snap with reduced motion. Closing restores the zoom from before.
+// or snap with reduced motion. Closing restores the zoom from before. The
+// creator's turn buttons and drag turn the outlaw towards `turnGoal`.
 let framing = null;
 let heldZoom = null;
+let turnGoal = 0;
 function frameCreator(next) {
   if (!framing) {
     if (pinched) zoomSlots.set(layout.orientation, zoomTarget);
     heldZoom = zoomTarget;
     // A three-quarter view of the figure.
-    player.heading = 0.3;
+    player.heading = turnGoal = 0.3;
   }
   framing = next;
   zoomTarget = next.cell;
@@ -263,6 +265,7 @@ function frameCreator(next) {
 }
 function unframe() {
   framing = null;
+  player.heading = Math.atan2(Math.sin(player.heading), Math.cos(player.heading));
   if (device.phone && !ruinPreview) {
     const slot = zoomSlots.get(layout.orientation);
     pinched = slot !== null;
@@ -280,6 +283,7 @@ function glideFraming(dt) {
     camera[key] += (goal[key] - camera[key]) * k;
     if (Math.abs(goal[key] - camera[key]) < 1e-4) camera[key] = goal[key];
   }
+  if (framing) player.heading += (turnGoal - player.heading) * k;
 }
 function snapFraming() {
   applyFraming();
@@ -386,6 +390,10 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
   cells: [MIN_CELL, MAX_CELL],
   onPreview: (skin) => { player.skin = skin; },
   onFrame: frameCreator,
+  onTurn: (by) => {
+    turnGoal += by;
+    if (reducedMotion) player.heading = turnGoal;
+  },
   // Create is the player's tap to play.
   onClose: (character) => {
     player.skin = cleanSkin(characters.active?.skin);
