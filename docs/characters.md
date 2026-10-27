@@ -104,10 +104,10 @@ A change is checked only against the rules of the fields it changes.
 
 The creator makes a character a page at a time, in a panel beside the live
 world: Welcome, Character creation, then Name, Class, Race, Age, Attributes,
-Description, Clues and a Summary. Info pages have Continue only. The seven
-steps show "Step n of 7", and Next stays dimmed until the step passes its
-rule, whose message shows under it. A race dresses the outlaw in its skin
-tone. The age starts at 18, and a typed age or birthday must be valid before
+Description, Clues, Skin and a Summary. Info pages have Continue only. The
+eight steps show "Step n of 8", and Next stays dimmed until the step passes
+its rule, whose message shows under it. A race dresses the outlaw in its
+skin tone until the player picks a tone on the Skin step. The age starts at 18, and a typed age or birthday must be valid before
 Next. A race changed later keeps the age, so the Age step and the Summary's
 final check of every step report an age past the new maximum.
 
@@ -119,7 +119,18 @@ Enter, a phone keyboard's Done and Next all add it instead of moving on.
 Screen readers read each count with its field and announce it once typing
 pauses.
 
-The Summary lists every row with an **Edit** that opens its step and comes
+The Skin step is optional and always passes. It offers the six
+[presets](#skins), a swatch group for each region (the legend names the
+pick, marked `[ ]`) and the **Hood up**, **Jerkin** and **Cloak** switches.
+Every pick repaints the outlaw at once; an outfit that matches no preset
+reads "Custom". While the skin tone or hair is picked the preview lowers the
+hood, so the face shows; the saved skin keeps its own hood. Below the
+outlaw, on every page, **‹** and **›** turn it an eighth of a turn, and a
+drag across the free area around it turns it a degree per pixel, its feet
+planted where it stands. Play starts facing the way it was turned.
+
+The Summary lists every row, the skin as its preset (or Custom), tone, hair
+and any layers off, with an **Edit** that opens its step and comes
 back with **Save and review**. It checks every step again: failing steps are
 listed with **Review** links and block **Create character**, as does a
 roster that can't take a character now (the cooldown shows when it opens).

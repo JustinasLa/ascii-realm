@@ -28,12 +28,12 @@ const sample = (start, r = roster()) => flow({ roster: r, start, draft: sampleDr
 
 test('pages run in order, and only steps are counted', () => {
   assert.deepEqual(PAGES.map((page) => page.id), ['welcome', 'creation', 'name-info', 'name', 'class-info', 'class', 'race',
-    'age', 'attributes', 'description-info', 'description', 'clues-info', 'clues', 'summary']);
+    'age', 'attributes', 'description-info', 'description', 'clues-info', 'clues', 'skin', 'summary']);
   const f = sample('welcome');
   const seen = [];
   do seen.push([f.page.id, f.counter && `${f.counter.n}/${f.counter.total}`]); while (f.next() && f.page.id !== 'summary');
   assert.deepEqual(seen.filter(([, counter]) => counter).map(([id, counter]) => `${id} ${counter}`),
-    ['name 1/7', 'class 2/7', 'race 3/7', 'age 4/7', 'attributes 5/7', 'description 6/7', 'clues 7/7']);
+    ['name 1/8', 'class 2/8', 'race 3/8', 'age 4/8', 'attributes 5/8', 'description 6/8', 'clues 7/8', 'skin 8/8']);
   assert.equal(f.page.id, 'summary');
   assert.equal(f.counter, null);
   assert.equal(f.error, null);
@@ -223,7 +223,7 @@ test('the Summary lists the sheet, and Edit returns to it', () => {
   const f = sample('summary');
   assert.equal(f.page.title, 'Review your character');
   assert.deepEqual(f.rows.map((row) => [row.step, row.label]), [['name', 'Name'], ['gender', 'Gender'], ['class', 'Class'],
-    ['race', 'Race'], ['age', 'Age'], ['attributes', 'Attributes'], ['description', 'Description'], ['clues', 'Clues']]);
+    ['race', 'Race'], ['age', 'Age'], ['attributes', 'Attributes'], ['description', 'Description'], ['clues', 'Clues'], ['skin', 'Skin']]);
   const value = (step) => f.rows.find((row) => row.step === step).value;
   assert.equal(value('gender'), 'Female');
   assert.equal(value('class'), 'Archer');
@@ -231,6 +231,7 @@ test('the Summary lists the sheet, and Edit returns to it', () => {
   assert.equal(value('age'), `34 (born ${formatBirthday(f.sheet.birthday)})`);
   assert.equal(value('attributes').split('\n')[1], 'Dexterity 6');
   assert.equal(value('clues'), 'Smells faintly of pine resin\nHums old songs under her breath');
+  assert.equal(value('skin'), 'Outlaw · Weathered skin · Umber hair');
   f.edit('race');
   assert.equal(f.page.id, 'race');
   assert.ok(f.returning);
@@ -322,4 +323,43 @@ test('start-up opens the creator for a first visit only', () => {
   assert.equal(at('?creator', made), true);
   const newer = roster({ 'ascii-realm-characters': JSON.stringify({ v: 99 }) });
   assert.equal(at('', newer), false, 'a roster that can\'t create plays as before');
+});
+
+test('the skin step always passes, and presets keep the tone and hair', () => {
+  const f = sample('skin');
+  assert.equal(f.error, null);
+  assert.equal(f.preset.id, 'outlaw');
+  f.setRegion('hair', 'flax');
+  f.wearPreset('drover');
+  assert.equal(f.preset.id, 'drover');
+  assert.equal(f.draft.skin.hair, 'flax', 'a preset keeps the hair');
+  assert.equal(f.draft.skin.layers.hood, false);
+  assert.equal(f.skinText, 'Drover · Weathered skin · Flax hair · Hood down');
+  f.setRegion('boots', 'tan');
+  assert.equal(f.preset, null, 'a changed outfit is custom');
+  f.setLayer('jerkin', false);
+  f.setLayer('cloak', false);
+  assert.equal(f.skinText, 'Custom · Weathered skin · Flax hair · Hood down · No jerkin · No cloak');
+  f.setLayer('hood', true);
+  assert.equal(f.draft.skin.layers.hood, true);
+  assert.ok(f.next());
+  assert.equal(f.page.id, 'summary');
+  f.edit('skin');
+  assert.equal(f.page.id, 'skin');
+  assert.ok(f.returning);
+});
+
+test('a tone the player picks is kept through race changes', () => {
+  const f = sample('race');
+  f.set('race', 'orc');
+  assert.equal(f.draft.skin.tone, 'olive', 'the race brings its tone');
+  f.setRegion('hair', 'black');
+  f.set('race', 'goblin');
+  assert.equal(f.draft.skin.tone, 'fern', 'other picks leave the tone to the race');
+  f.setRegion('tone', 'ember');
+  assert.ok(f.draft.toneChosen);
+  f.set('race', 'dryad');
+  assert.equal(f.draft.skin.tone, 'ember');
+  f.wearPreset('reaver');
+  assert.equal(f.draft.skin.tone, 'ember', 'and presets keep it');
 });

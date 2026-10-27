@@ -266,7 +266,8 @@ test('each step reports its first problem', () => {
   assert.equal(stepError('description', draft({ description: 'short' }), ctx), 'Description must be at least 32 characters.');
   assert.equal(stepError('description', draft({ gender: 'robot' }), ctx), 'Pick a gender or leave it unset.');
   assert.equal(stepError('clues', draft({ clues: [] }), ctx), 'Needs at least 2 clues.');
-  assert.equal(stepError('skin', draft(), ctx), 'Unknown step: skin');
+  assert.equal(stepError('skin', draft(), ctx), null, 'any skin passes');
+  assert.equal(stepError('traits', draft(), ctx), 'Unknown step: traits');
   // The clock defaults to now.
   assert.equal(stepError('age', draft()), null);
   assert.equal(fieldError('gender', draft({ gender: 'male' })), null);

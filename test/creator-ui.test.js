@@ -15,7 +15,7 @@ class Node {
       className: '', id: '', type: '', name: '', value: '', checked: false, disabled: false, tabIndex: 0, htmlFor: '',
       maxLength: -1, autocomplete: '', autocapitalize: '', spellcheck: true, placeholder: '', pattern: '', style: '',
       inert: false, onclick: null, oninput: null, onchange: null, onsubmit: null, onfocus: null, onbeforeinput: null, rows: 2,
-      text: '' });
+      onpointerdown: null, onpointermove: null, onpointerup: null, onpointercancel: null, captured: null, text: '' });
     const set = new Set();
     this.classList = { add: (c) => set.add(c), remove: (c) => set.delete(c), contains: (c) => set.has(c) };
   }
@@ -48,6 +48,7 @@ class Node {
   }
   find(predicate) { return [...this.walk()].filter(predicate); }
   getBoundingClientRect() { return this.doc.panel; }
+  setPointerCapture(id) { this.captured = id; }
   click() { this.onclick?.({}); }
   enter(value) { this.value = value; this.oninput(); }
 }
@@ -76,9 +77,10 @@ function setup({ start = 'welcome', sample = start !== 'welcome', storage = new 
   const previews = [];
   const frames = [];
   const created = [];
+  const turns = [];
   let closed = 0;
   const creator = new CharacterCreator({ root, outside: [canvas], win, doc, cells: [4.5, 24],
-    onPreview: (skin) => previews.push(skin), onFrame: (framing) => frames.push(framing),
+    onPreview: (skin) => previews.push(skin), onFrame: (framing) => frames.push(framing), onTurn: (by) => turns.push(by),
     onClose: (character) => { closed++; created.push(character); } });
   const roster = new Roster({ storage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v) },
     now: () => START, randomId: () => 'c0001' });
@@ -89,10 +91,10 @@ function setup({ start = 'welcome', sample = start !== 'welcome', storage = new 
     return event;
   };
   const ui = {
-    creator, root, canvas, doc, previews, frames, created, vars, win, roster, press, timers, closed: () => closed,
+    creator, root, canvas, doc, previews, frames, created, turns, vars, win, roster, press, timers, closed: () => closed,
     open: () => creator.open({ roster, now: () => START, start, draft: sample ? sampleDraft(roster, START) : null }),
     title: () => doc.getElementById('creator-title').textContent,
-    buttons: () => root.find((node) => node.tagName === 'BUTTON'),
+    buttons: () => creator.form.find((node) => node.tagName === 'BUTTON'),
     button: (text) => ui.buttons().find((node) => node.textContent === text),
     message: () => creator.message,
     live: () => root.children[1].textContent,
@@ -147,8 +149,8 @@ test('Name: Next waits for the rule and shows why', () => {
   const input = ui.doc.getElementById('creator-name');
   assert.equal(ui.doc.activeElement, input);
   assert.equal(input.getAttribute('enterkeyhint'), 'next');
-  assert.equal(ui.live(), 'Step 1 of 7: Name');
-  assert.equal(ui.root.find((n) => n.className === 'creator-counter')[0].textContent, 'Step 1 of 7');
+  assert.equal(ui.live(), 'Step 1 of 8: Name');
+  assert.equal(ui.root.find((n) => n.className === 'creator-counter')[0].textContent, 'Step 1 of 8');
   const next = ui.button('Next');
   assert.equal(next.getAttribute('aria-disabled'), 'true');
   assert.equal(ui.message().textContent, 'Name cannot be empty.');
@@ -298,10 +300,12 @@ test('every key stops at the creator while it is open', () => {
   assert.ok(stray.defaultPrevented);
   assert.equal(ui.doc.activeElement, input, 'a key outside the panel brings focus back');
   const [back, next] = [ui.button('Back'), ui.button('Next')];
-  assert.ok(ui.press('Tab', next).defaultPrevented);
+  const right = ui.root.find((node) => node.getAttribute('aria-label') === 'Turn right')[0];
+  assert.equal(ui.press('Tab', next).defaultPrevented, false, 'from the panel on to the turn buttons');
+  assert.ok(ui.press('Tab', right).defaultPrevented);
   assert.equal(ui.doc.activeElement, input, 'Tab wraps to the first control');
   assert.ok(ui.press('Tab', input, { shiftKey: true }).defaultPrevented);
-  assert.equal(ui.doc.activeElement, next, 'Shift+Tab wraps to the last');
+  assert.equal(ui.doc.activeElement, right, 'Shift+Tab wraps to the last');
   assert.equal(ui.press('Tab', back).defaultPrevented, false, 'Tab inside moves as usual');
 });
 
@@ -322,7 +326,7 @@ test('Description: a counted paragraph where Enter continues, then an optional g
   assert.equal(text.getAttribute('enterkeyhint'), 'next');
   const count = () => ui.root.find((n) => n.className === 'creator-counter')[1].textContent;
   assert.equal(count(), '0 / 256 (at least 32)');
-  assert.equal(ui.live(), 'Step 6 of 7: Description');
+  assert.equal(ui.live(), 'Step 6 of 8: Description');
   const gender = ui.radios();
   assert.deepEqual(gender.map((r) => r.parentNode.textContent), ['Male', 'Female', 'Other', 'Unset']);
   assert.equal(gender[3].checked, true, 'Unset by default');
@@ -333,7 +337,7 @@ test('Description: a counted paragraph where Enter continues, then an optional g
   text.enter('  A scarred ranger');
   text.enter('  A scarred ranger with a soft voice.  ');
   assert.equal(count(), '35 / 256 (at least 32)', 'trimmed, as the rule counts');
-  assert.equal(ui.live(), 'Step 6 of 7: Description', 'not announced while typing');
+  assert.equal(ui.live(), 'Step 6 of 8: Description', 'not announced while typing');
   assert.equal(ui.timers.size, 1, 'each key restarts the pause');
   const [pause] = ui.timers.values();
   assert.equal(pause.ms, 300);
@@ -398,7 +402,7 @@ test('Clues: added one at a time with a counter, removed, and limited to ten', (
   assert.equal(ui.button('Add').disabled, true);
   assert.equal(ui.doc.activeElement, ui.button('Next'));
   ui.submit();
-  assert.equal(ui.title(), 'Review your character');
+  assert.equal(ui.title(), 'Skin');
 });
 
 test('Summary: every row with its Edit, which returns there', () => {
@@ -407,7 +411,7 @@ test('Summary: every row with its Edit, which returns there', () => {
   assert.equal(ui.live(), 'Review your character');
   assert.equal(ui.root.find((n) => n.className === 'creator-counter')[0].textContent, '');
   assert.deepEqual(ui.root.find((n) => n.tagName === 'DT').map((n) => n.children[0].text),
-    ['Name', 'Gender', 'Class', 'Race', 'Age', 'Attributes', 'Description', 'Clues']);
+    ['Name', 'Gender', 'Class', 'Race', 'Age', 'Attributes', 'Description', 'Clues', 'Skin']);
   assert.equal(ui.root.find((n) => n.tagName === 'DD')[0].textContent, 'Arwen Vale');
   assert.deepEqual(ui.buttons().slice(-2).map((b) => b.textContent), ['Back', 'Create character']);
   const create = ui.button('Create character');
@@ -423,7 +427,7 @@ test('Summary: every row with its Edit, which returns there', () => {
   ui.submit();
   assert.equal(ui.doc.activeElement, ui.button('Create character'), 'only straight after an edit');
   ui.button('Back').click();
-  assert.equal(ui.title(), 'Clues');
+  assert.equal(ui.title(), 'Skin');
 });
 
 test('Summary: a failing step blocks Create with Review links', () => {
@@ -576,4 +580,102 @@ test('on phones the panel keeps above the on-screen keyboard', () => {
   assert.deepEqual(change('resize', 390, 0), ['0px', '0px'], 'and back when it hides');
   assert.deepEqual(change('resize', 400, -5), ['0px', '0px'], 'never negative');
   setup();
+});
+
+test('Skin: presets, swatches and layers repaint the outlaw and name the pick', () => {
+  const ui = setup({ start: 'skin' });
+  ui.open();
+  assert.equal(ui.live(), 'Step 8 of 8: Skin');
+  const legends = () => ui.root.find((n) => n.tagName === 'LEGEND').map((n) => n.textContent);
+  assert.deepEqual(legends(), ['Preset: Outlaw', 'Skin tone: Weathered', 'Hair: Umber', 'Shirt: Undyed linen', 'Hose: Pewter',
+    'Hood: Ash', 'Jerkin: Tan', 'Sleeves: Umber', 'Bracers and gloves: Saddle', 'Boots: Brown', 'Cloak: Charcoal']);
+  const input = (id) => ui.doc.getElementById(id);
+  assert.equal(ui.doc.activeElement, input('creator-preset-outlaw'), 'focus on the picked preset');
+  assert.equal(input('creator-preset-outlaw').checked, true);
+  assert.equal(input('creator-tone-weathered').getAttribute('aria-label'), 'Weathered');
+  assert.equal(input('creator-tone-weathered').name, 'creator-tone');
+  assert.equal(ui.message().textContent, 'Optional: you can change your skin at any time.');
+  assert.equal(ui.button('Next').getAttribute('aria-disabled'), 'false');
+  const swatch = input('creator-hood-night').parentNode;
+  assert.equal(swatch.className, 'creator-swatch');
+  assert.equal(swatch.children[1].style, 'background: rgb(38,40,50)');
+
+  input('creator-preset-drover').onchange();
+  assert.equal(ui.previews.at(-1).cloak, 'peat', 'a preset repaints at once');
+  assert.equal(input('creator-preset-drover').checked, true);
+  assert.equal(input('creator-preset-outlaw').checked, false);
+  assert.equal(input('creator-layer-hood').checked, false, 'its layers show');
+  assert.equal(input('creator-layer-hood').getAttribute('role'), 'switch');
+  assert.ok(legends().includes('Cloak: Peat'));
+  input('creator-boots-tan').onchange();
+  assert.equal(legends()[0], 'Preset: Custom');
+  assert.equal(input('creator-boots-tan').checked, true);
+  assert.equal(input('creator-boots-brown').checked, false);
+  input('creator-layer-cloak').checked = false;
+  input('creator-layer-cloak').onchange();
+  assert.equal(ui.previews.at(-1).layers.cloak, false);
+  assert.equal(ui.creator.flow.draft.skin.layers.cloak, false);
+});
+
+test('Skin: the hood comes down while the tone or hair is picked', () => {
+  const ui = setup({ start: 'skin' });
+  ui.open();
+  const input = (id) => ui.doc.getElementById(id);
+  const count = ui.previews.length;
+  input('creator-tone-olive').focus({ preventScroll: true });
+  assert.equal(ui.previews.at(-1).layers.hood, false, 'the face shows');
+  assert.equal(ui.creator.flow.draft.skin.layers.hood, true, 'only in the preview');
+  input('creator-hair-grey').focus({ preventScroll: true });
+  assert.equal(ui.previews.length, count + 1, 'moving within the group repaints nothing');
+  input('creator-tone-olive').onchange();
+  assert.equal(ui.previews.at(-1).tone, 'olive');
+  assert.equal(ui.previews.at(-1).layers.hood, false);
+  assert.ok(ui.creator.flow.draft.toneChosen);
+  input('creator-shirt-oat').focus({ preventScroll: true });
+  assert.equal(ui.previews.at(-1).layers.hood, true, 'and goes back up for the clothes');
+  input('creator-hair-flax').onchange();
+  assert.equal(ui.previews.at(-1).layers.hood, false, 'a tap that does not focus works too');
+  input('creator-layer-jerkin').focus({ preventScroll: true });
+  assert.equal(ui.previews.at(-1).layers.hood, true);
+  input('creator-hair-grey').onchange();
+  ui.submit();
+  assert.equal(ui.title(), 'Review your character');
+  assert.equal(ui.previews.at(-1).layers.hood, true, 'leaving the page puts it back up');
+  const row = ui.root.find((n) => n.tagName === 'DD').at(-1);
+  assert.equal(row.textContent, 'Outlaw · Olive skin · Grey hair', 'the tone and hair keep the preset');
+  ui.buttons().find((b) => b.getAttribute('aria-label') === 'Edit skin').click();
+  assert.equal(ui.title(), 'Skin');
+  ui.submit();
+  assert.equal(ui.doc.activeElement.getAttribute('aria-label'), 'Edit skin');
+});
+
+test('the turn buttons and a drag across the free area turn the outlaw', () => {
+  const ui = setup();
+  ui.open();
+  const stage = ui.root.children[2];
+  assert.equal(stage.className, 'creator-stage');
+  assert.equal(stage.style, 'width: 390px; height: 422px', 'over the free area above the sheet');
+  const turn = (label) => ui.root.find((n) => n.getAttribute('aria-label') === label)[0];
+  turn('Turn right').click();
+  turn('Turn left').click();
+  assert.deepEqual(ui.turns, [Math.PI / 4, -Math.PI / 4]);
+  ui.turns.length = 0;
+  stage.onpointerdown({ target: turn('Turn right'), pointerId: 1, clientX: 100 });
+  stage.onpointermove({ pointerId: 1, clientX: 140 });
+  assert.deepEqual(ui.turns, [], 'pressing a button is not a drag');
+  stage.onpointerdown({ target: stage, pointerId: 2, clientX: 100 });
+  assert.equal(stage.captured, 2);
+  stage.onpointermove({ pointerId: 2, clientX: 130 });
+  stage.onpointermove({ pointerId: 3, clientX: 300 });
+  stage.onpointermove({ pointerId: 2, clientX: 120 });
+  assert.deepEqual(ui.turns, [30 * Math.PI / 180, -10 * Math.PI / 180], 'a degree a pixel, one finger only');
+  stage.onpointerup();
+  stage.onpointermove({ pointerId: 2, clientX: 200 });
+  assert.equal(ui.turns.length, 2, 'until it lets go');
+  ui.submit();
+  assert.equal(ui.root.children[2], stage, 'the same free area on every page');
+  ui.win.innerWidth = 844;
+  ui.doc.panel = { left: 424, top: 0, width: 420, height: 390 };
+  ui.creator.refit();
+  assert.equal(stage.style, 'width: 424px; height: 844px', 'left of a side panel');
 });

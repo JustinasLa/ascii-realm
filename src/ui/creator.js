@@ -6,6 +6,7 @@ import { ATTRIBUTE_NAMES, ATTRIBUTES, CLASSES, GENDERS, RACES, raceOf, RULES, UN
 import { formatBirthday } from '../character/calendar.js';
 import { Creation } from '../character/creation.js';
 import { attributeCost, attributeTotals, cluesNeeded } from '../character/rules.js';
+import { cleanSkin, LAYERS, OUTER, PALETTES, PRESETS } from '../character/skin.js';
 
 const FOCUSABLE = 'button, input, textarea';
 const shown = (iso) => formatBirthday(iso).replace(/ AE$/, '');
@@ -13,15 +14,26 @@ const shown = (iso) => formatBirthday(iso).replace(/ AE$/, '');
 // the screen beside or above the panel.
 export const FIGURE_ROWS = 20;
 const FILL = 0.6;
+// A turn button turns the outlaw an eighth of a turn; a drag across the free
+// area turns it a degree for each pixel.
+const TURN_STEP = Math.PI / 4;
+const DRAG_TURN = Math.PI / 180;
+const REGION_NAMES = Object.freeze({ tone: 'Skin tone', hair: 'Hair', shirt: 'Shirt', hose: 'Hose', hood: 'Hood',
+  jerkin: 'Jerkin', sleeves: 'Sleeves', bracers: 'Bracers and gloves', boots: 'Boots', cloak: 'Cloak' });
+const LAYER_NAMES = Object.freeze({ hood: 'Hood up', jerkin: 'Jerkin', cloak: 'Cloak' });
+
+// The part of the screen the panel leaves free: left of a side panel (one
+// past 30 % of the width), else above a bottom sheet.
+function freeArea(width, height, panel) {
+  const side = panel.width > 0 && panel.left > 0.3 * width;
+  return { width: side ? panel.left : width, height: !side && panel.height > 0 ? panel.top : height };
+}
 
 // The camera's framing while the creator is open: the cell size, and how far
 // from the screen centre the outlaw's middle sits (bias down, biasX right, as
-// fractions of the screen) so it stands in the middle of the free area. A
-// panel past 30 % of the width is a side panel with the free area to its
-// left; otherwise it is a bottom sheet with the free area above.
+// fractions of the screen) so it stands in the middle of the free area.
 export function previewFraming(width, height, panel, [minCell, maxCell]) {
-  const side = panel.width > 0 && panel.left > 0.3 * width;
-  const free = { width: side ? panel.left : width, height: !side && panel.height > 0 ? panel.top : height };
+  const free = freeArea(width, height, panel);
   return { cell: Math.max(minCell, Math.min(maxCell, FILL * free.height / FIGURE_ROWS)),
     biasX: free.width / 2 / width - 0.5, bias: free.height / 2 / height - 0.5 };
 }
@@ -43,11 +55,11 @@ export function hidesPreview(prop, y, player) {
 export class CharacterCreator {
   // `outside` is made inert while the creator is open. `onPreview(skin)`
   // dresses the outlaw in the draft's skin; `onFrame(framing)` frames it
-  // between `cells` [smallest, largest]; `onClose(character)` runs once it
-  // shuts, with the character Create made.
-  constructor({ root, outside = [], cells = [4.5, 24], onPreview = () => {}, onFrame = () => {}, onClose = () => {},
-    win = window, doc = document }) {
-    Object.assign(this, { root, outside, cells, onPreview, onFrame, onClose, win, doc, flow: null });
+  // between `cells` [smallest, largest]; `onTurn(radians)` turns it;
+  // `onClose(character)` runs once it shuts, with the character Create made.
+  constructor({ root, outside = [], cells = [4.5, 24], onPreview = () => {}, onFrame = () => {}, onTurn = () => {},
+    onClose = () => {}, win = window, doc = document }) {
+    Object.assign(this, { root, outside, cells, onPreview, onFrame, onTurn, onClose, win, doc, flow: null });
     // On the window's capture phase, ahead of every game key.
     win.addEventListener('keydown', (event) => this.keydown(event), true);
     // The on-screen keyboard shrinks the visual viewport; on phones the
@@ -70,6 +82,7 @@ export class CharacterCreator {
     this.doc.body.classList.add('creator-open');
     for (const node of this.outside) node.inert = true;
     this.live = this.el('p', { className: 'creator-live', role: 'status' });
+    this.stage = this.turner();
     this.turn(true);
     this.refit();
   }
@@ -87,7 +100,46 @@ export class CharacterCreator {
   // or a turn of the phone. Pages keep the panel's size, so they don't.
   refit() {
     if (!this.flow) return;
-    this.onFrame(previewFraming(this.win.innerWidth, this.win.innerHeight, this.form.getBoundingClientRect(), this.cells));
+    const { innerWidth: width, innerHeight: height } = this.win;
+    const panel = this.form.getBoundingClientRect();
+    const free = freeArea(width, height, panel);
+    this.stage.style = `width: ${free.width}px; height: ${free.height}px`;
+    this.onFrame(previewFraming(width, height, panel, this.cells));
+  }
+
+  // The free area over the outlaw: a drag across it turns the figure, and so
+  // do its two buttons.
+  turner() {
+    let drag = null;
+    const button = (sign, text, label) => this.el('button', { type: 'button', textContent: text, 'aria-label': label,
+      onclick: () => this.onTurn(sign * TURN_STEP) });
+    const stage = this.el('div', { className: 'creator-stage',
+      onpointerdown: (event) => {
+        if (event.target !== stage) return;
+        drag = { id: event.pointerId, x: event.clientX };
+        stage.setPointerCapture(event.pointerId);
+      },
+      onpointermove: (event) => {
+        if (drag?.id !== event.pointerId) return;
+        this.onTurn((event.clientX - drag.x) * DRAG_TURN);
+        drag.x = event.clientX;
+      } },
+    this.el('div', { className: 'creator-turn' }, button(-1, '‹', 'Turn left'), button(1, '›', 'Turn right')));
+    stage.onpointerup = stage.onpointercancel = () => { drag = null; };
+    return stage;
+  }
+
+  // Dresses the outlaw in the draft's skin, with the hood down while the
+  // tone or hair is being picked, so the face shows.
+  preview() {
+    const { skin } = this.flow.draft;
+    this.onPreview(this.peek ? cleanSkin({ ...skin, layers: { ...skin.layers, hood: false } }) : skin);
+  }
+
+  look(peek) {
+    if (this.peek === peek) return;
+    this.peek = peek;
+    this.preview();
   }
 
   // An element; props the element has are set, the rest are attributes.
@@ -103,8 +155,8 @@ export class CharacterCreator {
 
   turn(moved) {
     if (!moved) return;
-    Object.assign(this, { touched: false, note: null });
-    this.onPreview(this.flow.draft.skin);
+    Object.assign(this, { touched: false, note: null, peek: false });
+    this.preview();
     this.render();
   }
 
@@ -127,7 +179,7 @@ export class CharacterCreator {
     this.el('div', { className: 'creator-body' }, ...this.content(page)), this.message,
     this.el('footer', {}, back, this.next));
     this.live.textContent = counter ? `${step}: ${page.title}` : page.title;
-    this.root.replaceChildren(this.form, this.live);
+    this.root.replaceChildren(this.form, this.live, this.stage);
     this.refresh();
     ((focusId && this.doc.getElementById(focusId)) || this.first || this.next).focus({ preventScroll: true });
   }
@@ -141,6 +193,7 @@ export class CharacterCreator {
     if (page.id === 'attributes') return this.attributes();
     if (page.id === 'description') return this.description();
     if (page.id === 'clues') return this.clues();
+    if (page.id === 'skin') return this.skin();
     return this.summary();
   }
 
@@ -167,7 +220,7 @@ export class CharacterCreator {
   change(apply) {
     apply();
     this.touched = true;
-    this.onPreview(this.flow.draft.skin);
+    this.preview();
     this.refresh();
   }
 
@@ -244,6 +297,50 @@ export class CharacterCreator {
       this.win.clearTimeout(this.pause);
       this.pause = this.win.setTimeout(() => { this.live.textContent = count.textContent; }, 300);
     }];
+  }
+
+  // A preset, then a swatch for each region and the layers worn. Each pick
+  // repaints the outlaw at once and updates every group's legend and mark.
+  skin() {
+    const { flow } = this;
+    const syncs = [];
+    const pick = (apply, peek) => () => {
+      this.peek = peek;
+      this.change(apply);
+      for (const sync of syncs) sync();
+    };
+    const group = (key, title, items, picked, apply, peek = false) => {
+      const legend = this.el('legend');
+      const inputs = items.map((item) => this.el('input', { type: 'radio', name: `creator-${key}`, id: `creator-${key}-${item.id}`,
+        'aria-label': item.name, onfocus: () => this.look(peek), onchange: pick(() => apply(item.id), peek) }));
+      syncs.push(() => {
+        const id = picked();
+        legend.textContent = `${title}: ${items.find((item) => item.id === id)?.name ?? 'Custom'}`;
+        inputs.forEach((input, i) => { input.checked = items[i].id === id; });
+      });
+      const swatch = key !== 'preset';
+      return [inputs, this.el('fieldset', { className: swatch ? 'creator-swatches' : 'creator-row' }, legend, ...items.map((item, i) =>
+        this.el('label', { className: swatch ? 'creator-swatch' : 'creator-card' }, inputs[i],
+          swatch ? this.el('span', { style: `background: rgb(${item.color})` }) : this.el('b', { textContent: item.name }))))];
+    };
+    const regions = (list, peek) => list.map((region) => group(region, REGION_NAMES[region], PALETTES[region],
+      () => flow.draft.skin[region], (id) => flow.setRegion(region, id), peek)[1]);
+    const [presets, presetSet] = group('preset', 'Preset', PRESETS, () => flow.preset?.id, (id) => flow.wearPreset(id));
+    const layers = LAYERS.map((layer) => {
+      const input = this.el('input', { type: 'checkbox', role: 'switch', id: `creator-layer-${layer}`,
+        onfocus: () => this.look(false), onchange: pick(() => flow.setLayer(layer, input.checked), false) });
+      syncs.push(() => { input.checked = flow.draft.skin.layers[layer]; });
+      return this.el('label', { className: 'creator-card' }, input, this.el('b', { textContent: LAYER_NAMES[layer] }));
+    });
+    const body = regions(['tone', 'hair'], true);
+    const clothes = regions(['shirt', 'hose', ...OUTER], false);
+    for (const sync of syncs) sync();
+    this.first = presets.find((input) => input.checked) ?? presets[0];
+    this.note = 'Optional: you can change your skin at any time.';
+    return [presetSet, this.el('h3', { textContent: 'Body' }),
+      this.el('p', { className: 'creator-counter', textContent: 'The hood comes down while you pick these, so the face shows.' }),
+      ...body, this.el('h3', { textContent: 'Clothes' }), ...clothes, this.el('h3', { textContent: 'Layers' }),
+      this.el('div', { className: 'creator-row' }, ...layers)];
   }
 
   // Every row with its Edit, and every step checked again before Create.
@@ -359,7 +456,7 @@ export class CharacterCreator {
   keydown(event) {
     if (!this.flow) return;
     event.stopImmediatePropagation();
-    const nodes = [...this.form.querySelectorAll(FOCUSABLE)].filter((node) => !node.disabled);
+    const nodes = [...this.root.querySelectorAll(FOCUSABLE)].filter((node) => !node.disabled);
     let to = null;
     if (event.key === 'Escape') event.preventDefault();
     else if (!this.root.contains(event.target)) to = this.first ?? this.next;

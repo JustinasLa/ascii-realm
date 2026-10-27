@@ -601,7 +601,8 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
      zooming on focus. */
   #creator-root .creator-panel { top: auto; right: 0; bottom: var(--creator-kb, 0px); left: 0; width: auto; height: 50dvh; padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); border-width: 1px 0 0; }
   #creator-root .creator-panel header { padding-top: 8px; }
-  #creator-root :is(.creator-panel button, .creator-panel input:not([type="radio"]), .creator-panel textarea, .creator-card) { min-height: 44px; }
+  #creator-root :is(.creator-panel button, .creator-panel input:not([type="radio"], [type="checkbox"]), .creator-panel textarea, .creator-card) { min-height: 44px; }
+  #creator-root .creator-swatch { width: 44px; height: 44px; }
   #creator-root .creator-panel button { min-width: 44px; }
   #creator-root .creator-panel :is(input, textarea) { font-size: 16px; }
   #creator-root .creator-message { min-height: 0; }
@@ -650,7 +651,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 /* The character creator: a side panel beside the live world, which keeps the rest of the page out of play. */
 #creator-root { position: fixed; inset: 0; z-index: 32; pointer-events: none; }
 .creator-open :is(.hud, #touch-controls, #panel-dock, #phone-menu, #chat-open, #chat, #fire-status, #builder-banner) { visibility: hidden; }
-.creator-panel { position: absolute; top: 16px; right: 16px; bottom: 16px; display: flex; flex-direction: column; width: min(440px, calc(100% - 32px)); color: var(--ink); background: rgba(6, 9, 10, 0.97); border: 1px solid var(--frame); pointer-events: auto; }
+.creator-panel { position: absolute; z-index: 1; top: 16px; right: 16px; bottom: 16px; display: flex; flex-direction: column; width: min(440px, calc(100% - 32px)); color: var(--ink); background: rgba(6, 9, 10, 0.97); border: 1px solid var(--frame); pointer-events: auto; }
 .creator-panel header { padding: 12px 14px 8px; border-bottom: 1px solid var(--line); }
 .creator-panel h2 { margin: 0; font-size: 14px; font-weight: 600; }
 .creator-counter { margin: 0 0 6px; color: var(--quiet); font-size: 11px; }
@@ -658,7 +659,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .creator-body p { margin: 0 0 10px; }
 .creator-body fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .creator-body :is(legend, label) { display: block; margin: 0 0 6px; padding: 0; color: var(--muted); }
-.creator-panel :is(input:not([type="radio"]), textarea) { width: 100%; min-height: 32px; padding: 4px 8px; color: var(--ink); background: var(--solid); border: 1px solid var(--line); border-radius: 0; }
+.creator-panel :is(input:not([type="radio"], [type="checkbox"]), textarea) { width: 100%; min-height: 32px; padding: 4px 8px; color: var(--ink); background: var(--solid); border: 1px solid var(--line); border-radius: 0; }
 .creator-panel button { min-width: 32px; min-height: 32px; padding: 4px 12px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 0; }
 .creator-panel button:hover:not([aria-disabled="true"], :disabled) { color: var(--ink); background: var(--hover); border-color: var(--frame); }
 .creator-panel [aria-disabled="true"] { opacity: 0.45; }
@@ -685,3 +686,19 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .creator-review { margin-bottom: 12px; padding: 8px 10px; color: var(--foe); border: 1px solid var(--foe); }
 .creator-review button { margin-right: 6px; }
 .creator-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.creator-body h3 { margin: 14px 0 6px; color: var(--ink); font-size: 12px; font-weight: 600; }
+/* Swatches: a colour square, marked [ ] when picked, as the lobby's name colours are. */
+.creator-body .creator-swatches { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 8px; }
+.creator-swatches legend { width: 100%; }
+.creator-body .creator-swatch { position: relative; display: flex; align-items: center; justify-content: center; width: 34px; height: 30px; margin: 0; color: transparent; cursor: pointer; }
+.creator-swatch input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.creator-swatch::before { content: "["; }
+.creator-swatch::after { content: "]"; }
+.creator-swatch:has(:checked) { color: var(--ink); }
+.creator-swatch:has(:focus-visible) { outline: 1px solid var(--ink); }
+.creator-swatch span { width: 16px; height: 16px; border: 1px solid var(--line); }
+/* The free area over the outlaw: dragging it turns the figure. */
+.creator-stage { position: absolute; top: 0; left: 0; display: flex; align-items: flex-end; justify-content: center; pointer-events: auto; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.creator-turn { display: flex; gap: 8px; margin-bottom: 14px; }
+.creator-turn button { min-width: 44px; min-height: 44px; color: var(--muted); background: rgba(6, 9, 10, 0.8); border: 1px solid var(--line); border-radius: 0; font: 18px/1 var(--font); }
+.creator-turn button:hover { color: var(--ink); border-color: var(--frame); }
