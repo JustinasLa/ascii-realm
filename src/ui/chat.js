@@ -236,6 +236,14 @@ export class ChatUi {
     return node;
   }
 
+  // A player's name, isolated so a right-to-left one keeps its tag after it.
+  speaker(member, className) {
+    const node = this.span('', className);
+    node.append(Object.assign(this.doc.createElement('bdi'), { textContent: member.name }));
+    if (member.tag) node.append(this.span(` (${member.tag})`, 'chat-name-tag'));
+    return node;
+  }
+
   // A reader scrolled back through the log stays where they are.
   add(node) {
     const log = this.log;
@@ -263,7 +271,7 @@ export class ChatUi {
       item.append(this.span('[', 'chat-bracket'), this.span(format.tag, 'chat-tag'), this.span('] ', 'chat-bracket'));
     }
     if (format.lead) item.append(this.span(format.lead, 'chat-lead'));
-    const name = this.span(displayName(message), 'chat-name');
+    const name = this.speaker(message, 'chat-name');
     const member = format.plainName ? null : roster.find((m) => m.id === message.from);
     const tint = member ? this.colorOf(member) : null;
     if (tint) name.style.color = `rgb(${tint[0]}, ${tint[1]}, ${tint[2]})`;

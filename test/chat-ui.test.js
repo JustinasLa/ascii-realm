@@ -446,6 +446,13 @@ test('every channel reads as it should, with the speaker\'s tint, and text stays
   assert.equal(ui.ids['chat-log'].children.at(-1).children[0].style.color, 'rgb(146, 198, 235)');
   for (const channel of ['rp', 'ooc']) line(channel, 'which?', { from: 'b2', name: 'Ash', tag: 2 });
   assert.deepEqual(ui.lines().slice(-2), ['Ash (2): "which?"', '[OOC] Ash (2): which?'], 'a tag shows on every channel');
+  // The name is isolated from its tag, so a right-to-left name keeps the tag
+  // after it.
+  line('rp', 'hi', { name: 'אבי', tag: 3 });
+  const [own, tag] = nameOf(ui.ids['chat-log'].children.length - 1).children;
+  assert.deepEqual([own.tagName, own.textContent, tag.className, tag.textContent], ['BDI', 'אבי', 'chat-name-tag', ' (3)']);
+  line('rp', 'hi', { name: 'Ash', tag: null });
+  assert.deepEqual(nameOf(ui.ids['chat-log'].children.length - 1).children.map((c) => c.tagName), ['BDI'], 'no tag, no tag span');
   line('rp', 'gone', { from: 'ff', name: 'Old' });
   assert.equal(ui.ids['chat-log'].children.at(-1).children[0].style.color, undefined, 'no tint for someone who left');
   ui.chat.receive({ seq: 2, channel: 'rp', from: 'ff', name: 'Old', text: 'no roster', clarity: 1, muffled: false });
@@ -456,7 +463,8 @@ test('every channel reads as it should, with the speaker\'s tint, and text stays
   line('rp', '<img src=x onerror=alert(1)>');
   const hostile = ui.ids['chat-log'].children.at(-1);
   assert.equal(hostile.textContent, 'Ash: "<img src=x onerror=alert(1)>"');
-  assert.ok(hostile.children.every((child) => child.tagName === 'SPAN' && child.children.length === 0));
+  const leaves = (node) => node.children.length ? node.children.flatMap(leaves) : [node];
+  assert.ok(hostile.children.flatMap(leaves).every((leaf) => ['SPAN', 'BDI'].includes(leaf.tagName) && leaf._text === leaf.textContent));
   assert.equal(ui.ids['chat-log'].scrollTop, ui.ids['chat-log'].scrollHeight);
 });
 
