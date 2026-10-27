@@ -112,7 +112,8 @@ export class CharacterCreator {
   }
 
   // The free area over the outlaw: a drag across it turns the figure, and so
-  // do its two buttons. Only the first finger down turns it, until it lifts.
+  // do its two buttons. Only the first finger down turns it, until it lifts
+  // or the stage loses it.
   turner() {
     let drag = null;
     const button = (sign, text, label) => this.el('button', { type: 'button', textContent: text, 'aria-label': label,
@@ -129,7 +130,7 @@ export class CharacterCreator {
         drag.x = event.clientX;
       } },
     this.el('div', { className: 'creator-turn' }, button(-1, '‹', 'Turn left'), button(1, '›', 'Turn right')));
-    stage.onpointerup = stage.onpointercancel = (event) => { if (drag?.id === event.pointerId) drag = null; };
+    stage.onpointerup = stage.onpointercancel = stage.onlostpointercapture = (event) => { if (drag?.id === event.pointerId) drag = null; };
     return stage;
   }
 
@@ -167,6 +168,7 @@ export class CharacterCreator {
   render(focusId = null) {
     const { flow } = this;
     const { page, counter } = flow;
+    const old = this.form;
     Object.assign(this, { first: null, problems: false, clue: null });
     this.win.clearTimeout(this.pause);
     const step = counter ? `Step ${counter.n} of ${counter.total}` : '';
@@ -182,7 +184,9 @@ export class CharacterCreator {
     this.el('div', { className: 'creator-body' }, ...this.content(page)), this.message,
     this.el('footer', {}, back, this.next));
     this.live.textContent = counter ? `${step}: ${page.title}` : page.title;
-    this.root.replaceChildren(this.form, this.live, this.stage);
+    // Only the panel is swapped, so a finger turning the outlaw keeps the stage.
+    if (old?.parentNode === this.root) old.replaceWith(this.form);
+    else this.root.replaceChildren(this.form, this.live, this.stage);
     this.refresh();
     ((focusId && this.doc.getElementById(focusId)) || this.first || this.next).focus({ preventScroll: true });
   }

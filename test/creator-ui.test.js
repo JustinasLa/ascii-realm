@@ -29,7 +29,19 @@ class Node {
       this.children.push(child);
     }
   }
-  replaceChildren(...nodes) { this.children = []; this.text = ''; this.append(...nodes); }
+  // A node taken out of the tree loses its pointer capture, as in a browser.
+  replaceChildren(...nodes) {
+    for (const child of this.children) Object.assign(child, { parentNode: null, captured: null });
+    this.children = [];
+    this.text = '';
+    this.append(...nodes);
+  }
+  replaceWith(node) {
+    const { parentNode: parent } = this;
+    Object.assign(node, { parentNode: parent });
+    parent.children[parent.children.indexOf(this)] = node;
+    this.parentNode = null;
+  }
   setAttribute(key, value) { this.attributes.set(key, String(value)); }
   removeAttribute(key) { this.attributes.delete(key); }
   getAttribute(key) { return this.attributes.get(key) ?? null; }
@@ -712,6 +724,17 @@ test('the turn buttons and a drag across the free area turn the outlaw', () => {
   assert.equal(ui.turns.length, 4, 'then another finger may turn it');
   ui.submit();
   assert.equal(ui.root.children[2], stage, 'the same free area on every page');
+  stage.onpointerup({ pointerId: 3 });
+  stage.onpointerdown({ target: stage, pointerId: 4, clientX: 0 });
+  const page = ui.title();
+  ui.submit();
+  assert.notEqual(ui.title(), page, 'a second finger moves on a page mid-turn');
+  assert.equal(stage.captured, 4, 'another page keeps the finger turning the outlaw');
+  stage.onpointerup({ pointerId: 4 });
+  stage.onpointerdown({ target: stage, pointerId: 5, clientX: 0 });
+  stage.onlostpointercapture({ pointerId: 5 });
+  stage.onpointerdown({ target: stage, pointerId: 6, clientX: 0 });
+  assert.equal(stage.captured, 6, 'losing the capture lets the next finger turn it');
   ui.win.innerWidth = 844;
   ui.doc.panel = { left: 424, top: 0, width: 420, height: 390 };
   ui.creator.refit();
