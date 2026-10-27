@@ -11,6 +11,7 @@ import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/
 import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
+import { sampleDraft } from '../../src/character/creation.js';
 import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
@@ -199,6 +200,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       roster(change) { this.rostered = change; }
       update() { this.updates++; }
     },
+    // The creator's open state and what it was opened with; the real one is
+    // tested on its own.
+    CharacterCreator: class {
+      constructor(options) { Object.assign(this, options); this.flow = null; this.opened = []; }
+      get isOpen() { return this.flow !== null; }
+      open(options) { this.opened.push(options); this.flow = options; }
+      close() { this.flow = null; this.onClose(); }
+    },
+    sampleDraft,
     // What reaches the speech bubbles; the real ones are tested on their own.
     SpeechBubbles: class {
       constructor(options) { Object.assign(this, options); this.size = 0; this.received = []; this.rostered = []; this.updates = []; }
@@ -327,7 +337,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     // tested on its own.
     bindTintPicker: (client, options) => ({ ...options, renders: 0, render() { this.renders++; } }),
     MultiplayerClient: class {
-      constructor(options) { this.players = []; this.room = null; this.notesSent = []; Object.assign(this, options); }
+      constructor(options) { this.players = []; this.room = null; this.notesSent = []; this.connects = []; Object.assign(this, options); }
+      connect(options) { this.connects.push(options); }
       // Records each note offered to the lobby; solo, nothing is sent.
       sendNote(note) { this.notesSent.push(note); return false; }
       leave() {}
