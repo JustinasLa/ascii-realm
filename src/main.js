@@ -391,12 +391,16 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
     player.skin = cleanSkin(characters.active?.skin);
     unframe();
     blockGameplay();
-    if (deferredJoin) connectLobby(deferredJoin);
-    deferredJoin = null;
+    // A lobby on another world reloads the page, which would lose a new
+    // character this visit couldn't save, so its waiting join is dropped.
+    const unsaved = character && characters.saveError;
+    if (deferredJoin && !unsaved) connectLobby(deferredJoin);
     if (character) {
       startPlay();
-      if (characters.saveError) hud.notify(characters.saveError);
+      if (unsaved) hud.notify(unsaved);
     } else if (gated()) gate.show('start');
+    if (deferredJoin && unsaved) hud.notify('The lobby wasn\'t joined: it could reload the page and lose this character.');
+    deferredJoin = null;
     canvas.focus({ preventScroll: true });
   } });
 debug.creator = creator;

@@ -119,6 +119,30 @@ test('a lobby join waits for the creator to close', async () => {
   assert.equal(plain.game.multiplayer.connects.length, 1);
 });
 
+test('a waiting join is dropped when the new character could not be saved', async () => {
+  const failing = { getItem: () => null, setItem: () => { throw new Error('full'); } };
+  const harness = await loadGame(undefined, { href: 'http://localhost/?debug', creator: true, real: { localStorage: failing } });
+  const { game } = harness;
+  const notes = [];
+  game.hud.notify = (...args) => notes.push(args);
+  game.multiplayer.connect({ mode: 'join', code: 'ABC234' });
+  const made = game.characters.create(sampleDraft(game.characters, Date.now()));
+  game.creator.close(made.character);
+  assert.deepEqual(game.multiplayer.connects, [], 'a reload into the lobby\'s world would lose the character');
+  assert.deepEqual(notes, [[game.characters.saveError],
+    ['The lobby wasn\'t joined: it could reload the page and lose this character.']]);
+  game.multiplayer.connect({ mode: 'join', code: 'ABC234' });
+  assert.equal(game.multiplayer.connects.length, 1, 'asking again joins');
+});
+
+test('a waiting join is made after Create when the character is saved', async () => {
+  const harness = await loadGame(undefined, { href: 'http://localhost/?debug', creator: true, real: { localStorage: memory() } });
+  const { game } = harness;
+  game.multiplayer.connect({ mode: 'join', code: 'ABC234' });
+  game.creator.close(game.characters.create(sampleDraft(game.characters, Date.now())).character);
+  assert.deepEqual(game.multiplayer.connects, [{ mode: 'join', code: 'ABC234' }]);
+});
+
 test('foes hold still and the own nameplate hides while the creator is open', async () => {
   const harness = await loadGame(undefined, { href: 'http://localhost/?debug&creator' });
   const { game } = harness;
