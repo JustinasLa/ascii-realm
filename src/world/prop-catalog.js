@@ -12,6 +12,7 @@ export const PROP_CATALOG = Object.freeze([
   { kind: 'log', label: 'Log', symbol: '=', group: 'Nature', solid: true },
   { kind: 'flowers', label: 'Flowers', symbol: '+', group: 'Nature', solid: false },
   { kind: 'mushrooms', label: 'Mushrooms', symbol: 'T', group: 'Nature', solid: false },
+  { kind: 'pale-caps', label: 'Pale caps', symbol: 'm', group: 'Nature', solid: false },
   { kind: 'reeds', label: 'Reeds', symbol: '|', group: 'Nature', solid: false },
   { kind: 'crate', label: 'Crate', symbol: '#', group: 'Camp', solid: true },
   { kind: 'barrel', label: 'Barrel', symbol: 'U', group: 'Camp', solid: true },

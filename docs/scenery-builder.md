@@ -6,9 +6,9 @@ Press `B` to enter build mode and open the testing panel; press it again to retu
 to play. You can also open the panel by clicking its summary, then choose
 **Start building**. Paint grass, dirt, shore, water or stone with terrain brushes,
 or choose from the **Nature**, **Camp** and **Architecture** prop palettes: trees, pines, rocks,
-bushes, stumps, logs, flowers, mushrooms, reeds, crates, barrels, fences, tents,
-campfires and signposts. Flowers, mushrooms and reeds are decorative and can be
-walked through; the other props block movement. Adjust the brush radius or prop
+bushes, stumps, logs, flowers, mushrooms, pale caps, reeds, crates, barrels, fences,
+tents, campfires and signposts. Flowers, mushrooms, pale caps and reeds are
+decorative and can be walked through; the other props block movement. Adjust the brush radius or prop
 scale in the panel and preview props before placing them; the eraser removes
 props only. Every placement gets a fresh variation in shape, proportions and
 color; rocks also vary their outline, mineral colors and moss. The preview shows
@@ -31,6 +31,18 @@ small letters on a dark silhouette like rocks, takes torch light on the flank th
 faces it, and reflects in water below it. It is decorative but solid: it blocks
 movement and arrows. It is damp, and glints in torchlight, only when placed on
 a water cell; on a dry shore beside a pool it stays dry.
+
+## Pale caps
+
+The **Nature** palette's **Pale caps** (`m`, after Mushrooms) places a clump of
+one to three rounded mushrooms with pale caps and teal undersides: a broad dome,
+a taller leaning bell or a small round button, each in its own size. A smaller
+cap beside the main one may stand in front of it or behind it. They are drawn in
+small letters on a dark silhouette like rocks and trees, catch torch light on the
+side facing it, and reflect in water below them. The teal gills and stems keep a
+steady glow of their own colour at night but light nothing around them. They are
+decorative: you can walk and shoot through them, and grass grows around them.
+Use the scale slider to vary sizes when clustering them around tree roots.
 
 Add `?builder` to the URL to open the panel automatically. With `?debug`, the
 current scene is available as `window.game.builder.scene` for inspection.

@@ -9,13 +9,13 @@ import { GRASS, WATER, World } from '../src/world/world.js';
 import { withLayers } from './helpers/renderer.js';
 
 const expectedKinds = [
-  'tree', 'rock', 'standing-stone', 'bush', 'pine', 'stump', 'log', 'flowers', 'mushrooms', 'reeds',
+  'tree', 'rock', 'standing-stone', 'bush', 'pine', 'stump', 'log', 'flowers', 'mushrooms', 'pale-caps', 'reeds',
   'crate', 'barrel', 'fence', 'tent', 'campfire', 'signpost',
   'stone-gate', 'stone-tower', 'column-short', 'column-broken', 'column-tall',
   'wall-low', 'wall-broken', 'rubble-small', 'rubble-large',
   ...PILLAR_DEFINITIONS.map(p => p.kind),
 ];
-const decorativeKinds = new Set(['flowers', 'mushrooms', 'reeds']);
+const decorativeKinds = new Set(['flowers', 'mushrooms', 'pale-caps', 'reeds']);
 
 test('catalog exposes the supported scenery kinds and their palette and collision metadata', () => {
   const kinds = PROP_CATALOG.map(({ kind }) => kind);
@@ -134,4 +134,21 @@ test('viewport queries retain tall props that reflect from above or draw their c
     }, putBg() {} }, view, fromBelow);
     assert.ok(visible.length > 0, `${kind} canopy draws in the viewport through the default renderer writer`);
   }
+});
+
+test('pale caps just above the view reflect into the water below them', () => {
+  const world = new World(42);
+  const scene = new Scenery(world);
+  const view = { x0: 0, y0: 0, cols: 40, rows: 24 };
+  const caps = scene.place('pale-caps', 20.5, -2.5, { seed: 7 });
+  const queried = world.propsInView(view).find(({ id }) => id === caps.id);
+  assert.ok(queried, 'the clump above the view stays queryable');
+  const layer = () => withLayers({ cols: view.cols, rows: view.rows, mask: new Uint8Array(view.cols * view.rows).fill(WATER),
+    fg: new Float32Array(view.cols * view.rows * 4) });
+  const direct = layer();
+  drawProp(direct, view, queried);
+  assert.ok(direct.fg.every((value, index) => index % 4 !== 3 || !value), 'the clump itself is off screen');
+  const renderer = layer();
+  drawProp(renderer, view, queried, reflector(0, view));
+  assert.ok(renderer.fg.some((value, index) => index % 4 === 3 && value > 0), 'its reflection reaches the visible water');
 });
