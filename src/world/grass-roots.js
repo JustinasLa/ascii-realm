@@ -46,6 +46,11 @@ const DRY = [THISTLE, YARROW, POPPY, YARROW, CLOCK, POPPY];
 // Low flowers sit down among the blades; spikes need a tall stalk.
 const LOW = new Set([BUTTERCUP, CLOVER, DANDELION, FORGET_ME_NOT]);
 const TALL = new Set([LUPIN, FOXGLOVE]);
+// The blue and white flowers of a grove's floor, by drifts of one species.
+export const WOOD_FLOWERS = [FORGET_ME_NOT, FORGET_ME_NOT, FORGET_ME_NOT, BLUEBELL, BLUEBELL,
+  CORNFLOWER, DAISY, DAISY, YARROW];
+// A grove root's chance of a wood flower where the grove is at full strength.
+export const GROVE_FLOWER_CHANCE = 0.22;
 
 // Drifts are blobs around jittered points on a coarse grid, measured on
 // the ground with the cell aspect corrected so they come out round.
@@ -132,6 +137,15 @@ export function flowerAt(wx, wy, seed, style, height, elev) {
   return hash2(wx, wy, seed + 1401) < chance ? kind : 0;
 }
 
+// The wood flower at a grove cell: broad drifts of one species, with a few
+// strays among them.
+export function woodFlowerAt(wx, wy, seed) {
+  const n = WOOD_FLOWERS.length;
+  if (hash2(wx, wy, seed + 2423) < 0.15) return WOOD_FLOWERS[Math.floor(hash2(wx, wy, seed + 2426) * n)];
+  const drift = Math.max(0, Math.min(0.999, (valueNoise(wx * ASPECT * 0.06, wy * 0.06, seed + 2422) - 0.2) / 0.6));
+  return WOOD_FLOWERS[Math.floor(drift * n)];
+}
+
 // Terrain is immutable. Store only roots that actually grow a visible blade,
 // in row order, so drawing never scans all the empty ground between them.
 // Everything about a root that does not move is settled here, once per
@@ -162,14 +176,20 @@ export function grassRoots(chunk, seed, size, { flora = true, meadow = false } =
       // Reject bare ground before the more expensive habitat lookups.
       // The ruin meadow is a continuous sward, with gentle variation instead
       // of isolated islands. Terrain edits supply its worn paths and gaps.
-      const patch = meadow ? 0.88 + valueNoise(wx * ASPECT * 0.045, wy * 0.045, seed + 1321) * 0.12
+      let patch = meadow ? 0.88 + valueNoise(wx * ASPECT * 0.045, wy * 0.045, seed + 1321) * 0.12
         : patchAt(wx, wy, seed);
+      // A grove's floor is a continuous sward around its trees, not islands.
+      const grove = chunk.grove?.[i] && chunk.type[i] === GRASS ? chunk.grove[i] / 255 : 0;
+      if (grove) patch = Math.max(patch, 0.85 * grove);
       if (hash2(wx, wy, seed + 1322) >= patch) continue;
       const elev = chunk.elev?.[i] ?? 0.55;
       const flower = meadow && hash2(wx, wy, seed + 1414) > 0.985 ? DAISY
-        : flora ? flowerAt(wx, wy, seed, style, grass, elev) : 0;
-      const density = chunk.grassDensity[i] * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1) *
+        : !flora ? 0 : grove && hash2(wx, wy, seed + 2421) < GROVE_FLOWER_CHANCE * grove ? woodFlowerAt(wx, wy, seed)
+          // The grove's own flowers crowd out the meadow's toward its heart.
+          : grove && hash2(wx, wy, seed + 2427) < grove ? 0 : flowerAt(wx, wy, seed, style, grass, elev);
+      let density = chunk.grassDensity[i] * (style === 1 ? 0.72 : style === 4 ? 0.85 : 1) *
         clumpAt(wx, wy, seed);
+      if (grove) density = Math.max(density * (1 + 0.5 * grove), 0.5 * grove);
       // Flowers grow mostly within the clumps; a few stand alone in the
       // gaps between them.
       if (chunk.rnd[i] < 1 - density && (!flower || hash2(wx, wy, seed + 1404) > 0.3)) continue;

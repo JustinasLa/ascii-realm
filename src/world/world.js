@@ -6,6 +6,7 @@ import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
 import { createSpawnRuins } from './spawn-ruins.js';
+import { groveField, groveProps } from './woodland.js';
 
 export const WATER = 0;
 export const SHORE = 1;
@@ -40,14 +41,31 @@ const smoothRange = (a, b, x) => {
   return u * u * (3 - 2 * u);
 };
 
+// The seeded land's elevation at a cell. The land is lifted so only the
+// deepest hollows hold a lake. It is a meadow throughout: no dirt tracks or
+// bare stone, just grass around the odd lake. The fewer, smaller lakes shelve
+// away more steeply, so they still open onto deep water rather than being
+// shallows from bank to bank.
+export function seededLand(x, y, seed) {
+  const e = fbm(x * ASPECT * 0.011, y * 0.011, seed, 5) + LAND_LIFT;
+  return e < WATER_LEVEL ? WATER_LEVEL - (WATER_LEVEL - e) * LAKE_SHELF : e;
+}
+
+export const landType = (e) => (e < WATER_LEVEL ? WATER : e < SHORE_LEVEL ? SHORE : GRASS);
+
 export class World {
   constructor(seed = 1, options = {}) {
     // A bare number is the chunk cache size.
     // `flora` brings back the wild flowers, ferns and cattails among the grass.
     // `rivers: false` leaves the land without rivers.
-    const { season = 'summer', maxChunks = 128, flora = false, meadow = false, spawnRuins = false, rivers = true } = typeof options === 'number' ? { maxChunks: options } : options;
+    // `woodland: 'dense'` grows groves around the trees (see woodland.js) and
+    // brings the flowers unless `flora` says otherwise.
+    const { season = 'summer', maxChunks = 128, woodland, flora, meadow = false, spawnRuins = false, rivers = true } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
-    this.flora = flora;
+    this.woodland = woodland === 'dense' ? 'dense' : 'sparse';
+    this.flora = !!(flora ?? this.woodland === 'dense');
+    // Tree sites are pure positions; each chunk's are worked out once.
+    this.siteCache = new Map();
     this.meadow = meadow;
     this.sceneryBatchDepth = 0;
     this.season = ['spring', 'summer', 'autumn', 'winter'].includes(season) ? season : 'summer';
@@ -91,6 +109,7 @@ export class World {
     // Rebuild the few chunks spawn discovery made with their rivers and
     // the starter site's dry ground as their baseline.
     this.chunks.clear();
+    this.siteCache.clear();
   }
 
   chunk(cx, cy) {
@@ -143,19 +162,8 @@ export class World {
         const y = cy * CHUNK + ly;
         const nx = x * ASPECT;
         const i = ly * CHUNK + lx;
-
-        // The land is lifted so only the deepest hollows hold a lake. It is
-        // a meadow throughout: no dirt tracks or bare stone, just grass
-        // around the odd lake.
-        let e = fbm(nx * 0.011, y * 0.011, s, 5) + LAND_LIFT;
-        // The fewer, smaller lakes shelve away more steeply, so they still
-        // open onto deep water rather than being shallows from bank to bank.
-        if (e < WATER_LEVEL) e = WATER_LEVEL - (WATER_LEVEL - e) * LAKE_SHELF;
-
-        let t = GRASS;
-        if (e < WATER_LEVEL) t = WATER;
-        else if (e < SHORE_LEVEL) t = SHORE;
-
+        let e = seededLand(x, y, s);
+        let t = landType(e);
         const starter = this.spawnRuins?.terrainAt(x, y);
         if (starter !== undefined) {
           t = starter;
@@ -209,11 +217,20 @@ export class World {
         }
       }
     }
+    // A grove's sward stands taller and fuller around its trees. Spawn is
+    // still being looked for while this.spawn is unset; those chunks go.
+    const grove = this.woodland === 'dense' && this.spawn ? groveField(this, cx, cy, CHUNK) : null;
+    for (let i = 0; grove && i < n; i++) {
+      if (!grove[i] || type[i] !== GRASS) continue;
+      const g = grove[i] / 255;
+      grassHeight[i] = Math.min(4.4, grassHeight[i] + 0.7 * g);
+      grassDensity[i] *= 1 + 0.45 * g;
+    }
     const elev = Float32Array.from(height);
     const baseType = type.slice();
     const baseElev = elev.slice();
     const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
-      baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
+      grove, baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
       flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null,
       // The water shader times a river's foam by its water's own lines.
       rivers: flow ? this.rivers : null };
@@ -483,6 +500,14 @@ export class World {
     return this.rivers?.near(x, y, radius)[0] ?? null;
   }
 
+  // The seeded land's terrain at a cell before rivers, worked out without
+  // generating its chunk: the same as preRiverTypeAt, safe while one is made.
+  landTypeAt(x, y) {
+    x = Math.floor(x);
+    y = Math.floor(y);
+    return this.spawnRuins?.terrainAt(x, y) ?? landType(seededLand(x, y, this.seed));
+  }
+
   // The terrain the seeded land had before rivers were cut into it.
   preRiverTypeAt(x, y) {
     const { c, i } = this.locate(Math.floor(x), Math.floor(y));
@@ -576,8 +601,16 @@ export class World {
         // Generated on the land as it was before rivers cut it, so the
         // numbered ids of props away from a river never change.
         typeAt: (x, y) => this.preRiverTypeAt(x, y),
+        landTypeAt: (x, y) => this.landTypeAt(x, y),
+        siteCache: this.siteCache,
+        grove: this.grove,
+        // Whether a generated prop outlasts the river and ruin filters below.
+        keeps: (prop) => !((this.rivers?.reaches(cx, cy) || c.preRiverType) && this.inRiver(prop))
+          && !this.spawnRuins?.exclude(prop),
       };
       c.props = generateProps(original, cx, cy, CHUNK);
+      // Dense woods come after the sparse props, which keep their ids.
+      if (this.woodland === 'dense') c.props.push(...groveProps(original, cx, cy, CHUNK, c.props));
       c.props.forEach((prop, i) => { prop.id = `p:${cx}:${cy}:${i}`; });
       if (this.rivers?.reaches(cx, cy) || c.preRiverType) {
         c.props = c.props.filter(prop => !this.inRiver(prop));

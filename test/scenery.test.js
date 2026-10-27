@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Scenery } from '../src/editor/scenery.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, DIRT, GRASS, STONE, WATER, WATER_LEVEL, World } from '../src/world/world.js';
+import { GROVE } from '../src/world/woodland.js';
 import { withLayers } from './helpers/renderer.js';
 
 function fixture(seed = 42) {
@@ -143,7 +144,7 @@ test('invalid imports leave edits, caches, and history unchanged', () => {
     { ...base, props: [{ id: 's:1', kind: 'dragon', x: 0, y: 0, scale: 1, seed: 1 }] },
     { ...base, props: [{ id: 's:9007199254740991', kind: 'tree', x: 0, y: 0, scale: 1, seed: 1 }] },
     { ...base, removed: ['s:1'] },
-    { ...base, removed: ['p:0:0:40'] },
+    { ...base, removed: ['p:0:0:64'] },
     { ...base, terrain: Array.from({ length: 129 }, (_, i) => ({ x: i * 64, y: 0, type: DIRT })) },
   ];
   const chunksBefore = world.chunks.size;
@@ -189,4 +190,47 @@ test('invalid brush arguments are rejected without changing the scene', () => {
   assert.throws(() => scene.erase(0, 0, NaN));
   assert.deepEqual(scene.serialize(), before);
   assert.equal(scene.canUndo, false);
+});
+
+test('dense woods save like the sparse world: late generated ids, and scenes move between them', () => {
+  // With grove trees on, as a later change may ship them.
+  const dense = Object.assign(new World(19, { woodland: 'dense' }), { grove: { ...GROVE, maxTreesPerChunk: 2 } });
+  const scene = new Scenery(dense);
+  // Grove props can take ids past the sparse world's 40.
+  scene.load({ version: 1, seed: 19, terrain: [], props: [], removed: ['p:-3:0:45', 'p:-3:0:63'] });
+  const saved = scene.serialize();
+  assert.deepEqual(saved.removed, ['p:-3:0:45', 'p:-3:0:63']);
+  scene.reset();
+  scene.load(saved);
+  assert.deepEqual(scene.serialize(), saved);
+  assert.throws(() => scene.load({ ...saved, removed: ['p:-3:0:64'] }), /Invalid removed prop/);
+  // Erase a pale cap and a grove tree, save, reset, load.
+  const props = [-4, -3, -2].flatMap((cx) => [-1, 0, 1].flatMap((cy) => dense.propsOf(cx, cy)));
+  const caps = props.find((p) => p.kind === 'pale-caps');
+  assert.ok(caps);
+  scene.reset();
+  scene.erase(caps.x, caps.y, 0.5);
+  const erased = scene.serialize();
+  assert.ok(erased.removed.includes(caps.id));
+  scene.reset();
+  assert.ok(dense.propsOf(...caps.id.split(':').slice(1, 3).map(Number)).some((p) => p.id === caps.id), 'Reset restores it');
+  scene.load(erased);
+  assert.ok(!dense.propsOf(...caps.id.split(':').slice(1, 3).map(Number)).some((p) => p.id === caps.id));
+  // The same save loads in the sparse world, its grove ids simply unknown.
+  const sparse = new Scenery(new World(19));
+  sparse.load(erased);
+  assert.deepEqual(sparse.serialize().removed, erased.removed);
+  const sparseSave = sparse.serialize();
+  scene.load(sparseSave);
+  assert.deepEqual(scene.serialize(), sparseSave);
+});
+
+test('a brush stroke past the edit limits is refused', () => {
+  const { world, scene } = fixture();
+  const { x, y } = world.spawn;
+  for (let i = 0; i < 50_000; i++) world.terrainEdits.set(`f${i}`, DIRT);
+  assert.throws(() => scene.paint(x, y, 2, DIRT), /50000 edited terrain cells/);
+  world.terrainEdits.clear();
+  for (let i = 0; i < 128; i++) world.editChunks.set(`f${i}`, 1);
+  assert.throws(() => scene.paint(x, y, 2, DIRT), /128 edited terrain chunks/);
 });

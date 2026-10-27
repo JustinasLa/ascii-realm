@@ -89,6 +89,7 @@ import { Torches } from './world/torch.js';
 import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from './world/world.js';
+import { guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, sparseWorldUrl, woodlandOptions } from './world/woodland.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 const params = new URLSearchParams(location.search);
@@ -201,8 +202,14 @@ const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
 // Shown above the warrior's head; ?name=... picks another.
 let name = cleanName(params.get('name') || 'Kael');
-const world = new World(seed, { season: params.get('season') ?? undefined, maxChunks: baseChunks,
-  meadow: ruinPreview, spawnRuins: !ruinPreview });
+// ?woodland=dense grows groves and ?flora=1 or 0 picks the wild flowers. Dense
+// woods are this page's own: a page starting in or on its way to a lobby
+// plays the sparse world the lobby shares.
+const session = (() => { try { return sessionStorage; } catch { return null; } })();
+const sessionHas = (key) => { try { return session.getItem(key) !== null; } catch { return false; } };
+const inLobby = params.has('room') || sessionHas('ascii-realm-rejoin') || sessionHas(PENDING_LOBBY);
+const world = new World(seed, { ...woodlandOptions(params, { inLobby }), season: params.get('season') ?? undefined,
+  maxChunks: baseChunks, meadow: ruinPreview, spawnRuins: !ruinPreview });
 // Keep every chunk a zoomed-out view touches, including the tallest trees
 // above and below it, or chunks would be rebuilt every frame.
 fitChunks = () => {
@@ -446,13 +453,14 @@ const remotePlayers = new RemotePlayers();
 const multiplayer = new MultiplayerClient({
   getState: () => playerState(player),
   onJoin: (lobby) => {
-    if (lobby.seed !== seed) {
-      const url = new URL(location.href);
-      url.searchParams.set('seed', lobby.seed);
-      url.searchParams.set('room', lobby.code);
-      if (multiplayer.options?.server) url.searchParams.set('server', multiplayer.options.server);
+    if (needsWorldReload(lobby, seed, world.woodland)) {
+      const url = lobbyWorldUrl(location.href, lobby, multiplayer.options?.server);
       try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
-      multiplayer.leave(false);
+      // A dense page reloads before it connects (below), so it never gets
+      // here; if it ever does, it keeps its seat in the lobby while it
+      // reloads into the sparse world, rather than leaving it.
+      if (world.woodland === 'dense') multiplayer.suspend();
+      else multiplayer.leave(false);
       location.replace(url);
       return;
     }
@@ -468,8 +476,13 @@ const multiplayer = new MultiplayerClient({
 });
 debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
+// Creating or joining a lobby from dense woods reloads into the sparse world
+// first, and the request is made there, so no lobby ever holds a dense page.
+guardLobbyConnect(multiplayer, { dense: world.woodland === 'dense', storage: session,
+  reload: (request) => location.replace(sparseWorldUrl(location.href, request)) });
 // While the creator is open the lobby waits; the last join asked for is made
-// once it closes.
+// once it closes. A dense page's reload waits too, and so does a request
+// resumed after one.
 let deferredJoin = null;
 const connectLobby = multiplayer.connect.bind(multiplayer);
 multiplayer.connect = (options) => { if (creator.isOpen) deferredJoin = options; else connectLobby(options); };
@@ -478,6 +491,7 @@ const renderLobby = bindMultiplayerControls(multiplayer, {
   onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
   onDone: () => canvas.focus({ preventScroll: true }),
 });
+resumePendingLobby(multiplayer, session);
 // Your name colour: what you chose (null for Auto), and how the lobby shows
 // you. Your own nameplate shows it solo too.
 let chosenTint = null;
