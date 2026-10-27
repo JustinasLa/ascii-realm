@@ -154,7 +154,10 @@ short version see the [README](../README.md).
   fletched arrows and a longbow across the back, a short sword on the hip and
   a simulated cloak. Every part is rasterised into glyphs with supersampling:
   outlines follow the silhouette with a moonlit rim, and each material (wool,
-  leather, wood, feather, iron) has its own glyph texture.
+  leather, wood, feather, iron) has its own glyph texture. The active
+  character's [skin](characters.md#skins) colours the clothes and can lower
+  the hood or take off the jerkin or cloak; without one the outlaw looks as
+  described here.
 - **Animation.** The player is a rigged 3D character playing professionally
   animated clips, drawn each frame into a small offscreen image from the
   game's camera angle and converted into shaded, outlined glyphs. Walk and

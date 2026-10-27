@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { cleanSkin, DEFAULT_SKIN, presetSkin } from '../src/character/skin.js';
 import { Player } from '../src/entities/player.js';
 import { Inventory } from '../src/inventory/inventory.js';
 import { CharacterPortrait } from '../src/ui/portrait.js';
@@ -101,4 +102,22 @@ test('portrait dimensions and font can be configured without affecting the game 
   portrait.destroy();
   assert.equal(portrait.update(gearedPlayer().player), false);
   assert.equal(context.cells.length, 0);
+});
+
+test('the portrait wears the player\'s skin and redraws when it changes', () => {
+  const { canvas, context } = canvasFixture();
+  const portrait = new CharacterPortrait(canvas);
+  const { player } = gearedPlayer();
+  assert.equal(portrait.update(player), true);
+  assert.equal(portrait.preview.skin, DEFAULT_SKIN);
+  const plain = context.cells.map((cell) => cell.color).join();
+  assert.equal(portrait.update(player), false, 'nothing changed');
+  player.skin = presetSkin('reaver');
+  assert.equal(portrait.update(player), true);
+  assert.equal(portrait.preview.skin, player.skin);
+  assert.notEqual(context.cells.map((cell) => cell.color).join(), plain);
+  assert.equal(portrait.update(player), false, 'the same skin');
+  player.skin = cleanSkin(player.skin);
+  assert.equal(portrait.update(player), true, 'another skin object redraws');
+  assert.equal(player.skin.hood, 'oxblood', 'the player\'s skin is untouched');
 });

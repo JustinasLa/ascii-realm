@@ -1,4 +1,5 @@
 import { noteReference } from '../audio/instruments.js';
+import { skinKey } from '../character/skin.js';
 import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
 import { itemArt } from './item-art.js';
 import { CharacterPortrait } from './portrait.js';
@@ -504,7 +505,7 @@ export class InventoryScreen {
     const vitals = this.player.vitals;
     const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
       this.inventory.hotbar, this.inventory.capacity, this.selection,
-      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone()]);
+      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), skinKey(this.player.skin)]);
     if (signature === this._signature) return;
     this._signature = signature;
     this.portrait.update(this.player);

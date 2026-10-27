@@ -3,7 +3,9 @@
 ```
 src/
   main.js            game loop and wiring
-  character/         character sheet rules, realm calendar and the saved roster
+  character/         character sheet rules, realm calendar, the saved roster and skins
+                     (skin.js colours both the rigged outlaw, gear.js, and the shape-built
+                     figure, figure.js)
   core/              input, touch controls, pointer aiming, ballistics, hashing, noise
   multiplayer/       lobby client, controls, snapshot validation and interpolation
   editor/            scenery builder controls, scene history and persistence

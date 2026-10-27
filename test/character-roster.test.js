@@ -3,9 +3,12 @@ import test from 'node:test';
 import { DAY } from '../src/character/catalog.js';
 import { ageOn, birthdayFromAge, realmToday } from '../src/character/calendar.js';
 import { blankSheet } from '../src/character/rules.js';
+import { cleanSkin, DEFAULT_SKIN } from '../src/character/skin.js';
 import { cleanRoster, migrate, MIGRATIONS, randomId, Roster, ROSTER_KEY, ROSTER_VERSION } from '../src/character/roster.js';
 
 const START = new Date(2026, 9, 26, 12).getTime();
+// A skin in today's outfit with an orc's olive skin tone.
+const OLIVE = cleanSkin({ tone: 'olive' });
 
 // A localStorage stand-in; `broken` makes reads or writes throw.
 function memory(entries = {}) {
@@ -119,11 +122,11 @@ test('a created character is stored cleaned, with its skin', () => {
   const { roster: r } = roster(memory(), { bypassCooldown: true });
   const draft = r.newDraft();
   draft.sheet = sheet(' O’Brien ', { clues: [' Smells of smoke and iron ', 'Whistles when nervous'] });
-  draft.skin = { preset: 'moss' };
+  draft.skin = { tone: 'olive', preset: 'moss', hood: 'nope' };
   const { character } = r.create(draft);
   assert.equal(character.sheet.name, "O'Brien");
   assert.deepEqual(character.sheet.clues, ['Smells of smoke and iron', 'Whistles when nervous']);
-  assert.deepEqual(character.skin, { preset: 'moss' });
+  assert.deepEqual(character.skin, OLIVE, 'unknown keys dropped, a bad swatch reset');
   const other = r.newDraft();
   other.sheet = sheet('Second');
   other.skin = 'red';
@@ -214,12 +217,14 @@ test('a rename may not take another character’s name', () => {
   assert.equal(r.update('c0002', { name: 'BRYN' }).ok, true);
 });
 
-test('skins are stored as given, or null', () => {
+test('skins are stored cleaned, or null', () => {
   const { roster: r, storage } = roster();
   make(r, 'Kael');
-  assert.deepEqual(r.setSkin('c0001', { tone: 'moss' }), { ok: true });
-  assert.deepEqual(r.active.skin, { tone: 'moss' });
-  assert.deepEqual(storage.saved().characters[0].skin, { tone: 'moss' });
+  assert.deepEqual(r.setSkin('c0001', { tone: 'olive', hair: 'moss' }), { ok: true });
+  assert.deepEqual(r.active.skin, OLIVE);
+  assert.deepEqual(storage.saved().characters[0].skin, OLIVE);
+  r.setSkin('c0001', { tone: 'moss' });
+  assert.deepEqual(r.active.skin, DEFAULT_SKIN, 'moss is no skin tone');
   r.setSkin('c0001', [1]);
   assert.equal(r.active.skin, null);
   assert.deepEqual(r.setSkin('nope', null), { ok: false, reason: 'No such character.' });
@@ -251,15 +256,15 @@ test('changes made while writes fail stick, and the next good write saves them a
   storage.broken.set = true;
   assert.equal(r.update('c0001', { name: 'Kael Two' }).ok, true);
   assert.equal(r.update('c0001', { gender: 'male' }).ok, true);
-  assert.equal(r.setSkin('c0001', { tone: 'ash' }).ok, true);
+  assert.equal(r.setSkin('c0001', { tone: 'olive' }).ok, true);
   assert.equal(r.active.sheet.name, 'Kael Two');
   assert.equal(r.active.sheet.gender, 'male');
-  assert.deepEqual(r.active.skin, { tone: 'ash' });
+  assert.deepEqual(r.active.skin, OLIVE);
   assert.equal(storage.saved().characters[0].sheet.name, 'Kael', 'storage still holds the old copy');
   storage.broken.set = false;
   r.update('c0001', { description: 'A wiry outlaw who never sits with his back to a door.' });
   const kept = storage.saved().characters[0];
-  assert.deepEqual([kept.sheet.name, kept.sheet.gender, kept.skin], ['Kael Two', 'male', { tone: 'ash' }]);
+  assert.deepEqual([kept.sheet.name, kept.sheet.gender, kept.skin], ['Kael Two', 'male', OLIVE]);
   assert.equal(new Roster({ storage }).active.sheet.description, 'A wiry outlaw who never sits with his back to a door.');
 });
 
@@ -297,10 +302,10 @@ test('nothing is written while reads fail, even once writes work', () => {
   storage.map.set(ROSTER_KEY, raw);
   storage.broken.get = true;
   assert.equal(r.update('c0001', { name: 'Kael Two' }).ok, true);
-  assert.equal(r.setSkin('c0001', { tone: 'ash' }).ok, true);
+  assert.equal(r.setSkin('c0001', { tone: 'olive' }).ok, true);
   assert.equal(storage.map.get(ROSTER_KEY), raw, 'the record it could not read is untouched');
   assert.equal(r.saveError, UNSAVED);
-  assert.deepEqual([r.active.sheet.name, r.active.skin], ['Kael Two', { tone: 'ash' }], 'the change is kept for the visit');
+  assert.deepEqual([r.active.sheet.name, r.active.skin], ['Kael Two', OLIVE], 'the change is kept for the visit');
   // Once reads work, the newer record is seen before anything is written.
   storage.broken.get = false;
   assert.deepEqual(r.update('c0001', { gender: 'male' }), { ok: false, reason: NEWER });
@@ -349,10 +354,10 @@ test('of two tabs’ switches the later one stays active, and created times keep
   Object.assign(other, { rev: other.rev + 1, active: 'c0002' });
   storage.map.set(ROSTER_KEY, JSON.stringify(other));
   storage.broken.set = false;
-  assert.equal(r.setSkin('c0001', { tone: 'ash' }).ok, true);
+  assert.equal(r.setSkin('c0001', { tone: 'olive' }).ok, true);
   const kept = storage.saved();
   assert.deepEqual([kept.active, kept.characters[0].createdAt, kept.characters[0].switchedAt, kept.characters[0].skin],
-    ['c0002', clock.now, clock.now, { tone: 'ash' }]);
+    ['c0002', clock.now, clock.now, OLIVE]);
 });
 
 test('another tab saving a newer version’s record is heard as a change', () => {
@@ -384,11 +389,11 @@ test('changes kept while writes fail are laid over what another tab saved meanwh
   storage.map.set(ROSTER_KEY, JSON.stringify(other));
   assert.equal(r.characters[1].sheet.gender, null, 'nothing is taken before the next change');
   storage.broken.set = false;
-  assert.equal(r.setSkin('c0001', { tone: 'ash' }).ok, true);
+  assert.equal(r.setSkin('c0001', { tone: 'olive' }).ok, true);
   const kept = storage.saved();
   assert.equal(kept.rev, 6);
   assert.deepEqual(kept.characters.map((c) => c.sheet.name), ['Kael Two', 'Bryn', 'Ash']);
-  assert.deepEqual([kept.characters[0].skin, kept.characters[1].sheet.gender, kept.active], [{ tone: 'ash' }, 'female', 'c0009']);
+  assert.deepEqual([kept.characters[0].skin, kept.characters[1].sheet.gender, kept.active], [OLIVE, 'female', 'c0009']);
   assert.deepEqual(r.characters, kept.characters);
   assert.equal(r.saveError, null);
 });
@@ -498,7 +503,7 @@ test('cleaning drops broken characters and repairs the rest', () => {
     null, 'x', [], { ...good }, { ...good, id: 'no' }, { ...good, id: 7 },
     { ...good, id: 'c0002', createdAt: -1 }, { ...good, id: 'c0003', createdAt: 1.5 }, { ...good, id: 'c0004', sheet: [] },
     { ...good, id: 'c0005', switchedAt: 'soon', skin: [1], sheet: { ...good.sheet, race: 'troll', description: 'short' } },
-    { ...good, id: 'c0006', skin: { tone: 'ash' } },
+    { ...good, id: 'c0006', skin: { tone: 'olive' } },
     { ...good, id: 'c0007' },
   ] });
   assert.deepEqual(clean.characters.map((c) => c.id), ['c0001', 'c0005', 'c0006']);
@@ -509,7 +514,9 @@ test('cleaning drops broken characters and repairs the rest', () => {
   assert.equal(repaired.skin, null);
   assert.equal(repaired.sheet.race, null);
   assert.equal(repaired.sheet.description, 'short', 'rule breaches are kept');
-  assert.deepEqual(clean.characters[2].skin, { tone: 'ash' });
+  assert.deepEqual(clean.characters[2].skin, OLIVE);
+  const stored = cleanRoster({ v: 1, characters: [{ ...good, skin: { tone: 'fern', layers: { hood: 'no' }, extra: 1 } }] });
+  assert.deepEqual(stored.characters[0].skin, cleanSkin({ tone: 'fern' }), 'a stored skin is repaired on read');
   assert.equal(cleanRoster({ v: 1, active: 'c0005', characters: clean.characters }).active, 'c0005');
   assert.deepEqual(cleanRoster(undefined), { v: 1, rev: 0, active: null, characters: [] });
   assert.equal(cleanRoster({ rev: -3 }).rev, 0);

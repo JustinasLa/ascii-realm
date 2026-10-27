@@ -1,3 +1,4 @@
+import { DEFAULT_SKIN } from '../character/skin.js';
 import { currentAt, easeCarry, immersion, settleBump } from '../world/rivers.js';
 import { ASPECT, MAX_WATER_DEPTH } from '../world/world.js';
 import { Cape } from './cape.js';
@@ -80,6 +81,9 @@ export class Player {
     this.runV = 0;
     this.time = 0;
     this.cape = new Cape();
+    // The character's skin: the outfit's colours and which outer layers are
+    // worn. Friends and new players wear today's outlaw.
+    this.skin = DEFAULT_SKIN;
     // Ground speeds in metres per second; a 3D character sets these to suit
     // its animation clips.
     this.walkSpeed = WALK_SPEED;
@@ -276,6 +280,7 @@ export class Player {
       modelTrail: this.modelTrail,
       walkSpeed: this.walkSpeed,
       runSpeed: this.runSpeed,
+      skin: this.skin,
       time: this.time,
       torchOut: this.torchOut,
       vitals: this.vitals,

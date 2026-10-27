@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { cleanSkin, presetSkin } from '../src/character/skin.js';
 import { Inventory } from '../src/inventory/inventory.js';
 import { ITEMS } from '../src/inventory/items.js';
 import { itemArt } from '../src/ui/item-art.js';
@@ -774,6 +775,21 @@ test('update redraws only when the inventory, selection or vitality changes', (t
   screen.update();
   assert.equal(draws, 3);
   assert.equal(screen.useButton.disabled, true);
+});
+
+test('a new skin while the bag is open repaints the portrait', (t) => {
+  const { screen, player, press } = mount(t);
+  let draws = 0;
+  const draw = screen.portrait.update.bind(screen.portrait);
+  screen.portrait.update = (subject) => { draws++; return draw(subject); };
+  press('KeyI');
+  assert.equal(draws, 1);
+  player.skin = presetSkin('drover');
+  screen.update();
+  assert.equal(draws, 2);
+  player.skin = cleanSkin(player.skin);
+  screen.update();
+  assert.equal(draws, 2, 'an equal skin is no change');
 });
 
 test('details describe the selected item, its stats, weight, durability and quick slot', (t) => {
