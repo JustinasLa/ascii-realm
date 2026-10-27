@@ -195,11 +195,12 @@ short version see the [README](../README.md).
   impact), a lunging thrust from a sprint, a plunging strike from the air and
   a charged spinning slash, all with glowing swing trails. Footsteps kick up
   dust and grass and leave prints in dirt and sand.
-- **Nameplate.** The outlaw's name floats above the hood; add `?name=...` to
-  the URL to choose it. Its colour is your name colour (see Multiplayer).
+- **Nameplate.** The active character's name floats above the hood (Kael with
+  no character; `?name=...` shows another for testing). Its colour is your
+  name colour (see Multiplayer).
 - **Atmosphere.** Fireflies, a vignette, and zoom.
 - **Status frames and quick slots.** A party-style frame in the top-left
-  corner shows the outlaw's name, segmented HP and MP bars and the satchel's weight.
+  corner shows the character's name, segmented HP and MP bars and the satchel's weight.
   Nine quick slots sit along the bottom. Running and sword strikes have no stamina cost.
 - **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
   equipment view drawn with the outlaw's own glyphs, item details, 24 bag slots
@@ -361,5 +362,7 @@ short version see the [README](../README.md).
 - **Nameplates** float over the scene on a dark backdrop of their own, so fog
   and the darker screen edges never wash a name out. A player by the edge of
   the screen keeps their whole nameplate inside it, clear of a phone's notch;
-  a name too long for the screen is cut short with `…`, never its number. A
-  nearer player's nameplate stands over a farther one's.
+  a name too long for the screen is cut short with `…`, never its number and
+  never inside a letter. Plates are as wide as their text measures, so names
+  in any alphabet, with wide letters or marks, stay centred. A nearer
+  player's nameplate stands over a farther one's.

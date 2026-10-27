@@ -42,14 +42,3 @@ test('without ?debug there is no game object, and play starts as before', async 
   const loaded = await loadGame(undefined, { href: 'http://localhost/' });
   assert.equal(loaded.game, undefined);
 });
-
-test('the shown name stays Kael even with a saved character', async () => {
-  const character = { id: 'c0001', createdAt: 1, switchedAt: null, sheet: { name: 'Zoë' }, skin: null };
-  const storage = memory({ [ROSTER_KEY]: JSON.stringify({ v: 1, rev: 1, active: 'c0001', characters: [character] }) });
-  const { game } = await loadGame(undefined, { real: { localStorage: storage } });
-  assert.equal(game.characters.active.sheet.name, 'Zoë');
-  assert.equal(game.inventoryScreen.name, 'Kael');
-  assert.deepEqual(storage.writes, []);
-  const harness = await loadGame();
-  assert.equal(harness.game.characters.storage, null, 'no localStorage in the harness');
-});

@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import { WebSocket } from 'ws';
 import { Player } from '../src/entities/player.js';
-import { MAX_PLAYERS, playerState, PROTOCOL_VERSION } from '../src/multiplayer/protocol.js';
+import { displayName, MAX_PLAYERS, playerState, PROTOCOL_VERSION, readMembers } from '../src/multiplayer/protocol.js';
 import { create, join, peer, setup } from './helpers/lobby.js';
 
 test('friends join by code with the same seed and receive movement, jumps and sword poses', async (t) => {
@@ -130,6 +130,36 @@ test('malformed names cannot crash lobby creation or joining', async (t) => {
   const next = await join(port, host.lobby.code, 'Rowan');
   assert.equal(next.lobby.self.name, 'Rowan');
   assert.equal(next.lobby.players.length, 3);
+});
+
+test('names in any alphabet join, keep their letters and are told apart by tags', async (t) => {
+  const { port } = await setup(t);
+  const host = await create(port, 42, 'Žydrūnas');
+  assert.equal(host.lobby.self.name, 'Žydrūnas');
+  const anna = await join(port, host.lobby.code, 'Анна');
+  const twin = await join(port, host.lobby.code, 'анна');
+  assert.deepEqual([anna.lobby.self.tag, twin.lobby.self.tag], [null, 2], 'the same name in another case');
+  twin.client.send({ type: 'chat', channel: 'ooc', text: 'good evening' });
+  const heard = await host.client.next('chat');
+  assert.deepEqual([heard.name, heard.tag], ['анна', 2]);
+  assert.equal((await join(port, host.lobby.code, 'Ash2')).lobby.self.name, 'Wanderer', 'the sheet\'s rule');
+});
+
+test('names round-trip from the join to every receiver, tags and all', async (t) => {
+  const { port } = await setup(t);
+  const host = await create(port, 42, 'Ash');
+  await join(port, host.lobby.code, 'Ash');
+  const last = await join(port, host.lobby.code, 'A\u030asa-Li\u0302n');
+  const members = readMembers(last.lobby.players);
+  assert.deepEqual(members.map((member) => [member.name, member.tag]), [['Ash', null], ['Ash', 2], ['Åsa-Lîn', null]]);
+  assert.deepEqual(members.map(displayName), ['Ash', 'Ash (2)', 'Åsa-Lîn']);
+});
+
+test('a page on the old protocol is told to refresh', async (t) => {
+  const { port } = await setup(t);
+  const old = await peer(port);
+  old.send({ type: 'create', version: 4, seed: 42, name: 'Ash' });
+  assert.match((await old.next('error')).message, /Refresh the game/);
 });
 
 test('invalid state cannot corrupt a room or impersonate another player', async (t) => {

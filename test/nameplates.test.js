@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { graphemes } from '../src/character/rules.js';
 import { fitName, NAMEPLATES, Nameplates } from '../src/ui/nameplates.js';
 import { NAMEPLATE_BACKDROP } from '../src/multiplayer/tint.js';
 import { byClass, installDocument } from './helpers/dom.js';
@@ -16,12 +17,14 @@ const projection = {
 };
 
 const noInsets = () => ({ left: 0, right: 0 });
+// Text measured as letters `px` wide each.
+const letters = (px) => (text) => graphemes(text).length * px;
 
 function setup(t) {
   const document = installDocument(t);
   const root = document.createElement('div');
   document.body.append(root);
-  return { root, nameplates: new Nameplates({ doc: document, root, insets: noInsets }) };
+  return { root, nameplates: new Nameplates({ doc: document, root, insets: noInsets, measureText: letters(40) }) };
 }
 
 const ash = { key: 'self', x: 130, row: 60, depth: 64, name: 'Ash', tag: null, colour: [146, 198, 235] };
@@ -74,7 +77,7 @@ test('letters stand a cell apart, as the scene spaces them, measured once per si
   const root = document.createElement('div');
   document.body.append(root);
   const widths = [];
-  const nameplates = new Nameplates({ doc: document, root, insets: noInsets,
+  const nameplates = new Nameplates({ doc: document, root, insets: noInsets, measureText: letters(6),
     measure: () => { widths.push(root.style.fontSize); return 5.2; } });
   nameplates.update([ash], projection);
   nameplates.update([ash], projection);
@@ -103,10 +106,60 @@ test('without a projection no name shows, and a zoom resizes every name', (t) =>
 });
 
 test('a name too long for the room is cut short with an ellipsis, never its tag', () => {
-  assert.equal(fitName('Ash', ' (2)', 7), 'Ash', 'fits exactly');
-  assert.equal(fitName('Ashley', ' (2)', 7), 'As\u2026');
-  assert.equal(fitName('Ashley', '', 4), 'Ash\u2026', 'no tag: all the room for the name');
-  assert.equal(fitName('Ashley', ' (12)', 3), '\u2026', 'only the ellipsis when no letter fits');
+  const width = letters(6);
+  assert.equal(fitName('Ash', ' (2)', 42, width), 'Ash', 'fits exactly');
+  assert.equal(fitName('Ashley', ' (2)', 42, width), 'As\u2026');
+  assert.equal(fitName('Ashley', '', 24, width), 'Ash\u2026', 'no tag: all the room for the name');
+  assert.equal(fitName('Ashley', ' (12)', 18, width), '\u2026', 'only the ellipsis when no letter fits');
+});
+
+test('names are cut by whole letters, never inside an accent or an emoji', () => {
+  const width = letters(6);
+  const marked = 'Ame\u0301lie';
+  assert.equal(fitName(marked, '', 24, width), 'Ame\u0301\u2026', 'the accent stays on its letter');
+  const family = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}';
+  assert.equal(fitName(`Al${family}xyz`, ' (2)', 48, width), `Al${family}\u2026`);
+  // CJK letters twice as wide as Latin ones fit half as many.
+  const wide = (text) => [...text].reduce((sum, c) => sum + (/\p{Script=Han}/u.test(c) ? 12 : 6), 0);
+  assert.equal(fitName('李小龍李小龍', '', 42, wide), '李小龍\u2026');
+});
+
+test('a plate is centred on its measured width, measured once per text and size', (t) => {
+  const document = installDocument(t);
+  const root = document.createElement('div');
+  document.body.append(root);
+  const measured = [];
+  const wide = (text) => { measured.push(text); return [...text].reduce((sum, c) => sum + (/\p{Script=Han}/u.test(c) ? 12 : 6), 0); };
+  const nameplates = new Nameplates({ doc: document, root, insets: noInsets, measure: () => 6, measureText: wide });
+  const plate = { ...ash, x: 101, name: '李小龍' };
+  nameplates.update([plate], projection);
+  const [node] = byClass(root, 'nameplate');
+  // 36 px of letters and 6 px of padding, held 4 px inside the left edge.
+  assert.match(node.style.transform, /^translate\(25\.0px,/);
+  assert.deepEqual(measured, ['李小龍']);
+  nameplates.update([plate], projection);
+  assert.deepEqual(measured, ['李小龍'], 'from the cache');
+  const zoomed = { project: (x, y) => ({ ...projection.project(x, y), y: (y - 50) * 7.3 }) };
+  nameplates.update([plate], zoomed);
+  assert.deepEqual(measured, ['李小龍', '李小龍'], 'a new font size measures again');
+  // The page's own probe: a hidden plate in the layer, padded nothing, gone after.
+  const probing = new Nameplates({ doc: document, root, insets: noInsets });
+  assert.equal(probing.probeText('Ash'), 800);
+  assert.equal(root.children.filter((child) => child.classList.contains('nameplate-text-probe')).length, 0);
+  assert.match(css, /^\.nameplate-text-probe \{ visibility: hidden; padding: 0; \}/m);
+});
+
+test('every plate is measured before the frame writes any', (t) => {
+  const document = installDocument(t);
+  const root = document.createElement('div');
+  document.body.append(root);
+  const log = [];
+  const append = root.append.bind(root);
+  root.append = (...nodes) => { log.push('write'); append(...nodes); };
+  const nameplates = new Nameplates({ doc: document, root, insets: noInsets, measure: () => 6,
+    measureText: (text) => { log.push('measure'); return letters(6)(text); } });
+  nameplates.update([ash, { ...ash, key: 'b', name: 'Bryn' }], projection);
+  assert.deepEqual(log, ['measure', 'measure', 'write', 'write']);
 });
 
 // A window whose safe-area insets the test sets, read the way the page reads
@@ -139,7 +192,7 @@ function edgeSetup(t) {
   root.getBoundingClientRect = () => root.rect;
   const win = fakeWindow();
   let time = 1000;
-  const nameplates = new Nameplates({ doc: document, win, root, now: () => time, measure: () => 6 });
+  const nameplates = new Nameplates({ doc: document, win, root, now: () => time, measure: () => 6, measureText: letters(6) });
   // The plate's left and right edges in CSS px, from its centre and its
   // letters (a cell each) and padding (a quarter of the 12 px font a side).
   const edges = (node) => {
@@ -220,7 +273,7 @@ test('without a window nothing listens for turns, and the layer box is still rea
   const document = installDocument(t);
   const root = document.createElement('div');
   document.body.append(root);
-  const nameplates = new Nameplates({ doc: document, root, insets: noInsets, measure: () => 6 });
+  const nameplates = new Nameplates({ doc: document, root, insets: noInsets, measure: () => 6, measureText: letters(6) });
   nameplates.update([twin(199.5)], projection);
   assert.equal(nameplates.box.width, 800, 'the layer\'s own width');
   assert.equal(nameplates.settleUntil, -Infinity);

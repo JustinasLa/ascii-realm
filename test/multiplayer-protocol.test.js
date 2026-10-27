@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
 import { INSTRUMENT_IDS } from '../src/audio/instruments.js';
 import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, NOTE_SLACK, NOTE_WINDOW_MS,
-  NOTES_PER_SECOND, playerState, RateBudget, readMembers, readNote, readPlayerState, RollingLimit,
+  NOTES_PER_SECOND, playerState, PROTOCOL_VERSION, RateBudget, readMembers, readName, readNote, readPlayerState, RollingLimit,
   validCode } from '../src/multiplayer/protocol.js';
 import { blendState, RemotePlayers } from '../src/multiplayer/remote-players.js';
 
@@ -42,11 +42,31 @@ test('lobby codes, names and seeds normalize consistently', () => {
   for (const code of ['', 'ABC', 'ABC DEF', 'ABC1234', undefined]) assert.equal(validCode(code), false);
   assert.equal(cleanName('  Kael\n\x00  '), 'Kael');
   assert.equal(cleanName(''), 'Wanderer');
-  assert.equal(cleanName('a'.repeat(100)).length, 24);
   assert.equal(cleanSeed(0), 0);
   assert.equal(cleanSeed(-12), -12);
   assert.equal(cleanSeed(Infinity), 1);
   assert.equal(cleanSeed(1.5), 1);
+});
+
+test('a joining name follows the sheet\'s rule: 3 to 24 letters in any alphabet', () => {
+  assert.equal(PROTOCOL_VERSION, 5);
+  assert.equal(cleanName('Kael'), 'Kael');
+  assert.equal(cleanName('Zoe\u0308'), 'Zo\u00eb', 'composed');
+  for (const name of ['Анна-Мария', 'Ἀθηνᾶ', '李小龍', 'Žydrūnas']) assert.equal(cleanName(name), name);
+  assert.equal(cleanName('O\u2019Neil'), "O'Neil", 'a curly apostrophe made straight');
+  assert.equal(cleanName('Ka\u202eel\u200b'), 'Kael', 'format characters dropped');
+  for (const name of ['Ash2', 'Al', 'a'.repeat(25), 'a'.repeat(97), '<b>Ash</b>']) assert.equal(cleanName(name), 'Wanderer');
+});
+
+test('a received name is kept as sent while it is safe to show', () => {
+  for (const name of ['Ash2', 'Al', '李小龍', 'e\u0301'.repeat(24)]) assert.equal(readName(name), name);
+  for (const name of ['', 'Ka\nel', 'Ka\u202eel', 'a'.repeat(25), 'e\u0301'.repeat(49), 42, null]) {
+    assert.equal(readName(name), 'Wanderer');
+  }
+  const state = playerState(new Player(0, 0));
+  const [member] = readMembers([{ id: 'ab', name: 'Ash2', tag: 2, color: 1, state }]);
+  assert.deepEqual([member.name, member.tag, displayName(member)], ['Ash2', 2, 'Ash2 (2)'], 'the join rule isn\'t applied again');
+  assert.equal(readMembers([{ id: 'ab', name: 'Ash\u0000', color: 1, state }])[0].name, 'Wanderer');
 });
 
 test('non-string names use the default without coercing untrusted values', () => {

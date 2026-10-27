@@ -20,7 +20,7 @@ class El extends EventTarget {
   click() { this.dispatchEvent(new Event('click')); }
 }
 
-const IDS = ['multiplayer-controls', 'multiplayer-summary', 'lobby-form', 'lobby-name', 'lobby-code', 'lobby-server',
+const IDS = ['multiplayer-controls', 'multiplayer-summary', 'lobby-form', 'lobby-as', 'lobby-code', 'lobby-server',
   'lobby-create', 'lobby-join', 'lobby-leave', 'multiplayer-status', 'lobby-session', 'lobby-room-code', 'lobby-players',
   'lobby-copy-code', 'lobby-copy-invite', 'lobby-share'];
 
@@ -40,13 +40,14 @@ function globals(t, { local, session, clipboard }) {
   });
 }
 
-function mount(t, { search = '', stored = null, rejoin = null, clipboard, storageThrows = false } = {}) {
+function mount(t, { search = '', stored = null, rejoin = null, clipboard, storageThrows = false, name = 'Kael' } = {}) {
   const ids = Object.fromEntries(IDS.map((id) => [id, new El(id === 'lobby-players' ? 'ul' : 'div')]));
   const doc = { getElementById: (id) => ids[id], createElement: (tag) => new El(tag) };
   const items = new Map(stored ? [['ascii-realm-name', stored]] : []);
   const blocked = () => { throw new Error('blocked'); };
+  const writes = [];
   const local = storageThrows ? { getItem: blocked, setItem: blocked }
-    : { getItem: (key) => items.get(key) ?? null, setItem: (key, value) => items.set(key, value) };
+    : { getItem: (key) => items.get(key) ?? null, setItem: (key, value) => { writes.push(key); items.set(key, value); } };
   const sessionItems = new Map(rejoin ? [['ascii-realm-rejoin', rejoin]] : []);
   const session = storageThrows ? { getItem: blocked } : {
     getItem: (key) => sessionItems.get(key) ?? null, removeItem: (key) => sessionItems.delete(key) };
@@ -59,33 +60,42 @@ function mount(t, { search = '', stored = null, rejoin = null, clipboard, storag
     connects: [], leaves: 0,
     connect(options) { this.connects.push(options); this.options = options; },
     leave() { this.leaves++; } };
-  const names = [];
   let done = 0;
-  const render = bindMultiplayerControls(client, { name: 'Kael', seed: () => 7, onName: (value) => names.push(value),
+  // The active character's name, which the test may change.
+  const shown = { name };
+  const render = bindMultiplayerControls(client, { name: () => shown.name, seed: () => 7,
     onDone: () => { done++; }, document: doc, location: loc, history: navigation });
-  return { ids, client, render, names, items, sessionItems, copied, urls, loc, done: () => done };
+  return { ids, client, render, shown, items, writes, sessionItems, copied, urls, loc, done: () => done };
 }
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-test('the form starts from the address, then the kept name, then the default', (t) => {
-  let page = mount(t, { stored: 'Bryn' });
-  assert.equal(page.ids['lobby-name'].value, 'Bryn');
-  assert.deepEqual(page.names, ['Bryn']);
+test('the panel has no name field: you join as the active character', (t) => {
+  const page = mount(t, { stored: 'Bryn', name: 'Žydrūnas' });
+  assert.equal(page.ids['lobby-name'], undefined);
+  assert.equal(page.ids['lobby-as'].textContent, 'You join as Žydrūnas.');
   assert.equal(page.ids['multiplayer-controls'].open, false);
   assert.equal(page.ids['multiplayer-summary'].textContent, 'Multiplayer · Solo');
   assert.deepEqual(page.client.connects, []);
-  page = mount(t, { search: '?name=Ash', stored: 'Bryn' });
-  assert.equal(page.ids['lobby-name'].value, 'Ash');
-  page = mount(t, { storageThrows: true });
-  assert.equal(page.ids['lobby-name'].value, 'Kael', 'blocked storage is no error');
+  // A rename or a switch shows at the next render, and goes with the next join.
+  page.shown.name = 'Анна';
+  page.render();
+  assert.equal(page.ids['lobby-as'].textContent, 'You join as Анна.');
+  page.ids['lobby-create'].click();
+  assert.equal(page.client.connects.at(-1).name, 'Анна');
+  Object.assign(page.client, { status: 'online', room: { code: 'ABC234', maxPlayers: 8 } });
+  page.render();
+  assert.equal(page.ids['lobby-as'].textContent,
+    'You join as Анна. A new name or character shows here when you next join.');
+  assert.deepEqual(page.writes, [], 'the old lobby name is never written');
+  assert.equal(page.items.get('ascii-realm-name'), 'Bryn');
 });
 
 test('an invite joins at once, unless it names its own lobby server', (t) => {
   let page = mount(t, { search: '?room=abc234&name=Ash' });
   assert.equal(page.ids['multiplayer-controls'].open, true);
-  assert.deepEqual(page.client.connects, [{ mode: 'join', name: 'Ash', seed: 7, code: 'ABC234', server: '' }]);
-  assert.equal(page.items.get('ascii-realm-name'), 'Ash');
+  assert.deepEqual(page.client.connects, [{ mode: 'join', name: 'Kael', seed: 7, code: 'ABC234', server: '' }]);
+  assert.deepEqual(page.writes, []);
   page = mount(t, { search: '?room=ABC234&server=wss://lobby.example' });
   assert.deepEqual(page.client.connects, []);
   assert.equal(page.ids['multiplayer-status'].textContent,
@@ -100,10 +110,8 @@ test('an invite joins at once, unless it names its own lobby server', (t) => {
 test('Create, Join, typing a code and Leave drive the client', (t) => {
   const page = mount(t);
   const { ids, client } = page;
-  ids['lobby-name'].value = '  Ash\n';
   ids['lobby-create'].click();
-  assert.deepEqual(client.connects.at(-1), { mode: 'create', name: 'Ash', seed: 7, code: '', server: '' });
-  assert.equal(ids['lobby-name'].value, 'Ash');
+  assert.deepEqual(client.connects.at(-1), { mode: 'create', name: 'Kael', seed: 7, code: '', server: '' });
   assert.equal(ids['lobby-create'].blurred, 1);
   assert.equal(page.done(), 1);
   ids['lobby-code'].value = 'abc234';

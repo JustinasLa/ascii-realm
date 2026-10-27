@@ -8,15 +8,21 @@ npm start
 # then open http://localhost:8000
 ```
 
-Open **Multiplayer**, enter your name and click **Create lobby**. Share the code
+Open **Multiplayer** and click **Create lobby**; you join as your active
+character, under its name (see [Characters](characters.md)). Share the code
 shown in the panel. Friends open the same website, enter the code and click
 **Join lobby**. **Copy invite** shares a link that joins that lobby. Joining a
 lobby on another world seed reloads the page into that world. **Leave lobby**
 returns to solo exploration. In a lobby, `Enter` opens the chat.
 
-Lobby servers and pages must speak the same protocol version (4); after an
+Lobby servers and pages must speak the same protocol version (5); after an
 update, a page left open from an older version is asked to refresh before it
-can join.
+can join. Deploy a new lobby server and the page together.
+
+Add `?name=Ash` to show another name for this visit only, for testing: the
+HUD, the nameplate, the inventory and lobby joins use it, and the saved
+character keeps its own. It must follow the sheet's name rule, or it is
+ignored.
 
 **Name colour**, in the same panel, picks the colour your name shows in. Add
 `?tint=ff5555` (a hex colour) or `?tint=dark_aqua` (a named colour's id) to the

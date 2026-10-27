@@ -10,6 +10,7 @@ import { HuntDrops } from '../../src/entities/hunt-drops.js';
 import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/loot.js';
 import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
+import { nameError, normalName } from '../../src/character/rules.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
 import { sampleDraft, wantsCreator } from '../../src/character/creation.js';
 import { hidesPreview } from '../../src/ui/creator.js';
@@ -244,8 +245,24 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     isControlTarget: () => false,
     clearInput: () => { taps.clear(); held.clear(); }, isGameplayBlocked: () => blocked,
     setGameplayBlocked: value => { blocked = value; taps.clear(); held.clear(); },
-    Inventory, ITEMS, INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer, InstrumentKeys, MusicNotes, Hud: inert(),
-    InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
+    Inventory, ITEMS, INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer, InstrumentKeys, MusicNotes,
+    // The HUD and the inventory record the names and pages they are given;
+    // the real ones are tested on their own.
+    Hud: class extends inert() {
+      constructor(options) { super(); this.name = options.name; }
+      setName(name) { this.name = name; }
+    },
+    InventoryScreen: class extends inert() {
+      constructor(options) { super(); Object.assign(this, options); this.opened = []; }
+      setName(name) { this.name = name; }
+      setOpen(open, page) { this.opened.push([open, page]); }
+    },
+    // The character pages count their renders.
+    CharacterPages: class {
+      constructor(options) { Object.assign(this, options); this.sheet = {}; this.renders = 0; }
+      render() { this.renders++; }
+    },
+    nameError, normalName,
     GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }

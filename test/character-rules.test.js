@@ -4,8 +4,8 @@ import { DAY, RACES } from '../src/character/catalog.js';
 import { ageOn, birthdayFromAge, realmToday } from '../src/character/calendar.js';
 import { ageError, ageOf, attributeCost, attributesError, attributesSpent, attributeTotals, birthdayError, blankSheet,
   canChange, classError, cleanSheet, cluesError, cluesNeeded, descriptionError, fieldError, genderError, lockEndsAt,
-  clusterCount, nameError, nameKey, normalName, raceError, setAge, setBirthday, sheetErrors, stepError, STEPS,
-  textLength } from '../src/character/rules.js';
+  clipText, clusterCount, graphemes, nameError, nameKey, normalName, raceError, setAge, setBirthday, sheetErrors,
+  stepError, STEPS, textLength } from '../src/character/rules.js';
 
 const NOW = new Date(2026, 9, 26, 12).getTime();
 const TODAY = realmToday(NOW);
@@ -92,6 +92,30 @@ test('without Intl.Segmenter, letters are counted the same', () => {
   assert.deepEqual(withSegmenter[0], CLUSTERS.map(([, letters]) => [letters, letters]));
   assert.deepEqual(CLUSTERS.map(([text]) => [...segments.segment(text)].length), CLUSTERS.map(([, letters]) => letters));
   assert.deepEqual(without[1], [null, 'Name cannot exceed 24 characters.', 'Name must be at least 3 characters.', null]);
+});
+
+test('text splits into whole letters and clips without splitting one, with or without Intl.Segmenter', () => {
+  const split = () => [
+    graphemes('Ame\u0301lie'), graphemes('a👩\u200D👩\u200D👧b'), graphemes('🇳🇱🇱🇹'), graphemes('ᄀ\u1161\u11A8가'),
+    graphemes('क्षत्रिय'), clipText('e\u0301'.repeat(25), 24), clipText(42, 1),
+  ];
+  const withSegmenter = split();
+  const segmenter = Intl.Segmenter;
+  delete Intl.Segmenter;
+  let without;
+  try {
+    without = split();
+  } finally {
+    Intl.Segmenter = segmenter;
+  }
+  assert.deepEqual(without, withSegmenter);
+  assert.deepEqual(withSegmenter, [['A', 'm', 'e\u0301', 'l', 'i', 'e'], ['a', '👩\u200D👩\u200D👧', 'b'], ['🇳🇱', '🇱🇹'],
+    ['ᄀ\u1161\u11A8', '가'], ['क्ष', 'त्रि', 'य'], 'e\u0301'.repeat(24), '4']);
+  // Every cluster of the counting cases rejoins into the text.
+  for (const [text, letters] of CLUSTERS) {
+    assert.equal(graphemes(text).length, letters, text);
+    assert.equal(graphemes(text).join(''), text);
+  }
 });
 
 test('without Intl.Segmenter, long runs of marks are counted in one pass', () => {

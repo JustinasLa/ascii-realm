@@ -1,9 +1,10 @@
 import { isInstrumentNote } from '../audio/instruments.js';
+import { nameError, normalName, textLength } from '../character/rules.js';
 import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
 import { parseTint } from './tint.js';
 
 export { PLAYER_COLORS } from './tint.js';
-export const PROTOCOL_VERSION = 4;
+export const PROTOCOL_VERSION = 5;
 export const MAX_PLAYERS = 8;
 export const UPDATE_MS = 50;
 // A player plays at most NOTES_PER_SECOND notes in any rolling window of
@@ -93,8 +94,26 @@ const POSE_RANGES = { twist: [-4, 4], lean: [-2, 2], crouch: [0, 2], off: [0, 1]
 const finite = (value, [min, max]) => typeof value === 'number' && Number.isFinite(value)
   ? Math.max(min, Math.min(max, value)) : null;
 
+// Longer input is refused before any work on it.
+const MAX_NAME_UNITS = 96;
+const UNSAFE = /[\p{Cc}\p{Cf}\u2028\u2029]/gu;
+
+// A name as a player joins with it: the character sheet's rule, 3 to 24
+// letters in any alphabet, after control characters are dropped. Anything
+// else joins as Wanderer.
 export function cleanName(value) {
-  return (typeof value === 'string' ? value : '').replace(/[^\x20-\x7e]/g, '').trim().slice(0, 24) || 'Wanderer';
+  if (typeof value !== 'string' || value.length > MAX_NAME_UNITS) return 'Wanderer';
+  const name = normalName(value.replace(UNSAFE, ''));
+  return nameError(name) ? 'Wanderer' : name;
+}
+
+// A name as the server sent it, kept as it is when it is safe to show: no
+// control or format characters and 1 to 24 letters. The join rule isn't
+// applied again, so the tags the server gave stay right.
+export function readName(value) {
+  if (typeof value !== 'string' || value.length > MAX_NAME_UNITS || value.match(UNSAFE)) return 'Wanderer';
+  const length = textLength(value);
+  return length >= 1 && length <= 24 ? value : 'Wanderer';
 }
 
 // The server numbers players who share a name, by join order: Ash, Ash (2),
@@ -161,7 +180,7 @@ export function readMembers(raw) {
     const state = readPlayerState(member.state);
     if (!state) continue;
     const color = Number.isInteger(member.color) && member.color >= 0 && member.color < MAX_PLAYERS ? member.color : 0;
-    members.push({ id: member.id, name: cleanName(typeof member.name === 'string' ? member.name : ''),
+    members.push({ id: member.id, name: readName(member.name),
       tag: cleanTag(member.tag), color, tint: parseTint(member.tint), state });
   }
   return members;

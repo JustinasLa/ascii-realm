@@ -213,6 +213,8 @@ function installBrowser(t, { canvas = true, hud = true } = {}) {
 function mount(t, { inventory = new Inventory(), browser = {}, beforeMount, ...options } = {}) {
   const env = installBrowser(t, browser);
   beforeMount?.(env);
+  // Pages are built on the page's document.
+  if (typeof options.pages === 'function') options.pages = options.pages(env);
   const player = {
     equipment: inventory.equipment,
     vitals: { health: 50, maxHealth: 100, stamina: 100, maxStamina: 100 },
@@ -984,4 +986,133 @@ test('an instrument lists its keys under the description, and phones say why the
   assert.equal(screen.itemPreview.textContent, itemArt('flute', ITEMS.flute.glyph));
   bagButton(3).click();
   assert.equal(screen.notes.hidden, true, 'an empty slot plays nothing');
+});
+
+// The inventory with the Character page, holding a button, as a second tab.
+function withCharacterPage(t) {
+  const shows = [];
+  let node;
+  const env = mount(t, { inventory: new Inventory({ starter: true }), pages: ({ document }) => {
+    node = document.createElement('section');
+    const edit = document.createElement('button');
+    edit.className = 'page-button';
+    node.append(edit);
+    return [{ id: 'character', label: 'Character', node, onShow: () => shows.push('character') }];
+  } });
+  return { ...env, node, shows, tabs: env.screen.pages.map((page) => page.tab) };
+}
+
+test('without extra pages there is no tab row', (t) => {
+  const { screen } = mount(t);
+  const [tabs] = screen.screen.querySelectorAll('.inventory-tabs');
+  assert.equal(tabs.hidden, true);
+  assert.equal(screen.page, 'inventory');
+});
+
+test('the pages are tabs: roles, names, the chosen one and the panels they control', (t) => {
+  const { screen, node, tabs } = withCharacterPage(t);
+  const [list] = screen.screen.querySelectorAll('.inventory-tabs');
+  assert.equal(list.hidden, false);
+  assert.deepEqual([list.getAttribute('role'), list.getAttribute('aria-label')], ['tablist', 'Pages']);
+  assert.deepEqual(tabs.map((tab) => [tab.textContent, tab.getAttribute('role'), tab.getAttribute('aria-controls'),
+    tab.getAttribute('aria-selected'), tab.tabIndex]),
+  [['Inventory', 'tab', 'inventory-page-inventory', 'true', 0], ['Character', 'tab', 'inventory-page-character', 'false', -1]]);
+  const [body] = screen.screen.querySelectorAll('.inventory-body');
+  for (const [panel, tab] of [[body, tabs[0]], [node, tabs[1]]]) {
+    assert.deepEqual([panel.id, panel.getAttribute('role'), panel.getAttribute('aria-labelledby')],
+      [tab.getAttribute('aria-controls'), 'tabpanel', tab.id]);
+  }
+  assert.equal(node.hidden, true);
+  assert.equal(screen.nameNode.getAttribute('dir'), 'auto');
+});
+
+test('the inventory opens on a page, turns to another while open, and shows each', (t) => {
+  const { screen, node, tabs, shows, document } = withCharacterPage(t);
+  const [body] = screen.screen.querySelectorAll('.inventory-body');
+  const [help] = screen.screen.querySelectorAll('.inventory-help');
+  screen.setOpen(true, 'character');
+  assert.equal(screen.isOpen, true);
+  assert.deepEqual([node.hidden, body.hidden, help.hidden], [false, true, true]);
+  assert.equal(document.activeElement, tabs[1], 'focus on the page\'s tab');
+  assert.deepEqual(shows, ['character']);
+  assert.ok(tabs[1].classList.contains('selected'));
+  screen.setOpen(true);
+  assert.deepEqual([node.hidden, body.hidden, help.hidden], [true, false, false]);
+  assert.equal(document.activeElement, tabs[0]);
+  screen.setOpen(true, 'nowhere');
+  assert.equal(screen.page, 'inventory', 'an unknown page changes nothing');
+  screen.setOpen(false);
+  screen.toggle();
+  assert.equal(screen.page, 'inventory', 'I, Tab and the phone menu open the bag');
+  assert.equal(document.activeElement, screen._selectedButton());
+  tabs[1].click();
+  assert.equal(screen.page, 'character');
+  assert.deepEqual(shows, ['character', 'character']);
+});
+
+test('C turns to the next page, once per press; arrows, Home and End move along the tabs', (t) => {
+  const { screen, tabs, press, document } = withCharacterPage(t);
+  screen.setOpen(true);
+  assert.deepEqual(press('KeyC'), { prevented: true, reachedGame: false });
+  assert.equal(screen.page, 'character');
+  assert.equal(document.activeElement, tabs[1]);
+  press('KeyC', { repeat: true });
+  assert.equal(screen.page, 'character', 'a held key turns no further');
+  press('KeyC');
+  assert.equal(screen.page, 'inventory', 'and wraps round');
+  tabs[0].focus();
+  for (const [code, page] of [['ArrowRight', 'character'], ['ArrowRight', 'inventory'], ['ArrowLeft', 'character'],
+    ['Home', 'inventory'], ['End', 'character']]) {
+    assert.deepEqual(press(code), { prevented: true, reachedGame: false }, code);
+    assert.equal(screen.page, page, code);
+    assert.equal(document.activeElement, screen._tab(), code);
+  }
+  // Enter and Space on a tab choose it.
+  tabs[0].focus();
+  press('Enter');
+  assert.equal(screen.page, 'inventory');
+  tabs[1].focus();
+  press('Space');
+  assert.equal(screen.page, 'character');
+});
+
+test('on the Character page the bag keys do nothing, game keys stay out, and Esc, Tab and Shift+Tab work', (t) => {
+  const { screen, node, tabs, press, document, inventory } = withCharacterPage(t);
+  screen.setOpen(true, 'character');
+  const before = JSON.stringify([inventory.slots, inventory.equipment, inventory.hotbar, screen.selection]);
+  for (const code of ['KeyG', 'KeyE', 'KeyU', 'KeyX', 'Digit1', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+    'NumpadEnter', 'KeyQ', 'KeyW', 'Space', 'KeyZ']) {
+    tabs[1].focus();
+    if (code === 'ArrowLeft' || code === 'ArrowRight') document.activeElement = document.body;
+    assert.equal(press(code, { target: document.body }).reachedGame, false, code);
+  }
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment, inventory.hotbar, screen.selection]), before);
+  assert.equal(screen.page, 'character');
+  assert.equal(press('KeyW', { target: document.body }).prevented, true, 'movement keys are swallowed');
+  // Shift+Tab cycles the visible buttons: the chosen tab, Close and the page's own.
+  const [pageButton] = node.querySelectorAll('.page-button');
+  const [close] = screen.screen.querySelectorAll('.inventory-close');
+  tabs[1].focus();
+  press('Tab', { shiftKey: true });
+  assert.equal(document.activeElement, pageButton);
+  press('Tab', { shiftKey: true });
+  assert.equal(document.activeElement, close);
+  press('Tab', { shiftKey: true });
+  assert.equal(document.activeElement, tabs[1]);
+  press('Escape');
+  assert.equal(screen.isOpen, false);
+  screen.setOpen(true, 'character');
+  press('Tab');
+  assert.equal(screen.isOpen, false, 'Tab closes from any page');
+});
+
+test('on the bag page arrows still move through the slots, even from its tab', (t) => {
+  const { screen, tabs, press, document } = withCharacterPage(t);
+  screen.setOpen(true);
+  press('ArrowRight');
+  assert.equal(screen.selection.index, 1);
+  tabs[0].focus();
+  press('ArrowDown');
+  assert.equal(screen.selection.index, 7);
+  assert.equal(document.activeElement, screen._selectedButton());
 });

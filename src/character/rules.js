@@ -78,12 +78,33 @@ export function clusterCount(text) {
 }
 
 // Letters as a reader counts them, so an accented or combined letter is one.
-let graphemes = null;
+let segmenter = null;
 export function textLength(text) {
   if (typeof Intl.Segmenter !== 'function') return clusterCount(text);
-  graphemes ??= new Intl.Segmenter('en', { granularity: 'grapheme' });
-  return [...graphemes.segment(text)].length;
+  segmenter ??= new Intl.Segmenter('en', { granularity: 'grapheme' });
+  return [...segmenter.segment(text)].length;
 }
+
+// The text split into letters as a reader sees them. Without Intl.Segmenter
+// each code point joins the letter before it unless it adds one to the
+// count; that is quadratic, but only names and nameplates use it.
+export function graphemes(text) {
+  if (typeof Intl.Segmenter === 'function') {
+    segmenter ??= new Intl.Segmenter('en', { granularity: 'grapheme' });
+    return [...segmenter.segment(text)].map((part) => part.segment);
+  }
+  const parts = [];
+  let seen = '';
+  for (const c of text) {
+    seen += c;
+    if (clusterCount(seen) > parts.length) parts.push(c);
+    else parts[parts.length - 1] += c;
+  }
+  return parts;
+}
+
+// At most `max` letters of the text, never splitting one.
+export const clipText = (text, max) => graphemes(String(text)).slice(0, max).join('');
 
 const NAME = /^\p{L}[\p{L}\p{M} .'-]*$/u;
 

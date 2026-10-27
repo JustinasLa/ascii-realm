@@ -4,9 +4,12 @@ A character sheet describes who the player is: name, gender, race, age and
 birthday, class, attributes, description and clues. Each browser keeps up
 to three characters, one of them active. The rules, the skins and the saved
 roster live in `src/character/`. A first visit opens the
-[creator](#the-creator). In play only the active character's skin is used
-so far: the HUD name and the lobby name are unchanged, and the roster can
-be reached only from the console with `?debug`, as `game.characters`.
+[creator](#the-creator). The active character is played everywhere: its name
+in the HUD, over the outlaw, in the inventory and in lobbies, and its skin on
+the outlaw and the inventory portrait. Its sheet shows on the inventory's
+[Character page](#the-character-menu). Making more characters, switching and
+editing can be reached only from the console with `?debug`, as
+`game.characters`, for now.
 
 ## Races
 
@@ -58,6 +61,12 @@ straight ones, and names are stored in composed Unicode form (NFC), so
 may share a name, ignoring case.
 
 Gender is Male, Female, Other or unset (shown as "Unset").
+
+Lobbies use the same rule. A page joins under its active character's name,
+and the lobby server checks it again with this rule (dropping control and
+format characters first), so a name in any alphabet joins as it is written;
+any other name joins as Wanderer. Names another player's page receives are
+shown as the server sent them, as text.
 
 ## The realm calendar, age and birthday
 
@@ -151,6 +160,25 @@ If the new character couldn't be saved, that join is dropped with a notice:
 a lobby on another world reloads the page, which would lose it.
 A draft isn't saved: a reload starts again.
 
+## The character menu
+
+The inventory has page tabs: **Inventory** and **Character**. With the
+inventory open, `C` turns to the next page, and the arrow keys, Home and End
+move along the focused tabs. On phones the menu's Inventory row reaches them.
+
+The **Character** page shows the active character's sheet: name, gender,
+age, birthday, race (in its colour), description, class, the six attribute
+totals with the race's bonus, and the clues. Under the race, class, age and
+attributes a note says when the choice locks ("Locks in 3d 4h") or since
+when it has been locked ("Locked since" the date). A `?name=` visit says the
+name it shows instead. In a lobby the page says that a new name or character
+shows to the others at the next join, and a roster that can't save says why.
+With no character (say with `?nocreator` on a fresh profile) it reads "You
+have no character yet."
+
+A change another tab saves to the roster shows here at once: the name in the
+HUD, over the outlaw and in the inventory, the skin and the Character page.
+
 ## The roster
 
 Characters are saved in `localStorage` under `ascii-realm-characters`, as a
@@ -183,8 +211,8 @@ skin is always well formed.
   survive. Two tabs changing at the same instant can lose one change: the
   last write wins.
 - **The old lobby name** (`ascii-realm-name`) is offered as the first
-  character's name if it is a valid name. The roster never writes or
-  deletes it.
+  character's name if it is a valid name. Nothing writes or deletes it any
+  more: the lobby form that saved it is gone.
 
 Times come from the device clock, so changing the clock moves the locks and
 the cooldown.
