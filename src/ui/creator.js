@@ -26,6 +26,20 @@ export function previewFraming(width, height, panel, [minCell, maxCell]) {
     biasX: free.width / 2 / width - 0.5, bias: free.height / 2 / height - 0.5 };
 }
 
+// Whether a prop, or the part of it drawn at depth `y`, would hide the
+// framed outlaw: it is drawn in front of the figure and its cells reach into
+// the figure's box (`player.foliageBounds`). The creator leaves those out,
+// wherever the outlaw stands, since the player can't step clear.
+export function hidesPreview(prop, y, player) {
+  const { bounds: b } = prop;
+  const box = player.foliageBounds;
+  if (!b || !box || y <= player.y) return false;
+  const x0 = Math.floor(prop.x);
+  const y0 = Math.floor(prop.y);
+  return x0 + b.maxX >= box.x - box.rx && x0 + b.minX <= box.x + box.rx
+    && y0 + b.maxY >= box.y - box.ry && y0 + b.minY <= box.y + box.ry;
+}
+
 export class CharacterCreator {
   // `outside` is made inert while the creator is open. `onPreview(skin)`
   // dresses the outlaw in the draft's skin; `onFrame(framing)` frames it

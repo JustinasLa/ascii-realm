@@ -12,6 +12,7 @@ import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
 import { sampleDraft, wantsCreator } from '../../src/character/creation.js';
+import { hidesPreview } from '../../src/ui/creator.js';
 import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
@@ -217,7 +218,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       refit() { this.refits++; }
       close(character = null) { this.flow = null; this.onClose(character); }
     },
-    sampleDraft, wantsCreator,
+    sampleDraft, wantsCreator, hidesPreview,
     // What reaches the speech bubbles; the real ones are tested on their own.
     SpeechBubbles: class {
       constructor(options) { Object.assign(this, options); this.size = 0; this.received = []; this.rostered = []; this.updates = []; }

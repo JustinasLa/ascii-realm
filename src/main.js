@@ -51,7 +51,7 @@ import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { ChatUi } from './ui/chat.js';
-import { CharacterCreator } from './ui/creator.js';
+import { CharacterCreator, hidesPreview } from './ui/creator.js';
 import { figureTop, SpeechBubbles } from './ui/bubbles.js';
 import { Nameplates } from './ui/nameplates.js';
 import { Hud } from './ui/hud.js';
@@ -1685,12 +1685,15 @@ function frame(now) {
   // Reflections first, each prop measured about its own base.
   const reflections = props.filter((p) => propInView(view, p, true)).map((p) => ({ y: p.y,
     draw: () => drawProp(renderer, view, p, mirror, time, null, seed, true) }));
+  // While the creator is open, whatever would hide the outlaw is left out.
+  const hides = (p, y) => creator.isOpen && hidesPreview(p, y, player);
   const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).flatMap((p) => {
     // A turned arch spans several ground rows. Interleave its stone surfaces
     // with actors and grass instead of drawing both piers at one anchor depth.
     const slices = propDepthSlices(p);
-    if (slices) return slices.map(({ depth, cells }) => ({ y: p.y + depth,
+    if (slices) return slices.filter(({ depth }) => !hides(p, p.y + depth)).map(({ depth, cells }) => ({ y: p.y + depth,
       draw: () => drawProp(renderer, view, p, undefined, time, player, seed, false, cells) }));
+    if (hides(p, p.y)) return [];
     return [{ y: p.y, draw: () => {
       drawProp(renderer, view, p, undefined, time, player, seed);
       drawLeaves(renderer, view, p, time, seed);

@@ -3,7 +3,7 @@ import test from 'node:test';
 import { sampleDraft } from '../src/character/creation.js';
 import { Roster } from '../src/character/roster.js';
 import { DEFAULT_SKIN } from '../src/character/skin.js';
-import { CharacterCreator, FIGURE_ROWS, previewFraming } from '../src/ui/creator.js';
+import { CharacterCreator, FIGURE_ROWS, hidesPreview, previewFraming } from '../src/ui/creator.js';
 
 const START = new Date(2026, 9, 26, 12).getTime();
 
@@ -509,6 +509,20 @@ test('Create refused: another tab took the name meanwhile, and Review Name fixes
   assert.equal(ui.created[0].sheet.name, 'Arwen Dale');
   assert.deepEqual(JSON.parse(storage.get('ascii-realm-characters')).characters.map((c) => c.sheet.name),
     ['Arwen Vale', 'Arwen Dale'], 'both tabs\' characters are saved');
+});
+
+test('a prop hides the framed outlaw when it is drawn in front and reaches into its box', () => {
+  const player = { y: 10, foliageBounds: { x: 0, y: 0, rx: 6, ry: 14 } };
+  const tree = { x: 8.7, y: 30, bounds: { minX: -3, maxX: 3, minY: -40, maxY: 0 } };
+  assert.equal(hidesPreview(tree, 30, player), true, 'its crown covers the figure');
+  assert.equal(hidesPreview(tree, 10, player), false, 'drawn at the figure\'s depth or behind, it is covered instead');
+  assert.equal(hidesPreview({ ...tree, x: 10.2 }, 30, player), false, 'clear to the right');
+  assert.equal(hidesPreview({ ...tree, x: -9.5 }, 30, player), false, 'clear to the left');
+  assert.equal(hidesPreview({ ...tree, y: 55 }, 55, player), false, 'too far in front to reach up to it');
+  assert.equal(hidesPreview({ ...tree, y: 14, bounds: { minX: -3, maxX: 3, minY: -40, maxY: -30 } }, 14, player), false,
+    'wholly above it');
+  assert.equal(hidesPreview({ x: 0, y: 30 }, 30, player), false, 'not measured');
+  assert.equal(hidesPreview(tree, 30, { y: 10, foliageBounds: null }), false, 'no figure yet');
 });
 
 test('the framing puts the outlaw in the middle of the free area', () => {

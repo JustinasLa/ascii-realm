@@ -130,7 +130,9 @@ Start-up opens the creator instead of play while the roster is empty and a
 character can be made; `?creator` always opens it, and `?nocreator` or
 `?nogate` never do. While it is open the camera zooms in and frames the
 outlaw beside the desktop and landscape panel, or above the portrait sheet,
-and comes back afterwards (it snaps with reduced motion). On phones the
+and comes back afterwards (it snaps with reduced motion). Trees, rocks and
+ruins in front of the outlaw that would hide it are left out until play
+starts, wherever it stands, since the player can't step clear. On phones the
 panel keeps above the on-screen keyboard. The rest of the screen is inert,
 every key stays in the panel (Esc doesn't close it), monsters and animals
 hold still, nothing can hurt the player, and a lobby join waits for Create.

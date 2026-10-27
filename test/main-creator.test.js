@@ -162,6 +162,40 @@ test('foes hold still and the own nameplate hides while the creator is open', as
   assert.equal(game.nameplates.updates.at(-1).plates.length, 1);
 });
 
+test('while the creator is open, props in front of the outlaw that would hide it are left out', async () => {
+  const bounds = { minX: -5, maxX: 5, minY: -30, maxY: 0 };
+  const tree = { x: 1, y: 5, bounds };
+  const far = { x: 60, y: 5, bounds };
+  const behind = { x: 1, y: -3, bounds };
+  const arch = { x: 1, y: 0, bounds, arch: true };
+  const props = [tree, far, behind, { x: 1, y: 5 }, arch];
+  let drawn = [];
+  const harness = await loadGame(undefined, { href: 'http://localhost/?debug', creator: true, real: {
+    World: class {
+      constructor() { this.spawn = { x: 0, y: 0 }; this.woodland = 'sparse'; }
+      isWalkable() { return true; }
+      typeAt() { return 0; }
+      propsIn() { return props; }
+      waterDepthAt() { return 0; }
+      trim() {}
+    },
+    propDepthSlices: (p) => (p.arch ? [{ depth: -2, cells: [] }, { depth: 2, cells: [] }] : null),
+    // Records the depths of what is drawn among the grass.
+    Grass: class {
+      constructor() { return new Proxy(this, { get: (target, key) => target[key] ?? (() => {}) }); }
+      drawLayered(...args) { drawn = [...args[4].map((d) => d.y)].sort((a, b) => a - b); }
+    },
+  } });
+  const { game } = harness;
+  game.model.cells = [{ sx: 0, sy: -20 }, { sx: 4, sy: 0 }];
+  harness.frame();
+  assert.deepEqual({ ...game.player.foliageBounds }, { x: 2, y: -10, rx: 6, ry: 14 });
+  assert.deepEqual(drawn, [-3, -2, 0, 5, 5], 'the tree and the arch\'s front go; the outlaw, and what stands behind, far off or unmeasured, stay');
+  game.creator.close();
+  harness.frame();
+  assert.deepEqual(drawn, [-3, -2, 0, 2, 5, 5, 5], 'all of it comes back once play starts');
+});
+
 test('Create starts play in the same tap, and the camera comes back', async () => {
   const harness = await loadGame(undefined, { phone: true, width: 390, height: 844, href: 'http://localhost/?debug',
     creator: true, real: { localStorage: memory() } });
