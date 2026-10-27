@@ -39,6 +39,7 @@ import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
+import { sampleDraft } from './character/creation.js';
 import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
@@ -50,6 +51,7 @@ import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { ChatUi } from './ui/chat.js';
+import { CharacterCreator } from './ui/creator.js';
 import { figureTop, SpeechBubbles } from './ui/bubbles.js';
 import { Nameplates } from './ui/nameplates.js';
 import { Hud } from './ui/hud.js';
@@ -313,6 +315,34 @@ if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
 
+// The character creator, built before the phone menu and the inventory so
+// its key listener runs first: a key listener added before this one would
+// get keys the creator owns. For now only ?creator opens it, and
+// ?debug&creator=<page> opens that page on a sample character.
+const creator = new CharacterCreator({ root: document.getElementById('creator-root'),
+  outside: ['hud-root', 'touch-controls', 'panel-dock', 'phone-menu', 'chat', 'chat-open', 'inventory-root', 'screen']
+    .map((id) => document.getElementById(id)),
+  onPreview: (skin) => { player.skin = skin; },
+  onClose: () => {
+    player.skin = cleanSkin(characters.active?.skin);
+    blockGameplay();
+    if (deferredJoin) connectLobby(deferredJoin);
+    deferredJoin = null;
+    if (gated()) gate.show('start');
+    canvas.focus({ preventScroll: true });
+  } });
+debug.creator = creator;
+if (params.has('creator')) {
+  const start = params.has('debug') && params.get('creator');
+  creator.open({ roster: characters, start: start || 'welcome', draft: start ? sampleDraft(characters, Date.now()) : null });
+}
+// Nothing may hurt the player while the creator is open: every blow, spell
+// and burn lands through takeDamage, and a friend's spell aimed at the
+// player, which can also set health or shove, is dropped.
+const playerShielded = () => creator.isOpen;
+const takeDamage = player.takeDamage.bind(player);
+player.takeDamage = (amount, attacker) => playerShielded() ? 0 : takeDamage(amount, attacker);
+
 // On phones the corner menu opens the panel dock as a full-screen sheet.
 // It is built before the inventory so its keys are handled first.
 const phoneMenu = new PhoneMenu({
@@ -399,7 +429,7 @@ const inventoryScreen = new InventoryScreen({
 });
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
-  setGameplayBlocked(phoneMenu.open || inventoryScreen.isOpen || chat.isOpen);
+  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || chat.isOpen);
 }
 debug.hud = hud;
 debug.wallet = wallet;
@@ -438,6 +468,11 @@ const multiplayer = new MultiplayerClient({
 });
 debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
+// While the creator is open the lobby waits; the last join asked for is made
+// once it closes.
+let deferredJoin = null;
+const connectLobby = multiplayer.connect.bind(multiplayer);
+multiplayer.connect = (options) => { if (creator.isOpen) deferredJoin = options; else connectLobby(options); };
 const renderLobby = bindMultiplayerControls(multiplayer, {
   name, seed: () => seed,
   onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
@@ -456,7 +491,7 @@ debug.tint = tintPicker;
 // Escape closes a panel opened over it before the chat. The builder and the
 // rune wheel are declared further down and are read only once a key or tap
 // arrives.
-const panelOpen = () => builder.enabled || inventoryScreen.isOpen || phoneMenu.open || !!spellControls.menu?.isOpen;
+const panelOpen = () => creator.isOpen || builder.enabled || inventoryScreen.isOpen || phoneMenu.open || !!spellControls.menu?.isOpen;
 const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
   isControlTarget,
   mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
@@ -715,7 +750,8 @@ function onPhoneChange(phone) {
   applyFraming();
   resize();
 }
-if (gated()) gate.show('start');
+if (creator.isOpen) blockGameplay();
+else if (gated()) gate.show('start');
 onPhoneChange(device.phone);
 
 // Skeletons rise from the ground around the player, goblins come running,
@@ -932,8 +968,8 @@ loadSpells().then(spells => {
 multiplayer.onCast = message => {
   syncSpellPeers();
   const caster = spellPeers.get(message.casterId);
-  if (!caster) return;
   const target = player.spellId === message.targetId ? player : spellPeers.get(message.targetId);
+  if (!caster || (target === player && playerShielded())) return;
   casting.cast(message.id, { caster, target, heading: message.heading, aim: message.aim, remote: true });
 };
 let monsterFigures = null;
@@ -1147,14 +1183,14 @@ function suspend() {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     suspend();
-    if (gated()) gate.show('resume');
+    if (gated() && !creator.isOpen) gate.show('resume');
   } else {
     if (gate.waiting) void sound.engine.suspend();
     schedule();
   }
 });
 window.addEventListener('pagehide', (event) => {
-  if (event.persisted && gated()) gate.show('resume');
+  if (event.persisted && gated() && !creator.isOpen) gate.show('resume');
 });
 canvas.addEventListener('webglcontextlost', (e) => {
   e.preventDefault();
@@ -1274,6 +1310,7 @@ function frame(now) {
   const held = isDown('KeyJ', 'TouchStrike') || mouseHeld;
   const fromX = player.x, fromY = player.y, fromAir = player.air;
   const paused = debug.freeze || builder.enabled || playerDt === 0;
+  const foeDt = creator.isOpen ? 0 : playerDt;
   casting.setPresentationPaused(paused || document.hidden);
   // A bow draws while the attack is held and shoots on release; a spear or
   // javelin jabs on a tap and is thrown after a longer hold.
@@ -1362,8 +1399,9 @@ function frame(now) {
   if (!paused) {
     syncSpellPeers();
     casting.update(playerDt);
-    monsters.update(playerDt, world, player);
-    monsterFigures?.update(playerDt, monsters.list);
+    // Foes hold still while the creator is open.
+    monsters.update(foeDt, world, player);
+    monsterFigures?.update(foeDt, monsters.list);
   }
   for (const e of monsters.events) monsterEvent(e);
   monsters.events.length = 0;
@@ -1471,11 +1509,11 @@ function frame(now) {
   }
   // Wildlife shies from the player, friends and monsters alike.
   if (!paused) {
-    animals.update(playerDt, world, { player, peers, monsters: monsters.living, view });
+    animals.update(foeDt, world, { player, peers, monsters: monsters.living, view });
     birds.update(playerDt, world, { player, peers, monsters: monsters.living,
       predators: animals.list.filter((a) => a.alive && a.predator), view });
     fishes.update(playerDt, world, { player, peers, view });
-    animalFigures?.update(playerDt, animals.list, [...birds.list, ...fishes.list]);
+    animalFigures?.update(foeDt, animals.list, [...birds.list, ...fishes.list]);
     if (horses.list.length && !horseLoad) {
       horseLoad = HorseFigures.load({ phone: () => device.phone }).then((f) => {
         horseFigures = f;
@@ -1698,7 +1736,7 @@ function frame(now) {
   const ownTop = model ? model.top : Math.floor(player.y + figureTop(figure));
   lastOwnTop = ownTop;
   const self = selfMember();
-  const plates = Number.isFinite(ownTop) ? [{ key: 'self', x: player.x, row: ownTop - 2, depth: player.y,
+  const plates = Number.isFinite(ownTop) && !creator.isOpen ? [{ key: 'self', x: player.x, row: ownTop - 2, depth: player.y,
     name: self ? self.name : name, tag: self?.tag ?? null,
     colour: self ? memberColour(self) : chosenTint ? hexRgb(chosenTint) : SOLO_COLOR }] : [];
   for (const peer of peers) {

@@ -6,7 +6,7 @@ to three characters, one of them active. The rules, the skins and the saved
 roster live in `src/character/`. In play only the active character's skin
 is used so far: the HUD name and the lobby name are unchanged, and the
 roster can be reached only from the console with `?debug`, as
-`game.characters`.
+`game.characters`. The creator is still being built.
 
 ## Races
 
@@ -99,6 +99,24 @@ creation:
 | Name, gender, description, clues, skin | always |
 
 A change is checked only against the rules of the fields it changes.
+
+## The creator
+
+The creator makes a character a page at a time, in a panel beside the live
+world: Welcome, Character creation, then Name, Class, Race, Age, Attributes,
+Description, Clues and a Summary. Info pages have Continue only. The seven
+steps show "Step n of 7", and Next stays dimmed until the step passes its
+rule, whose message shows under it. A race dresses the outlaw in its skin
+tone. The age starts at 18, and a typed age or birthday must be valid before
+Next. A race changed later keeps the age, so the Age step and the Summary's
+final check of every step report an age past the new maximum.
+
+The Description, Clues and Summary pages and Create are still to come, so it
+opens only with `?creator` (`?debug&creator=<page>` opens that page on a
+sample character) and saves nothing. While it is open the rest of the screen
+is inert, every key stays in the panel (Esc doesn't close it), monsters and
+animals hold still, nothing can hurt the player, and a lobby join waits for
+it to close.
 
 ## The roster
 
