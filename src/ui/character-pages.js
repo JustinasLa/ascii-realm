@@ -114,7 +114,8 @@ export class CharacterPages {
       this.headings.set(row.id, heading);
     }
     const state = createState(this.roster);
-    this.create = this.button('Create character', null, () => this.act(this.list, () => state.ok ? this.onCreate() : state));
+    this.create = this.button('Create character', null,
+      () => this.act(this.list, () => this.recheck(state, this.roster.canCreate(), () => this.onCreate())));
     const create = this.element('div', 'character-create');
     create.append(this.create, this.element('p', 'character-lock', state.used));
     if (!state.ok) {
@@ -123,6 +124,13 @@ export class CharacterPages {
     }
     this.list.status.textContent = '';
     this.list.replaceChildren(this.element('h3', '', 'Your characters'), list, create, this.list.status);
+  }
+
+  // Create character and Play as ask the roster again when pressed: a cooldown
+  // that ended, or began, while the page was open redraws the list first.
+  recheck(shown, live, run) {
+    if (live.ok !== shown.ok) this.renderList();
+    return live.ok ? run() : live;
   }
 
   drawPortrait(character) {
@@ -143,7 +151,7 @@ export class CharacterPages {
   // Play as: a refusal stays on the page; a switch moves focus to the new
   // active row's name.
   switchTo(row) {
-    const result = this.act(this.list, () => row.play.ok ? this.onPlay(row.id) : row.play);
+    const result = this.act(this.list, () => this.recheck(row.play, this.roster.canSwitch(row.id), () => this.onPlay(row.id)));
     if (!result.ok) return;
     this.render();
     this.list.status.textContent = `Now playing as ${row.name}.`;

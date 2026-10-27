@@ -228,3 +228,43 @@ test('Create character asks the game while a slot is free, else says why', (t) =
   assert.equal(created, 1);
   assert.equal(pages.list.status.textContent, block().children[2].textContent);
 });
+
+test('a cooldown that ends with the page open no longer holds back Create character or Play as', (t) => {
+  for (const press of ['Create character', 'Play as']) {
+    let created = 0;
+    const { pages, roster, clock } = setup(t, { characters: 2, onCreate: () => { created++; return { ok: true }; },
+      onPlay: (id) => roster.switchTo(id) });
+    // Opened a day before the cooldown ends: both are shown refused.
+    clock.set(NOW + DAY);
+    pages.render();
+    const [play] = buttons(pages.list, 'Play as');
+    assert.equal(pages.create.getAttribute('aria-disabled'), 'true');
+    assert.equal(play.getAttribute('aria-disabled'), 'true');
+    // The page stays open past the opening time.
+    clock.set(NOW + 2 * DAY + 1);
+    (press === 'Play as' ? play : pages.create).click();
+    if (press === 'Play as') {
+      assert.equal(roster.active.sheet.name, 'Arwen Vale', 'switches without reopening the page');
+      assert.equal(pages.list.status.textContent, 'Now playing as Arwen Vale.');
+    } else {
+      assert.equal(created, 1, 'asks the game without reopening the page');
+      assert.equal(pages.create.getAttribute('aria-disabled'), null, 'and the list is shown as it is now');
+      assert.equal(buttons(pages.list, 'Play as')[0].getAttribute('aria-disabled'), null);
+    }
+  }
+});
+
+test('a cooldown that began with the page open refuses Create character and redraws the list', (t) => {
+  let created = 0;
+  const { pages, roster, clock } = setup(t, { characters: 2, onCreate: () => { created++; return { ok: true }; } });
+  clock.set(NOW + 3 * DAY);
+  pages.render();
+  const [play] = buttons(pages.list, 'Play as');
+  assert.equal(play.getAttribute('aria-disabled'), null);
+  // Switched elsewhere while the page was open.
+  roster.switchTo(roster.characters[0].id);
+  pages.create.click();
+  assert.equal(created, 0);
+  assert.equal(pages.create.getAttribute('aria-disabled'), 'true');
+  assert.match(pages.list.status.textContent, /^You are on cooldown from switching characters\. Opens in 4d, on /);
+});
