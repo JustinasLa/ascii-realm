@@ -38,12 +38,13 @@ import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
+import { nameError, normalName } from './character/rules.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
 import { sampleDraft, wantsCreator } from './character/creation.js';
 import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
-import { cleanName, displayName, playerState } from './multiplayer/protocol.js';
+import { displayName, playerState } from './multiplayer/protocol.js';
 import { RemotePlayers } from './multiplayer/remote-players.js';
 import { autoColour, hexRgb, memberColour, SOLO_COLOR } from './multiplayer/tint.js';
 import { bindTintPicker } from './multiplayer/tint-picker.js';
@@ -51,6 +52,7 @@ import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { ChatUi } from './ui/chat.js';
+import { CharacterPages } from './ui/character-pages.js';
 import { CharacterCreator, hidesPreview } from './ui/creator.js';
 import { figureTop, SpeechBubbles } from './ui/bubbles.js';
 import { Nameplates } from './ui/nameplates.js';
@@ -201,8 +203,6 @@ window.addEventListener('keydown', (e) => {
 
 const requestedSeed = Number(params.get('seed'));
 const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? requestedSeed : 1;
-// Shown above the warrior's head; ?name=... picks another.
-let name = cleanName(params.get('name') || 'Kael');
 // ?woodland=dense grows groves and ?flora=1 or 0 picks the wild flowers. Dense
 // woods are this page's own: a page starting in or on its way to a lobby
 // plays the sparse world the lobby shares.
@@ -235,10 +235,26 @@ inventory.events.length = 0;
 let walletStorage = null;
 try { walletStorage = localStorage; } catch {}
 const wallet = new Wallet({ storage: walletStorage });
-// The player's characters, kept on this device. Only the active one's skin
-// is played yet; without one the outlaw wears today's outfit.
-const characters = new Roster({ storage: walletStorage, bypassCooldown: params.has('debug'), events: window });
+// The player's characters, kept on this device. The active one is played:
+// its name and skin. Without one the outlaw is Kael in today's outfit.
+const characters = new Roster({ storage: walletStorage, bypassCooldown: params.has('debug'), events: window,
+  onChange: () => applyCharacter() });
 player.skin = cleanSkin(characters.active?.skin);
+// ?name=... shows another valid name for this visit, for testing; the
+// roster keeps the character's own.
+const nameOverride = params.has('name') && !nameError(params.get('name')) ? normalName(params.get('name')) : null;
+const shownName = () => nameOverride ?? characters.active?.sheet.name ?? 'Kael';
+let name = shownName();
+// Shows the active character everywhere, after it changes here or in another
+// tab. The creator's preview keeps its own skin while it is open.
+function applyCharacter() {
+  name = shownName();
+  hud.setName(name);
+  inventoryScreen.setName(name);
+  if (!creator.isOpen) player.skin = cleanSkin(characters.active?.skin);
+  characterPages.render();
+  renderLobby?.(multiplayer);
+}
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
 // Harvestable tufts and berry bushes stay disabled.
 const harvesting = new Harvesting(world, null, { wild: false });
@@ -396,13 +412,15 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
   },
   // Create is the player's tap to play.
   onClose: (character) => {
-    player.skin = cleanSkin(characters.active?.skin);
+    applyCharacter();
     unframe();
     blockGameplay();
     // A lobby on another world reloads the page, which would lose a new
     // character this visit couldn't save, so its waiting join is dropped.
+    // A kept join goes in under the name now played, not the one it was
+    // asked with (an invite asks before the first character exists).
     const unsaved = character && characters.saveError;
-    if (deferredJoin && !unsaved) connectLobby(deferredJoin);
+    if (deferredJoin && !unsaved) connectLobby({ ...deferredJoin, name });
     if (character) {
       startPlay();
       if (unsaved) hud.notify(unsaved);
@@ -498,8 +516,13 @@ const hud = new Hud({
   },
   onInventory: () => inventoryScreen.toggle(),
 });
+// The character menu's pages, tabs in the inventory.
+const characterPages = new CharacterPages({ doc: document, roster: characters, name: () => name,
+  inLobby: () => !!multiplayer.room });
+debug.characterPages = characterPages;
 const inventoryScreen = new InventoryScreen({
   inventory, player, name,
+  pages: [{ id: 'character', label: 'Character', node: characterPages.sheet, onShow: () => characterPages.render() }],
   onToggle: (open) => {
     if (open) chat.close();
     blockGameplay();
@@ -562,8 +585,7 @@ let deferredJoin = null;
 const connectLobby = multiplayer.connect.bind(multiplayer);
 multiplayer.connect = (options) => { if (creator.isOpen) deferredJoin = options; else connectLobby(options); };
 const renderLobby = bindMultiplayerControls(multiplayer, {
-  name, seed: () => seed,
-  onName: (value) => { name = value; hud.setName(value); inventoryScreen.setName(value); },
+  name: () => name, seed: () => seed,
   onDone: () => canvas.focus({ preventScroll: true }),
 });
 resumePendingLobby(multiplayer, session);

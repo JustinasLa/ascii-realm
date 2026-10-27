@@ -10,6 +10,8 @@ const memory = (entries = {}) => {
   const map = new Map(Object.entries(entries));
   return { getItem: (key) => map.get(key) ?? null, setItem: (key, value) => map.set(key, String(value)) };
 };
+// The page's requests, as plain objects of this realm.
+const connects = (game) => JSON.parse(JSON.stringify(game.multiplayer.connects));
 const saved = JSON.stringify({ v: 1, rev: 1, active: 'c0001', characters: [
   { id: 'c0001', createdAt: 1, switchedAt: null, sheet: { name: 'Bryn' }, skin: { tone: 'sage' } }] });
 
@@ -110,7 +112,7 @@ test('a lobby join waits for the creator to close', async () => {
   game.multiplayer.connect({ mode: 'join', code: 'XYZ567' });
   assert.deepEqual(game.multiplayer.connects, [], 'nothing connects while creating');
   game.creator.close();
-  assert.deepEqual(game.multiplayer.connects, [{ mode: 'join', code: 'XYZ567' }], 'the last join is made');
+  assert.deepEqual(connects(game), [{ mode: 'join', code: 'XYZ567', name: 'Kael' }], 'the last join is made');
   game.multiplayer.connect({ mode: 'create' });
   assert.equal(game.multiplayer.connects.length, 2, 'once closed, joins go straight through');
   game.creator.close = () => {};
@@ -140,7 +142,23 @@ test('a waiting join is made after Create when the character is saved', async ()
   const { game } = harness;
   game.multiplayer.connect({ mode: 'join', code: 'ABC234' });
   game.creator.close(game.characters.create(sampleDraft(game.characters, Date.now())).character);
-  assert.deepEqual(game.multiplayer.connects, [{ mode: 'join', code: 'ABC234' }]);
+  assert.deepEqual(connects(game), [{ mode: 'join', code: 'ABC234', name: game.characters.active.sheet.name }]);
+});
+
+test('an invite on a first visit joins under the character just created', async () => {
+  // The invite's join is asked for as the page starts, before any character.
+  const bindMultiplayerControls = (client, { name }) => {
+    client.connect({ mode: 'join', name: name(), code: 'ABC234', server: '' });
+    return () => {};
+  };
+  const harness = await loadGame(undefined, { href: 'http://localhost/?debug&room=ABC234', creator: true,
+    real: { localStorage: memory(), bindMultiplayerControls } });
+  const { game } = harness;
+  assert.deepEqual(game.multiplayer.connects, [], 'the join waits for the creator');
+  const draft = sampleDraft(game.characters, Date.now());
+  const made = game.characters.create({ ...draft, sheet: { ...draft.sheet, name: 'Åsa-Lîn' } });
+  game.creator.close(made.character);
+  assert.deepEqual(connects(game), [{ mode: 'join', name: 'Åsa-Lîn', code: 'ABC234', server: '' }]);
 });
 
 test('foes hold still and the own nameplate hides while the creator is open', async () => {

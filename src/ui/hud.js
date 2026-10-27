@@ -1,4 +1,5 @@
 import { INSTRUMENTS, noteSlots, secondLayer } from '../audio/instruments.js';
+import { clipText } from '../character/rules.js';
 import { ITEMS } from '../inventory/items.js';
 import { denars } from '../inventory/wallet.js';
 import { itemArt } from './item-art.js';
@@ -107,7 +108,8 @@ export class Hud {
     this.frames = element('section', 'hud-frames hud-panel');
     attribute(this.frames, 'aria-label', 'Player status');
     const status = element('div', 'hud-frame hud-status');
-    this.nameNode = element('div', 'hud-name', String(name || 'Wanderer').slice(0, 24));
+    this.nameNode = element('div', 'hud-name', clipText(name || 'Wanderer', 24));
+    this.nameNode.setAttribute('dir', 'auto');
     status.append(this.nameNode);
     this.health = makeVital('Health', 'health', 'HP');
     // Mana appears once a spell caster is attached.
@@ -560,7 +562,7 @@ export class Hud {
   }
 
   setName(name) {
-    text(this.nameNode, String(name || 'Wanderer').slice(0, 24));
+    text(this.nameNode, clipText(name || 'Wanderer', 24));
   }
 
   // Party members' frames, below the player's own: [{ name, tag, colour,
@@ -577,6 +579,7 @@ export class Hud {
         const frame = element('div', 'hud-frame hud-member');
         const title = element('div', 'hud-name');
         const name = element('span', 'hud-name-text');
+        name.setAttribute('dir', 'auto');
         const tag = element('span', 'hud-name-tag');
         const note = element('span', 'hud-name-note');
         title.append(name, tag, note);
@@ -590,7 +593,7 @@ export class Hud {
     list.forEach((member, index) => {
       const frame = this.partyFrames[index];
       const colour = Array.isArray(member.colour) ? `rgb(${member.colour.join(', ')})` : '';
-      text(frame.name, String(member.name || 'Wanderer').slice(0, 24));
+      text(frame.name, clipText(member.name || 'Wanderer', 24));
       style(frame.name, 'color', colour);
       text(frame.tag, member.tag ? ` (${member.tag})` : '');
       style(frame.tag, 'color', colour);

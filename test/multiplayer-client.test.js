@@ -200,7 +200,7 @@ test('malformed lobby members are dropped and names, colours and seeds are clean
   assert.equal(client.status, 'online');
   assert.equal(received.seed, 1);
   assert.equal(client.players.length, 1);
-  assert.equal(client.players[0].name.length, 24);
+  assert.equal(client.players[0].name, 'Wanderer', 'a name too long to show');
   assert.equal(client.players[0].color, 0);
   socket.message({ type: 'joined', ...joined(), id: { toString: () => 'a1' } });
   assert.equal(client.id, 'a1');

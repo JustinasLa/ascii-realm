@@ -7,8 +7,12 @@
 // Each is placed every frame from its player's position, a letter to a cell
 // as the scene draws them, and names go in as text, never markup. A plate
 // near the screen's edge is held inside it, clear of a notch, and one wider
-// than the screen shortens the name, never the tag. A nearer player's plate
-// stands over a farther one's, as their speech bubbles do.
+// than the screen shortens the name, never the tag, and never splits a
+// letter. Widths are the real text's, measured once per text and size, so
+// wide letters and marks in any alphabet centre and fit. A nearer player's
+// plate stands over a farther one's, as their speech bubbles do.
+
+import { graphemes } from '../character/rules.js';
 
 // `edge` keeps a plate that many CSS px inside the safe area; the screen is
 // read again for `settle` ms after a turn or resize.
@@ -17,18 +21,34 @@ export const NAMEPLATES = Object.freeze({ edge: 4, settle: 500 });
 const CUT = '…';
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-// The name as it fits in `room` letters before its tag: whole, or cut short
-// with an ellipsis (only the ellipsis when no letter of it fits).
-export function fitName(name, tag, room) {
-  if (name.length + tag.length <= room) return name;
-  return `${name.slice(0, Math.max(0, room - tag.length - CUT.length))}${CUT}`;
+// The name as it fits in `room` px before its tag, `width` measuring text:
+// whole, or the most letters that fit cut short with an ellipsis (only the
+// ellipsis when none does).
+export function fitName(name, tag, room, width) {
+  if (width(name + tag) <= room) return name;
+  const letters = graphemes(name);
+  let [low, high] = [0, letters.length - 1];
+  while (low < high) {
+    const k = Math.ceil((low + high) / 2);
+    if (width(letters.slice(0, k).join('') + CUT + tag) <= room) low = k;
+    else high = k - 1;
+  }
+  return letters.slice(0, low).join('') + CUT;
 }
 
 export class Nameplates {
-  constructor({ doc = document, win = doc.defaultView, root, measure = null, insets = null,
+  constructor({ doc = document, win = doc.defaultView, root, measure = null, measureText = null, insets = null,
     now = () => performance.now() }) {
     Object.assign(this, { doc, win, root, now });
     this.measure = measure ?? (() => this.probe());
+    this.measureText = measureText ?? ((text) => this.probeText(text));
+    // Each text's width at the layer's font size and spacing.
+    this.widths = new Map();
+    this.width = (text) => {
+      let width = this.widths.get(text);
+      if (width === undefined) this.widths.set(text, width = this.measureText(text));
+      return width;
+    };
     this.insets = insets ?? (() => this.probeInsets());
     this.plates = new Map();
     this.fontSize = '';
@@ -57,6 +77,17 @@ export class Nameplates {
     const { width } = span.getBoundingClientRect();
     span.remove();
     return width / 20;
+  }
+
+  // How wide a text shows on a plate, from a hidden one in the layer.
+  probeText(text) {
+    const span = this.doc.createElement('span');
+    span.className = 'nameplate nameplate-text-probe';
+    span.textContent = text;
+    this.root.append(span);
+    const { width } = span.getBoundingClientRect();
+    span.remove();
+    return width;
   }
 
   // The screen's safe-area insets in CSS px (a notch, rounded corners), from
@@ -99,20 +130,32 @@ export class Nameplates {
       if (fontSize !== this.fontSize) {
         this.root.style.fontSize = this.fontSize = fontSize;
         this.advance = this.measure();
+        this.widths.clear();
       }
       const cellW = projection.project(1, 0).x - corner.x;
       const spacing = `${Math.max(0, cellW - this.advance).toFixed(2)}px`;
-      if (spacing !== this.spacing) this.root.style.letterSpacing = this.spacing = spacing;
-      // A letter takes a cell, or the font's own width if that is wider; the
-      // padding is a quarter of the font size on each side.
-      const fit = { step: Math.max(cellW, this.advance), pad: Number.parseFloat(fontSize) / 2,
+      if (spacing !== this.spacing) {
+        this.root.style.letterSpacing = this.spacing = spacing;
+        this.widths.clear();
+      }
+      // The padding is a quarter of the font size on each side.
+      const fit = { pad: Number.parseFloat(fontSize) / 2,
         low: box.safe.left + NAMEPLATES.edge, high: box.width - box.safe.right - NAMEPLATES.edge, box };
-      fit.room = Math.max(0, Math.floor((fit.high - fit.low - fit.pad) / fit.step));
+      const room = fit.high - fit.low - fit.pad;
+      // Every plate is fitted before any is written, so a frame measures
+      // (when a name, the room or the font changed) before it writes.
+      const fitted = plates.map((plate) => {
+        const at = projection.project(plate.x, plate.row + 0.5);
+        if (!at.visible) return { plate, at };
+        const suffix = plate.tag ? ` (${plate.tag})` : '';
+        const name = fitName(String(plate.name), suffix, room, this.width);
+        return { plate, at, texts: [name, suffix], width: this.width(name + suffix) };
+      });
       const shown = [];
-      for (const plate of plates) {
+      for (const { plate, at, texts, width } of fitted) {
         seen.add(plate.key);
         const node = this.plate(plate.key);
-        if (this.place(node, plate, projection.project(plate.x, plate.row + 0.5), fit)) shown.push({ node, depth: plate.depth });
+        if (this.place(node, plate, at, texts, width, fit)) shown.push({ node, depth: plate.depth });
       }
       // The nearer player (feet lower on the screen) stands on top.
       shown.sort((a, b) => a.depth - b.depth);
@@ -135,6 +178,7 @@ export class Nameplates {
       node.className = 'nameplate';
       const name = this.doc.createElement('span');
       name.className = 'nameplate-name';
+      name.setAttribute('dir', 'auto');
       const tag = this.doc.createElement('span');
       tag.className = 'nameplate-tag';
       node.append(name, tag);
@@ -147,19 +191,17 @@ export class Nameplates {
 
   // Only what changed is written, so a still crowd costs no DOM writes.
   // Gives whether the plate shows.
-  place(plate, { name, tag, colour }, at, { step, pad, low, high, room, box }) {
+  place(plate, { colour }, at, texts, width, { pad, low, high, box }) {
     const hidden = !at.visible;
     if (hidden !== plate.hidden) plate.node.hidden = plate.hidden = hidden;
     if (hidden) return false;
-    const suffix = tag ? ` (${tag})` : '';
-    const texts = [fitName(String(name), suffix, room), suffix];
     for (let i = 0; i < 2; i++) {
       if (texts[i] !== plate.texts[i]) [plate.name, plate.tag][i].textContent = plate.texts[i] = texts[i];
     }
     const rgb = `rgb(${colour.join(', ')})`;
     if (rgb !== plate.colour) plate.node.style.color = plate.colour = rgb;
     // Centred over the player, or as near it as the safe area allows.
-    const half = ((texts[0].length + suffix.length) * step + pad) / 2;
+    const half = (width + pad) / 2;
     const x = clamp(at.x - box.left, low + half, Math.max(low + half, high - half));
     const transform = `translate(${x.toFixed(1)}px, ${(at.y - box.top).toFixed(1)}px) translate(-50%, -50%)`;
     if (transform !== plate.transform) plate.node.style.transform = plate.transform = transform;

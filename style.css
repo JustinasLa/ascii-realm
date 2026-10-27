@@ -274,6 +274,29 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .inventory-help { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 10px; }
 .inventory-key-hint { display: inline-flex; align-items: center; gap: 5px; }
 .inventory-key-hint kbd { font-size: 10px; }
+/* The inventory's pages: tabs on their own row under the title, the chosen
+   one marked [ ]. */
+.inventory-header { flex-wrap: wrap; }
+.inventory-tabs { order: 3; display: flex; flex-basis: 100%; gap: 4px; }
+.inventory-screen .inventory-tab { min-height: 24px; padding: 2px 8px; font-size: 11px; }
+.inventory-screen .inventory-tab.selected { color: var(--ink); border-color: var(--frame); }
+.inventory-tab::before { content: "\00a0"; }
+.inventory-tab::after { content: "\00a0"; }
+.inventory-tab.selected::before { content: "["; }
+.inventory-tab.selected::after { content: "]"; }
+/* The Character page: the sheet as label and value columns. */
+.character-sheet { padding: 2px 4px; font-size: 12px; line-height: 1.5; }
+.character-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; }
+.character-rows dt { color: var(--quiet); }
+.character-rows dd { margin: 0; overflow-wrap: anywhere; }
+.character-list { margin: 0; padding-left: 2.2em; }
+.character-rows ul.character-list { padding: 0; list-style: none; }
+.character-lock { display: block; color: var(--quiet); font-size: 10px; }
+.character-note, .character-empty { margin: 10px 0 0; color: var(--quiet); }
+@media (max-width: 520px) {
+  .character-rows { grid-template-columns: 1fr; gap: 0; }
+  .character-rows dd { margin-bottom: 8px; }
+}
 
 /* The phone's "Tap to play" card, over a dimmed and paused scene. */
 #play-gate { position: fixed; inset: 0; z-index: 40; display: grid; place-content: center; justify-items: center; gap: 10px; width: 100%; height: 100%; margin: 0; padding: 0; color: var(--ink); background: rgba(5, 6, 10, 0.72); border: 0; border-radius: 0; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
@@ -296,6 +319,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   input, textarea, select, #lobby-share { user-select: text; -webkit-user-select: text; -webkit-touch-callout: default; }
   #lobby-room-code { user-select: all; -webkit-user-select: all; }
   #panel-dock, .inventory-screen { touch-action: pan-y; }
+  .inventory-screen .inventory-tab { min-height: 44px; padding: 2px 12px; font-size: 12px; }
   #touch-controls { display: block; position: fixed; z-index: 12; inset: 0; pointer-events: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #touch-controls button, #move-pad { pointer-events: auto; touch-action: none; color: var(--ink); background: var(--surface); border: 1px solid var(--frame); }
   #touch-controls button { min-width: 44px; min-height: 44px; padding: 6px; border-radius: 0; font-size: 10px; }
@@ -488,6 +512,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 #nameplate-root { position: fixed; inset: 0; z-index: 8; pointer-events: none; overflow: hidden; contain: strict; }
 .nameplate { position: absolute; left: 0; top: 0; padding: 0 0.25em; font-family: var(--font); line-height: 1; white-space: pre; font-variant-ligatures: none; font-kerning: none; background: rgb(10, 9, 19); will-change: transform; }
 .nameplate-probe { visibility: hidden; letter-spacing: 0; padding: 0; }
+.nameplate-text-probe { visibility: hidden; padding: 0; }
 .nameplate-safe { position: absolute; visibility: hidden; padding: 0 env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 #bubble-root { position: fixed; inset: 0; z-index: 9; pointer-events: none; overflow: hidden; contain: strict; }
 .bubble { position: absolute; left: 0; top: 0; font: 12px/14px var(--font); white-space: pre; font-variant-ligatures: none; font-kerning: none; letter-spacing: 0; will-change: transform; contain: layout style; }

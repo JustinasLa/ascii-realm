@@ -140,6 +140,6 @@ test('a page from before name colours is told to refresh', async () => {
   old.send({ type: 'join', version: 3, code: lobby.joined.code, name: 'Old', tint: '#ff5555' });
   const error = await old.next('error');
   assert.equal(error.message, 'Refresh the game to use this lobby server.');
-  assert.equal(PROTOCOL_VERSION, 4);
+  assert.equal(PROTOCOL_VERSION, 5);
   await closed;
 });

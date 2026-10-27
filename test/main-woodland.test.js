@@ -94,6 +94,6 @@ test('the creator holds a dense page\'s lobby request, and the one resumed after
   assert.deepEqual(second.game.multiplayer.connects, []);
   assert.equal(session.has(PENDING_LOBBY), false, 'taken once');
   second.game.creator.close();
-  assert.deepEqual(second.game.multiplayer.connects, [request]);
+  assert.deepEqual(JSON.parse(JSON.stringify(second.game.multiplayer.connects)), [request]);
   assert.equal(second.navigatedTo(), undefined);
 });

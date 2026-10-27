@@ -173,7 +173,8 @@ test('relayed lines and notices are checked again on the page', () => {
   assert.equal(readChat({ ...line, clarity: Number.NaN }).clarity, 1);
   assert.equal(readChat({ ...line, muffled: 'yes' }).muffled, false);
   assert.equal(readChat({ ...line, muffled: true }).muffled, true);
-  assert.equal(readChat({ ...line, name: `${u(0x202e)}${'N'.repeat(40)}` }).name, 'N'.repeat(24));
+  assert.equal(readChat({ ...line, name: `${u(0x202e)}${'N'.repeat(20)}` }).name, 'Wanderer', 'an unsafe name');
+  assert.equal(readChat({ ...line, name: 'Ash2' }).name, 'Ash2', 'kept as the server sent it');
   assert.equal(readChat({ ...line, text: `a${u(0x202e)}b` }).text, 'ab');
   for (const bad of [null, 'chat', [], { ...line, type: 'snapshot' }, { ...line, seq: -1 }, { ...line, seq: 1.5 },
     { ...line, channel: 'admin' }, { ...line, channel: '__proto__' }, { ...line, channel: 'constructor' },

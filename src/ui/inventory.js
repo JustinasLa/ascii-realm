@@ -52,7 +52,9 @@ export function emptySlotHint(carried, phone = false) {
 
 /** A live inventory panel. Opening it blocks controls, while the world keeps moving. */
 export class InventoryScreen {
-  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false }) {
+  // `pages` are more tabs after the bag's: `{ id, label, node, onShow }`,
+  // `onShow` running each time the page shows.
+  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false, pages = [] }) {
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
     // Drops a bag stack into the world; returns { ok, message }.
@@ -94,13 +96,30 @@ export class InventoryScreen {
     const title = element('h2', 'inventory-title', 'Inventory');
     const identity = element('div', 'inventory-identity');
     this.nameNode = element('span', 'inventory-character-name', String(name));
+    this.nameNode.setAttribute('dir', 'auto');
     identity.append(title, this.nameNode);
     const close = element('button', 'inventory-close', 'Close');
     close.append(element('kbd', '', 'Esc'));
     close.type = 'button';
     close.setAttribute('aria-label', 'Close inventory');
     close.addEventListener('click', () => this.setOpen(false));
-    header.append(identity, close);
+    // The pages, as tabs: the bag, then the character menu's.
+    this.page = 'inventory';
+    this.pages = [{ id: 'inventory', label: 'Inventory' }, ...pages];
+    const tabs = element('div', 'inventory-tabs');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', 'Pages');
+    tabs.hidden = !pages.length;
+    for (const page of this.pages) {
+      page.tab = element('button', 'inventory-tab', page.label);
+      page.tab.type = 'button';
+      page.tab.id = `inventory-tab-${page.id}`;
+      page.tab.setAttribute('role', 'tab');
+      page.tab.setAttribute('aria-controls', `inventory-page-${page.id}`);
+      page.tab.addEventListener('click', () => this._show(page.id, true));
+      tabs.append(page.tab);
+    }
+    header.append(identity, tabs, close);
 
     const body = element('div', 'inventory-body');
     const equipment = element('section', 'inventory-equipment');
@@ -241,7 +260,15 @@ export class InventoryScreen {
       help.append(hint);
     }
     help.id = 'inventory-help';
-    this.screen.append(header, body, help);
+    this.pages[0].node = body;
+    this.pages[0].help = help;
+    for (const page of this.pages) {
+      page.node.id = `inventory-page-${page.id}`;
+      page.node.setAttribute('role', 'tabpanel');
+      page.node.setAttribute('aria-labelledby', page.tab.id);
+    }
+    this.screen.append(header, body, help, ...pages.map((page) => page.node));
+    this._show('inventory');
     // Keep scene zoom and pointer handlers out of panel interactions.
     this.screen.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
     this.screen.addEventListener('pointerdown', (event) => event.stopPropagation());
@@ -264,8 +291,10 @@ export class InventoryScreen {
 
   get isOpen() { return this._isOpen; }
 
-  setOpen(open) {
+  // Opens on `page`, or turns to it when already open.
+  setOpen(open, page = 'inventory') {
     open = Boolean(open);
+    if (open) this._show(page, this._isOpen);
     if (open === this._isOpen) return;
     if (open) this._previousFocus = document.activeElement;
     this._isOpen = open;
@@ -280,7 +309,8 @@ export class InventoryScreen {
     this.onToggle(open);
     if (open) {
       this.update();
-      this._selectedButton()?.focus();
+      if (this.page === 'inventory') this._selectedButton()?.focus();
+      else this._tab().focus();
     } else {
       this._dragFrom = null;
       // Gameplay handlers ignore UI controls, so closing returns to the scene.
@@ -292,6 +322,25 @@ export class InventoryScreen {
   }
 
   setName(name) { setText(this.nameNode, String(name)); }
+
+  _tab(id = this.page) { return this.pages.find((page) => page.id === id).tab; }
+
+  // Shows one page and hides the rest, with its tab selected and the one
+  // Tab and arrow keys reach.
+  _show(id, focus = false) {
+    if (!this.pages.some((page) => page.id === id)) return;
+    this.page = id;
+    for (const page of this.pages) {
+      const selected = page.id === id;
+      attribute(page.tab, 'aria-selected', String(selected));
+      page.tab.tabIndex = selected ? 0 : -1;
+      page.tab.classList.toggle('selected', selected);
+      hidden(page.node, !selected);
+      if (page.help) hidden(page.help, !selected);
+      if (selected) page.onShow?.();
+    }
+    if (focus) this._tab().focus();
+  }
 
   toggle() { this.setOpen(!this._isOpen); }
 
@@ -334,12 +383,33 @@ export class InventoryScreen {
       this.setOpen(false);
       return;
     }
+    // C turns to the next page; arrows, Home and End move along the tabs.
+    const pageAt = (index) => this.pages[(index + this.pages.length) % this.pages.length].id;
+    const current = this.pages.findIndex((page) => page.id === this.page);
+    if (event.code === 'KeyC') {
+      this._consume(event);
+      if (!event.repeat) this._show(pageAt(current + 1), true);
+      return;
+    }
+    const tabKeys = { ArrowLeft: current - 1, ArrowRight: current + 1, Home: 0, End: this.pages.length - 1 };
+    if (event.code in tabKeys && event.target?.closest?.('[role="tab"]')) {
+      this._consume(event);
+      this._show(pageAt(tabKeys[event.code]), true);
+      return;
+    }
     const focusedButton = event.target?.closest?.('button');
     if (focusedButton && this.screen.contains(focusedButton)
       && (event.code === 'Space' || ['Enter', 'NumpadEnter'].includes(event.code)
         && !focusedButton.matches('.inventory-slot, .equipment-slot'))) {
       this._consume(event);
       if (!event.repeat) focusedButton.click();
+      return;
+    }
+    // The other pages have no bag keys, but no key reaches the game either.
+    const gameKeys = ['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyJ', 'KeyF', 'KeyQ', 'Equal', 'Minus', 'Backspace'];
+    if (this.page !== 'inventory') {
+      event.stopImmediatePropagation();
+      if (gameKeys.includes(event.code)) this._consume(event);
       return;
     }
     const arrows = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
@@ -375,8 +445,7 @@ export class InventoryScreen {
     }
     // No held movement or queued attack may escape from an open inventory.
     event.stopImmediatePropagation();
-    if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyJ', 'KeyF', 'KeyQ',
-      'Equal', 'Minus', 'Backspace'].includes(event.code)) this._consume(event);
+    if (gameKeys.includes(event.code)) this._consume(event);
   }
 
   _selectedButton() {

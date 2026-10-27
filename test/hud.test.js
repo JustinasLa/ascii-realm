@@ -308,6 +308,10 @@ test('the prompt, extra frame notes, name and party frames show what they are gi
   assert.equal(byClass(document.body, 'hud-name')[0].textContent, 'Wanderer');
   hud.setName('Robin');
   assert.equal(byClass(document.body, 'hud-name')[0].textContent, 'Robin');
+  assert.equal(byClass(document.body, 'hud-name')[0].getAttribute('dir'), 'auto', 'a right-to-left name reads its way');
+  // Cut at 24 letters as a reader counts them, never inside one.
+  hud.setName('e\u0301'.repeat(30));
+  assert.equal(byClass(document.body, 'hud-name')[0].textContent, 'e\u0301'.repeat(24));
 
   const tab = byClass(document.body, 'hud-party-tab')[0];
   hud.setParty([{ id: 'a', name: 'Marian', health: 40, maxHealth: 100, note: '12m' }, { id: 'b', health: 10, maxHealth: 100 }]);
@@ -318,6 +322,7 @@ test('the prompt, extra frame notes, name and party frames show what they are gi
   assert.equal(byClass(members[1], 'hud-name')[0].textContent, 'Wanderer');
   const name = byClass(members[0], 'hud-name-text')[0];
   assert.equal(name.textContent, 'Marian');
+  assert.equal(name.getAttribute('dir'), 'auto');
   assert.equal(byClass(members[0], 'hud-name-note')[0].textContent, ' · 12m');
   assert.equal(name.style.color, '', 'a name without a colour keeps the frame\'s ink');
   hud.setParty([{ id: 'a', name: 'Marian', colour: [255, 85, 85], health: 30, maxHealth: 100 }, { id: 'b', health: 10, maxHealth: 100 }]);

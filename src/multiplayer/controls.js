@@ -1,12 +1,13 @@
-import { cleanCode, cleanName } from './protocol.js';
+import { cleanCode } from './protocol.js';
 import { memberColour } from './tint.js';
 
-export function bindMultiplayerControls(client, { name, seed, onName, onDone = () => {}, document: doc = document,
+// `name()` is the active character's name, read at every join and render.
+export function bindMultiplayerControls(client, { name, seed, onDone = () => {}, document: doc = document,
   location: loc = location, history: navigation = history } = {}) {
   const panel = doc.getElementById('multiplayer-controls');
   const summary = doc.getElementById('multiplayer-summary');
   const form = doc.getElementById('lobby-form');
-  const nameInput = doc.getElementById('lobby-name');
+  const joinAs = doc.getElementById('lobby-as');
   const codeInput = doc.getElementById('lobby-code');
   const serverInput = doc.getElementById('lobby-server');
   const create = doc.getElementById('lobby-create');
@@ -21,19 +22,12 @@ export function bindMultiplayerControls(client, { name, seed, onName, onDone = (
   const share = doc.getElementById('lobby-share');
   const params = new URLSearchParams(loc.search);
   let wasInLobby = false;
-  let storedName;
-  try { storedName = localStorage.getItem('ascii-realm-name'); } catch {}
-  nameInput.value = cleanName(params.get('name') || storedName || name);
   codeInput.value = cleanCode(params.get('room'));
   serverInput.value = params.get('server') || '';
   if (codeInput.value) panel.open = true;
 
   function connect(mode) {
-    const chosenName = cleanName(nameInput.value);
-    nameInput.value = chosenName;
-    onName(chosenName);
-    try { localStorage.setItem('ascii-realm-name', chosenName); } catch {}
-    client.connect({ mode, name: chosenName, seed: seed(), code: codeInput.value, server: serverInput.value });
+    client.connect({ mode, name: name(), seed: seed(), code: codeInput.value, server: serverInput.value });
     create.blur();
     join.blur();
     onDone();
@@ -73,7 +67,8 @@ export function bindMultiplayerControls(client, { name, seed, onName, onDone = (
     const busy = ['online', 'connecting', 'reconnecting'].includes(client.status);
     form.hidden = !!client.room;
     session.hidden = !client.room;
-    for (const input of [nameInput, codeInput, serverInput, create, join]) input.disabled = busy;
+    for (const input of [codeInput, serverInput, create, join]) input.disabled = busy;
+    joinAs.textContent = `You join as ${name()}.${client.room ? ' A new name or character shows here when you next join.' : ''}`;
     leave.hidden = !busy;
     leave.textContent = client.room ? 'Leave lobby' : 'Cancel';
     status.textContent = client.message;
@@ -117,7 +112,6 @@ export function bindMultiplayerControls(client, { name, seed, onName, onDone = (
   }
   client.onChange = render;
   render();
-  onName(nameInput.value);
   // An invite joins straight away, but not one naming its own lobby server:
   // a link should not connect the page to an unknown host until the player
   // has seen the address and pressed Join.

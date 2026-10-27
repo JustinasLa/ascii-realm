@@ -115,9 +115,8 @@
     <details id="multiplayer-controls" data-game-ui>
       <summary id="multiplayer-summary">Multiplayer · Solo</summary>
       <p id="multiplayer-status" role="status" aria-live="polite">Play solo, create a lobby, or join with a code.</p>
+      <p id="lobby-as" class="lobby-label"></p>
       <form id="lobby-form">
-        <label for="lobby-name">Your name</label>
-        <input id="lobby-name" type="text" maxlength="24" autocomplete="nickname" placeholder="Kael" />
         <label for="lobby-code">Lobby code</label>
         <input id="lobby-code" type="text" maxlength="6" minlength="6" pattern="[A-Za-z0-9]{6}" required
           autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="AB7K2D"
