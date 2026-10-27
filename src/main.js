@@ -1294,7 +1294,9 @@ function frame(now) {
   if (player.ranged.held === 0) rangedSource = null;
   if (!paused) player.update(playerDt, world, move, isDown('ShiftLeft', 'ShiftRight'), held);
   if (model) {
+    // Paused, the pose holds but a new skin or gear still shows at once.
     if (!paused) model.update(playerDt, player);
+    else model.gear.apply(player.equipment, player.skin);
     model.renderPose(player.x, player.y);
     // The sword's trail follows the blade of the 3D character.
     player.trail = player.trail.filter((t) => player.time - t.t < 0.16);

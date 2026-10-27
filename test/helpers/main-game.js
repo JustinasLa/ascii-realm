@@ -91,6 +91,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const model = {
     gaits: [{ key: 'walk', speed: 1 }, { key: 'jog', speed: 3 }],
     update: () => { modelUpdates++; },
+    // What the paused game dresses the model in, as [equipment, skin].
+    gear: { applied: [], apply(equipment, skin) { this.applied.push([equipment, skin]); } },
     resetPose: noop,
     rasterise: noop,
     renderPose: noop,
@@ -413,6 +415,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     frame: (dt = 1 / 60) => nextFrame(now += dt * 1000),
     bladeSamples: () => bladeSamples,
     modelUpdates: () => modelUpdates,
+    model,
     cellHeight: () => cellHeight,
     keydown(key, modifiers = {}) {
       const event = Object.assign(new Event('keydown', { cancelable: true }), { key, ...modifiers });

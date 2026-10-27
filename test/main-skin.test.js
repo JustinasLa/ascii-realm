@@ -46,3 +46,15 @@ test('?debug can change the skin by preset or by value, without saving it', asyn
   assert.deepEqual(storage.writes, []);
   assert.equal(game.characters.active.skin, null);
 });
+
+test('a skin set while the game is frozen shows on the model at once', async () => {
+  const { game, frame, model, modelUpdates } = await loadGame();
+  frame();
+  const updates = modelUpdates();
+  assert.equal(model.gear.applied.length, 0, 'running, the model dresses itself in update');
+  game.freeze = true;
+  const skin = game.setSkin('greenwood');
+  frame();
+  assert.equal(modelUpdates(), updates, 'the pose holds');
+  assert.deepEqual(model.gear.applied.at(-1), [game.player.equipment, skin]);
+});
