@@ -669,9 +669,10 @@ export class World {
 
   // Whether a stone glints damp in torchlight: a rock by the water, a
   // standing stone only where it stands in water.
+  // Ore blocks are not checked: near a chunk's edge that would generate its neighbour early.
   dampStone(prop) {
     if (prop.kind === 'standing-stone') return this.typeAt(Math.floor(prop.x), Math.floor(prop.y)) === WATER;
-    return prop.kind === 'rock' && !prop.wet && this.byWater(prop);
+    return prop.kind === 'rock' && !prop.wet && !prop.ore && this.byWater(prop);
   }
 
   // Marks a stone damp where dampStone says so. A rock stays damp once it

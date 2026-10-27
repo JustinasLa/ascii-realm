@@ -477,9 +477,8 @@ function makeBigRock(x, y, stream, seed = x * 23 + y) {
     bounds: cellBounds(cells), cells }, fineBoulder(rock, seed, bake), { make: 'bigRock', x, y, draws, seed });
 }
 
-// A fist-high block of ore: fresh, chunky stone tinted by the local rock,
-// with clumps of the ore's mineral in it. Everything comes from its base,
-// ore, host rock and seed, so the fine worker rebuilds it exactly.
+// A fist-high block of ore: fresh, chunky stone tinted by the local rock, with clumps
+// of its mineral. Its base, ore, host and seed make it, so a worker rebuilds it exactly.
 export function makeOreBlock({ x, y, ore, host, seed }, bakeFn = bake) {
   const rand = mulberry32(seed);
   const rx = 2.2 + rand() * 0.4;
@@ -500,9 +499,18 @@ export function makeOreBlock({ x, y, ore, host, seed }, bakeFn = bake) {
   };
   const rock = boulder(rand, seed, { rx, ry, sides: 5 + Math.floor(rand() * 3), roundness: 0.78, stone,
     mossCoverage: 0, grit: 0.15, lichen: false, cracks: rand() < 0.4 ? 1 : 0, crackWidth: 0.22, flecks });
-  const cells = bakeBoulder(rock, seed, bakeFn);
-  return withFine({ kind: 'rock', ore, host, x, y, footW: rx * 0.9 / ASPECT, footH: 0.9, bounds: cellBounds(cells), cells },
-    fineBoulder(rock, seed, bakeFn), { make: 'ore', x, y, ore, host, seed });
+  // Baked on first draw, not with its chunk, and never with the fine bake's normals.
+  let cells;
+  return withFine({ kind: 'rock', ore, host, x, y, footW: rx * 0.9 / ASPECT, footH: 0.9,
+    bounds: { minX: -rock.w, maxX: rock.w, minY: rock.top, maxY: 2 },
+    get cells() {
+      if (cells) return cells;
+      const fine = rock.normals.on;
+      rock.normals.on = false;
+      this.bounds = cellBounds(cells = bakeBoulder(rock, seed, bakeFn));
+      rock.normals.on = fine;
+      return cells;
+    } }, fineBoulder(rock, seed, bakeFn), { make: 'ore', x, y, ore, host, seed });
 }
 
 // Where a big rock stands nothing else grows: its face and a margin around

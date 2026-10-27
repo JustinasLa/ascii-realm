@@ -4,10 +4,9 @@ import { blocks } from './props.js';
 import { neighbourSolids } from './woodland.js';
 import { ASPECT, GRASS } from './world.js';
 
-// Ore veins: tight clusters of fist-high ore blocks on the surface, placed
-// per chunk from the world seed. In each row: how often a vein is of that
-// ore, how many blocks it has, what a harvested block drops, the pickaxe
-// tier it needs and the colours of its flecks.
+// Ore veins: tight clusters of fist-high ore blocks on the surface, placed per
+// chunk from the world seed. In each row: how often a vein is of that ore, its
+// blocks, a block's drop, the pickaxe tier it needs and its flecks' colours.
 export const ORES = Object.freeze({
   coal: { id: 'coal', name: 'Coal ore', weight: 40, size: [4, 8], drop: { id: 'coal', count: [1, 1] }, tier: 'wood',
     fleck: [44, 42, 46], glint: [150, 150, 160], density: 0.46 },
@@ -24,8 +23,7 @@ export const ORES = Object.freeze({
 // The chance of 0, 1 or 2 veins in a chunk.
 export const VEIN_COUNT = [0.6, 0.3, 0.1];
 
-// The host stone takes the colour of the local rock: dark basalt, grey
-// granite, pale limestone.
+// The host stone takes the local rock's colour: dark basalt, grey granite, pale limestone.
 export const HOST_TINT = Object.freeze({
   basalt: { k: 0.72, add: [-2, 0, 8] },
   granite: { k: 0.96, add: [10, 4, 0] },
@@ -37,8 +35,7 @@ const SPAWN_CLEAR = 40;
 // A mined block is remembered by its base cell.
 export const minedKey = (block) => `ore:${Math.floor(block.x)}:${Math.floor(block.y)}`;
 
-// A block's art seed and size, from its base cell alone, so placement and
-// the bake agree and the worker can rebuild it.
+// A block's art seed and size, from its base cell alone, so placement and the bake agree.
 export function oreSeed(world, x, y) {
   return Math.floor(hash2(Math.floor(x), Math.floor(y), world.seed + 2811) * 2 ** 32);
 }
@@ -53,14 +50,13 @@ function pick(weights, roll) {
   return weights.length - 1;
 }
 
-// The ore blocks of a chunk as `{ x, y, ore, host, seed, vein }`, in placement
-// order. `props` are the chunk's generated props; neighbours' scenery comes
-// from their seeds (neighbourSolids), so loading order never matters. A vein
-// hugs the chunk's big rock where it can and otherwise sits on open ground.
+// The ore blocks of a chunk as `{ x, y, ore, host, seed, vein }`, in placement order.
+// `props` are the chunk's generated props; neighbours' scenery comes from their
+// seeds (neighbourSolids), so loading order never matters. A vein hugs the
+// chunk's big rock where it can and otherwise sits on open ground.
 export function placeVeins(world, cx, cy, size, props) {
   const rand = mulberry32(Math.floor(hash2(cx, cy, world.seed + 2809) * 2 ** 32));
-  // Side by side and across, from a block to its neighbours in a vein.
-  const step = 2 * 2.4 / ASPECT * 0.8;
+  const step = 2 * 2.4 / ASPECT * 0.8; // side by side and across, block to block in a vein
   const neighbours = [[step, 0], [-step, 0], [step / 2, 1.6], [-step / 2, 1.6], [step / 2, -1.6], [-step / 2, -1.6]];
   const solids = neighbourSolids(world, cx, cy, size);
   const trees = props.filter((p) => p.kind === 'tree');
@@ -69,15 +65,13 @@ export function placeVeins(world, cx, cy, size, props) {
   const nearSolid = (x, y) => trees.some((t) => Math.abs(x - t.x) < t.footW + 6 && Math.abs(y - t.y) < t.footH + 3)
     || solids.some((s) => s.box ? x > s.x0 - 4 && x < s.x1 + 4 && y > s.y0 - 2 && y < s.y1 + 2
       : Math.abs(x - s.x) < s.footW + 6 && Math.abs(y - s.y) < s.footH + 3);
-  // Snapped first, then the final base and every cell of the foot (and the
-  // row in front of it) checked; a candidate that fails is dropped.
+  // Snapped, then its base and every cell of its foot checked; one that fails is dropped.
   const candidate = (px, py, placed) => {
     const x = Math.floor(px) + 0.5, y = Math.floor(py) + 0.5;
     const seed = oreSeed(world, x, y);
     const foot = oreFoot(seed);
     if (x - foot < cx * size + 4 || x + foot >= (cx + 1) * size - 4) return null;
-    // The foot's rows (footH 0.9 each way), its lower edge included.
-    const top = Math.floor(y - 0.9), bottom = Math.floor(y + 0.9);
+    const top = Math.floor(y - 0.9), bottom = Math.floor(y + 0.9); // the foot's rows, lower edge included
     if (top < cy * size + 2 || bottom >= (cy + 1) * size - 2) return null;
     if (world.spawn && Math.hypot((x - world.spawn.x) * ASPECT, y - world.spawn.y) < SPAWN_CLEAR) return null;
     for (let gy = top; gy <= bottom; gy++) {

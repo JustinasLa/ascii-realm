@@ -3,7 +3,7 @@ import test from 'node:test';
 import { glyph, LAYER } from '../src/render/glyphs.js';
 import { STONE_MID } from '../src/render/palette.js';
 import { rockTypeAt } from '../src/world/geology.js';
-import { fineRecipe, fineSource } from '../src/world/prop-art.js';
+import { bakeSurface, fineRecipe, fineSource } from '../src/world/prop-art.js';
 import { packFine } from '../src/world/fine-bakes.js';
 import { HOST_TINT, minedKey, oreFoot, ORES, oreSeed, placeVeins, VEIN_COUNT } from '../src/world/ore-veins.js';
 import { blocks, makeOreBlock, rebuildProp } from '../src/world/props.js';
@@ -177,6 +177,34 @@ test('an ore block is fresh stone tinted by its rock, with clumps of its ore and
   const hosts = Object.keys(HOST_TINT).map((host) => makeOreBlock({ x: 0.5, y: 0.5, ore: 'iron', host, seed: 5 }));
   assert.equal(new Set(hosts.map((b) => JSON.stringify(b.cells.map((c) => c.r)))).size, 3);
   assert.ok(STONE_MID.length === 3);
+});
+
+test('an ore block is baked on first draw, not with its chunk, the same either way', () => {
+  const spec = { x: 4.5, y: 9.5, ore: 'tin', host: 'limestone', seed: 777 };
+  const eager = makeOreBlock(spec).cells;
+  let bakes = 0;
+  const block = makeOreBlock(spec, (...args) => {
+    bakes++;
+    return bakeSurface(...args);
+  });
+  assert.equal(bakes, 0, 'nothing is baked with its chunk');
+  const frame = block.bounds;
+  fineCells(block);
+  assert.deepEqual(block.cells, eager, 'baked after its fine bake, it has no normals');
+  assert.equal(block.cells, block.cells, 'baked once');
+  assert.equal(bakes, 2);
+  const b = block.bounds;
+  assert.ok(frame.minX <= b.minX && frame.maxX >= b.maxX && frame.minY <= b.minY && frame.maxY >= b.maxY, 'inside its frame');
+});
+
+test('an ore block by water is not checked for damp, so its chunk loads no neighbour', () => {
+  const world = new World(1);
+  let looks = 0;
+  world.typeAt = () => (looks++, WATER);
+  const rock = { kind: 'rock', x: 0.5, y: 0.5, footW: 2, footH: 0.9 };
+  assert.equal(world.dampStone({ ...rock, ore: 'iron' }), false);
+  assert.equal(looks, 0);
+  assert.equal(world.dampStone(rock), true, 'a plain rock there is damp');
 });
 
 test('a worker rebuilds an ore block from its source exactly', () => {

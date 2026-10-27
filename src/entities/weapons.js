@@ -109,8 +109,7 @@ export const WEAPONS = freeze({
       blob([0, -0.26, 0], 0.04, 0.04, 'trim'),
     ],
   },
-  // A one-handed mining pick: an iron-shod head on a haft. It swings and
-  // hits like a war hammer of its material.
+  // A one-handed mining pick that swings and hits like a war hammer of its material.
   pickaxe: {
     id: 'pickaxe', name: 'Pickaxe', type: 'pickaxe', category: 'heavy',
     damage: 44, reach: 0.68, speed: 0.65, staminaCost: 26, weight: 4.6,

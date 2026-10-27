@@ -4,9 +4,8 @@ import { inStrike } from './harvesting.js';
 import { minedKey, ORES } from './ore-veins.js';
 import { ASPECT, CHUNK_SIZE } from './world.js';
 
-// Classic mining: a pickaxe of a high enough tier breaks an ore block in a
-// few blows and gets its ore; anything else takes many blows and the block
-// crumbles to nothing.
+// Classic mining: a pickaxe of a high enough tier breaks an ore block in a few
+// blows and gets its ore; anything else takes many and the block crumbles away.
 export const PICKAXES = Object.freeze({
   wood: { name: 'wooden pickaxe', blows: 6, level: 0 },
   stone: { name: 'stone pickaxe', blows: 3, level: 1 },
@@ -58,8 +57,7 @@ export class Mining {
     return best;
   }
 
-  // The block the next swing would hit, by the strike's own reach and
-  // corridor, with its prompt.
+  // The block the next swing would hit (the strike's reach and corridor), with its prompt.
   nearby(player, tier) {
     const reach = (player.feel?.reach ?? 0.95) * SCALE;
     const heading = player.heading ?? 0;
