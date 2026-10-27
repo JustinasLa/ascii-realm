@@ -21,6 +21,8 @@ const DRAG_TURN = Math.PI / 180;
 const REGION_NAMES = Object.freeze({ tone: 'Skin tone', hair: 'Hair', shirt: 'Shirt', hose: 'Hose', hood: 'Hood',
   jerkin: 'Jerkin', sleeves: 'Sleeves', bracers: 'Bracers and gloves', boots: 'Boots', cloak: 'Cloak' });
 const LAYER_NAMES = Object.freeze({ hood: 'Hood up', jerkin: 'Jerkin', cloak: 'Cloak' });
+// The root is the dialog, so the turn buttons beside the panel are in it.
+const DIALOG = Object.freeze({ role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'creator-title' });
 
 // The part of the screen the panel leaves free: left of a side panel (one
 // past 30 % of the width), else above a bottom sheet.
@@ -81,6 +83,7 @@ export class CharacterCreator {
     this.flow = new Creation(options);
     this.doc.body.classList.add('creator-open');
     for (const node of this.outside) node.inert = true;
+    for (const [key, value] of Object.entries(DIALOG)) this.root.setAttribute(key, value);
     this.live = this.el('p', { className: 'creator-live', role: 'status' });
     this.stage = this.turner();
     this.turn(true);
@@ -91,6 +94,7 @@ export class CharacterCreator {
     if (!this.flow) return;
     this.flow = null;
     this.root.replaceChildren();
+    for (const key of Object.keys(DIALOG)) this.root.removeAttribute(key);
     this.doc.body.classList.remove('creator-open');
     for (const node of this.outside) node.inert = false;
     this.onClose(character);
@@ -108,14 +112,14 @@ export class CharacterCreator {
   }
 
   // The free area over the outlaw: a drag across it turns the figure, and so
-  // do its two buttons.
+  // do its two buttons. Only the first finger down turns it, until it lifts.
   turner() {
     let drag = null;
     const button = (sign, text, label) => this.el('button', { type: 'button', textContent: text, 'aria-label': label,
       onclick: () => this.onTurn(sign * TURN_STEP) });
     const stage = this.el('div', { className: 'creator-stage',
       onpointerdown: (event) => {
-        if (event.target !== stage) return;
+        if (event.target !== stage || drag) return;
         drag = { id: event.pointerId, x: event.clientX };
         stage.setPointerCapture(event.pointerId);
       },
@@ -125,7 +129,7 @@ export class CharacterCreator {
         drag.x = event.clientX;
       } },
     this.el('div', { className: 'creator-turn' }, button(-1, '‹', 'Turn left'), button(1, '›', 'Turn right')));
-    stage.onpointerup = stage.onpointercancel = () => { drag = null; };
+    stage.onpointerup = stage.onpointercancel = (event) => { if (drag?.id === event.pointerId) drag = null; };
     return stage;
   }
 
@@ -172,8 +176,7 @@ export class CharacterCreator {
         : flow.returning ? 'Save and review' : 'Next' });
     const back = flow.index > 0 && page.kind !== 'info' ? this.el('button', { type: 'button', textContent: flow.returning ? 'Back to review' : 'Back',
       onclick: () => this.turn(flow.back()) }) : '';
-    this.form = this.el('form', { className: 'creator-panel', role: 'dialog', 'aria-modal': 'true',
-      'aria-labelledby': 'creator-title', onsubmit: (event) => { event.preventDefault(); this.submit(); } },
+    this.form = this.el('form', { className: 'creator-panel', onsubmit: (event) => { event.preventDefault(); this.submit(); } },
     this.el('header', {}, this.el('p', { className: 'creator-counter', textContent: step }),
       this.el('h2', { id: 'creator-title', tabIndex: -1, textContent: page.title })),
     this.el('div', { className: 'creator-body' }, ...this.content(page)), this.message,
@@ -301,6 +304,7 @@ export class CharacterCreator {
 
   // A preset, then a swatch for each region and the layers worn. Each pick
   // repaints the outlaw at once and updates every group's legend and mark.
+  // A tap that neither focuses nor changes a swatch still shows the face.
   skin() {
     const { flow } = this;
     const syncs = [];
@@ -319,7 +323,7 @@ export class CharacterCreator {
         inputs.forEach((input, i) => { input.checked = items[i].id === id; });
       });
       const swatch = key !== 'preset';
-      return [inputs, this.el('fieldset', { className: swatch ? 'creator-swatches' : 'creator-row' }, legend, ...items.map((item, i) =>
+      return [inputs, this.el('fieldset', { className: swatch ? 'creator-swatches' : 'creator-row', onclick: () => this.look(peek) }, legend, ...items.map((item, i) =>
         this.el('label', { className: swatch ? 'creator-swatch' : 'creator-card' }, inputs[i],
           swatch ? this.el('span', { style: `background: rgb(${item.color})` }) : this.el('b', { textContent: item.name }))))];
     };
@@ -452,17 +456,18 @@ export class CharacterCreator {
 
   // Every key stops here while the creator is open, so no game key runs;
   // typing, radio arrows and buttons still work. Esc can't dismiss the first
-  // creation, and Tab wraps inside the panel.
+  // creation, and Tab wraps inside the panel. A radio group is one Tab stop,
+  // entered at its checked radio, if any.
   keydown(event) {
     if (!this.flow) return;
     event.stopImmediatePropagation();
     const nodes = [...this.root.querySelectorAll(FOCUSABLE)].filter((node) => !node.disabled);
+    const group = (node) => (node.type === 'radio' ? nodes.filter((n) => n.type === 'radio' && n.name === node.name) : [node]);
+    const [from, wrap] = event.shiftKey ? [nodes[0], nodes.at(-1)] : [nodes.at(-1), nodes[0]];
     let to = null;
     if (event.key === 'Escape') event.preventDefault();
     else if (!this.root.contains(event.target)) to = this.first ?? this.next;
-    else if (event.key === 'Tab' && event.target === (event.shiftKey ? nodes[0] : nodes.at(-1))) {
-      to = event.shiftKey ? nodes.at(-1) : nodes[0];
-    }
+    else if (event.key === 'Tab' && group(from).includes(event.target)) to = group(wrap).find((n) => n.checked) ?? wrap;
     if (!to) return;
     event.preventDefault();
     to.focus({ preventScroll: true });

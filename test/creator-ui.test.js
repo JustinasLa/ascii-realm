@@ -31,6 +31,7 @@ class Node {
   }
   replaceChildren(...nodes) { this.children = []; this.text = ''; this.append(...nodes); }
   setAttribute(key, value) { this.attributes.set(key, String(value)); }
+  removeAttribute(key) { this.attributes.delete(key); }
   getAttribute(key) { return this.attributes.get(key) ?? null; }
   focus(options) {
     assert.deepEqual(options, { preventScroll: true });
@@ -113,9 +114,10 @@ test('opening shows Welcome, makes the outside inert and previews the draft', ()
   assert.equal(ui.canvas.inert, true);
   assert.deepEqual(ui.previews, [DEFAULT_SKIN]);
   const form = ui.creator.form;
-  assert.equal(form.getAttribute('role'), 'dialog');
-  assert.equal(form.getAttribute('aria-modal'), 'true');
-  assert.equal(form.getAttribute('aria-labelledby'), 'creator-title');
+  assert.equal(ui.root.getAttribute('role'), 'dialog', 'the dialog holds the panel and the turn buttons');
+  assert.equal(ui.root.getAttribute('aria-modal'), 'true');
+  assert.equal(ui.root.getAttribute('aria-labelledby'), 'creator-title');
+  assert.equal(form.getAttribute('role'), null);
   assert.equal(ui.title(), 'Welcome');
   assert.equal(ui.live(), 'Welcome');
   assert.ok(form.textContent.includes('Welcome to Cerrith.'));
@@ -139,6 +141,7 @@ test('closing restores the page once', () => {
   assert.equal(ui.closed(), 1);
   assert.equal(ui.creator.isOpen, false);
   assert.equal(ui.root.children.length, 0);
+  assert.deepEqual(['role', 'aria-modal', 'aria-labelledby'].map((key) => ui.root.getAttribute(key)), [null, null, null]);
   assert.equal(ui.canvas.inert, false);
   assert.equal(ui.doc.body.classList.contains('creator-open'), false);
 });
@@ -307,6 +310,26 @@ test('every key stops at the creator while it is open', () => {
   assert.ok(ui.press('Tab', input, { shiftKey: true }).defaultPrevented);
   assert.equal(ui.doc.activeElement, right, 'Shift+Tab wraps to the last');
   assert.equal(ui.press('Tab', back).defaultPrevented, false, 'Tab inside moves as usual');
+});
+
+test('a radio group is one Tab stop, so Tab wraps from any of its radios', () => {
+  const ui = setup({ start: 'skin' });
+  ui.open();
+  const input = (id) => ui.doc.getElementById(id);
+  input('creator-preset-drover').onchange();
+  const right = ui.root.find((node) => node.getAttribute('aria-label') === 'Turn right')[0];
+  assert.ok(ui.press('Tab', input('creator-preset-drover'), { shiftKey: true }).defaultPrevented, 'the checked preset, not the first');
+  assert.ok(ui.doc.activeElement === right);
+  ui.press('Tab', right);
+  assert.ok(ui.doc.activeElement === input('creator-preset-drover'), 'Tab enters the group at its checked radio');
+  ui.creator.close();
+  const race = setup({ start: 'race', sample: false });
+  race.open();
+  const radios = race.radios();
+  assert.ok(radios.every((radio) => !radio.checked));
+  assert.ok(race.press('Tab', radios[2], { shiftKey: true }).defaultPrevented, 'none checked: any radio of the group');
+  race.press('Tab', race.doc.activeElement);
+  assert.ok(race.doc.activeElement === radios[0], 'none checked: the first');
 });
 
 test('the info page without a field focuses Continue after a failed step', () => {
@@ -637,6 +660,13 @@ test('Skin: the hood comes down while the tone or hair is picked', () => {
   assert.equal(ui.previews.at(-1).layers.hood, false, 'a tap that does not focus works too');
   input('creator-layer-jerkin').focus({ preventScroll: true });
   assert.equal(ui.previews.at(-1).layers.hood, true);
+  const fieldset = (id) => input(id).parentNode.parentNode;
+  fieldset('creator-tone-olive').onclick();
+  assert.equal(ui.previews.at(-1).layers.hood, false, 'tapping the tone already picked shows the face');
+  fieldset('creator-boots-brown').onclick();
+  assert.equal(ui.previews.at(-1).layers.hood, true, 'tapping clothes already picked puts the hood back');
+  fieldset('creator-preset-outlaw').onclick();
+  assert.equal(ui.previews.at(-1).layers.hood, true);
   input('creator-hair-grey').onchange();
   ui.submit();
   assert.equal(ui.title(), 'Review your character');
@@ -669,9 +699,17 @@ test('the turn buttons and a drag across the free area turn the outlaw', () => {
   stage.onpointermove({ pointerId: 3, clientX: 300 });
   stage.onpointermove({ pointerId: 2, clientX: 120 });
   assert.deepEqual(ui.turns, [30 * Math.PI / 180, -10 * Math.PI / 180], 'a degree a pixel, one finger only');
-  stage.onpointerup();
+  stage.onpointerdown({ target: stage, pointerId: 3, clientX: 0 });
+  assert.equal(stage.captured, 2, 'a second finger does not take over');
+  stage.onpointerup({ pointerId: 3 });
+  stage.onpointermove({ pointerId: 2, clientX: 125 });
+  assert.equal(ui.turns.length, 3, 'nor does lifting it stop the turn');
+  stage.onpointercancel({ pointerId: 2 });
   stage.onpointermove({ pointerId: 2, clientX: 200 });
-  assert.equal(ui.turns.length, 2, 'until it lets go');
+  assert.equal(ui.turns.length, 3, 'until the first lets go');
+  stage.onpointerdown({ target: stage, pointerId: 3, clientX: 0 });
+  stage.onpointermove({ pointerId: 3, clientX: 10 });
+  assert.equal(ui.turns.length, 4, 'then another finger may turn it');
   ui.submit();
   assert.equal(ui.root.children[2], stage, 'the same free area on every page');
   ui.win.innerWidth = 844;
