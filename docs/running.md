@@ -58,7 +58,9 @@ start URL and scope are relative, so it works from a sub-path such as GitHub
 Pages. There is no service worker, so nothing is cached offline. Phones start
 behind a "Tap to play" card and come back from being hidden behind "Tap to
 resume"; tools and benchmarks add `?nogate` to skip both.
-`?creator` opens the [character creator](characters.md#the-creator); with
+A first visit opens the [character creator](characters.md#the-creator);
+`?creator` always opens it and `?nocreator` (or `?nogate`) skips it, so
+screenshot tools on a fresh profile add `?nocreator` for play. With
 `?debug`, `?creator=age` (or another page) opens that page on a sample.
 
 Tests are described in the [README](../README.md#tests). Run `npm run bench` for

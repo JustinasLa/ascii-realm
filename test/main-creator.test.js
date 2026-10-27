@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ROSTER_KEY } from '../src/character/roster.js';
+import { sampleDraft } from '../src/character/creation.js';
 import { cleanSkin, DEFAULT_SKIN } from '../src/character/skin.js';
 import { Spellcasting } from '../src/spells/casting.js';
 import { loadGame } from './helpers/main-game.js';
@@ -12,16 +13,23 @@ const memory = (entries = {}) => {
 const saved = JSON.stringify({ v: 1, rev: 1, active: 'c0001', characters: [
   { id: 'c0001', createdAt: 1, switchedAt: null, sheet: { name: 'Bryn' }, skin: { tone: 'sage' } }] });
 
-test('start-up opens the creator only with ?creator', async () => {
-  const plain = await loadGame(undefined, { phone: true, href: 'http://localhost/?debug' });
-  assert.equal(plain.game.creator.isOpen, false, 'not yet for a first visit');
-  assert.equal(plain.gateButton.hidden, false, 'the play card shows as before');
-
-  const harness = await loadGame(undefined, { phone: true, href: 'http://localhost/?creator' });
-  const { creator } = harness.window.game ?? {};
-  assert.equal(creator, undefined, 'without ?debug nothing is exposed');
+test('a first visit opens the creator instead of the play card', async () => {
+  const harness = await loadGame(undefined, { phone: true, href: 'http://localhost/?debug', creator: true });
+  assert.equal(harness.game.creator.opened.length, 1);
+  assert.equal(harness.game.creator.opened[0].start, 'welcome');
   assert.ok(harness.blocked(), 'gameplay is blocked');
   assert.equal(harness.gateButton.hidden, true, 'the play card waits for the creator');
+
+  const hidden = await loadGame(undefined, { phone: true, href: 'http://localhost/?creator' });
+  assert.equal(hidden.window.game, undefined, 'without ?debug nothing is exposed');
+  assert.ok(hidden.blocked());
+
+  const skips = async (href, real = {}) => (await loadGame(undefined, { href, real, creator: true })).game.creator.opened.length;
+  assert.equal(await skips('http://localhost/?debug&nocreator'), 0, '?nocreator plays at once');
+  assert.equal(await skips('http://localhost/?debug&nogate'), 0, 'and so does ?nogate');
+  assert.equal(await skips('http://localhost/?debug', { localStorage: memory({ [ROSTER_KEY]: saved }) }), 0, 'a character exists');
+  assert.equal(await skips('http://localhost/?debug', { localStorage: memory({ [ROSTER_KEY]: JSON.stringify({ v: 99 }) }) }), 0,
+    'a roster that cannot create plays as before');
 });
 
 test('?creator opens Welcome on a blank draft, and ?debug&creator=<page> a sample on that page', async () => {
@@ -128,4 +136,74 @@ test('foes hold still and the own nameplate hides while the creator is open', as
   assert.ok(steps.every(([, dt]) => dt > 0));
   assert.equal(steps.length, 2);
   assert.equal(game.nameplates.updates.at(-1).plates.length, 1);
+});
+
+test('Create starts play in the same tap, and the camera comes back', async () => {
+  const harness = await loadGame(undefined, { phone: true, width: 390, height: 844, href: 'http://localhost/?debug',
+    creator: true, real: { localStorage: memory() } });
+  const { game, audio, fullscreenRequests, cellHeight } = harness;
+  const before = cellHeight();
+  game.creator.onFrame({ cell: 9.7, bias: -0.25, biasX: 0 });
+  assert.equal(cellHeight(), 9.7, 'reduced motion snaps the zoom');
+  assert.equal(game.camera.bias, -0.25);
+  assert.equal(game.player.heading, 0.3, 'a three-quarter view');
+  game.creator.onFrame({ cell: 9, bias: 0, biasX: -0.25 });
+  assert.equal(game.camera.biasX, -0.25);
+  const notes = [];
+  game.hud.notify = (...args) => notes.push(args);
+  game.inventoryScreen.isOpen = false;
+  const made = game.characters.create({ ...sampleDraft(game.characters, Date.now()), skin: cleanSkin({ tone: 'olive' }) });
+  game.creator.close(made.character);
+  assert.equal(audio.unlocks, 1, 'sound unlocks');
+  assert.equal(fullscreenRequests.length, 1, 'the phone goes full screen');
+  assert.equal(harness.gateButton.hidden, true, 'no play card after Create');
+  assert.equal(harness.blocked(), false);
+  assert.equal(game.player.skin.tone, 'olive');
+  assert.equal(cellHeight(), before, 'the phone zoom comes back');
+  assert.deepEqual([game.camera.bias, game.camera.biasX], [0.1, 0]);
+  assert.deepEqual(notes, [], 'saved');
+});
+
+test('on a desktop the framing glides in and out, and a failed save is told', async () => {
+  const failing = { getItem: () => null, setItem: () => { throw new Error('full'); } };
+  const harness = await loadGame(undefined, { href: 'http://localhost/?debug', creator: true, real: { localStorage: failing } });
+  const { game, audio, fullscreenRequests, cellHeight, frame } = harness;
+  harness.pinch(1.5);
+  for (let i = 0; i < 120; i++) frame();
+  const zoomed = cellHeight();
+  game.creator.onFrame({ cell: 18, bias: 0, biasX: -0.17 });
+  frame();
+  assert.ok(game.camera.biasX < 0 && game.camera.biasX > -0.17, 'it glides');
+  for (let i = 0; i < 120; i++) frame();
+  assert.equal(game.camera.biasX, -0.17);
+  assert.equal(cellHeight(), 18);
+  const notes = [];
+  game.hud.notify = (...args) => notes.push(args);
+  const made = game.characters.create(sampleDraft(game.characters, Date.now()));
+  game.creator.close(made.character);
+  assert.equal(audio.unlocks, 1);
+  assert.equal(fullscreenRequests.length, 0, 'a desktop stays windowed');
+  assert.deepEqual(notes, [[game.characters.saveError]]);
+  for (let i = 0; i < 120; i++) frame();
+  assert.equal(game.camera.biasX, 0);
+  assert.equal(cellHeight(), zoomed, 'the zoom from before');
+});
+
+test('a resize, a turn or a phone change while open refits the creator, and the pinch slots wait', async () => {
+  const harness = await loadGame(undefined, { phone: true, width: 393, height: 852, href: 'http://localhost/?debug', creator: true });
+  const { game, cellHeight } = harness;
+  game.creator.onFrame({ cell: 10, bias: -0.25, biasX: 0 });
+  harness.resizeTo(393, 800);
+  assert.equal(game.creator.refits, 1);
+  assert.equal(cellHeight(), 10, 'the phone default stays away');
+  harness.rotate();
+  assert.equal(game.creator.refits, 3, 'the turn and its resize');
+  assert.equal(game.layout.zoomSlots.get('portrait'), null);
+  assert.equal(game.camera.bias, -0.25, 'the creator keeps its framing');
+  harness.setPhone(false);
+  assert.equal(game.creator.refits, 4);
+  game.creator.close();
+  assert.equal(harness.gateButton.hidden, true, 'no card off a phone');
+  harness.setPhone(true);
+  assert.equal(game.creator.refits, 4, 'closed, nothing to refit');
 });

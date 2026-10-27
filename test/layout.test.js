@@ -165,6 +165,9 @@ test('the camera frames its target below centre by its bias, applied at once', (
   assert.equal(biased.x0, plain.x0);
   assert.ok(Math.abs(camera.centreY(biased) - (80 - 0.1 * 101)) < 1e-9);
   assert.equal(FRAME_BIAS.landscape, 0);
+  camera.biasX = -0.25;
+  const left = v => v.x0 + v.offX / renderer.cellW;
+  assert.ok(Math.abs(left(camera.view(renderer)) - left(plain) - 0.5 * 50) < 1e-9, 'biasX moves the target left of centre');
 });
 
 test('a shaken camera wobbles around its target and settles', () => {

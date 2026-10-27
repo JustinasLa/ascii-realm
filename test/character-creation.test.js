@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DAY } from '../src/character/catalog.js';
 import { formatBirthday } from '../src/character/calendar.js';
-import { Creation, PAGES, sampleDraft } from '../src/character/creation.js';
+import { Creation, PAGES, sampleDraft, wantsCreator } from '../src/character/creation.js';
 import { Roster } from '../src/character/roster.js';
 import { sheetErrors } from '../src/character/rules.js';
 import { DEFAULT_SKIN } from '../src/character/skin.js';
@@ -264,6 +264,8 @@ test('the final recheck lists every failing step and blocks Create', () => {
   assert.equal(refused.ok, false);
   assert.deepEqual(refused.errors.map((e) => e.step), ['age', 'description']);
   assert.equal(r.characters.length, 0, 'nothing is written');
+  assert.equal(f.error, 'Age must be between 18 and 90 for your race.', 'the Summary refuses with the first');
+  assert.equal(f.next(), false);
 });
 
 test('Create saves the character, makes it active and keeps its skin', () => {
@@ -293,6 +295,7 @@ test('Create passes on the roster refusals', () => {
   assert.equal(cooldown.reason, 'You are on cooldown from switching characters.');
   assert.equal(cooldown.opensAt, START + 4 * DAY);
   assert.deepEqual(third.create(), cooldown);
+  assert.equal(third.error, cooldown.reason, 'the Summary refuses while on cooldown');
   r.clock.now += 4 * DAY;
   assert.ok(third.create().ok);
   assert.deepEqual(sample('summary', r).allowed, { ok: false, reason: 'All 3 character slots are taken.' });
@@ -305,4 +308,18 @@ test('the sample draft passes every rule', () => {
   const draft = sampleDraft(r, START);
   assert.deepEqual(sheetErrors(draft, { now: START }), []);
   assert.equal(draft.skin, DEFAULT_SKIN);
+});
+
+test('start-up opens the creator for a first visit only', () => {
+  const at = (query, r = roster()) => wantsCreator(new URLSearchParams(query), r);
+  assert.equal(at(''), true, 'an empty roster');
+  assert.equal(at('?nocreator'), false, 'tools skip it');
+  assert.equal(at('?nogate'), false, 'and so do benchmarks');
+  assert.equal(at('?creator&nogate'), true, '?creator always opens it');
+  const made = roster();
+  assert.ok(made.create(sampleDraft(made, START)).ok);
+  assert.equal(at('', made), false, 'a character exists');
+  assert.equal(at('?creator', made), true);
+  const newer = roster({ 'ascii-realm-characters': JSON.stringify({ v: 99 }) });
+  assert.equal(at('', newer), false, 'a roster that can\'t create plays as before');
 });

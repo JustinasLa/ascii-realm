@@ -7,6 +7,8 @@ export class Camera {
     // How far below the screen centre the target sits, as a fraction of the
     // view height. Applied when the view is built, so a change shows at once.
     this.bias = 0;
+    // How far right of the screen centre it sits, as a fraction of the width.
+    this.biasX = 0;
   }
 
   // Jolts the view, e.g. when a heavy blow lands; `amount` is in rows.
@@ -26,14 +28,15 @@ export class Camera {
 
   // Works out which world cell lands in the top-left grid slot and how far
   // (in device px) the grid must be scrolled to place the camera target
-  // exactly in the middle of the screen, or `bias` of the height below it.
+  // exactly in the middle of the screen, or `bias` of the height below it
+  // and `biasX` of the width right of it.
   view(renderer) {
     const halfW = renderer.canvas.width / renderer.cellW / 2;
     const halfH = renderer.canvas.height / renderer.cellH / 2;
     // A fast, decaying wobble while the view is shaken.
     const jx = (Math.sin(this.time * 71) * this.quake) / 0.6;
     const jy = Math.sin(this.time * 53 + 1) * this.quake;
-    const left = this.x + jx - halfW;
+    const left = this.x + jx - halfW * (1 + 2 * this.biasX);
     const top = this.y + jy - halfH * (1 + 2 * this.bias);
     const x0 = Math.floor(left);
     const y0 = Math.floor(top);

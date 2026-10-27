@@ -3,10 +3,10 @@
 A character sheet describes who the player is: name, gender, race, age and
 birthday, class, attributes, description and clues. Each browser keeps up
 to three characters, one of them active. The rules, the skins and the saved
-roster live in `src/character/`. In play only the active character's skin
-is used so far: the HUD name and the lobby name are unchanged, and the
-roster can be reached only from the console with `?debug`, as
-`game.characters`. The creator is still being built.
+roster live in `src/character/`. A first visit opens the
+[creator](#the-creator). In play only the active character's skin is used
+so far: the HUD name and the lobby name are unchanged, and the roster can
+be reached only from the console with `?debug`, as `game.characters`.
 
 ## Races
 
@@ -111,12 +111,27 @@ tone. The age starts at 18, and a typed age or birthday must be valid before
 Next. A race changed later keeps the age, so the Age step and the Summary's
 final check of every step report an age past the new maximum.
 
-The Description, Clues and Summary pages and Create are still to come, so it
-opens only with `?creator` (`?debug&creator=<page>` opens that page on a
-sample character) and saves nothing. While it is open the rest of the screen
-is inert, every key stays in the panel (Esc doesn't close it), monsters and
-animals hold still, nothing can hurt the player, and a lobby join waits for
-it to close.
+The Description step counts the trimmed text against 32 to 256 characters,
+takes one paragraph (Enter continues) and offers an optional gender. Clues
+are added one at a time with **Add** (or Enter in the field), each checked
+as it is added, and removed with **Remove**; at ten the field closes.
+
+The Summary lists every row with an **Edit** that opens its step and comes
+back with **Save and review**. It checks every step again: failing steps are
+listed with **Review** links and block **Create character**, as does a
+roster that can't take a character now (the cooldown shows when it opens).
+Create saves the character, makes it active and starts play in the same
+tap: sound starts, and phones go full screen and keep the screen awake.
+
+Start-up opens the creator instead of play while the roster is empty and a
+character can be made; `?creator` always opens it, and `?nocreator` or
+`?nogate` never do. While it is open the camera zooms in and frames the
+outlaw beside the desktop and landscape panel, or above the portrait sheet,
+and comes back afterwards (it snaps with reduced motion). On phones the
+panel keeps above the on-screen keyboard. The rest of the screen is inert,
+every key stays in the panel (Esc doesn't close it), monsters and animals
+hold still, nothing can hurt the player, and a lobby join waits for Create.
+A draft isn't saved: a reload starts again.
 
 ## The roster
 

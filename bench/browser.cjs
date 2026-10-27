@@ -57,6 +57,8 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
       await gated.setViewport({ width: 393, height: 852, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
       const gateUrl = new URL(url.href);
       gateUrl.searchParams.delete('nogate');
+      // A fresh profile would open the character creator instead of the card.
+      gateUrl.searchParams.set('nocreator', '');
       await gated.goto(gateUrl.href, { waitUntil: 'load' });
       await gated.waitForFunction(() => window.game?.metrics.frames > 30, { timeout: 180000 });
       const shown = await gated.evaluate(() => {
