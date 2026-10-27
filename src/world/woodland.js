@@ -6,9 +6,10 @@ import { makeTree } from './trees.js';
 import { ASPECT, GRASS } from './world.js';
 
 // How thickly woods grow. The sparse world is the default; a dense one grows
-// groves: a few more trees where the forest is thick, a flowered sward around
-// each mature trunk and clusters of pale caps in the trees' shade, with the
-// ground between neighbouring trunks left open to walk through.
+// groves: a flowered sward around each mature trunk and clusters of pale caps
+// in the trees' shade, with the ground between neighbouring trunks left open
+// to walk through, and, where GROVE.maxTreesPerChunk allows, a few more trees
+// where the forest is thick.
 export const WOODLANDS = Object.freeze(['sparse', 'dense']);
 
 export const GROVE = Object.freeze({
@@ -17,7 +18,9 @@ export const GROVE = Object.freeze({
   forestFrom: 0.5, // the forest noise sparse trees follow, from where groves begin
   forestGain: 2.4, // chance = clamp((forest - forestFrom) * gain, 0, chanceMax)
   chanceMax: 0.55,
-  maxTreesPerChunk: 2, // 0 grows the undergrowth around the sparse trees only
+  // Grove trees are baked on the main thread; at 1 or 2 a chunk, entering a
+  // forest hitches, so dense woods grow undergrowth around the sparse trees.
+  maxTreesPerChunk: 0,
   treeGap: Object.freeze([32, 10]), // trees conflict when |dx| < 32 cells and |dy| < 10 rows
   spawnClear: 42, // grove trees and caps keep out of the spawn clearing
   skirt: Object.freeze([14, 5]), // ground cover beyond the largest foot, cells × rows
@@ -339,7 +342,8 @@ export function groveProps(world, cx, cy, size, props) {
         if (lanes.some(([p, q]) => laneDistance(x, y, p, q) <= g.laneClear)) continue;
         if (accepted.some((c) => Math.abs(c.x - x) < 3 && Math.abs(c.y - y) < 1)) continue;
         const clump = createProp('pale-caps', x, y, { seed: capSeed, scale });
-        const outline = [[0, 0], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1], [-1, -0.5], [1, -0.5]]
+        // The corners and edge middles of its footprint box, and its centre.
+        const outline = [[0, 0], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1], [-1, -0.5], [1, -0.5], [0, -0.5]]
           .map(([dx, dy]) => [x + dx * clump.footW, y + dy * clump.footH]);
         if (outline.some(([px, py]) => solids.some((p) => blocks(p, px, py)
           || (p.kind === 'tree' && insideShape({ x: p.x, y: p.y, footW: p.footW * 1.15, footH: p.footH * 1.15 }, px, py)))

@@ -21,8 +21,12 @@ const fineCells = (prop) => finish(fineRecipe(prop)());
 const BLOCK = { cx: -4, cy: -1, n: 4 };
 const chunksOf = ({ cx, cy, n }) => Array.from({ length: n * n }, (_, k) => [cx + k % n, cy + Math.floor(k / n)]);
 const blockProps = (world, block = BLOCK) => chunksOf(block).flatMap(([cx, cy]) => world.propsOf(cx, cy));
+// Dense woods ship without grove trees (their bakes hitch the main thread);
+// these tests turn them on through the config seam, as a later change may.
+const GROVE2 = { ...GROVE, maxTreesPerChunk: 2 };
+const withGrove = (world, grove = GROVE2) => Object.assign(world, { grove });
 let dense19;
-const dense = () => (dense19 ??= new World(19, { woodland: 'dense' }));
+const dense = () => (dense19 ??= withGrove(new World(19, { woodland: 'dense' })));
 const groveTrees = (world, props) => {
   const sites = new Set(chunksOf(BLOCK).flatMap(([cx, cy]) => treeSites(world, cx, cy, S))
     .filter((s) => s.grove).map((s) => `${s.x},${s.y}`));
@@ -30,7 +34,7 @@ const groveTrees = (world, props) => {
 };
 // A world that is grass everywhere, with spawn far away: generators place
 // every rock and tree they draw.
-const meadowWorld = (seed, grove = GROVE) => ({ seed, season: 'summer', spawn: { x: 1e6, y: 1e6 }, grove,
+const meadowWorld = (seed, grove = GROVE2) => ({ seed, season: 'summer', spawn: { x: 1e6, y: 1e6 }, grove,
   typeAt: () => GRASS, landTypeAt: () => GRASS, siteCache: new Map() });
 
 test('the world keeps its sparse, grass-only woods unless dense ones are asked for', () => {
@@ -108,13 +112,13 @@ test('every tree the sparse generator grows is a tree site, so the sites follow 
 });
 
 test('grove sites are seeded, on grass, out of the spawn clearing and at most two a chunk', () => {
-  const world = new World(19, { woodland: 'dense' });
-  const again = new World(19, { woodland: 'dense' });
-  const other = new World(20, { woodland: 'dense' });
+  const world = withGrove(new World(19, { woodland: 'dense' }));
+  const again = withGrove(new World(19, { woodland: 'dense' }));
+  const other = withGrove(new World(20, { woodland: 'dense' }));
   const all = [];
   for (const [cx, cy] of chunksOf({ cx: -8, cy: -6, n: 12 })) {
     const sites = treeSites(world, cx, cy, S).filter((s) => s.grove);
-    assert.ok(sites.length <= GROVE.maxTreesPerChunk);
+    assert.ok(sites.length <= GROVE2.maxTreesPerChunk);
     assert.deepEqual(treeSites(again, cx, cy, S), treeSites(world, cx, cy, S));
     for (const s of sites) {
       assert.equal(Math.floor(s.x / S), cx);
@@ -128,9 +132,9 @@ test('grove sites are seeded, on grass, out of the spawn clearing and at most tw
   const elsewhere = chunksOf({ cx: -8, cy: -6, n: 12 }).flatMap(([cx, cy]) => treeSites(other, cx, cy, S))
     .filter((s) => s.grove).map((s) => `${s.x},${s.y}`);
   assert.notDeepEqual(elsewhere, all, 'another seed grows other groves');
-  // The config seam: no grove trees, only undergrowth around the sparse ones.
+  // As shipped: no grove trees, only undergrowth around the sparse ones.
   const bare = new World(19, { woodland: 'dense' });
-  bare.grove = { ...GROVE, maxTreesPerChunk: 0 };
+  assert.equal(GROVE.maxTreesPerChunk, 0);
   assert.equal(chunksOf({ cx: -8, cy: -6, n: 12 }).flatMap(([cx, cy]) => treeSites(bare, cx, cy, S))
     .filter((s) => s.grove).length, 0);
 });
@@ -139,7 +143,7 @@ test('a grove tree keeps its gap from every other tree site (R1)', () => {
   assert.ok(GROVE.treeGap[0] >= 2 * TREE_FOOT_MAX + 4, 'two of the largest feet side by side leave 4 cells');
   assert.ok(GROVE.treeGap[1] >= 2 * TREE_FOOTH_MAX + 2, 'or 2 rows one above the other');
   for (const seed of [1, 7, 19]) {
-    const world = new World(seed, { woodland: 'dense' });
+    const world = withGrove(new World(seed, { woodland: 'dense' }));
     const sites = chunksOf({ cx: -6, cy: -6, n: 12 }).flatMap(([cx, cy]) => treeSites(world, cx, cy, S));
     for (let i = 0; i < sites.length; i++) {
       for (let j = i + 1; j < sites.length; j++) {
@@ -321,7 +325,7 @@ test('a clump\'s reach is known before it is made, and bounds the clump made', (
 });
 
 test('all three pale-cap forms grow, and generated clumps bake the same in a worker', () => {
-  const world = new World(7, { woodland: 'dense' });
+  const world = withGrove(new World(7, { woodland: 'dense' }));
   const forms = new Set();
   let clump;
   for (const [cx, cy] of chunksOf({ cx: -1, cy: -2, n: 6 })) {
@@ -338,14 +342,14 @@ test('all three pale-cap forms grow, and generated clumps bake the same in a wor
 });
 
 test('dense props are the same after their chunks are evicted and grown again', () => {
-  const first = new World(19, { woodland: 'dense', maxChunks: 16 });
+  const first = withGrove(new World(19, { woodland: 'dense', maxChunks: 16 }));
   const look = (world) => chunksOf({ cx: -4, cy: -1, n: 2 }).flatMap(([cx, cy]) => world.propsOf(cx, cy))
     .map((p) => JSON.stringify([p.id, p.kind, p.x, p.y, p.seed, p.cells.length, p.cells[0]]));
   const before = look(first);
   for (let i = 0; i < 40; i++) first.chunk(40 + i, 40);
   assert.equal(first.chunks.has('-4,-1'), false, 'evicted');
   assert.deepEqual(look(first), before);
-  assert.deepEqual(look(new World(19, { woodland: 'dense' })), before);
+  assert.deepEqual(look(withGrove(new World(19, { woodland: 'dense' }))), before);
 });
 
 test('a grove sward flowers blue and white around each mature tree, its rim ragged', () => {
@@ -412,7 +416,7 @@ test('a grove sward flowers blue and white around each mature tree, its rim ragg
 });
 
 test('without flora a dense grove is grass alone, still thick around its trees', () => {
-  const world = new World(19, { woodland: 'dense', flora: false });
+  const world = withGrove(new World(19, { woodland: 'dense', flora: false }));
   const sparse = new World(19);
   let roots = 0, sparseRoots = 0;
   for (const [cx, cy] of chunksOf({ cx: -4, cy: -1, n: 2 })) {
@@ -466,7 +470,7 @@ test('phantom neighbours cover every big rock and fragment a neighbouring chunk 
 test('a boulder at the edge of the next chunk keeps grove trees and caps off its foot', () => {
   // Look for a chunk whose boulder is about the largest a chunk can grow,
   // based as near its west edge as one can be.
-  const grove = { ...GROVE, forestFrom: -1, chanceMax: 1 };
+  const grove = { ...GROVE2, forestFrom: -1, chanceMax: 1 };
   let found;
   for (let seed = 1; !found && seed < 40; seed++) {
     for (let cx = -60; !found && cx < 60; cx++) {
@@ -501,5 +505,26 @@ test('a boulder at the edge of the next chunk keeps grove trees and caps off its
         }
       }
     }
+  }
+});
+
+test('as shipped, dense woods grow no extra trees: a sward and pale caps around the sparse ones', () => {
+  const world = new World(19, { woodland: 'dense' });
+  const sparse = new World(19);
+  const block = { cx: -7, cy: -4, n: 6 };
+  const props = blockProps(world, block);
+  const trees = props.filter((p) => p.kind === 'tree');
+  assert.deepEqual(trees.map((p) => p.id), blockProps(sparse, block).filter((p) => p.kind === 'tree').map((p) => p.id));
+  assert.ok(trees.length >= 3);
+  const caps = props.filter((p) => p.kind === 'pale-caps');
+  assert.ok(caps.length >= trees.length, `${caps.length} clumps round ${trees.length} trees`);
+  for (const c of caps) {
+    const near = trees.some((t) => Math.abs(c.x - t.x) < t.footW * 1.9 + 2 + 2 * clumpReach(c.seed, GROVE.scale[1]) + 3
+      && Math.abs(c.y - t.y) < t.footH + 4);
+    assert.ok(near, `${c.id} grows by a tree`);
+  }
+  for (const t of trees) {
+    const { c, i } = world.locate(Math.floor(t.x + 6), Math.floor(t.y + 1));
+    assert.ok(c.grove?.[i] > 0, `a sward round ${t.id}`);
   }
 });

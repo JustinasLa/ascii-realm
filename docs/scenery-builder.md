@@ -43,6 +43,8 @@ side facing it, and reflect in water below them. The teal gills and stems keep a
 steady glow of their own colour at night but light nothing around them. They are
 decorative: you can walk and shoot through them, and grass grows around them.
 Use the scale slider to vary sizes when clustering them around tree roots.
+In dense woods (`?woodland=dense`), the generated pale caps around trees
+can be erased like other generated props, and **Reset scene** restores them.
 
 Add `?builder` to the URL to open the panel automatically. With `?debug`, the
 current scene is available as `window.game.builder.scene` for inspection.

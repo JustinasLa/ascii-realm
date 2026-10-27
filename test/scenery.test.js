@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { Scenery } from '../src/editor/scenery.js';
 import { drawGround } from '../src/world/ground.js';
 import { ASPECT, DIRT, GRASS, STONE, WATER, WATER_LEVEL, World } from '../src/world/world.js';
+import { GROVE } from '../src/world/woodland.js';
 import { withLayers } from './helpers/renderer.js';
 
 function fixture(seed = 42) {
@@ -192,7 +193,8 @@ test('invalid brush arguments are rejected without changing the scene', () => {
 });
 
 test('dense woods save like the sparse world: late generated ids, and scenes move between them', () => {
-  const dense = new World(19, { woodland: 'dense' });
+  // With grove trees on, as a later change may ship them.
+  const dense = Object.assign(new World(19, { woodland: 'dense' }), { grove: { ...GROVE, maxTreesPerChunk: 2 } });
   const scene = new Scenery(dense);
   // Grove props can take ids past the sparse world's 40.
   scene.load({ version: 1, seed: 19, terrain: [], props: [], removed: ['p:-3:0:45', 'p:-3:0:63'] });

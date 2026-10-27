@@ -95,6 +95,24 @@ short version see the [README](../README.md).
   Add `?season=spring`, `?season=autumn` or `?season=winter` for seasonal
   palettes and snow-tipped evergreens. Summer is the default; the season
   stays fixed until reload and can be combined with `?seed=42&season=autumn`.
+- **Woodland density.** The world's woods are sparse by default: mature
+  trees stand alone or in loose groups on grass-only meadows. Two URL
+  parameters change that, and both stay fixed until reload:
+  - `?flora=1` grows wild flowers, ferns and cattails among the grass, in
+    drifts of one species; `?flora=0` keeps the grass alone.
+  - `?woodland=dense` grows a grove around every mature tree. The grass
+    around the trunk grows taller and fuller, in a ragged sward that leans
+    toward the shade the moon leaves, with drifts of forget-me-nots,
+    bluebells, cornflowers, daisies and yarrow. Clusters of pale caps grow
+    around the trunk, larger near each cluster's heart, and the ground on the
+    line between two neighbouring trunks stays open to walk through. The
+    trees themselves are the sparse world's. Dense woods bring the flowers
+    unless `?flora=0` is added.
+  Dense woods are for solo play: lobbies share one world, so a page opened
+  with a lobby code plays the sparse woods, and creating or joining a lobby
+  from dense woods first reloads the page into the sparse world. Saved
+  scenery works in both: generated props keep their ids, and an erased grove
+  prop is simply not there in the sparse world.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
   the moon) mirrored in every lake. Walk or run through any lake: the water
   rises from your ankles to at most your knees, slows your stride, and hides
