@@ -268,8 +268,10 @@ test('ordinary and fine bakes keep their glyphs, colours and random draws', () =
   const scenery = [rebuildProp({ make: 'tree', x: 3, y: 4, draws: drawsOf(400), options: { species: 'oak', seed: 9 } })];
   for (const { kind, group } of PROP_CATALOG) {
     if (group === 'Architecture' && !kind.startsWith('rubble')) continue;
-    // Newer than these pins: its own tests cover it (standing-stone.test.js).
+    // Newer than these pins: their own tests cover them (standing-stone.test.js,
+    // pale-caps.test.js).
     if (kind === 'standing-stone') continue;
+    if (kind === 'pale-caps') continue;
     for (const variant of [0, 1]) (kind === 'rock' ? rocks : scenery).push(createProp(kind, 4.5, 6.5, { seed: 3, variant }));
   }
   assert.deepEqual({ rocks: bakeDigest(rocks), scenery: bakeDigest(scenery) }, BAKE_PINS);

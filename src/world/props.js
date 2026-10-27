@@ -7,6 +7,7 @@ import { isArchitectureKind, makeArchitectureProp } from './architecture-props.j
 import { makeCampProp } from './camp-props.js';
 import { deadwoodBlocks } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
+import { paleCaps } from './pale-caps.js';
 import { fineOf } from './fine-bakes.js';
 import { shade } from './glow.js';
 import { bakeSurface, canopyOf, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withCanopy, withFine } from './prop-art.js';
@@ -411,6 +412,14 @@ function makeStandingStone(x, y, rand, seed, bakeFn = bake) {
     cells: bakeBoulder(rock, seed, bakeFn) }, fineBoulder(rock, seed, bakeFn));
 }
 
+// A builder's clump of pale caps: decorative, and walked through like the
+// mushrooms it grows among.
+function makePaleCaps(x, y, rand, seed, bakeFn = bake) {
+  const caps = paleCaps(rand, seed);
+  return withFine({ kind: 'pale-caps', x, y, footW: caps.b / ASPECT, footH: 0.8,
+    cells: bakeBoulder(caps, seed, bakeFn) }, fineBoulder(caps, seed, bakeFn));
+}
+
 // Rocks and standing stones: solid stone that is damp by water, keeps the
 // grass off its face and stops arrows.
 export const isStoneProp = (prop) => prop.kind === 'rock' || prop.kind === 'standing-stone';
@@ -670,7 +679,7 @@ export function createProp(kind, x, y, options = {}) {
   const used = { baked: false };
   const bakeFn = scaledBaker(width * scale, height * scale, used);
   const make = { tree: makeBuilderTree, rock: variant === 0 ? makeRock : makeSceneryRock, bush: makeBuilderBush,
-    'standing-stone': makeStandingStone }[kind];
+    'standing-stone': makeStandingStone, 'pale-caps': makePaleCaps }[kind];
   const prop = make ? make(x, y, rand, seed, bakeFn)
     : makeNaturalProp(kind, x, y, rand, seed, bakeFn) ?? makeCampProp(kind, x, y, rand, seed, bakeFn)
       ?? makeArchitectureProp(kind, x, y, rand, seed, bakeFn, rotation);
