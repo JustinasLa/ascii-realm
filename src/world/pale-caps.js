@@ -135,10 +135,11 @@ export function paleCaps(rand, seed) {
     const u = (px - cap.cx) / rx;
     const v = (h - sh) / ch;
     const hw = capWidth(cap.form, v);
-    if (Math.abs(u) <= hw) {
+    // A zero width is above or below the cap, not a line up its middle.
+    if (hw > 0 && Math.abs(u) <= hw) {
       // The cap's normal on a sphere fitted to its outline, in the screen's
       // frame: x right, y down the screen, z toward the viewer.
-      const a = hw > 0 ? u / hw : 0;
+      const a = u / hw;
       const ring = Math.sqrt(Math.max(0, 1 - v * v));
       const nx = a * ring, ny = -v, nz = Math.sqrt(Math.max(0, 1 - a * a)) * ring;
       const grain = (hash2(Math.floor(px * 2.2), Math.floor(py * 1.6), seed + 17) - 0.5) * 0.08;

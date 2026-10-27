@@ -107,6 +107,21 @@ test('a pale cap\'s crown faces the moon, so it is lit above its rim', () => {
   }
 });
 
+test('nothing is drawn above a pale cap\'s crown, even straight above its middle', () => {
+  for (let seed = 1; seed <= 80; seed++) {
+    const shape = shapeOf(seed);
+    for (const cap of shape.caps) {
+      const crown = cap.oy - cap.sh - cap.ch;
+      for (const lift of [1e-6, 0.01, 0.5, 1]) {
+        // Only another cap of the clump may stand there.
+        const s = shape.sample(cap.cx, crown - lift);
+        const others = shape.caps.filter((c) => c !== cap && c.oy - c.sh - c.ch <= crown - lift);
+        if (!others.length) assert.equal(s, null, `seed ${seed} ${cap.form}: ${lift} above the crown`);
+      }
+    }
+  }
+});
+
 test('pale caps are pale above and teal below, whatever their seed or variation', () => {
   for (const seed of [...Array.from({ length: 40 }, (_, i) => i + 1), ...Object.values(lone).flat()]) {
     for (const variant of [0, 1]) {
@@ -169,6 +184,47 @@ test('pale caps grow alone or in twos and threes, the main cap the largest', () 
   }
   assert.deepEqual([...counts].sort(), [1, 2, 3]);
   assert.ok(overlapping > 10, `${overlapping} front satellites overlap the main cap`);
+});
+
+// The clump's sampler with only one of its caps left where it stands.
+function solo(seed, index) {
+  const shape = shapeOf(seed);
+  shape.caps.forEach((c, i) => { if (i !== index) { c.cx += 1e3; c.ox += 1e3; } });
+  return shape.sample;
+}
+
+test('a clump draws every satellite, a front one over the main cap and the main cap over a back one', () => {
+  let drawn = 0, overFront = 0, overBack = 0;
+  for (let seed = 1; seed <= 120; seed++) {
+    const shape = shapeOf(seed);
+    const [main, ...satellites] = shape.caps;
+    if (!satellites.length) continue;
+    const cells = fineCells(createProp('pale-caps', 0.5, 0.5, { seed, variant: 0 }));
+    const at = (px, py) => cells.find((c) => c.dx === Math.floor(px * FINE / ASPECT + 0.5) && c.dy === Math.floor(py * FINE) + 1);
+    for (const sat of satellites) {
+      // A satellite's crown clear of the main cap is baked as a pale letter.
+      if (Math.abs(sat.cx - main.cx) < main.rx + 0.4) continue;
+      const crown = at(sat.cx, sat.oy - sat.sh - sat.ch * 0.6);
+      assert.ok(crown && !isTeal(crown) && crown.r >= 120, `seed ${seed}: satellite crown`);
+      drawn++;
+    }
+    // Where two caps cover the same point, the nearer one is the one seen.
+    const solos = shape.caps.map((_, i) => solo(seed, i));
+    const order = [...satellites.filter((c) => c.front), main, ...satellites.filter((c) => !c.front)]
+      .map((c) => solos[shape.caps.indexOf(c)]);
+    for (let py = -0.02; py > shape.top; py -= 0.13) {
+      for (let px = -shape.b; px <= shape.b; px += 0.11) {
+        const seen = order.map((f) => f(px, py)).filter(Boolean);
+        assert.deepEqual(shape.sample(px, py), seen[0] ?? null, `seed ${seed} at ${px}, ${py}`);
+        if (seen.length < 2 || JSON.stringify(seen[0]) === JSON.stringify(seen[1])) continue;
+        const mainHit = solos[0](px, py);
+        if (mainHit && JSON.stringify(seen[0]) !== JSON.stringify(mainHit)) overFront++;
+        else if (mainHit) overBack++;
+      }
+    }
+  }
+  assert.ok(drawn > 10, `${drawn} satellite crowns baked`);
+  assert.ok(overFront > 50 && overBack > 50, `${overFront} points under a front satellite, ${overBack} over a back one`);
 });
 
 test('pale caps grow with the scale slider and are never clipped', () => {
