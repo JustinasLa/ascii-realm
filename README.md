@@ -17,6 +17,7 @@ world is generated as you walk, and up to eight friends can share it.
 - **Water and reflections** — wade knee-deep through any lake while the outlaw, trees and stars reflect and break apart on the swell.
 - **Rivers** — seeded streams wind downhill into the lakes, their foam streaks racing downstream and their current carrying anyone who wades in, and now and then a log or other flotsam drifting by that you, and the monsters wading after you, can shove aside.
 - **A motion-captured outlaw** — real walk, run, jump and trick animations, an idle that looks around, breath in the cold, and footprints in dirt and sand.
+- **Characters** — a first visit makes a character step by step (name, class, race, age, attributes, description and clues), checked on a summary page before it is saved, with the live outlaw framed beside the panel.
 - **Sword play** — click to cut towards the cursor: draw, guard, a three-hit combo, a running lunge, a plunge from the air and a charged spin; cuts fell trees and mow tall grass.
 - **Rune casting** — 44 rune spells across fire, ice, life and water, picked from a hold-to-open rune wheel (middle mouse) and cast at the cursor with `R` or a right click, each with its own ASCII animation and recorded foley, paid for with slowly refilling mana.
 - **Wildlife** — deer herds and rabbits that graze, watch and flee: deer bolt together, rabbits scatter. Hunt them with sword or bow for hide, meat and bone.
