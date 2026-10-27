@@ -39,7 +39,7 @@ import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
-import { sampleDraft } from './character/creation.js';
+import { sampleDraft, wantsCreator } from './character/creation.js';
 import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
@@ -51,7 +51,7 @@ import { putOutlinedCell } from './render/cells.js';
 import { buildAtlas } from './render/glyphs.js';
 import { AsciiRenderer } from './render/renderer.js';
 import { ChatUi } from './ui/chat.js';
-import { CharacterCreator } from './ui/creator.js';
+import { CharacterCreator, hidesPreview } from './ui/creator.js';
 import { figureTop, SpeechBubbles } from './ui/bubbles.js';
 import { Nameplates } from './ui/nameplates.js';
 import { Hud } from './ui/hud.js';
@@ -150,7 +150,8 @@ let fitChunks = null;
 // slide away: the default follows it so the view stays in the cell budget,
 // unless the player has pinched a zoom of their own in this orientation.
 function onWindowResize() {
-  if (device.phone && !ruinPreview && !pinched) cellH = zoomTarget = phoneDefault(layout.orientation);
+  if (creator.isOpen) creator.refit();
+  else if (device.phone && !ruinPreview && !pinched) cellH = zoomTarget = phoneDefault(layout.orientation);
   resize();
 }
 window.addEventListener('resize', onWindowResize);
@@ -244,20 +245,66 @@ const harvesting = new Harvesting(world, null, { wild: false });
 const mushrooms = new Mushrooms(world);
 player.equipment = inventory.equipment;
 const camera = new Camera(spawn.x, spawn.y - 11);
+// While the creator is open the camera zooms in and frames the outlaw in
+// the free part of the screen; the zoom and framing glide there and back,
+// or snap with reduced motion. Closing restores the zoom from before.
+let framing = null;
+let heldZoom = null;
+function frameCreator(next) {
+  if (!framing) {
+    if (pinched) zoomSlots.set(layout.orientation, zoomTarget);
+    heldZoom = zoomTarget;
+    // A three-quarter view of the figure.
+    player.heading = 0.3;
+  }
+  framing = next;
+  zoomTarget = next.cell;
+  if (reducedMotion) snapFraming();
+}
+function unframe() {
+  framing = null;
+  if (device.phone && !ruinPreview) {
+    const slot = zoomSlots.get(layout.orientation);
+    pinched = slot !== null;
+    zoomTarget = slot ?? phoneDefault(layout.orientation);
+  } else zoomTarget = heldZoom;
+  if (reducedMotion) snapFraming();
+}
+function framingGoal() {
+  return framing ?? { bias: device.phone ? FRAME_BIAS[layout.orientation] : 0, biasX: 0 };
+}
+function glideFraming(dt) {
+  const goal = framingGoal();
+  const k = 1 - Math.exp(-14 * dt);
+  for (const key of ['bias', 'biasX']) {
+    camera[key] += (goal[key] - camera[key]) * k;
+    if (Math.abs(goal[key] - camera[key]) < 1e-4) camera[key] = goal[key];
+  }
+}
+function snapFraming() {
+  applyFraming();
+  cellH = zoomTarget;
+  resize();
+}
+
 // Portrait phones show more of the world ahead; everything else is centred.
 function applyFraming() {
-  camera.bias = device.phone ? FRAME_BIAS[layout.orientation] : 0;
+  Object.assign(camera, framingGoal());
 }
 applyFraming();
 // A turned phone keeps the pinched zoom it left and returns to the one it
 // had, and snaps to it at once, as the controls re-lay out in CSS.
 function onOrientation(next, previous) {
   if (!device.phone) return;
-  if (pinched) zoomSlots.set(previous, zoomTarget);
-  if (!ruinPreview) {
-    const slot = zoomSlots.get(next);
-    pinched = slot !== null;
-    cellH = zoomTarget = slot ?? phoneDefault(next);
+  // The creator frames the outlaw for the new layout instead.
+  if (creator.isOpen) creator.refit();
+  else {
+    if (pinched) zoomSlots.set(previous, zoomTarget);
+    if (!ruinPreview) {
+      const slot = zoomSlots.get(next);
+      pinched = slot !== null;
+      cellH = zoomTarget = slot ?? phoneDefault(next);
+    }
   }
   applyFraming();
   resize();
@@ -322,24 +369,42 @@ if (params.has('debug')) window.game = debug;
 
 const fireStatus = document.getElementById('fire-status');
 
+// The reduced-motion setting is kept from its change events: reading the
+// query on every frame costs a style check.
+const reducedMotionQuery = matchMedia('(prefers-reduced-motion: reduce)');
+let reducedMotion = reducedMotionQuery.matches;
+reducedMotionQuery.addEventListener('change', (event) => { reducedMotion = event.matches; });
+
 // The character creator, built before the phone menu and the inventory so
 // its key listener runs first: a key listener added before this one would
-// get keys the creator owns. For now only ?creator opens it, and
-// ?debug&creator=<page> opens that page on a sample character.
+// get keys the creator owns. A first visit opens it (?creator always, never
+// with ?nocreator or ?nogate), and ?debug&creator=<page> opens that page on
+// a sample character.
 const creator = new CharacterCreator({ root: document.getElementById('creator-root'),
   outside: ['hud-root', 'touch-controls', 'panel-dock', 'phone-menu', 'chat', 'chat-open', 'inventory-root', 'screen']
     .map((id) => document.getElementById(id)),
+  cells: [MIN_CELL, MAX_CELL],
   onPreview: (skin) => { player.skin = skin; },
-  onClose: () => {
+  onFrame: frameCreator,
+  // Create is the player's tap to play.
+  onClose: (character) => {
     player.skin = cleanSkin(characters.active?.skin);
+    unframe();
     blockGameplay();
-    if (deferredJoin) connectLobby(deferredJoin);
+    // A lobby on another world reloads the page, which would lose a new
+    // character this visit couldn't save, so its waiting join is dropped.
+    const unsaved = character && characters.saveError;
+    if (deferredJoin && !unsaved) connectLobby(deferredJoin);
+    if (character) {
+      startPlay();
+      if (unsaved) hud.notify(unsaved);
+    } else if (gated()) gate.show('start');
+    if (deferredJoin && unsaved) hud.notify('The lobby wasn\'t joined: it could reload the page and lose this character.');
     deferredJoin = null;
-    if (gated()) gate.show('start');
     canvas.focus({ preventScroll: true });
   } });
 debug.creator = creator;
-if (params.has('creator')) {
+if (wantsCreator(params, characters)) {
   const start = params.has('debug') && params.get('creator');
   creator.open({ roster: characters, start: start || 'welcome', draft: start ? sampleDraft(characters, Date.now()) : null });
 }
@@ -381,15 +446,17 @@ const gate = new PlayGate({ button: document.getElementById('play-gate'), doc: d
     chat.close({ keepDraft: true });
     updateWakeLock();
   },
-  onStart: () => {
-    // Inside the tap: the browser allows sound and full screen only here.
-    void sound.engine.unlock();
-    if (!isStandalone(window)) void enterFullscreen(document, document.documentElement);
-    clock.reset();
-    cancelActions();
-    updateWakeLock();
-    canvas.focus({ preventScroll: true });
-  } });
+  onStart: startPlay });
+// Inside the tap on the card or on Create: the browser allows sound and full
+// screen only here.
+function startPlay() {
+  void sound.engine.unlock();
+  if (device.phone && !isStandalone(window)) void enterFullscreen(document, document.documentElement);
+  clock.reset();
+  cancelActions();
+  updateWakeLock();
+  canvas.focus({ preventScroll: true });
+}
 // Tools and benchmarks (?nogate) never see the card.
 const gated = () => device.phone && !params.has('nogate');
 function updateWakeLock() {
@@ -518,11 +585,6 @@ const chat = new ChatUi({ doc: document, win: window, phone: device, client: mul
   colorOf: memberColour });
 debug.chat = chat;
 // What players say floats over their heads, above the scene and below the HUD.
-// The reduced-motion setting is kept from its change events: reading the
-// query on every frame costs a style check.
-const reducedMotionQuery = matchMedia('(prefers-reduced-motion: reduce)');
-let reducedMotion = reducedMotionQuery.matches;
-reducedMotionQuery.addEventListener('change', (event) => { reducedMotion = event.matches; });
 const bubbles = new SpeechBubbles({ doc: document, root: document.getElementById('bubble-root'),
   reducedMotion: () => reducedMotion });
 debug.bubbles = bubbles;
@@ -756,7 +818,8 @@ function onPhoneChange(phone) {
   const changed = lastPhone !== undefined && phone !== lastPhone;
   lastPhone = phone;
   if (!changed) return;
-  if (!ruinPreview) {
+  if (creator.isOpen) creator.refit();
+  else if (!ruinPreview) {
     pinched = false;
     if (phone) cellH = zoomTarget = phoneDefault(layout.orientation);
     else zoomTarget = 8;
@@ -1233,6 +1296,7 @@ function frame(now) {
   const dt = gate.waiting || debug.pinTime !== null ? 0 : step;
   time = debug.pinTime ?? time + dt;
   updateZoom(debug.pinTime === null ? dt : step);
+  glideFraming(step);
   if (debug.freeze || isGameplayBlocked() || player.magicStunned || gate.waiting) cancelActions();
   updateWakeLock();
 
@@ -1621,12 +1685,15 @@ function frame(now) {
   // Reflections first, each prop measured about its own base.
   const reflections = props.filter((p) => propInView(view, p, true)).map((p) => ({ y: p.y,
     draw: () => drawProp(renderer, view, p, mirror, time, null, seed, true) }));
+  // While the creator is open, whatever would hide the outlaw is left out.
+  const hides = (p, y) => creator.isOpen && hidesPreview(p, y, player);
   const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).flatMap((p) => {
     // A turned arch spans several ground rows. Interleave its stone surfaces
     // with actors and grass instead of drawing both piers at one anchor depth.
     const slices = propDepthSlices(p);
-    if (slices) return slices.map(({ depth, cells }) => ({ y: p.y + depth,
+    if (slices) return slices.filter(({ depth }) => !hides(p, p.y + depth)).map(({ depth, cells }) => ({ y: p.y + depth,
       draw: () => drawProp(renderer, view, p, undefined, time, player, seed, false, cells) }));
+    if (hides(p, p.y)) return [];
     return [{ y: p.y, draw: () => {
       drawProp(renderer, view, p, undefined, time, player, seed);
       drawLeaves(renderer, view, p, time, seed);

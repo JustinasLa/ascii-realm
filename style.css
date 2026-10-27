@@ -593,6 +593,19 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   /* The inventory is a full-screen sheet too. */
   .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
   .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
+  /* The character creator (see .creator-panel below): a bottom sheet with
+     the outlaw framed above it; in landscape a side panel (in the landscape
+     block). Both keep to the visual viewport (CharacterCreator sets
+     --creator-kb and --creator-kb-top), so Back and Next stay above the
+     on-screen keyboard. Targets are 44 px, and 16 px fields keep iOS from
+     zooming on focus. */
+  #creator-root .creator-panel { top: auto; right: 0; bottom: var(--creator-kb, 0px); left: 0; width: auto; height: 50dvh; padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); border-width: 1px 0 0; }
+  #creator-root .creator-panel header { padding-top: 8px; }
+  #creator-root :is(.creator-panel button, .creator-panel input:not([type="radio"]), .creator-panel textarea, .creator-card) { min-height: 44px; }
+  #creator-root .creator-panel button { min-width: 44px; }
+  #creator-root .creator-panel :is(input, textarea) { font-size: 16px; }
+  #creator-root .creator-message { min-height: 0; }
+  #creator-root .creator-panel footer { padding: 6px 14px; }
 }
 /* Landscape phones: the stick and the cluster at the side edges, mid-to-low,
    leaving the middle of the screen clear (src/core/layout.js holds the
@@ -610,6 +623,8 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat:not(.open) .chat-line:nth-last-child(n+3) { display: none; }
   #chat.open { transform: none; }
   #chat.open #chat-log { max-height: calc(5 * 13px + 8px); }
+  /* The character creator's side panel (see .creator-panel below). */
+  #creator-root .creator-panel { top: var(--creator-kb-top, 0px); left: auto; width: min(50vw, 420px); height: auto; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) 0; border-width: 0 0 0 1px; }
 }
 /* Portrait phones too narrow for a 120px target strip beside the vitals
    (100vw - 46vw - 72px < 120px) put it on a second row under them (and
@@ -643,7 +658,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .creator-body p { margin: 0 0 10px; }
 .creator-body fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .creator-body :is(legend, label) { display: block; margin: 0 0 6px; padding: 0; color: var(--muted); }
-.creator-panel input:not([type="radio"]) { width: 100%; min-height: 32px; padding: 4px 8px; color: var(--ink); background: var(--solid); border: 1px solid var(--line); border-radius: 0; }
+.creator-panel :is(input:not([type="radio"]), textarea) { width: 100%; min-height: 32px; padding: 4px 8px; color: var(--ink); background: var(--solid); border: 1px solid var(--line); border-radius: 0; }
 .creator-panel button { min-width: 32px; min-height: 32px; padding: 4px 12px; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 0; }
 .creator-panel button:hover:not([aria-disabled="true"], :disabled) { color: var(--ink); background: var(--hover); border-color: var(--frame); }
 .creator-panel [aria-disabled="true"] { opacity: 0.45; }
@@ -657,4 +672,16 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .creator-message[data-state="error"] { color: var(--foe); }
 .creator-panel footer { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line); }
 .creator-panel .creator-primary { margin-left: auto; color: var(--ink); border-color: var(--frame); }
+.creator-panel textarea { display: block; resize: none; font: inherit; }
+.creator-body .creator-row { display: flex; flex-wrap: wrap; gap: 0 6px; margin-top: 10px; }
+.creator-row legend { width: 100%; }
+.creator-row .creator-card { flex: 1 1 auto; padding-right: 8px; }
+.creator-clues { margin: 10px 0 0; padding: 0 0 0 24px; }
+.creator-clues li { margin-bottom: 6px; }
+.creator-clues li, .creator-summary dt { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.creator-summary { margin: 0; }
+.creator-summary dt { color: var(--muted); }
+.creator-summary dd { margin: 0 0 10px; white-space: pre-line; overflow-wrap: anywhere; }
+.creator-review { margin-bottom: 12px; padding: 8px 10px; color: var(--foe); border: 1px solid var(--foe); }
+.creator-review button { margin-right: 6px; }
 .creator-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

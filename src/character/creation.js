@@ -40,6 +40,15 @@ const STEP_PAGES = PAGES.filter((page) => page.kind === 'step');
 const pageOf = (id) => PAGES.findIndex((page) => page.id === id);
 const SUMMARY = pageOf('summary');
 
+// Whether start-up opens the creator: always with ?creator, never for tools
+// (?nocreator, ?nogate), and otherwise on a first visit, while there is no
+// character yet and one can be made.
+export function wantsCreator(params, roster) {
+  if (params.has('creator')) return true;
+  if (params.has('nocreator') || params.has('nogate')) return false;
+  return !roster.characters.length && roster.canCreate().ok;
+}
+
 // A finished draft, for screenshots of any page with `?debug&creator=<page>`.
 export function sampleDraft(roster, now) {
   const { id } = roster.newDraft();
@@ -69,8 +78,13 @@ export class Creation {
   }
 
   // What keeps this page from passing: invalid typed input first, then the
-  // step's rule.
+  // step's rule. On the Summary: any step's problem, or why no character can
+  // be made now.
   get error() {
+    if (this.page.kind === 'summary') {
+      const allowed = this.allowed;
+      return this.review[0]?.message ?? (allowed.ok ? null : allowed.reason);
+    }
     if (this.page.kind !== 'step') return null;
     return Object.values(this.pending)[0]?.message ?? stepError(this.page.step, this.draft, this.ctx);
   }

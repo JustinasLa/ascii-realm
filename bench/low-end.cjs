@@ -26,6 +26,7 @@ fs.mkdirSync(output, { recursive: true });
         await client.send('Emulation.setCPUThrottlingRate', { rate: 1 });
         const url = new URL(base);
         url.searchParams.set('debug', '');
+        url.searchParams.set('nocreator', '');
         url.searchParams.set('name', 'Robin');
         await page.goto(url.href, { waitUntil: 'networkidle0' });
         await page.waitForFunction(() => window.game?.model && game.metrics.frames > 60);

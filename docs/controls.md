@@ -190,9 +190,11 @@ button or a rune wheel held on **CAST**. The controls keep clear of the notch,
 rounded corners and the home indicator, and of browser bars as they slide in
 and out.
 
-Phones play like an app. The game starts behind a **TAP TO PLAY** card; the
-tap turns on the sound and goes full screen where the browser allows it
-(iPhone Safari does not; add the game to the home screen there instead). The
+Phones play like an app. The game starts behind a **TAP TO PLAY** card (on
+a first visit, behind the character creator, whose **Create character** does
+the same); the tap turns on the sound and goes full screen where the browser
+allows it (iPhone Safari does not; add the game to the home screen there
+instead). The
 page itself never zooms, scrolls, bounces, pulls to refresh or selects text,
 and pinching anywhere only zooms the scene. The screen stays awake while you
 play. Switching to another app or locking the phone pauses the whole world and

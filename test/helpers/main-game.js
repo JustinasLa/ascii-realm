@@ -11,7 +11,8 @@ import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/
 import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
-import { sampleDraft } from '../../src/character/creation.js';
+import { sampleDraft, wantsCreator } from '../../src/character/creation.js';
+import { hidesPreview } from '../../src/ui/creator.js';
 import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
@@ -56,7 +57,7 @@ const inert = () => class {
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
   width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false, real = {},
-  session = new Map() } = {}) {
+  session = new Map(), creator = new URL(href).searchParams.has('creator') } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -206,15 +207,18 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       roster(change) { this.rostered = change; }
       update() { this.updates++; }
     },
-    // The creator's open state and what it was opened with; the real one is
-    // tested on its own.
+    // The creator's open state, what it was opened with and how often it
+    // was refitted; the real one is tested on its own. It opens only when a
+    // test asks (`creator`, or ?creator in the URL), so the other tests play
+    // although their roster is empty.
     CharacterCreator: class {
-      constructor(options) { Object.assign(this, options); this.flow = null; this.opened = []; }
+      constructor(options) { Object.assign(this, options); this.flow = null; this.opened = []; this.refits = 0; }
       get isOpen() { return this.flow !== null; }
-      open(options) { this.opened.push(options); this.flow = options; }
-      close() { this.flow = null; this.onClose(); }
+      open(options) { this.opened.push(options); if (creator) this.flow = options; }
+      refit() { this.refits++; }
+      close(character = null) { this.flow = null; this.onClose(character); }
     },
-    sampleDraft,
+    sampleDraft, wantsCreator, hidesPreview,
     // What reaches the speech bubbles; the real ones are tested on their own.
     SpeechBubbles: class {
       constructor(options) { Object.assign(this, options); this.size = 0; this.received = []; this.rostered = []; this.updates = []; }
