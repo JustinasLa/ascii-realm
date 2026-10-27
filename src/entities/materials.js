@@ -97,8 +97,11 @@ export const MATERIALS = {
   // The undyed linen shirt beneath the tunic, and cropped hair.
   linen: { color: [150, 142, 124], tex: fitted },
   hair: { color: [52, 40, 32], tex: wool },
-  // Worn leather.
+  // Worn leather: the belt, pouch, scabbard and grips, and the gloves and
+  // boot cuffs, which a skin may colour apart from them.
   leather: { color: [86, 60, 42], tex: leather },
+  glove: { color: [86, 60, 42], tex: leather },
+  cuff: { color: [86, 60, 42], tex: leather },
   jerkin: { color: [108, 78, 52], tex: jerkin },
   bracer: { color: [90, 64, 42], tex: leather },
   boot: { color: [78, 56, 40], tex: boot },

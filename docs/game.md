@@ -110,7 +110,8 @@ short version see the [README](../README.md).
     unless `?flora=0` is added.
   Dense woods are for solo play: lobbies share one world, so a page opened
   with a lobby code plays the sparse woods, and creating or joining a lobby
-  from dense woods first reloads the page into the sparse world. Saved
+  from dense woods first reloads the page into the sparse world and makes
+  the request there (once the character creator, if open, is closed). Saved
   scenery works in both: generated props keep their ids, and an erased grove
   prop is simply not there in the sparse world.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
@@ -172,7 +173,10 @@ short version see the [README](../README.md).
   fletched arrows and a longbow across the back, a short sword on the hip and
   a simulated cloak. Every part is rasterised into glyphs with supersampling:
   outlines follow the silhouette with a moonlit rim, and each material (wool,
-  leather, wood, feather, iron) has its own glyph texture.
+  leather, wood, feather, iron) has its own glyph texture. The active
+  character's [skin](characters.md#skins) colours the clothes and can lower
+  the hood or take off the jerkin or cloak; without one the outlaw looks as
+  described here.
 - **Animation.** The player is a rigged 3D character playing professionally
   animated clips, drawn each frame into a small offscreen image from the
   game's camera angle and converted into shaded, outlined glyphs. Walk and

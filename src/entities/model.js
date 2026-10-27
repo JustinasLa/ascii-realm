@@ -545,7 +545,7 @@ export class ModelFigure {
     this.mixer.update(0);
     this.layerSwing();
 
-    this.gear.apply(p.equipment);
+    this.gear.apply(p.equipment, p.skin);
     const weapon = p.equipment === undefined ? SHORT_SWORD : heldWeapon(p.equipment);
     this.armory.update(weapon, cb.inHand || Boolean(p.ranged?.aiming));
     this.turned = this.spinTurn(p);

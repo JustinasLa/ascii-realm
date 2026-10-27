@@ -2,10 +2,11 @@
 
 A character sheet describes who the player is: name, gender, race, age and
 birthday, class, attributes, description and clues. Each browser keeps up
-to three characters, one of them active. The rules and the saved roster
-live in `src/character/`. Nothing in play uses them yet: the outlaw, the HUD
-name and the lobby name are unchanged, and the roster can be reached only
-from the console with `?debug`, as `game.characters`.
+to three characters, one of them active. The rules, the skins and the saved
+roster live in `src/character/`. In play only the active character's skin
+is used so far: the HUD name and the lobby name are unchanged, and the
+roster can be reached only from the console with `?debug`, as
+`game.characters`. The creator is still being built.
 
 ## Races
 
@@ -99,12 +100,32 @@ creation:
 
 A change is checked only against the rules of the fields it changes.
 
+## The creator
+
+The creator makes a character a page at a time, in a panel beside the live
+world: Welcome, Character creation, then Name, Class, Race, Age, Attributes,
+Description, Clues and a Summary. Info pages have Continue only. The seven
+steps show "Step n of 7", and Next stays dimmed until the step passes its
+rule, whose message shows under it. A race dresses the outlaw in its skin
+tone. The age starts at 18, and a typed age or birthday must be valid before
+Next. A race changed later keeps the age, so the Age step and the Summary's
+final check of every step report an age past the new maximum.
+
+The Description, Clues and Summary pages and Create are still to come, so it
+opens only with `?creator` (`?debug&creator=<page>` opens that page on a
+sample character) and saves nothing. While it is open the rest of the screen
+is inert, every key stays in the panel (Esc doesn't close it), monsters and
+animals hold still, nothing can hurt the player, and a lobby join waits for
+it to close.
+
 ## The roster
 
 Characters are saved in `localStorage` under `ascii-realm-characters`, as a
 versioned record (`v: 1`) of up to three characters and the active one's
 id. Each character has an id, its creation time, the time it was last
-switched to, the sheet and a skin slot (empty, meaning today's outfit).
+switched to, the sheet and a skin slot (empty, meaning today's outfit). A
+skin is repaired by `cleanSkin` whenever it is stored or read, so a stored
+skin is always well formed.
 
 - **Switching** the active character is allowed 4 days after the last
   switch. `?debug` skips the wait.
@@ -134,3 +155,67 @@ switched to, the sheet and a skin slot (empty, meaning today's outfit).
 
 Times come from the device clock, so changing the clock moves the locks and
 the cooldown.
+
+## Skins
+
+A skin is how the character's outlaw looks. Like a skin on a fixed player
+model it repaints the outlaw's existing regions and never changes the model,
+its proportions, its animations, its stride or how its feet plant. Both the
+rigged outlaw and the shape-built figure (the inventory portrait, friends,
+and the stand-in shown before the model loads) are painted from the same
+skin (`src/character/skin.js`).
+
+| Layer | Regions |
+|---|---|
+| Base | skin tone, hair, shirt (linen), hose |
+| Outer | hood, jerkin, tunic sleeves, bracers and gloves, boots, cloak |
+
+The hood, the jerkin and the cloak can each be taken off, like a player
+model's skin-part switches, and the base layer shows beneath: hood down
+shows the face and cropped hair instead of the hood and its shoulder cape,
+jerkin off shows the linen shirt on the body and sleeves, and cloak off
+leaves the back bare. The gloves take the bracers' colour and the boot cuffs
+the boots'; the belt, pouch, scabbard and grips stay plain leather. Under a
+raised hood the rigged outlaw's face is in shadow, so the skin tone shows
+with the hood down, or on the jaw of the shape-built figure.
+
+Each region takes a colour from a small palette:
+
+| Palette | Regions | Swatches |
+|---|---|---|
+| Tones | skin tone | fair, weathered, tan, deep, dark, olive, fern, sage, ember, rust |
+| Hair | hair | umber, black, chestnut, auburn, flax, grey, white |
+| Linen | shirt | undyed, oat, grey, dun |
+| Wool | hose, hood, sleeves, cloak | ash, charcoal, umber, pewter, Lincoln green, moss, peat, night, oxblood, heather |
+| Leather | jerkin, bracers, boots | tan, saddle, brown, dark, black, russet, grey |
+
+No outer-layer colour, the gloves, cuffs and cloak lining included, is
+brighter (Rec. 709 luma) than 1.25 times today's hood, so the outlaw still
+reads as a dark shadow against the grass; a test checks every swatch. The
+base layer may be lighter, as today's linen already is.
+
+Orcs and goblins start with the green olive and fern tones, dryads with
+sage and the Oseni with the red ember (`toneForRace`); the player may change
+it.
+
+Six presets are starting points: **Outlaw** (today's look, the default),
+**Greenwood**, **Nightrunner**, **Drover** (hood down), **Pilgrim** and
+**Reaver** (no cloak). A preset sets the outfit and layers and keeps the
+character's tone and hair.
+
+A character with no saved skin wears today's outlaw, exactly as before
+skins. For now friends in a lobby see everyone as today's outlaw: skins are
+not sent to other players yet. With `?debug`, `game.setSkin('drover')` or
+`game.setSkin({ tone: 'olive', layers: { hood: false } })` dresses the
+outlaw for a screenshot without saving it, and `game.skins` lists the
+presets and palettes.
+
+A skin is saved as a record with its own version, `v: 1`, one swatch id per
+region and the three layer switches. A swatch id that isn't known, a value
+of the wrong type or a missing field takes the default for that field
+alone, and unknown keys are dropped. A later change to skins that an older
+version of the game can't read back without losing something (more skins
+per character, or a new required field) must raise the roster's version
+and add a migration, so older versions leave the record alone rather than
+drop data. New swatch ids need no new version only if an older version
+resetting them to the default is acceptable.

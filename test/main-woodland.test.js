@@ -54,3 +54,28 @@ test('a dense page that somehow joins keeps its seat and reloads into the sparse
   sparse.game.multiplayer.onJoin({ seed: 2, code: 'ABC234' });
   assert.deepEqual(sparse.game.multiplayer.leaves, [false]);
 });
+
+test('the creator holds a dense page\'s lobby request, and the one resumed after its reload', async () => {
+  const session = new Map();
+  const request = { mode: 'join', name: 'Kael', seed: 5, code: 'ABC234', server: '' };
+  const first = await loadGame(undefined, { href: 'http://localhost/?debug&creator&seed=5&woodland=dense', session });
+  first.game.multiplayer.connect(request);
+  assert.deepEqual(first.game.multiplayer.connects, [], 'nothing connects while creating');
+  assert.equal(first.navigatedTo(), undefined, 'and the page doesn\'t reload under the creator');
+  assert.equal(session.has(PENDING_LOBBY), false);
+  first.game.creator.close();
+  assert.deepEqual(first.game.multiplayer.connects, [], 'a dense page never connects');
+  assert.equal(session.has(PENDING_LOBBY), true, 'it keeps the request');
+  const destination = new URL(first.navigatedTo());
+  assert.equal(destination.searchParams.has('woodland'), false);
+  // The reloaded page opens the creator again (as a first visit will): the
+  // resumed request waits for it.
+  const second = await loadGame(undefined, { href: destination.href, session });
+  assert.equal(second.game.world.woodland, 'sparse');
+  assert.equal(second.game.creator.isOpen, true);
+  assert.deepEqual(second.game.multiplayer.connects, []);
+  assert.equal(session.has(PENDING_LOBBY), false, 'taken once');
+  second.game.creator.close();
+  assert.deepEqual(second.game.multiplayer.connects, [request]);
+  assert.equal(second.navigatedTo(), undefined);
+});

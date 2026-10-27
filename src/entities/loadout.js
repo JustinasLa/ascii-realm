@@ -1,3 +1,4 @@
+import { DEFAULT_SKIN } from '../character/skin.js';
 import { ITEMS } from '../inventory/items.js';
 import { getWeapon } from './weapons.js';
 
@@ -32,9 +33,13 @@ export const isBow = (weapon) => weapon?.type === 'bow';
 export const isThrown = (weapon) => weapon?.type === 'spear' || weapon?.type === 'javelin';
 
 // For now the outlaw's clothes are part of the character rather than items,
-// so they are always worn; only the hands' gear follows the equipment.
+// so they are always worn; only the hands' gear follows the equipment. The
+// skin can take off the hood, jerkin and cloak, showing what is beneath.
 const OUTFIT = new Set(['helm', 'chest', 'legs', 'hands', 'cape']);
-export const wears = (equipment, slot) => equipment === undefined || OUTFIT.has(slot) || Boolean(equipment?.[slot]);
+const LAYER_OF = { helm: 'hood', chest: 'jerkin', cape: 'cloak' };
+export const wears = (equipment, slot, skin = DEFAULT_SKIN) =>
+  (equipment === undefined || OUTFIT.has(slot) || Boolean(equipment?.[slot]))
+  && (!Object.hasOwn(LAYER_OF, slot) || skin.layers[LAYER_OF[slot]] !== false);
 
 // A two-handed weapon in the main hand leaves no hand free for a torch.
 export const needsBothHands = (equipment) => Boolean(ITEMS[equipment?.mainHand?.id]?.twoHanded);

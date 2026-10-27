@@ -25,6 +25,7 @@ export class CharacterPortrait {
     this.brightness = positive(brightness, 1.7);
     this.fontFamily = fontFamily;
     this.signature = null;
+    this.skin = null;
 
     canvas.width = Math.round(this.width * this.pixelRatio);
     canvas.height = Math.round(this.height * this.pixelRatio);
@@ -42,12 +43,13 @@ export class CharacterPortrait {
         const stack = equipment?.[slot];
         return stack ? [stack.id, stack.count] : null;
       }));
-    if (signature === this.signature) return false;
+    if (signature === this.signature && player.skin === this.skin) return false;
 
     // Copy stacks so drawing can never attach preview state to the real gear.
     this.preview.equipment = equipment === undefined ? undefined
       : Object.fromEntries(EQUIPMENT_SLOTS.map((slot) => [slot,
         equipment?.[slot] ? { ...equipment[slot] } : null]));
+    this.preview.skin = player.skin;
     const context = this.context;
     context.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     context.clearRect(0, 0, this.width, this.height);
@@ -64,6 +66,7 @@ export class CharacterPortrait {
       context.fillText(character, x * this.cellWidth, y * this.fontSize);
     });
     this.signature = signature;
+    this.skin = player.skin;
     return true;
   }
 
