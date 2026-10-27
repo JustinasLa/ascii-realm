@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { ROSTER_KEY } from '../src/character/roster.js';
 import { cleanSkin, DEFAULT_SKIN } from '../src/character/skin.js';
+import { Spellcasting } from '../src/spells/casting.js';
 import { loadGame } from './helpers/main-game.js';
 
 const memory = (entries = {}) => {
@@ -55,29 +56,43 @@ test('the creator previews skins, and closing restores the character\'s and star
 });
 
 test('while the creator is open, nothing can hurt the player', async () => {
-  const harness = await loadGame(undefined, { href: 'http://localhost/?debug&creator' });
+  const harness = await loadGame(undefined, { href: 'http://localhost/?debug&creator', real: { Spellcasting } });
   const { game } = harness;
-  const { player } = game;
+  const { player, casting } = game;
+  // A friend's rune that strikes its target at once.
+  const strike = { id: 'strike', root: 'strike', variants: [{ id: 'rune', kind: 'rune', params: { mana: 1 } }],
+    nodes: { strike: { steps: [{ op: 'mmodamage', args: { a: '20', ii: 'true' }, target: { op: 'target', args: {} } }] } } };
+  casting.spells = new Map([[strike.id, strike]]);
   const casts = [];
-  game.casting.cast = (...args) => casts.push(args);
-  const health = player.vitals.health;
-  assert.equal(player.takeDamage(30), 0, 'a blow, a spell or a burn lands on nothing');
-  assert.equal(player.vitals.health, health);
+  const cast = casting.cast.bind(casting);
+  casting.cast = (...args) => { casts.push(args); return cast(...args); };
   game.multiplayer.id = 'a1';
-  game.multiplayer.players = [{ id: 'b2', state: { x: 1, y: 1, health: 100 } }];
-  const spell = { id: 'firebolt', casterId: 'b2', targetId: 'a1', heading: 0, aim: null };
+  game.multiplayer.players = [{ id: 'b2', state: { x: player.x + 1, y: player.y, health: 100 } }];
+  const spell = { id: 'strike', casterId: 'b2', targetId: 'a1', heading: 0, aim: null };
+  const bite = () => {
+    game.animals.events.push({ type: 'hit-player', amount: 5, x: player.x, y: player.y });
+    harness.frame();
+  };
+  const health = player.vitals.health;
   game.multiplayer.onCast(spell);
   assert.equal(casts.length, 0, 'a friend\'s spell at the player is dropped');
+  assert.equal(cast('strike', { caster: { spellPlayer: true, spellId: 'b2', x: 0, y: 0, health: 100 }, target: player, remote: true }).ok,
+    true, 'and even one that lands');
+  bite();
+  assert.equal(game.animals.events.length, 0, 'the bite reached hurtPlayer');
+  assert.equal(player.takeDamage(30), 0, 'like a bite or a burn');
+  assert.equal(player.vitals.health, health, 'hurts nothing');
   game.multiplayer.onCast({ ...spell, targetId: 'b2' });
   assert.equal(casts.length, 1, 'other spells still play');
   game.multiplayer.onCast({ ...spell, casterId: 'gone' });
   assert.equal(casts.length, 1);
+
   game.creator.close();
   game.multiplayer.onCast(spell);
-  assert.equal(casts.length, 2);
   assert.equal(casts[1][1].target, player);
-  assert.equal(player.takeDamage(30), 30);
-  assert.equal(player.vitals.health, health - 30);
+  assert.equal(player.vitals.health, health - 20, 'once closed, a friend\'s spell lands');
+  bite();
+  assert.equal(player.vitals.health, health - 25, 'and so does a bite');
 });
 
 test('a lobby join waits for the creator to close', async () => {

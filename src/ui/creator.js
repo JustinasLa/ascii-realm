@@ -65,7 +65,7 @@ export class CharacterCreator {
     this.message = this.el('p', { className: 'creator-message', role: 'status' });
     this.next = this.el('button', { type: 'submit', className: 'creator-primary',
       textContent: page.kind === 'info' ? 'Continue' : flow.returning ? 'Save and review' : 'Next' });
-    const back = flow.index > 0 ? this.el('button', { type: 'button', textContent: flow.returning ? 'Back to review' : 'Back',
+    const back = flow.index > 0 && page.kind !== 'info' ? this.el('button', { type: 'button', textContent: flow.returning ? 'Back to review' : 'Back',
       onclick: () => this.turn(flow.back()) }) : '';
     this.form = this.el('form', { className: 'creator-panel', role: 'dialog', 'aria-modal': 'true',
       'aria-labelledby': 'creator-title', onsubmit: (event) => { event.preventDefault(); this.submit(); } },
@@ -135,13 +135,17 @@ export class CharacterCreator {
     const max = race?.maxAge ?? RULES.minAge;
     const born = () => `Born ${formatBirthday(flow.sheet.birthday)}`;
     const step = (delta, text, label) => this.el('button', { type: 'button', id: `creator-age${delta}`, textContent: text,
-      'aria-label': label, disabled: delta < 0 ? flow.age <= RULES.minAge : flow.age >= max, onclick: () =>
+      'aria-label': label, onclick: () =>
         flow.setAge(Math.max(RULES.minAge, Math.min(max, flow.age + delta))) && this.redo(`creator-age${delta}`, born()) });
-    // Each field shows what the other one's valid input gives.
+    const steps = [step(-1, '−', 'Decrease age'), step(1, '+', 'Increase age')];
+    const limit = () => { [steps[0].disabled, steps[1].disabled] = [flow.age <= RULES.minAge, flow.age >= max]; };
+    limit();
+    // Each field shows what the other one's valid input gives, and the
+    // stepper follows a valid age.
     const typed = (type, other, value) => () => this.change(() => {
       type();
       const valid = !Object.keys(flow.pending).length;
-      if (valid) other.value = value();
+      if (valid) { other.value = value(); limit(); }
       this.note = valid ? born() : null;
     });
     const age = this.el('input', { id: 'creator-age', value: String(flow.age ?? ''), inputmode: 'numeric', pattern: '[0-9]*', 'aria-label': 'Age' });
@@ -151,7 +155,7 @@ export class CharacterCreator {
     birthday.oninput = typed(() => flow.typeBirthday(birthday.value), age, () => String(flow.age));
     this.first = age;
     return [this.el('fieldset', {}, this.el('legend', { textContent: `Age (${RULES.minAge} to ${max} for ${race?.name ?? 'your race'})` }),
-      this.el('div', { className: 'creator-stepper' }, step(-1, '−', 'Decrease age'), age, step(1, '+', 'Increase age')),
+      this.el('div', { className: 'creator-stepper' }, steps[0], age, steps[1]),
       this.el('label', { htmlFor: 'creator-birthday', textContent: 'Birthday (AE)' }), birthday)];
   }
 

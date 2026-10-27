@@ -108,9 +108,12 @@ test('opening shows Welcome, makes the outside inert and previews the draft', ()
   assert.equal(ui.doc.activeElement, ui.button('Continue'));
   ui.submit();
   assert.equal(ui.title(), 'Character creation');
-  assert.deepEqual(ui.buttons().map((b) => b.textContent), ['Back', 'Continue']);
+  assert.deepEqual(ui.buttons().map((b) => b.textContent), ['Continue'], 'info pages offer Continue only');
+  ui.submit();
+  ui.submit();
+  assert.equal(ui.creator.flow.page.id, 'name');
   ui.button('Back').click();
-  assert.equal(ui.title(), 'Welcome');
+  assert.equal(ui.creator.flow.page.id, 'name-info', 'a step goes back to the info page before it');
 });
 
 test('closing restores the page once', () => {
@@ -199,6 +202,12 @@ test('Age: the stepper keeps to the race range and shows the birthday', () => {
   ui.creator.flow.setAge(18);
   ui.creator.render();
   assert.equal(ui.doc.getElementById('creator-age-1').disabled, true);
+  ui.doc.getElementById('creator-age').enter('30');
+  assert.equal(ui.doc.getElementById('creator-age-1').disabled, false, 'a typed age frees the stepper');
+  ui.doc.getElementById('creator-age').enter('210');
+  assert.equal(ui.doc.getElementById('creator-age1').disabled, true, 'and holds it at the top');
+  ui.doc.getElementById('creator-age').enter('5');
+  assert.equal(ui.doc.getElementById('creator-age1').disabled, true, 'a bad age leaves it as it was');
   ui.creator.flow.setAge(210);
   ui.creator.render();
   assert.equal(ui.doc.getElementById('creator-age1').disabled, true);
