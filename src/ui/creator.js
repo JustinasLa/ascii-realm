@@ -5,6 +5,7 @@
 import { ATTRIBUTE_NAMES, ATTRIBUTES, CLASSES, GENDERS, RACES, raceOf, RULES, UNSET } from '../character/catalog.js';
 import { formatBirthday } from '../character/calendar.js';
 import { Creation } from '../character/creation.js';
+import { lockNote } from '../character/menu.js';
 import { attributeCost, attributeTotals, cluesNeeded } from '../character/rules.js';
 import { cleanSkin, LAYERS, OUTER, PALETTES, PRESETS } from '../character/skin.js';
 
@@ -58,7 +59,8 @@ export class CharacterCreator {
   // `outside` is made inert while the creator is open. `onPreview(skin)`
   // dresses the outlaw in the draft's skin; `onFrame(framing)` frames it
   // between `cells` [smallest, largest]; `onTurn(radians)` turns it;
-  // `onClose(character)` runs once it shuts, with the character Create made.
+  // `onClose(character, mode)` runs once it shuts, with the character Create
+  // or Save made. The mode is 'first', 'new' (another character) or 'edit'.
   constructor({ root, outside = [], cells = [4.5, 24], onPreview = () => {}, onFrame = () => {}, onTurn = () => {},
     onClose = () => {}, win = window, doc = document }) {
     Object.assign(this, { root, outside, cells, onPreview, onFrame, onTurn, onClose, win, doc, flow: null });
@@ -78,9 +80,12 @@ export class CharacterCreator {
 
   get isOpen() { return this.flow !== null; }
 
-  // `options` go to the flow: `roster`, `now`, `start` (a page id), `draft`.
+  // `options` go to the flow: `roster`, `now`, `start` (a page id), `draft`,
+  // `edit` (a saved character); and `mode: 'new'` for another character.
+  // Each session starts clean.
   open(options) {
     this.flow = new Creation(options);
+    Object.assign(this, { mode: options.edit ? 'edit' : options.mode ?? 'first', touchedOnce: false, editing: null });
     this.doc.body.classList.add('creator-open');
     for (const node of this.outside) node.inert = true;
     for (const [key, value] of Object.entries(DIALOG)) this.root.setAttribute(key, value);
@@ -93,11 +98,12 @@ export class CharacterCreator {
   close(character = null) {
     if (!this.flow) return;
     this.flow = null;
+    this.asking = null;
     this.root.replaceChildren();
     for (const key of Object.keys(DIALOG)) this.root.removeAttribute(key);
     this.doc.body.classList.remove('creator-open');
     for (const node of this.outside) node.inert = false;
-    this.onClose(character);
+    this.onClose(character, this.mode);
   }
 
   // Frames the outlaw again for the panel as laid out now, after a resize
@@ -169,21 +175,26 @@ export class CharacterCreator {
     const { flow } = this;
     const { page, counter } = flow;
     const old = this.form;
-    Object.assign(this, { first: null, problems: false, clue: null });
+    Object.assign(this, { first: null, problems: false, clue: null, asking: null });
+    const review = page.kind === 'summary';
+    const title = flow.editing && review ? `Edit ${flow.original.sheet.name}` : page.title;
     this.win.clearTimeout(this.pause);
     const step = counter ? `Step ${counter.n} of ${counter.total}` : '';
     this.message = this.el('p', { className: 'creator-message', role: 'status' });
     this.next = this.el('button', { type: 'submit', className: 'creator-primary',
-      textContent: page.kind === 'info' ? 'Continue' : page.kind === 'summary' ? 'Create character'
+      textContent: page.kind === 'info' ? 'Continue' : review ? (flow.editing ? 'Save' : 'Create character')
         : flow.returning ? 'Save and review' : 'Next' });
-    const back = flow.index > 0 && page.kind !== 'info' ? this.el('button', { type: 'button', textContent: flow.returning ? 'Back to review' : 'Back',
+    const cancel = this.mode === 'first' ? '' : this.el('button', { type: 'button', className: 'creator-cancel', textContent: 'Cancel',
+      'aria-label': this.mode === 'edit' ? 'Cancel editing' : 'Cancel new character', onclick: () => this.cancel() });
+    this.footer = this.el('footer', {});
+    const back = flow.index > 0 && page.kind !== 'info' && !(flow.editing && review) ? this.el('button', { type: 'button', textContent: flow.returning ? 'Back to review' : 'Back',
       onclick: () => this.turn(flow.back()) }) : '';
     this.form = this.el('form', { className: 'creator-panel', onsubmit: (event) => { event.preventDefault(); this.submit(); } },
-    this.el('header', {}, this.el('p', { className: 'creator-counter', textContent: step }),
-      this.el('h2', { id: 'creator-title', tabIndex: -1, textContent: page.title })),
-    this.el('div', { className: 'creator-body' }, ...this.content(page)), this.message,
-    this.el('footer', {}, back, this.next));
-    this.live.textContent = counter ? `${step}: ${page.title}` : page.title;
+    this.el('header', {}, this.el('p', { className: 'creator-counter', textContent: step }), cancel,
+      this.el('h2', { id: 'creator-title', tabIndex: -1, dir: 'auto', textContent: title })),
+    this.el('div', { className: 'creator-body' }, ...this.content(page)), this.message, this.footer);
+    this.footer.append(back, this.next);
+    this.live.textContent = counter ? `${step}: ${title}` : title;
     // Only the panel is swapped, so a finger turning the outlaw keeps the stage.
     if (old?.parentNode === this.root) old.replaceWith(this.form);
     else this.root.replaceChildren(this.form, this.live, this.stage);
@@ -210,7 +221,11 @@ export class CharacterCreator {
   submit() {
     if (this.clue?.value.trim()) return this.addClue();
     if (this.flow.page.kind === 'summary' && !this.flow.error) return this.create();
-    if (this.flow.next()) return this.turn(true);
+    const passed = this.flow.page.kind === 'step';
+    if (this.flow.next()) {
+      this.touchedOnce ||= passed;
+      return this.turn(true);
+    }
     this.touched = true;
     this.refresh();
     (this.first ?? this.next).focus({ preventScroll: true });
@@ -226,7 +241,7 @@ export class CharacterCreator {
 
   change(apply) {
     apply();
-    this.touched = true;
+    this.touched = this.touchedOnce = true;
     this.preview();
     this.refresh();
   }
@@ -355,19 +370,23 @@ export class CharacterCreator {
   summary() {
     const { flow } = this;
     const edit = (step) => () => {
+      const refused = flow.edit(step);
+      if (refused) return this.redo(null, refused);
       this.editing = step;
-      flow.edit(step);
       this.turn(true);
     };
     const problems = flow.review;
     const { ok, opensAt } = flow.allowed;
     if (!ok && opensAt) this.note = `Opens ${new Date(opensAt).toLocaleString()}.`;
     const edits = {};
-    const rows = flow.rows.flatMap(({ step, label, value }) => [this.el('dt', {}, label,
-      edits[step] = this.el('button', { type: 'button', textContent: 'Edit', 'aria-label': `Edit ${label.toLowerCase()}`,
-        onclick: edit(step) })), this.el('dd', { textContent: value })]);
+    // A locked step has no Edit; a step that locks says when.
+    const now = flow.now();
+    const rows = flow.rows.flatMap(({ step, label, value, lock }) => [this.el('dt', {}, label,
+      lock?.locked ? '' : edits[step] = this.el('button', { type: 'button', textContent: 'Edit', 'aria-label': `Edit ${label.toLowerCase()}`,
+        onclick: edit(step) })), this.el('dd', { textContent: value },
+      lock ? this.el('span', { className: 'creator-lock', textContent: lockNote(lock, now) }) : '')]);
     const alert = problems.length ? this.el('div', { className: 'creator-review', role: 'alert', tabIndex: -1 },
-      this.el('p', { textContent: 'Review these steps before creating your character:' }),
+      this.el('p', { textContent: `Review these steps before ${flow.editing ? 'saving' : 'creating your character'}:` }),
       ...problems.map(({ step, label, message }) => this.el('p', {},
         this.el('button', { type: 'button', textContent: `Review ${label}`, onclick: edit(step) }), ` ${message}`))) : '';
     this.problems = Boolean(alert);
@@ -379,9 +398,9 @@ export class CharacterCreator {
 
   // Create is the player's first tap: play starts inside it. Another tab
   // may have taken the name or the last slot meanwhile, which the Summary
-  // then shows.
+  // then shows. An edit saves instead.
   create() {
-    const result = this.flow.create();
+    const result = this.flow.editing ? this.flow.save() : this.flow.create();
     if (result.ok) return this.close(result.character);
     this.redo(null, result.errors || result.reason === this.flow.error ? null : result.reason);
   }
@@ -452,15 +471,36 @@ export class CharacterCreator {
         race ? ` · ${race.name} +${RULES.raceBonus} to each` : ''}` }), ...rows];
   }
 
+  // Cancel: an edit shuts at once, and so does a new character not started
+  // on. Otherwise the footer asks first; asked again, it keeps creating.
+  cancel() {
+    if (this.asking) return this.keep();
+    if (this.mode === 'edit' || !this.touchedOnce) return this.close();
+    const keep = this.el('button', { type: 'button', textContent: 'Keep creating', onclick: () => this.keep() });
+    this.asking = this.el('div', { className: 'creator-discard', role: 'alertdialog', 'aria-labelledby': 'creator-discard',
+      'aria-describedby': 'creator-discard-line' },
+    this.el('p', { id: 'creator-discard', textContent: 'Discard this character?' }),
+    this.el('p', { id: 'creator-discard-line', textContent: 'Your unfinished choices will be lost.' }),
+    keep, this.el('button', { type: 'button', textContent: 'Discard draft', onclick: () => this.close() }));
+    this.footer.replaceWith(this.asking);
+    keep.focus({ preventScroll: true });
+  }
+
+  keep() {
+    this.asking.replaceWith(this.footer);
+    this.asking = null;
+    this.next.focus({ preventScroll: true });
+  }
+
   // Draws the page again after a change, keeping focus on the control used.
   redo(focusId, note = null) {
-    Object.assign(this, { touched: true, note });
+    Object.assign(this, { touched: true, touchedOnce: true, note });
     this.render(focusId);
   }
 
   // Every key stops here while the creator is open, so no game key runs;
-  // typing, radio arrows and buttons still work. Esc can't dismiss the first
-  // creation, and Tab wraps inside the panel. A radio group is one Tab stop,
+  // typing, radio arrows and buttons still work. Esc is Cancel, but can't
+  // dismiss the first creation, and Tab wraps inside the panel. A radio group is one Tab stop,
   // entered at its checked radio, if any.
   keydown(event) {
     if (!this.flow) return;
@@ -469,7 +509,10 @@ export class CharacterCreator {
     const group = (node) => (node.type === 'radio' ? nodes.filter((n) => n.type === 'radio' && n.name === node.name) : [node]);
     const [from, wrap] = event.shiftKey ? [nodes[0], nodes.at(-1)] : [nodes.at(-1), nodes[0]];
     let to = null;
-    if (event.key === 'Escape') event.preventDefault();
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (this.mode !== 'first') this.cancel();
+    }
     else if (!this.root.contains(event.target)) to = this.first ?? this.next;
     else if (event.key === 'Tab' && group(from).includes(event.target)) to = group(wrap).find((n) => n.checked) ?? wrap;
     if (!to) return;

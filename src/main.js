@@ -410,8 +410,9 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
     turnGoal += by;
     if (reducedMotion) player.heading = turnGoal;
   },
-  // Create is the player's tap to play.
-  onClose: (character) => {
+  // Create is the player's tap to play. Edit, and a new character
+  // cancelled, go back to the page they came from.
+  onClose: (character, mode) => {
     applyCharacter();
     unframe();
     blockGameplay();
@@ -421,13 +422,18 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
     // asked with (an invite asks before the first character exists).
     const unsaved = character && characters.saveError;
     if (deferredJoin && !unsaved) connectLobby({ ...deferredJoin, name });
-    if (character) {
+    if (mode === 'edit' || mode === 'new' && !character) {
+      inventoryScreen.setOpen(true, mode === 'edit' ? 'character' : 'characters');
+      (mode === 'edit' ? characterPages.edit : characterPages.create)?.focus();
+      if (character) hud.notify(lobbyNote('Changes saved.'));
+    } else if (character) {
       startPlay();
-      if (unsaved) hud.notify(unsaved);
+      if (mode === 'new') hud.notify(lobbyNote(`Now playing as ${name}.`));
     } else if (gated()) gate.show('start');
+    if (unsaved) hud.notify(unsaved);
     if (deferredJoin && unsaved) hud.notify('The lobby wasn\'t joined: it could reload the page and lose this character.');
     deferredJoin = null;
-    canvas.focus({ preventScroll: true });
+    if (!inventoryScreen.isOpen) canvas.focus({ preventScroll: true });
   } });
 debug.creator = creator;
 if (wantsCreator(params, characters)) {
@@ -516,13 +522,46 @@ const hud = new Hud({
   },
   onInventory: () => inventoryScreen.toggle(),
 });
-// The character menu's pages, tabs in the inventory.
+// A rename or switch reaches a lobby on the next join.
+const lobbyNote = (text) => multiplayer.room ? `${text} Others see the new name when you next join.` : text;
+// Edit, Create character and Play as wait until the player has not been
+// hurt for this many seconds of play, so the menu can't pause a fight. The
+// refusal stays on the page and nothing else happens.
+const HURT_LOCK_S = 10;
+function hurtLock() {
+  const left = HURT_LOCK_S - (time - lastHurt);
+  return left > 0 ? { ok: false, reason: `You were hurt recently. Try again in ${Math.ceil(left)} s.` } : { ok: true };
+}
+// Opens the creator from the inventory, which closing unblocks play.
+function openCreator(options) {
+  const lock = hurtLock();
+  if (!lock.ok) return lock;
+  inventoryScreen.setOpen(false);
+  creator.open({ roster: characters, ...options });
+  blockGameplay();
+  return lock;
+}
+// The character menu's pages, tabs in the inventory. Switching applies the
+// new name and skin on the next frame, with no reload.
 const characterPages = new CharacterPages({ doc: document, roster: characters, name: () => name,
-  inLobby: () => !!multiplayer.room });
+  inLobby: () => !!multiplayer.room, equipment: () => inventory.equipment,
+  onEdit: () => openCreator({ start: 'summary', edit: characters.active }),
+  onCreate: () => openCreator({ start: 'creation', mode: 'new' }),
+  onPlay: (id) => {
+    const lock = hurtLock();
+    if (!lock.ok) return lock;
+    const result = characters.switchTo(id);
+    if (result.ok) {
+      applyCharacter();
+      hud.notify(lobbyNote(`Now playing as ${name}.`));
+    }
+    return result;
+  } });
 debug.characterPages = characterPages;
 const inventoryScreen = new InventoryScreen({
   inventory, player, name,
-  pages: [{ id: 'character', label: 'Character', node: characterPages.sheet, onShow: () => characterPages.render() }],
+  pages: [{ id: 'character', label: 'Character', node: characterPages.sheet, onShow: () => characterPages.render() },
+    { id: 'characters', label: 'Characters', node: characterPages.list, onShow: () => characterPages.render() }],
   onToggle: (open) => {
     if (open) chat.close();
     blockGameplay();

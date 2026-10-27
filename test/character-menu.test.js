@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DAY } from '../src/character/catalog.js';
-import { countdown, lockState, sheetRows } from '../src/character/menu.js';
+import { countdown, createState, lockNote, lockState, rosterRows, sheetRows, waitText } from '../src/character/menu.js';
+import { Roster } from '../src/character/roster.js';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -56,4 +57,62 @@ test('a sheet without a gender, race or class reads Unset, and a gender shows it
   assert.equal(rows[1].value, 'Female');
   assert.deepEqual([rows[4].value, rows[4].colour], ['Unset', null]);
   assert.equal(rows[6].value, 'Unset');
+});
+
+test('lock notes say when a choice locked or how long until it does', () => {
+  assert.equal(lockNote({ locked: false, at: CREATED + DAY }, CREATED), 'Locks in 1d');
+  assert.equal(lockNote({ locked: true, at: CREATED }, CREATED + DAY), `Locked since ${new Date(CREATED).toLocaleDateString()}`);
+  assert.equal(lockNote({ locked: true, at: CREATED }, CREATED, () => 'then'), 'Locked since then');
+});
+
+// A roster of three made a day apart from CREATED, with ids c0001 to c0003.
+function three() {
+  const map = new Map();
+  let now = CREATED;
+  let n = 0;
+  const roster = new Roster({ storage: { getItem: (key) => map.get(key) ?? null, setItem: (key, value) => map.set(key, value) },
+    now: () => now, bypassCooldown: true, randomId: () => `c000${++n}` });
+  for (const [name, race] of [['Bryn', 'elf'], ['Ash', 'human'], ['Cael', 'elf']]) {
+    const draft = roster.newDraft();
+    draft.sheet = { ...character.sheet, name, race, clues: [...character.sheet.clues],
+      attributes: { strength: 1, dexterity: 3, constitution: 1, intelligence: 0, wisdom: 2, charisma: 0 } };
+    if (race === 'human') draft.sheet.birthday = '0349-01-01';
+    assert.equal(roster.create(draft).ok, true, name);
+    now += DAY;
+  }
+  return { roster, at: (ms) => { now = ms; } };
+}
+
+test('roster rows: most recently played first, then by name, with their line and Play as', () => {
+  const { roster, at } = three();
+  const now = CREATED + 3 * DAY;
+  let rows = rosterRows(roster, now);
+  assert.deepEqual(rows.map((row) => [row.id, row.name, row.active]), [['c0003', 'Cael', true], ['c0002', 'Ash', false], ['c0001', 'Bryn', false]]);
+  assert.equal(rows[0].line, `Elf · Archer · ${rows[0].line.split(' · ')[2]}`);
+  assert.match(rows[1].line, /^Human · Archer · 30$/);
+  assert.ok(rows.every((row) => row.play.ok), 'the cooldown is bypassed');
+  // Two played at the same moment go by name; an unset race and class say so.
+  roster.state.characters[0].switchedAt = roster.state.characters[1].switchedAt;
+  roster.state.characters[0].sheet.race = null;
+  roster.state.characters[0].sheet.class = null;
+  roster.bypassCooldown = false;
+  at(now);
+  rows = rosterRows(roster, now);
+  assert.deepEqual(rows.map((row) => row.name), ['Cael', 'Ash', 'Bryn']);
+  assert.match(rows[2].line, /^Unset · Unset · \d+$/);
+  assert.deepEqual(rows[1].play, { ok: false, reason: 'You are on cooldown from switching characters.', opensAt: CREATED + 6 * DAY });
+});
+
+test('the Create state counts the slots and passes on the refusal', () => {
+  const { roster } = three();
+  assert.deepEqual(createState(roster), { ok: false, reason: 'All 3 character slots are taken.', used: '3 of 3 character slots used' });
+  roster.state.characters.pop();
+  assert.deepEqual(createState(roster), { ok: true, used: '2 of 3 character slots used' });
+});
+
+test('waiting text: the reason, then how long and when', () => {
+  const opensAt = CREATED + 3 * DAY + 4 * HOUR + 12 * MINUTE;
+  assert.equal(waitText({ reason: 'Wait.', opensAt }, CREATED, () => 'Friday'), 'Wait. Opens in 3d 4h 12m, on Friday.');
+  assert.equal(waitText({ reason: 'Wait.', opensAt }, CREATED), `Wait. Opens in 3d 4h 12m, on ${new Date(opensAt).toLocaleString()}.`);
+  assert.equal(waitText({ reason: 'All 3 character slots are taken.' }, CREATED), 'All 3 character slots are taken.');
 });
