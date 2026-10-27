@@ -417,8 +417,10 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
     blockGameplay();
     // A lobby on another world reloads the page, which would lose a new
     // character this visit couldn't save, so its waiting join is dropped.
+    // A kept join goes in under the name now played, not the one it was
+    // asked with (an invite asks before the first character exists).
     const unsaved = character && characters.saveError;
-    if (deferredJoin && !unsaved) connectLobby(deferredJoin);
+    if (deferredJoin && !unsaved) connectLobby({ ...deferredJoin, name });
     if (character) {
       startPlay();
       if (unsaved) hud.notify(unsaved);
