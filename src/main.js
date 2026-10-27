@@ -38,6 +38,7 @@ import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
+import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
 import { metresBetween } from './multiplayer/chat.js';
 import { MultiplayerClient } from './multiplayer/client.js';
 import { bindMultiplayerControls } from './multiplayer/controls.js';
@@ -224,8 +225,10 @@ inventory.events.length = 0;
 let walletStorage = null;
 try { walletStorage = localStorage; } catch {}
 const wallet = new Wallet({ storage: walletStorage });
-// The player's characters, kept on this device. Nothing plays them yet.
+// The player's characters, kept on this device. Only the active one's skin
+// is played yet; without one the outlaw wears today's outfit.
 const characters = new Roster({ storage: walletStorage, bypassCooldown: params.has('debug'), events: window });
+player.skin = cleanSkin(characters.active?.skin);
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
 // Harvestable tufts and berry bushes stay disabled.
 const harvesting = new Harvesting(world, null, { wild: false });
@@ -401,6 +404,10 @@ function blockGameplay() {
 debug.hud = hud;
 debug.wallet = wallet;
 debug.characters = characters;
+// Dresses the outlaw in a preset (by id) or any skin, cleaned, for screenshot
+// tools. Nothing is saved.
+debug.setSkin = (skin) => (player.skin = typeof skin === 'string' ? presetSkin(skin) : cleanSkin(skin));
+debug.skins = { PRESETS, PALETTES };
 debug.inventoryScreen = inventoryScreen;
 
 // Friends in a lobby share the world's seed and see one another walk about.

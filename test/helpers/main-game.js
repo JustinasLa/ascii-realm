@@ -10,6 +10,7 @@ import { HuntDrops } from '../../src/entities/hunt-drops.js';
 import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/loot.js';
 import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
+import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
 import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
 import { Inventory } from '../../src/inventory/inventory.js';
@@ -223,7 +224,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     setGameplayBlocked: value => { blocked = value; taps.clear(); held.clear(); },
     Inventory, ITEMS, INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer, InstrumentKeys, MusicNotes, Hud: inert(),
     InventoryScreen: class extends inert() { constructor(options) { super(); Object.assign(this, options); } },
-    GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, mulberry32, drawItem: noop, drawResource: noop,
+    GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }

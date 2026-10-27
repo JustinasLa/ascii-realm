@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DEFAULT_PAINT, DEFAULT_SKIN, skinPaint } from '../character/skin.js';
 import { buildInstrumentShape, HOLD } from './instrument-shapes.js';
 import { wears } from './loadout.js';
 
@@ -6,26 +7,15 @@ import { wears } from './loadout.js';
 // mesh, so clothing is painted onto it by body region, each vertex taking
 // the region of the bone that moves it most, and the hood, cloak, buckler
 // and hair are simple shapes riding on the bones. The hands' gear follows
-// the inventory's equipment slots; the clothes are always worn for now.
+// the inventory's equipment slots; the clothes are always worn for now, and
+// their colours and outer layers come from the character's skin
+// (`character/skin.js`), shared with the shape-built figure.
 
 const bone = (name) => THREE.PropertyBinding.sanitizeNodeName(name);
 
-// Undyed wool, worn leather and skin, matching the shape-built figure.
-const COLORS = {
-  jerkin: 0x6c4e34,
-  tunic: 0x5c4a3c,
-  linen: 0x968e7c,
-  hose: 0x484852,
-  boot: 0x4e3828,
-  leather: 0x563c2a,
-  bracer: 0x5a402a,
-  skin: 0x967660,
-  hood: 0x46444a,
-  cloak: 0x3a3840,
-  hair: 0x342820,
-  wood: 0x84623e,
-  iron: 0x70747c,
-};
+// The buckler's board and fittings, which no skin paints.
+const COLORS = { wood: 0x84623e, iron: 0x70747c };
+const hex = ([r, g, b]) => (r << 16) | (g << 8) | b;
 
 const REGION_OF = [
   [/head|neck/, 'head'],
@@ -38,19 +28,20 @@ const REGION_OF = [
   [/hips|spine|shoulder/, 'torso'],
 ];
 
-// The colour of each body region for the gear being worn.
-export function regionColors(equipment) {
-  const wearing = (slot) => wears(equipment, slot);
+// The material painted on each body region for the gear being worn, by the
+// names `skinPaint` colours.
+export function regionColors(equipment, skin = DEFAULT_SKIN) {
+  const wearing = (slot) => wears(equipment, slot, skin);
   const sleeve = wearing('chest') ? 'tunic' : 'linen';
   return {
     head: wearing('helm') ? 'hood' : 'skin',
     torso: wearing('chest') ? 'jerkin' : 'linen',
     upperArm: sleeve,
     forearm: wearing('hands') ? 'bracer' : sleeve,
-    hand: wearing('hands') ? 'leather' : 'skin',
+    hand: wearing('hands') ? 'glove' : 'skin',
     thigh: 'hose',
     shin: wearing('legs') ? 'boot' : 'hose',
-    foot: wearing('legs') ? 'boot' : 'leather',
+    foot: wearing('legs') ? 'boot' : 'cuff',
   };
 }
 
@@ -89,21 +80,21 @@ export class Gear {
     // A hood open at the face, a peak pulled over the brow, a tail down the
     // back and a short cape over the shoulders.
     this.hood = new THREE.Group();
-    const cowl = mesh(new THREE.SphereGeometry(0.185, 18, 12, Math.PI / 2 + 0.85, Math.PI * 2 - 1.7), COLORS.hood);
+    const cowl = mesh(new THREE.SphereGeometry(0.185, 18, 12, Math.PI / 2 + 0.85, Math.PI * 2 - 1.7), hex(DEFAULT_PAINT.hood));
     cowl.material.side = THREE.DoubleSide;
-    const peak = mesh(new THREE.ConeGeometry(0.06, 0.12, 10), COLORS.hood);
+    const peak = mesh(new THREE.ConeGeometry(0.06, 0.12, 10), hex(DEFAULT_PAINT.hood));
     peak.position.set(0, 0.18, -0.03);
     peak.rotation.x = -0.35;
-    const tail = mesh(new THREE.ConeGeometry(0.05, 0.32, 8), COLORS.hood);
+    const tail = mesh(new THREE.ConeGeometry(0.05, 0.32, 8), hex(DEFAULT_PAINT.hood));
     tail.position.set(0, -0.14, -0.17);
     tail.rotation.x = Math.PI - 0.35;
     this.hood.add(cowl, peak, tail);
     this.attach(this.hood, head, [0, 1.67, -0.02]);
-    this.capelet = mesh(new THREE.CylinderGeometry(0.11, 0.25, 0.16, 16, 1, true), COLORS.hood);
+    this.capelet = mesh(new THREE.CylinderGeometry(0.11, 0.25, 0.16, 16, 1, true), hex(DEFAULT_PAINT.hood));
     this.capelet.material.side = THREE.DoubleSide;
     this.attach(this.capelet, chest, [0, 1.43, -0.01]);
 
-    this.hair = mesh(new THREE.SphereGeometry(0.172, 14, 8, 0, Math.PI * 2, 0, 1.2), COLORS.hair);
+    this.hair = mesh(new THREE.SphereGeometry(0.172, 14, 8, 0, Math.PI * 2, 0, 1.2), hex(DEFAULT_PAINT.hair));
     this.attach(this.hair, head, [0, 1.675, -0.02]);
 
     // The cloak hangs from the shoulders to the calves behind the back.
@@ -112,7 +103,7 @@ export class Gear {
       new THREE.Vector3(0.2, 0, 0), new THREE.Vector3(0.32, -0.95, -0.08), new THREE.Vector3(-0.32, -0.95, -0.08),
     ]);
     cloakShape.computeVertexNormals();
-    this.cloak = mesh(cloakShape, COLORS.cloak);
+    this.cloak = mesh(cloakShape, hex(DEFAULT_PAINT.cloak));
     this.cloak.material.side = THREE.DoubleSide;
     this.attach(this.cloak, chest, [0, 1.44, -0.15]);
 
@@ -133,6 +124,9 @@ export class Gear {
     this.instruments = new Map();
 
     this.signature = null;
+    this.skin = null;
+    // Each skin's region colours, converted once.
+    this.palettes = new Map();
   }
 
   // Parents `object` to `parent` so that, in the rest pose, it sits at
@@ -144,13 +138,16 @@ export class Gear {
     parent.add(object);
   }
 
-  // Shows and paints what `equipment` says is worn; cheap when unchanged.
-  apply(equipment) {
+  // Shows and paints what `equipment` says is worn, in the colours and
+  // layers of `skin`; cheap when neither changed.
+  apply(equipment, skin = DEFAULT_SKIN) {
     const signature = equipment === undefined ? 'all'
       : ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand'].map((s) => equipment?.[s]?.id ?? '').join();
-    if (signature === this.signature) return;
+    if (signature === this.signature && skin === this.skin) return;
     this.signature = signature;
-    const wearing = (slot) => wears(equipment, slot);
+    if (skin !== this.skin) this.paint(skin);
+    this.skin = skin;
+    const wearing = (slot) => wears(equipment, slot, skin);
     this.hood.visible = wearing('helm');
     this.capelet.visible = wearing('helm');
     this.hair.visible = !wearing('helm');
@@ -163,15 +160,36 @@ export class Gear {
       this.instruments.set(offHand, shape);
     }
     for (const [id, shape] of this.instruments) if (shape) shape.visible = id === offHand;
-    const regions = regionColors(equipment);
-    const color = new THREE.Color();
+    const regions = regionColors(equipment, skin);
+    const colors = this.palette(skin);
     for (const { mesh: o, regions: of } of this.painted) {
       const out = o.geometry.attributes.color;
       for (let i = 0; i < of.length; i++) {
-        color.set(COLORS[regions[of[i]]]);
+        const color = colors[regions[of[i]]];
         out.setXYZ(i, color.r, color.g, color.b);
       }
       out.needsUpdate = true;
     }
+  }
+
+  // Colours the hood, hair and cloak for a skin.
+  paint(skin) {
+    const paint = skinPaint(skin);
+    for (const o of [...this.hood.children, this.capelet]) o.material.color.setHex(hex(paint.hood));
+    this.hair.material.color.setHex(hex(paint.hair));
+    this.cloak.material.color.setHex(hex(paint.cloak));
+  }
+
+  // A skin's colours as three.js colours, by material name. Packing them to
+  // hex keeps the same sRGB conversion the fixed colours always had.
+  palette(skin) {
+    const paint = skinPaint(skin);
+    let colors = this.palettes.get(paint);
+    if (!colors) {
+      colors = Object.fromEntries(Object.entries(paint).map(([name, rgb]) => [name, new THREE.Color().setHex(hex(rgb))]));
+      if (this.palettes.size >= 8) this.palettes.clear();
+      this.palettes.set(paint, colors);
+    }
+    return colors;
   }
 }

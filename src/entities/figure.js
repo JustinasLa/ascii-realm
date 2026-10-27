@@ -1,4 +1,5 @@
 import { INSTRUMENTS } from '../audio/instruments.js';
+import { DEFAULT_SKIN, skinPaint } from '../character/skin.js';
 import { ITEMS } from '../inventory/items.js';
 import { putCell } from '../render/cells.js';
 import { glyph } from '../render/glyphs.js';
@@ -38,15 +39,34 @@ function barGlyph(dx, dy) {
   return EDGE.rise;
 }
 
+// The materials a skin dresses the figure in: `MATERIALS` with the skin's
+// colours, sharing every texture. A skin in today's colours gets `MATERIALS`
+// itself. Built once per skin object, so the player, its reflection, the
+// portrait and every friend in the same skin share them.
+const skinMats = new WeakMap();
+export function skinMaterials(skin = DEFAULT_SKIN) {
+  let mats = skinMats.get(skin);
+  if (mats) return mats;
+  mats = MATERIALS;
+  for (const [name, color] of Object.entries(skinPaint(skin))) {
+    if (color.join() === MATERIALS[name].color.join()) continue;
+    if (mats === MATERIALS) mats = { ...MATERIALS };
+    mats[name] = { ...MATERIALS[name], color };
+  }
+  skinMats.set(skin, mats);
+  return mats;
+}
+
 // Collects projected shapes along with their depth, so they can be drawn
-// back to front.
+// back to front. Materials named by a string come from `mats`.
 class Dresser {
-  constructor() {
+  constructor(mats = MATERIALS) {
     this.parts = [];
+    this.mats = mats;
   }
 
   add(shape, mat, z) {
-    shape.mat = typeof mat === 'string' ? MATERIALS[mat] : mat;
+    shape.mat = typeof mat === 'string' ? this.mats[mat] : mat;
     shape.z = z;
     this.parts.push(shape);
     return shape;
@@ -89,11 +109,12 @@ const across = (rig, w, d) => Math.hypot(w * rig.facing, d * (1 - rig.facing));
 // short sword at the hip.
 // `equipment` is the inventory's worn gear, slot by slot; without one the
 // outlaw is fully dressed. The clothes are always worn for now (see `wears`),
-// so the hood, boots and gloves are always drawn; a missing weapon or buckler
-// simply is not drawn.
-function dress(rig, capeSim, equipment, weapon = null) {
-  const d = new Dresser();
-  const wearing = (slot) => wears(equipment, slot);
+// so the boots and gloves are always drawn, and the hood, jerkin and cloak
+// unless the skin takes them off; a missing weapon or buckler simply is not
+// drawn. `skin` colours the clothes.
+function dress(rig, capeSim, equipment, weapon = null, skin = DEFAULT_SKIN) {
+  const d = new Dresser(skinMaterials(skin));
+  const wearing = (slot) => wears(equipment, slot, skin);
   if (wearing('cape') && capeSim?.pts) cloak(d, rig, capeSim.pts);
 
   for (const l of rig.legs) {
@@ -102,7 +123,7 @@ function dress(rig, capeSim, equipment, weapon = null) {
     // Tall soft boots turned down in a cuff below the knee.
     const top = lerp3(l.knee, l.ankle, 0.3);
     d.limb(top, l.ankle, 0.062, 0.054, 'boot', 0.005);
-    d.limb(top, lerp3(l.knee, l.ankle, 0.42), 0.07, 0.066, 'leather', 0.01);
+    d.limb(top, lerp3(l.knee, l.ankle, 0.42), 0.07, 0.066, 'cuff', 0.01);
     d.limb(l.ankle, l.toe, 0.056, 0.042, 'boot', 0.01);
   }
 
@@ -116,12 +137,13 @@ function dress(rig, capeSim, equipment, weapon = null) {
     d.limb(a.shoulder, a.elbow, 0.062, 0.054, wearing('chest') ? 'sleeve' : 'linen');
     d.limb(a.elbow, a.wrist, 0.05, 0.046, wearing('chest') ? 'sleeve' : 'linen');
     d.limb(lerp3(a.elbow, a.wrist, 0.3), a.wrist, 0.054, 0.05, 'bracer', 0.01);
-    d.limb(a.wrist, a.hand, 0.046, 0.042, 'leather', 0.015);
+    d.limb(a.wrist, a.hand, 0.046, 0.042, 'glove', 0.015);
   }
   if (equipment?.offHand?.id === 'woodenBuckler') buckler(d, rig);
   else if (instrumentFamily(equipment?.offHand?.id)) heldInstrument(d, rig, equipment.offHand.id);
 
-  hood(d, rig);
+  if (wearing('helm')) hood(d, rig);
+  else bareHead(d, rig);
 
   return d.sorted();
 }
@@ -304,6 +326,23 @@ function hood(d, rig) {
   }
 }
 
+// With the hood down: cropped hair over the face.
+function bareHead(d, rig) {
+  const h = rig.headAt;
+  const head = h([0, 0, 0]);
+  const z = project(head)[2];
+  const front = (p) => (project(p)[2] > z ? 0.3 : -0.3);
+  d.limb(rig.neck, head, 0.05, 0.06, 'skin');
+  d.blob(head, 0.12, 0.145, 'skin');
+  d.blob(h([0, 0.05, -0.02]), 0.125, 0.11, 'hair', 0.01);
+  if (rig.eyes > 0.05) {
+    for (const s of [-1, 1]) {
+      const eye = h([s * 0.04, -0.01, 0.115]);
+      d.blob(eye, 0.016, 0.009 * rig.eyes, 'void', front(eye));
+    }
+  }
+}
+
 // A quiver of arrows slung across the back, fletching showing over the
 // shoulder, and an unstrung longbow crossed behind it.
 function quiverAndBow(d, rig) {
@@ -469,9 +508,9 @@ export function drawShadow(r, view, x, y, air = 0) {
 // Built once a frame and shared by the figure and its reflection.
 export function dressFigure(state) {
   const depth = state.waterDepth ?? 0;
-  if (depth <= 0) return dress(buildRig(state), state.cape, state.equipment, state.weapon);
+  if (depth <= 0) return dress(buildRig(state), state.cape, state.equipment, state.weapon, state.skin);
   const cape = state.cape?.pts ? { pts: state.cape.pts.map((p) => [p[0], p[1] - depth, p[2]]) } : null;
-  return dress(buildRig({ ...state, air: state.air - depth }), cape, state.equipment, state.weapon);
+  return dress(buildRig({ ...state, air: state.air - depth }), cape, state.equipment, state.weapon, state.skin);
 }
 
 // One reusable raster for the current pose. Both painter passes replay the

@@ -18,6 +18,7 @@
 // that can't be read might be a newer version's.
 
 import { RULES } from './catalog.js';
+import { cleanSkin } from './skin.js';
 import { blankSheet, canChange, cleanSheet, fieldError, nameKey, normalName, nameError, sheetErrors } from './rules.js';
 
 export const ROSTER_KEY = 'ascii-realm-characters';
@@ -51,7 +52,7 @@ function cleanCharacter(raw, seen) {
     createdAt: raw.createdAt,
     switchedAt: time(raw.switchedAt) ? raw.switchedAt : null,
     sheet: cleanSheet(raw.sheet),
-    skin: plain(raw.skin) ? raw.skin : null,
+    skin: plain(raw.skin) ? cleanSkin(raw.skin) : null,
   };
 }
 
@@ -281,7 +282,7 @@ export class Roster {
     const errors = sheetErrors({ id: draft.id, sheet }, { others: this.state.characters, now });
     if (errors.length) return { ok: false, errors };
     const character = { id: draft.id, createdAt: now, switchedAt: this.state.active ? now : null,
-      sheet: cleanSheet(sheet), skin: plain(draft.skin) ? structuredClone(draft.skin) : null };
+      sheet: cleanSheet(sheet), skin: plain(draft.skin) ? cleanSkin(draft.skin) : null };
     this.state.characters.push(character);
     this.state.active = character.id;
     this.save(character.id, true);
@@ -329,13 +330,13 @@ export class Roster {
     return { ok: true };
   }
 
-  // The skin can always change; its contents are the skin's own to check.
+  // The skin can always change. A malformed one is repaired by `cleanSkin`.
   setSkin(id, skin) {
     this.sync();
     if (this.readOnly) return { ok: false, reason: NEWER };
     const character = this.find(id);
     if (!character) return { ok: false, reason: MISSING };
-    character.skin = plain(skin) ? structuredClone(skin) : null;
+    character.skin = plain(skin) ? cleanSkin(skin) : null;
     this.save(id);
     return { ok: true };
   }
