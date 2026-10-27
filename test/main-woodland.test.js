@@ -55,6 +55,24 @@ test('a dense page that somehow joins keeps its seat and reloads into the sparse
   assert.deepEqual(sparse.game.multiplayer.leaves, [false]);
 });
 
+test('a lobby asked for from dense woods keeps its lobby server through the reload', async () => {
+  const session = new Map();
+  const server = 'wss://friends.example/lobby';
+  const first = await loadGame(undefined, { href: 'http://localhost/?debug&seed=5&woodland=dense', session });
+  first.game.multiplayer.connect({ mode: 'create', name: 'Kael', seed: 5, code: '', server });
+  // The reloaded page's Lobby server field reads the address, and so do its
+  // refreshes and invites.
+  const destination = new URL(first.navigatedTo());
+  assert.equal(destination.searchParams.get('server'), server);
+  assert.equal(destination.searchParams.has('woodland'), false);
+  const second = await loadGame(undefined, { href: destination.href, session });
+  assert.deepEqual(second.game.multiplayer.connects, [{ mode: 'create', name: 'Kael', seed: 5, code: '', server }]);
+  // A field cleared back to the default server drops an old address.
+  const cleared = await loadGame(undefined, { href: `http://localhost/?debug&woodland=dense&server=${server}`, session: new Map() });
+  cleared.game.multiplayer.connect({ mode: 'join', name: 'Kael', seed: 1, code: 'ABC234', server: '' });
+  assert.equal(new URL(cleared.navigatedTo()).searchParams.has('server'), false);
+});
+
 test('the creator holds a dense page\'s lobby request, and the one resumed after its reload', async () => {
   const session = new Map();
   const request = { mode: 'join', name: 'Kael', seed: 5, code: 'ABC234', server: '' };

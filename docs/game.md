@@ -110,8 +110,9 @@ short version see the [README](../README.md).
     unless `?flora=0` is added.
   Dense woods are for solo play: lobbies share one world, so a page opened
   with a lobby code plays the sparse woods, and creating or joining a lobby
-  from dense woods first reloads the page into the sparse world and makes
-  the request there (once the character creator, if open, is closed). Saved
+  from dense woods first reloads the page into the sparse world, keeping
+  the lobby server you named, and makes the request there (once the
+  character creator, if open, is closed). Saved
   scenery works in both: generated props keep their ids, and an erased grove
   prop is simply not there in the sparse world.
 - **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and

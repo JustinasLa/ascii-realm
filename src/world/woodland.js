@@ -363,10 +363,22 @@ export const PENDING_LOBBY = 'ascii-realm-pending-lobby';
 export function guardLobbyConnect(client, { dense, storage, reload }) {
   if (!dense) return false;
   client.connect = ({ mode, name, seed, code, server = '' }) => {
-    try { storage.setItem(PENDING_LOBBY, JSON.stringify({ mode, name, seed, code, server })); } catch {}
-    reload();
+    const request = { mode, name, seed, code, server };
+    try { storage.setItem(PENDING_LOBBY, JSON.stringify(request)); } catch {}
+    reload(request);
   };
   return true;
+}
+
+// The sparse world a dense page reloads into to make a lobby request. It
+// names the request's lobby server, so the reloaded page's Lobby server field,
+// refreshes and invites keep it.
+export function sparseWorldUrl(href, { server = '' } = {}) {
+  const url = new URL(href);
+  url.searchParams.delete('woodland');
+  if (server.trim()) url.searchParams.set('server', server);
+  else url.searchParams.delete('server');
+  return url;
 }
 
 // The lobby request a dense page left before reloading, made now. Returns it,

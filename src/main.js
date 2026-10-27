@@ -89,7 +89,7 @@ import { Torches } from './world/torch.js';
 import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
 import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from './world/world.js';
-import { guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, woodlandOptions } from './world/woodland.js';
+import { guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, sparseWorldUrl, woodlandOptions } from './world/woodland.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
 const params = new URLSearchParams(location.search);
@@ -478,11 +478,8 @@ debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
 // Creating or joining a lobby from dense woods reloads into the sparse world
 // first, and the request is made there, so no lobby ever holds a dense page.
-guardLobbyConnect(multiplayer, { dense: world.woodland === 'dense', storage: session, reload: () => {
-  const url = new URL(location.href);
-  url.searchParams.delete('woodland');
-  location.replace(url);
-} });
+guardLobbyConnect(multiplayer, { dense: world.woodland === 'dense', storage: session,
+  reload: (request) => location.replace(sparseWorldUrl(location.href, request)) });
 // While the creator is open the lobby waits; the last join asked for is made
 // once it closes. A dense page's reload waits too, and so does a request
 // resumed after one.

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { WebSocket } from 'ws';
 import { MultiplayerClient } from '../src/multiplayer/client.js';
 import {
-  guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby,
+  guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, sparseWorldUrl,
 } from '../src/world/woodland.js';
 import { setup } from './helpers/lobby.js';
 
@@ -113,4 +113,14 @@ test('a lobby keeps a suspended player\'s seat for the reconnect window; leaving
   await once(second, 'close');
   await delay(50);
   assert.equal(game.rooms.size, 0, 'a player who leaves gives the room up at once');
+});
+
+test('the sparse world a dense page reloads into names the request\'s lobby server', () => {
+  const url = sparseWorldUrl('http://localhost/?seed=7&woodland=dense&flora=1', { server: 'wss://x.example/lobby' });
+  assert.equal(url.searchParams.get('woodland'), null);
+  assert.equal(url.searchParams.get('flora'), '1');
+  assert.equal(url.searchParams.get('server'), 'wss://x.example/lobby');
+  assert.equal(sparseWorldUrl('http://localhost/?woodland=dense&server=wss://old.example', { server: '  ' })
+    .searchParams.has('server'), false, 'the default server drops an old address');
+  assert.equal(sparseWorldUrl('http://localhost/?woodland=dense').searchParams.has('server'), false);
 });

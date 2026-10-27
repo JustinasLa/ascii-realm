@@ -38,7 +38,8 @@ import { metresBetween } from '../../src/multiplayer/chat.js';
 import { figureTop } from '../../src/ui/bubbles.js';
 import { displayName } from '../../src/multiplayer/protocol.js';
 import { autoColour, hexRgb, memberColour, SOLO_COLOR } from '../../src/multiplayer/tint.js';
-import { guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, woodlandOptions } from '../../src/world/woodland.js';
+import { guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, sparseWorldUrl,
+  woodlandOptions } from '../../src/world/woodland.js';
 
 const noop = () => {};
 
@@ -171,7 +172,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     // The page's session storage; `session` is the Map behind it.
     sessionStorage: { getItem: key => session.get(key) ?? null, setItem: (key, value) => session.set(key, String(value)),
       removeItem: key => session.delete(key) },
-    guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, woodlandOptions,
+    guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, sparseWorldUrl, woodlandOptions,
     document,
     matchMedia: () => coarseQuery, innerWidth: width, innerHeight: height,
     navigator,
