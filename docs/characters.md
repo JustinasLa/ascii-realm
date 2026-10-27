@@ -113,8 +113,11 @@ final check of every step report an age past the new maximum.
 
 The Description step counts the trimmed text against 32 to 256 characters,
 takes one paragraph (Enter continues) and offers an optional gender. Clues
-are added one at a time with **Add** (or Enter in the field), each checked
-as it is added, and removed with **Remove**; at ten the field closes.
+are added one at a time with **Add**, each checked as it is added, and
+removed with **Remove**; at ten the field closes. While a clue is typed,
+Enter, a phone keyboard's Done and Next all add it instead of moving on.
+Screen readers read each count with its field and announce it once typing
+pauses.
 
 The Summary lists every row with an **Edit** that opens its step and comes
 back with **Save and review**. It checks every step again: failing steps are
@@ -131,6 +134,8 @@ and comes back afterwards (it snaps with reduced motion). On phones the
 panel keeps above the on-screen keyboard. The rest of the screen is inert,
 every key stays in the panel (Esc doesn't close it), monsters and animals
 hold still, nothing can hurt the player, and a lobby join waits for Create.
+If the new character couldn't be saved, that join is dropped with a notice:
+a lobby on another world reloads the page, which would lose it.
 A draft isn't saved: a reload starts again.
 
 ## The roster

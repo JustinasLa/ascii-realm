@@ -63,7 +63,12 @@ function setup({ start = 'welcome', sample = start !== 'welcome', storage = new 
   const canvas = new Node(doc, 'canvas');
   doc.body.append(root, canvas);
   let keydown = null;
-  const win = { innerWidth: 390, innerHeight: 844, visualViewport: viewport, addEventListener: (type, listener, capture) => {
+  // Timers run when the test says.
+  const timers = new Map();
+  let timerId = 0;
+  const win = { innerWidth: 390, innerHeight: 844, visualViewport: viewport,
+    setTimeout: (run, ms) => { timers.set(++timerId, { run, ms }); return timerId; }, clearTimeout: (id) => timers.delete(id),
+    addEventListener: (type, listener, capture) => {
     assert.equal(type, 'keydown');
     assert.equal(capture, true);
     keydown = listener;
@@ -84,7 +89,7 @@ function setup({ start = 'welcome', sample = start !== 'welcome', storage = new 
     return event;
   };
   const ui = {
-    creator, root, canvas, doc, previews, frames, created, vars, win, roster, press, closed: () => closed,
+    creator, root, canvas, doc, previews, frames, created, vars, win, roster, press, timers, closed: () => closed,
     open: () => creator.open({ roster, now: () => START, start, draft: sample ? sampleDraft(roster, START) : null }),
     title: () => doc.getElementById('creator-title').textContent,
     buttons: () => root.find((node) => node.tagName === 'BUTTON'),
@@ -323,8 +328,17 @@ test('Description: a counted paragraph where Enter continues, then an optional g
   assert.equal(gender[3].checked, true, 'Unset by default');
   gender[2].onchange();
   assert.equal(ui.creator.flow.sheet.gender, 'other');
+  assert.equal(text.getAttribute('aria-describedby'), 'creator-description-count', 'the count is read on focus');
+  assert.equal(ui.doc.getElementById('creator-description-count').textContent, count());
+  text.enter('  A scarred ranger');
   text.enter('  A scarred ranger with a soft voice.  ');
   assert.equal(count(), '35 / 256 (at least 32)', 'trimmed, as the rule counts');
+  assert.equal(ui.live(), 'Step 6 of 7: Description', 'not announced while typing');
+  assert.equal(ui.timers.size, 1, 'each key restarts the pause');
+  const [pause] = ui.timers.values();
+  assert.equal(pause.ms, 300);
+  pause.run();
+  assert.equal(ui.live(), '35 / 256 (at least 32)', 'announced once typing pauses');
   let prevented = 0;
   text.onbeforeinput({ inputType: 'insertText', preventDefault: () => prevented++ });
   assert.equal(ui.title(), 'Description', 'typing goes on');
@@ -352,18 +366,24 @@ test('Clues: added one at a time with a counter, removed, and limited to ten', (
   assert.equal(status()[1], '50/48 · 2 over');
   field().enter('Smells of pine resin');
   assert.equal(status()[1], '20/48');
+  assert.equal(field().getAttribute('aria-describedby'), 'creator-clue-count');
+  [...ui.timers.values()][0].run();
+  assert.equal(ui.live(), '20/48');
   ui.button('Add').click();
   assert.deepEqual(ui.creator.flow.sheet.clues, ['Smells of pine resin']);
   assert.equal(field().value, '', 'the field empties');
   assert.equal(ui.doc.activeElement, field());
   field().enter('Hums under her breath');
-  const enter = ui.press('Enter', field());
-  assert.ok(enter.defaultPrevented, 'Enter in the field adds rather than continues');
+  ui.submit();
+  assert.equal(ui.title(), 'Clues', 'Enter, Done or Next adds a typed clue rather than continues');
+  assert.deepEqual(ui.creator.flow.sheet.clues, ['Smells of pine resin', 'Hums under her breath']);
+  assert.equal(ui.timers.size, 0, 'a new page drops a pending count');
+  field().enter('Too short');
+  ui.submit();
+  assert.equal(ui.title(), 'Clues', 'a typed clue that fails stays, with why');
+  assert.equal(ui.message().textContent, 'Each clue must be 12 to 48 characters.');
   assert.equal(ui.creator.flow.sheet.clues.length, 2);
-  assert.equal(ui.press('Enter', field(), { isComposing: true }).defaultPrevented, false, 'an empty field lets Enter continue');
-  field().value = 'Composing a clue';
-  assert.equal(ui.press('Enter', field(), { isComposing: true }).defaultPrevented, false, 'nor while composing');
-  assert.equal(ui.creator.flow.sheet.clues.length, 2);
+  field().enter('');
   const remove = ui.doc.getElementById('creator-remove0');
   assert.equal(remove.getAttribute('aria-label'), 'Remove clue 1');
   remove.click();
@@ -459,10 +479,36 @@ test('Create refused: the cooldown with its opening time, or a name taken meanwh
   other.creator.flow.create = () => ({ ok: false, reason: 'This character needs a new id.' });
   other.submit();
   assert.equal(other.message().textContent, 'This character needs a new id.');
-  other.creator.flow.create = () => ({ ok: false, errors: [] });
-  other.submit();
-  assert.equal(other.message().textContent, '');
   assert.equal(other.closed(), 0);
+});
+
+test('Create refused: another tab took the name meanwhile, and Review Name fixes it', () => {
+  const storage = new Map();
+  const ui = setup({ start: 'summary', storage });
+  ui.open();
+  assert.equal(ui.button('Create character').getAttribute('aria-disabled'), 'false');
+  // A second tab on the same storage makes a character with the same name.
+  const tab = new Roster({ storage: { getItem: (k) => storage.get(k) ?? null, setItem: (k, v) => storage.set(k, v) },
+    now: () => START, randomId: () => 'c0009' });
+  assert.ok(tab.create(sampleDraft(tab, START)).ok);
+  ui.submit();
+  assert.equal(ui.closed(), 0, 'nothing is made');
+  assert.deepEqual(ui.roster.characters.map((c) => c.id), ['c0009'], 'this tab now sees the other one');
+  const alert = ui.root.find((n) => n.getAttribute('role') === 'alert')[0];
+  assert.ok(alert.textContent.includes('Review Name Name already in use.'));
+  assert.equal(ui.doc.activeElement, alert);
+  assert.equal(ui.button('Create character').getAttribute('aria-disabled'), 'true');
+  ui.button('Review Name').click();
+  assert.equal(ui.title(), 'Name');
+  assert.equal(ui.message().textContent, 'Name already in use.');
+  ui.doc.getElementById('creator-name').enter('Arwen Dale');
+  ui.submit();
+  assert.equal(ui.title(), 'Review your character', 'Save and review returns');
+  ui.submit();
+  assert.equal(ui.closed(), 1);
+  assert.equal(ui.created[0].sheet.name, 'Arwen Dale');
+  assert.deepEqual(JSON.parse(storage.get('ascii-realm-characters')).characters.map((c) => c.sheet.name),
+    ['Arwen Vale', 'Arwen Dale'], 'both tabs\' characters are saved');
 });
 
 test('the framing puts the outlaw in the middle of the free area', () => {

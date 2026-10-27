@@ -97,7 +97,8 @@ export class CharacterCreator {
   render(focusId = null) {
     const { flow } = this;
     const { page, counter } = flow;
-    Object.assign(this, { first: null, problems: false });
+    Object.assign(this, { first: null, problems: false, clue: null });
+    this.win.clearTimeout(this.pause);
     const step = counter ? `Step ${counter.n} of ${counter.total}` : '';
     this.message = this.el('p', { className: 'creator-message', role: 'status' });
     this.next = this.el('button', { type: 'submit', className: 'creator-primary',
@@ -130,7 +131,10 @@ export class CharacterCreator {
   }
 
   // Next stays focusable while the step fails; pressing it shows why.
+  // A typed clue is added instead, however the form was sent: Enter, a
+  // phone keyboard's Done, or Next.
   submit() {
+    if (this.clue?.value.trim()) return this.addClue();
     if (this.flow.page.kind === 'summary' && !this.flow.error) return this.create();
     if (this.flow.next()) return this.turn(true);
     this.touched = true;
@@ -166,8 +170,6 @@ export class CharacterCreator {
   description() {
     const { flow } = this;
     const { min, max } = RULES.description;
-    const count = this.el('p', { className: 'creator-counter' });
-    const counted = () => { count.textContent = `${flow.sheet.description.trim().length} / ${max} (at least ${min})`; };
     const text = this.el('textarea', { id: 'creator-description', rows: 4, maxLength: 512, value: flow.sheet.description,
       autocapitalize: 'sentences', autocorrect: 'on', enterkeyhint: 'next',
       oninput: () => this.change(() => { flow.set('description', text.value); counted(); }),
@@ -176,7 +178,7 @@ export class CharacterCreator {
         event.preventDefault();
         this.submit();
       } });
-    counted();
+    const [count, counted] = this.counter(text, () => `${flow.sheet.description.trim().length} / ${max} (at least ${min})`);
     const gender = this.choices('Gender (optional)', [...GENDERS, { id: null, name: UNSET }], 'gender', () => []);
     gender[0].className = 'creator-row';
     this.first = text;
@@ -189,13 +191,12 @@ export class CharacterCreator {
     const { min, max, most } = RULES.clues;
     const { clues } = flow.sheet;
     const full = clues.length >= most;
-    const count = this.el('span', { className: 'creator-counter' });
     const input = this.el('input', { id: 'creator-clue', maxLength: 96, autocomplete: 'off', autocapitalize: 'sentences',
-      enterkeyhint: 'done', disabled: full, 'aria-label': 'New clue', oninput: () => {
-        const n = input.value.trim().length;
-        count.textContent = `${n}/${max}${n < min ? ` · need ${min - n} more` : n > max ? ` · ${n - max} over` : ''}`;
-      } });
-    input.oninput();
+      enterkeyhint: 'done', disabled: full, 'aria-label': 'New clue', oninput: () => counted() });
+    const [count, counted] = this.counter(input, () => {
+      const n = input.value.trim().length;
+      return `${n}/${max}${n < min ? ` · need ${min - n} more` : n > max ? ` · ${n - max} over` : ''}`;
+    });
     this.clue = input;
     this.first = full ? null : input;
     const remove = (i) => () => {
@@ -216,6 +217,19 @@ export class CharacterCreator {
     if (ok) return this.redo('creator-clue');
     Object.assign(this, { touched: true, note: message });
     this.refresh();
+  }
+
+  // A count shown under `field` as it is typed. The field names it, so it
+  // is read on focus, and it is announced once typing pauses for 300 ms, so
+  // a screen reader isn't flooded. Returns the count and its update.
+  counter(field, text) {
+    const count = this.el('p', { id: `${field.id}-count`, className: 'creator-counter', textContent: text() });
+    field.setAttribute('aria-describedby', count.id);
+    return [count, () => {
+      count.textContent = text();
+      this.win.clearTimeout(this.pause);
+      this.pause = this.win.setTimeout(() => { this.live.textContent = count.textContent; }, 300);
+    }];
   }
 
   // Every row with its Edit, and every step checked again before Create.
@@ -335,10 +349,6 @@ export class CharacterCreator {
     let to = null;
     if (event.key === 'Escape') event.preventDefault();
     else if (!this.root.contains(event.target)) to = this.first ?? this.next;
-    else if (event.key === 'Enter' && event.target === this.clue && this.clue.value.trim() && !event.isComposing) {
-      event.preventDefault();
-      this.addClue();
-    }
     else if (event.key === 'Tab' && event.target === (event.shiftKey ? nodes[0] : nodes.at(-1))) {
       to = event.shiftKey ? nodes.at(-1) : nodes[0];
     }
