@@ -36,6 +36,7 @@ import { metresBetween } from '../../src/multiplayer/chat.js';
 import { figureTop } from '../../src/ui/bubbles.js';
 import { displayName } from '../../src/multiplayer/protocol.js';
 import { autoColour, hexRgb, memberColour, SOLO_COLOR } from '../../src/multiplayer/tint.js';
+import { guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, woodlandOptions } from '../../src/world/woodland.js';
 
 const noop = () => {};
 
@@ -51,7 +52,8 @@ const inert = () => class {
 };
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
-  width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false, real = {} } = {}) {
+  width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false, real = {},
+  session = new Map() } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -162,7 +164,10 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const source = readFileSync(new URL('../../src/main.js', import.meta.url), 'utf8');
   const context = {
     console: { ...console, error: (...args) => startupErrors.push(args) }, URL, URLSearchParams, window,
-    sessionStorage: { setItem: noop },
+    // The page's session storage; `session` is the Map behind it.
+    sessionStorage: { getItem: key => session.get(key) ?? null, setItem: (key, value) => session.set(key, String(value)),
+      removeItem: key => session.delete(key) },
+    guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, woodlandOptions,
     document,
     matchMedia: () => coarseQuery, innerWidth: width, innerHeight: height,
     navigator,
@@ -240,7 +245,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     wasTapped: code => !blocked && taps.delete(code),
     Player, ASPECT, GRASS, CHUNK_SIZE: 64,
     World: class {
-      constructor() { this.spawn = { x: 0, y: 0 }; }
+      constructor(seed, options = {}) {
+        this.spawn = { x: 0, y: 0 };
+        this.options = options;
+        this.woodland = options.woodland === 'dense' ? 'dense' : 'sparse';
+      }
       isWalkable() { return true; }
       typeAt() { return GRASS; }
       propsIn() { return []; }
@@ -324,10 +333,16 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     // tested on its own.
     bindTintPicker: (client, options) => ({ ...options, renders: 0, render() { this.renders++; } }),
     MultiplayerClient: class {
-      constructor(options) { this.players = []; this.room = null; this.notesSent = []; Object.assign(this, options); }
+      constructor(options) {
+        this.players = []; this.room = null; this.notesSent = []; this.connects = []; this.leaves = []; this.suspends = 0;
+        Object.assign(this, options);
+      }
+      // Records lobby requests and how the page left a lobby.
+      connect(request) { this.connects.push(request); }
+      suspend() { this.suspends++; }
       // Records each note offered to the lobby; solo, nothing is sent.
       sendNote(note) { this.notesSent.push(note); return false; }
-      leave() {}
+      leave(notify) { this.leaves.push(notify); }
     },
     RemotePlayers: class { constructor() { this.peers = new Map(); } sync() {} update() {} visible() { return []; } },
     bindMultiplayerControls: noop,

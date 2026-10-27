@@ -4,6 +4,7 @@ import { isArchitectureKind } from '../world/architecture-props.js';
 import { PROP_KINDS, propDefinition } from '../world/prop-catalog.js';
 import { ASPECT, STONE, WATER } from '../world/world.js';
 import { isSpawnRuinId } from '../world/spawn-ruins.js';
+import { MAX_CHUNK_PROPS } from '../world/woodland.js';
 
 const HISTORY_LIMIT = 64;
 const COORD_LIMIT = 1_000_000;
@@ -273,7 +274,7 @@ export class Scenery {
       if (!isSpawnRuinId(id)) {
         if (typeof id !== 'string' || !/^p:-?\d+:-?\d+:\d+$/.test(id)) throw new Error('Invalid removed prop identifier.');
         const [, cx, cy, index] = id.split(':').map(Number);
-        if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cy) || Math.abs(cx) > COORD_LIMIT / 64 + 1 || Math.abs(cy) > COORD_LIMIT / 64 + 1 || !Number.isSafeInteger(index) || index >= 40) throw new Error('Invalid removed prop identifier.');
+        if (!Number.isSafeInteger(cx) || !Number.isSafeInteger(cy) || Math.abs(cx) > COORD_LIMIT / 64 + 1 || Math.abs(cy) > COORD_LIMIT / 64 + 1 || !Number.isSafeInteger(index) || index >= MAX_CHUNK_PROPS) throw new Error('Invalid removed prop identifier.');
       }
       if (removedIds.has(id)) throw new Error('Duplicate removed prop identifier.');
       removedIds.add(id);

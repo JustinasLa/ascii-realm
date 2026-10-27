@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { Grass } from '../src/world/grass.js';
 import {
@@ -167,4 +168,23 @@ test('neighbouring clumps differ in shade', () => {
 test('every flora glyph has a unique name and stays within the cell format', () => {
   const names = FLORA.map((e) => e.name);
   assert.equal(new Set(names).size, names.length);
+});
+
+// Digests taken on the code before dense woods existed: grass and flowers
+// grow root for root as they did, with flora on or off.
+test('sparse meadows grow the same roots and flowers as before dense woods', () => {
+  const blades = (world) => {
+    const h = createHash('sha256');
+    for (let cy = 0; cy <= 2; cy++) {
+      for (let cx = 0; cx <= 2; cx++) {
+        const b = world.chunk(cx, cy).blades;
+        for (const k of ['rows', 'indices', 'heights', 'flowers', 'extras', 'tones']) {
+          h.update(Buffer.from(b[k].buffer, b[k].byteOffset, b[k].byteLength));
+        }
+      }
+    }
+    return h.digest('hex').slice(0, 16);
+  };
+  assert.equal(blades(new World(7)), 'fc33f0f2ef427285');
+  assert.equal(blades(new World(19, { flora: true })), '28c90d4ddccb5be7');
 });

@@ -185,18 +185,24 @@ export class MultiplayerClient {
     this.retryTimer = setTimeout(() => this.open(true), delay);
   }
 
+  // Drops the connection without telling the lobby, so the server keeps this
+  // player's seat for its reconnect window, as after a lost connection.
+  suspend() {
+    this.leave(true, false);
+  }
+
   fail(message) {
     this.leave(false);
     this.setStatus('error', message);
   }
 
-  leave(notify = true) {
+  leave(notify = true, tell = true) {
     this.clearTimers();
     if (this.room) this.onRoster?.({ left: 'self' });
     const socket = this.socket;
     this.socket = null;
     if (socket) {
-      if (socket.readyState === 1) socket.send(JSON.stringify({ type: 'leave' }));
+      if (tell && socket.readyState === 1) socket.send(JSON.stringify({ type: 'leave' }));
       socket.close();
     }
     this.room = null;
