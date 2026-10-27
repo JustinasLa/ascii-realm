@@ -56,6 +56,14 @@ function build(type) {
       add(box(0.22, 0.11, 0.11, 0x9aa0aa, 0.66), true);
       base = 0.55; tip = 0.72;
       break;
+    case 'pickaxe':
+      // An arched head: a pick on one side, a blunt peen on the other.
+      add(rod(0.85, 0.018, WOOD, -0.15));
+      add(box(0.2, 0.035, 0.035, 0x9aa0aa, 0.64, -0.09), true).rotation.z = 0.3;
+      add(box(0.2, 0.035, 0.035, 0x9aa0aa, 0.64, 0.09), true).rotation.z = -0.3;
+      add(box(0.05, 0.05, 0.05, 0x8a8a90, 0.64), true);
+      base = 0.55; tip = 0.7;
+      break;
     case 'spear':
       add(rod(1.7, 0.016, WOOD, -0.5));
       add(point(0.035, 0.18, 0xc8d4dc, 1.29), true);

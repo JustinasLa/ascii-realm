@@ -73,7 +73,7 @@ export class Inventory {
     }
     for (const [id, count] of [
       ['healingDraught', 3], ['staminaTonic', 3], ['bandage', 5],
-      ['ironOre', 6], ['oakLog', 3], ['woodenBuckler', 1],
+      ['rawIron', 6], ['oakLog', 3], ['woodenBuckler', 1],
       // Every weapon to try, with arrows for the bow.
       ['longbow', 1], ['arrow', 30], ['spear', 1], ['javelin', 3], ['battleAxe', 1], ['dagger', 1],
       ['greatsword', 1], ['warHammer', 1], ['quarterstaff', 1],

@@ -16,6 +16,7 @@ import { sampleDraft, wantsCreator } from '../../src/character/creation.js';
 import { hidesPreview } from '../../src/ui/creator.js';
 import { mulberry32 } from '../../src/core/rng.js';
 import { Collection } from '../../src/inventory/collection.js';
+import { Mining, toolOf } from '../../src/world/mining.js';
 import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
 import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer } from '../../src/audio/instruments.js';
@@ -276,7 +277,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       render() { this.renders++; }
     },
     nameError, normalName,
-    GroundItems: inert(), Harvesting: inert(), Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, drawItem: noop, drawResource: noop,
+    GroundItems: inert(), Harvesting: inert(), Mining, toolOf, Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }

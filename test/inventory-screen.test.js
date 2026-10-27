@@ -497,7 +497,7 @@ test('E equips, U unequips and Enter uses or swaps the selected item', (t) => {
   assert.equal(document.activeElement, bagButton(0));
 
   // Materials and empty slots have no action.
-  bagButton(indexOf('ironOre')).click();
+  bagButton(indexOf('rawIron')).click();
   press('Enter');
   bagButton(20).click();
   press('Enter');
@@ -629,7 +629,7 @@ test('X drops the selected bag stack through onDrop', (t) => {
   press('KeyI');
   assert.ok(visible(screen.dropButton));
 
-  const ore = indexOf('ironOre');
+  const ore = indexOf('rawIron');
   bagButton(ore).click();
   results.push({ ok: true, message: 'Dropped Iron Ore.' }, { ok: false, message: 'Nothing to drop.' }, undefined);
   assert.equal(press('KeyX').prevented, true);
@@ -660,18 +660,18 @@ test('without onDrop there is no drop key or button', (t) => {
   assert.equal(press('KeyX').prevented, true);
   assert.equal(inventory.slots[0].count, before);
   assert.equal(notes.length, 0);
-  assert.ok(indexOf('ironOre') >= 0);
+  assert.ok(indexOf('rawIron') >= 0);
 });
 
 test('number keys assign the selected bag item to a quick slot', (t) => {
   const { screen, inventory, notes, press, bagButton, slotButton, indexOf } = mount(t);
   press('KeyI');
-  bagButton(indexOf('ironOre')).click();
+  bagButton(indexOf('rawIron')).click();
   assert.equal(screen.assignment.textContent, 'Quick slot unassigned');
 
   assert.deepEqual(press('Digit3'), { prevented: true, reachedGame: false });
-  assert.equal(inventory.hotbar[2], 'ironOre');
-  assert.deepEqual(notes.at(-1), ['Iron Ore assigned to hotbar 3.', 'info']);
+  assert.equal(inventory.hotbar[2], 'rawIron');
+  assert.deepEqual(notes.at(-1), ['Raw Iron assigned to hotbar 3.', 'info']);
   assert.equal(screen.feedback.dataset.kind, 'info');
   assert.equal(screen.assignment.textContent, 'Quick slot 3');
   press('Numpad4');
@@ -698,7 +698,7 @@ test('dragging a bag stack onto another slot moves or swaps it', (t) => {
   assert.equal(bagButton(5).dispatch('dragover', { dataTransfer: {} }).defaultPrevented, false);
   assert.equal(bagButton(5).dispatch('drop', { dataTransfer: {} }).defaultPrevented, false);
 
-  const ore = indexOf('ironOre');
+  const ore = indexOf('rawIron');
   const start = bagButton(ore).dispatch('dragstart', { dataTransfer: dataTransfer() });
   assert.equal(start.defaultPrevented, false);
   assert.equal(start.dataTransfer.data['application/x-ascii-realm-slot'], String(ore));
@@ -709,16 +709,16 @@ test('dragging a bag stack onto another slot moves or swaps it', (t) => {
   assert.equal(over.dataTransfer.dropEffect, 'move');
   assert.equal(bagButton(20).dispatch('drop', { dataTransfer: {} }).defaultPrevented, true);
   assert.equal(inventory.slots[ore], null);
-  assert.deepEqual(inventory.slots[20], { id: 'ironOre', count: 6 });
+  assert.deepEqual(inventory.slots[20], { id: 'rawIron', count: 6 });
   assert.deepEqual(screen.selection, { source: 'bag', index: 20 });
   assert.equal(document.activeElement, bagButton(20));
-  assert.equal(bagButton(20).getAttribute('data-item-id'), 'ironOre');
+  assert.equal(bagButton(20).getAttribute('data-item-id'), 'rawIron');
   assert.equal(bagButton(ore).getAttribute('data-item-kind'), 'empty');
 
   // A drop onto its own slot changes nothing.
   bagButton(20).dispatch('dragstart', { dataTransfer: dataTransfer() });
   bagButton(20).dispatch('drop', { dataTransfer: {} });
-  assert.deepEqual(inventory.slots[20], { id: 'ironOre', count: 6 });
+  assert.deepEqual(inventory.slots[20], { id: 'rawIron', count: 6 });
 
   // A cancelled drag leaves later drops alone.
   bagButton(0).dispatch('dragstart', { dataTransfer: dataTransfer() });
@@ -826,7 +826,7 @@ test('details describe the selected item, its stats, weight, durability and quic
   assert.ok(slot.classList.contains('selected'));
   assert.equal(screen.bagNodes[0].count.textContent, 'x3');
   assert.equal(bagButton(indexOf('woodenBuckler')).getAttribute('data-item-kind'), 'equipment');
-  assert.equal(bagButton(indexOf('ironOre')).getAttribute('data-item-kind'), 'material');
+  assert.equal(bagButton(indexOf('rawIron')).getAttribute('data-item-kind'), 'material');
   assert.equal(bagButton(20).getAttribute('aria-label'), 'Slot 21: empty');
   assert.equal(bagButton(20).getAttribute('draggable'), 'false');
   assert.ok(bagButton(20).classList.contains('empty'));

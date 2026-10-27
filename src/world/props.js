@@ -1,7 +1,7 @@
 import { fbm, valueNoise } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { FINE, putCell } from '../render/cells.js';
-import { dg, LAYER, over } from '../render/glyphs.js';
+import { dg, glyph, LAYER, over } from '../render/glyphs.js';
 import { MOSS, STONE_MID } from '../render/palette.js';
 import { isArchitectureKind, makeArchitectureProp } from './architecture-props.js';
 import { makeCampProp } from './camp-props.js';
@@ -14,6 +14,7 @@ import { bakeSurface, canopyOf, cellBounds, fineRecipe, makeCell, recording, rep
 import { propDefinition } from './prop-catalog.js';
 import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, MOON, VIEW_C, VIEW_S, glossByte } from './surface-light.js';
 import { tintRgb } from './moon-tint.js';
+import { HOST_TINT, ORES } from './ore-veins.js';
 import { makeTree } from './trees.js';
 import { treeWind, windGust } from './wind.js';
 import { ASPECT, GRASS, WATER } from './world.js';
@@ -49,7 +50,7 @@ const ROCK_LIFT = 1.8;
 // (`undercut`), more and wider fissures that fork (`cracks`, `crackWidth`)
 // and a skirt of scree (`talus`).
 function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCoverage: moss, grit = 0.5,
-  strata = 0, undercut = 0, cracks: crackCount = null, crackWidth = 0.32, talus = 0 }) {
+  strata = 0, undercut = 0, cracks: crackCount = null, crackWidth = 0.32, talus = 0, lichen: lichenOn = true, flecks = null }) {
   const stone = base.map((v) => Math.min(255, v * ROCK_LIFT));
   // Moss takes over the characters it grows on, so a little goes a long way.
   const mossCoverage = moss * 0.5;
@@ -189,6 +190,12 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
         }
       }
     }
+    // Ore flecks, where a vein's mineral shows through the stone.
+    const fleck = flecks?.(px, py, l, best);
+    if (fleck) {
+      s.acc = fleck;
+      return s;
+    }
     const patch = valueNoise(px * 0.7, py * 0.9, seed + 29);
     // Where two facets meet: the distance to the bisector between them.
     const gx = (next.u - best.u) * rx;
@@ -213,7 +220,7 @@ function boulder(rand, seed, { rx, ry, sides, roundness, stone: base, mossCovera
     if (ridgeEdge) {
       const a = (Math.round(-Math.atan2(gx, -gy) / (Math.PI / 4)) + 8) % 4;
       s.acc = { g: ridges[a], c: stone.map((x) => x * (0.85 + l * 0.55)) };
-    } else if (hash2(Math.floor(px * 1.7), Math.floor(py), seed + 41) < 0.05 * grit + (l > 0.5 ? 0.03 : 0)) {
+    } else if (lichenOn && hash2(Math.floor(px * 1.7), Math.floor(py), seed + 41) < 0.05 * grit + (l > 0.5 ? 0.03 : 0)) {
       s.acc = { g: lichenGlyphs[Math.floor(hash2(Math.floor(px), Math.floor(py), seed + 43) * 4)],
         c: lichen.map((x) => x * (0.55 + l * 0.5)) };
     }
@@ -468,6 +475,34 @@ function makeBigRock(x, y, stream, seed = x * 23 + y) {
   const cells = bake(rock.w, rock.top, 0, rock.sample, seed, { shadow: rock.shadow, extras: rock.extras });
   return withFine({ kind: 'rock', x, y, footW: rx * 0.9 / ASPECT, footH: Math.max(2, ry * 0.3),
     bounds: cellBounds(cells), cells }, fineBoulder(rock, seed, bake), { make: 'bigRock', x, y, draws, seed });
+}
+
+// A fist-high block of ore: fresh, chunky stone tinted by the local rock,
+// with clumps of the ore's mineral in it. Everything comes from its base,
+// ore, host rock and seed, so the fine worker rebuilds it exactly.
+export function makeOreBlock({ x, y, ore, host, seed }, bakeFn = bake) {
+  const rand = mulberry32(seed);
+  const rx = 2.2 + rand() * 0.4;
+  const ry = rx * (0.6 + rand() * 0.12);
+  const tint = HOST_TINT[host];
+  const stone = STONE_MID.map((v, i) => v * tint.k + tint.add[i]);
+  const kind = ORES[ore];
+  const glyphs = [...'%*:;'].map((ch) => glyph(ch));
+  const flecks = (px, py, l, facet) => {
+    if (valueNoise(px * 1.7, py * 2.3, seed + 73) <= 1 - kind.density) return null;
+    const fx = Math.floor(px * FINE / ASPECT), fy = Math.floor(py * FINE);
+    const h = hash2(fx, fy, seed + 79);
+    if (h >= 0.7) return null;
+    const c = kind.patina && facet.up < -0.15 && h < 0.35 ? kind.patina
+      : kind.glint && l > 0.55 && h < 0.25 ? kind.glint : kind.fleck;
+    const k = (0.65 + 0.75 * l) * (kind.lift ?? 1);
+    return { g: glyphs[Math.floor(hash2(fx, fy, seed + 83) * 4)], c: c.map((v) => Math.min(255, v * k)) };
+  };
+  const rock = boulder(rand, seed, { rx, ry, sides: 5 + Math.floor(rand() * 3), roundness: 0.78, stone,
+    mossCoverage: 0, grit: 0.15, lichen: false, cracks: rand() < 0.4 ? 1 : 0, crackWidth: 0.22, flecks });
+  const cells = bakeBoulder(rock, seed, bakeFn);
+  return withFine({ kind: 'rock', ore, host, x, y, footW: rx * 0.9 / ASPECT, footH: 0.9, bounds: cellBounds(cells), cells },
+    fineBoulder(rock, seed, bakeFn), { make: 'ore', x, y, ore, host, seed });
 }
 
 // Where a big rock stands nothing else grows: its face and a margin around
@@ -748,6 +783,7 @@ export function rebuildProp(source, fineOnly = false) {
   if (source.make === 'rock') return makeRock(source.x, source.y, draws, source.seed);
   if (source.make === 'riverStone') return makeRiverStone(source.x, source.y, draws, source.seed);
   if (source.make === 'bigRock') return makeBigRock(source.x, source.y, draws, source.seed);
+  if (source.make === 'ore') return makeOreBlock(source);
   if (source.make === 'prop') return createProp(source.kind, source.x, source.y, source.options);
   return null;
 }

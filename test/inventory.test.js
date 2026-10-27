@@ -102,16 +102,16 @@ test('capacity checks agree with additions for matching, different, and sanitize
 test('moving to an empty slot and swapping different items conserves their counts', () => {
   const inventory = emptyInventory();
   inventory.add('healingDraught', 3);
-  inventory.add('ironOre', 2);
+  inventory.add('rawIron', 2);
   const beforeWeight = inventory.weight;
   assert.equal(inventory.move(0, 5), true);
   assert.equal(inventory.slots[0], null);
   assert.deepEqual(inventory.slots[5], { id: 'healingDraught', count: 3 });
   assert.equal(inventory.move(5, 1), true);
   assert.deepEqual(inventory.slots[1], { id: 'healingDraught', count: 3 });
-  assert.deepEqual(inventory.slots[5], { id: 'ironOre', count: 2 });
+  assert.deepEqual(inventory.slots[5], { id: 'rawIron', count: 2 });
   assert.equal(carriedCount(inventory, 'healingDraught'), 3);
-  assert.equal(carriedCount(inventory, 'ironOre'), 2);
+  assert.equal(carriedCount(inventory, 'rawIron'), 2);
   assert.equal(inventory.weight, beforeWeight);
 });
 
@@ -124,7 +124,7 @@ test('a full bag accepts only the quantity that fits an existing stack', () => {
   inventory.events.length = 0;
   assert.equal(inventory.add('healingDraught', 3), 1);
   assert.equal(carriedCount(inventory, 'healingDraught'), limit);
-  assert.equal(inventory.add('ironOre', 1), 0);
+  assert.equal(inventory.add('rawIron', 1), 0);
   assert.equal(carriedCount(inventory, 'longbow'), 23);
   assert.deepEqual(inventory.events, [{ type: 'pickup', id: 'healingDraught', count: 1 }]);
 });

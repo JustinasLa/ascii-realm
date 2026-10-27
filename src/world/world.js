@@ -1,7 +1,8 @@
 import { fbm, valueNoise } from '../core/noise.js';
 import { hash2, mulberry32 } from '../core/rng.js';
 import { rockTypeAt } from './geology.js';
-import { blocks, generateProps, isStoneProp, makeRiverStone } from './props.js';
+import { blocks, generateProps, isStoneProp, makeOreBlock, makeRiverStone } from './props.js';
+import { minedKey, placeVeins } from './ore-veins.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
@@ -81,6 +82,8 @@ export class World {
     this.burningTrees = new Map();
     this.loot = new Map();
     this.gathered = new Set();
+    // Ore blocks mined out, by base cell (see ore-veins.js).
+    this.mined = new Set();
     this.burntPlants = new Set();
     // How many edited cells each chunk holds, so budgets need no full scan.
     this.editChunks = new Map();
@@ -611,7 +614,10 @@ export class World {
       c.props = generateProps(original, cx, cy, CHUNK);
       // Dense woods come after the sparse props, which keep their ids.
       if (this.woodland === 'dense') c.props.push(...groveProps(original, cx, cy, CHUNK, c.props));
+      // Ore veins come last, so every other prop keeps its id.
+      c.props.push(...placeVeins(original, cx, cy, CHUNK, c.props).map((b) => makeOreBlock(b)));
       c.props.forEach((prop, i) => { prop.id = `p:${cx}:${cy}:${i}`; });
+      if (this.mined.size) c.props = c.props.filter((p) => !p.ore || !this.mined.has(minedKey(p)));
       if (this.rivers?.reaches(cx, cy) || c.preRiverType) {
         c.props = c.props.filter(prop => !this.inRiver(prop));
         this.rivers.stonesIn(cx, cy).forEach((stone, k) => {

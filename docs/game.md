@@ -204,8 +204,8 @@ short version see the [README](../README.md).
   Nine quick slots sit along the bottom. Running and sword strikes have no stamina cost.
 - **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
   equipment view drawn with the outlaw's own glyphs, item details, 24 bag slots
-  and a 60 kg carrying limit. The bag starts empty, with a short sword equipped
-  and assigned to quick slot 1. You can move the sword into the bag, equip it
+  and a 60 kg carrying limit. The bag starts with a short sword, equipped and
+  assigned to quick slot 1, and a stone pickaxe on quick slot 2. You can move the sword into the bag, equip it
   again and assign it to other quick slots. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
@@ -215,8 +215,30 @@ short version see the [README](../README.md).
   run, plunge from a jump or hold and release for a spinning slash. Three sword blows fell a tree,
   leaving a stump, and cuts mow tall grass. Felled trees and cut plants stay
   that way for the session, even after the land has been unloaded and generated
-  again. Gathering, loose pickups and item drops are disabled; cutting plants
-  produces no loot.
+  again. Cutting plants and felling trees gives no logs, berries or fibre; only
+  ore veins can be gathered (see Mining).
+- **Mining.** Ore veins lie on the land: tight clusters of fist-high ore
+  blocks, drawn in small letters like other rocks, in stone tinted by the local
+  rock (dark basalt, grey granite, pale limestone) with clumps of the ore's
+  colour in it. A chunk of land has up to two veins. The first hugs the foot of
+  the chunk's big rock when there is one; others sit on open grass, never in
+  the spawn clearing, in water or at a tree's foot. Veins are coal (four to
+  eight blocks, near-black with shiny glints), copper (three to seven, orange
+  with green patina), iron (two to five, tan), tin (two to five, pale) and lapis
+  (one to four, deep blue); coal is the most common and lapis the rarest.
+  Facing a block within reach shows what it is and what it needs, such as
+  `Iron ore · stone pickaxe` or `Iron ore · needs a stone pickaxe`. Strike it to
+  mine it: a stone pickaxe breaks a block in three blows, anything else takes
+  40, and each blow shows `Mining iron ore: 1/3`. A wooden pickaxe (none exists
+  yet) would take six blows and get coal only; the stone pickaxe gets every ore.
+  A block broken with the wrong tool crumbles and drops nothing. A mined block
+  drops 1 Coal, 1 Raw Iron, 2 to 5 Raw Copper, 1 Raw Tin or 4 to 9 Lapis Lazuli,
+  laid on the ground beside it like loot: walk over it to pick it up. A full
+  bag leaves it lying, and it lasts five minutes. Mined blocks stay gone, with
+  grass growing back, for the session, even after the land has been unloaded and
+  generated again; unfinished blows on a block are forgotten when you leave.
+  The stone pickaxe is a one-handed weapon too: it swings and hits like a stone
+  war hammer.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,

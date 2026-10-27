@@ -13,7 +13,7 @@ export function heldWeapon(equipment) {
   const stack = equipment?.mainHand;
   const item = stack && ITEMS[stack.id];
   if (!item?.weapon) return null;
-  return getWeapon(item.weapon, stack.material ?? 'iron');
+  return getWeapon(item.weapon, stack.material ?? item.material ?? 'iron');
 }
 
 // How a weapon changes the shared swings: their speed, stamina cost, how
