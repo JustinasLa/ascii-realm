@@ -6,6 +6,7 @@ import { minedKey, placeVeins } from './ore-veins.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
+import { chunkLift, hillRelief, liftRows, MAX_LIFT } from './relief.js';
 import { createSpawnRuins } from './spawn-ruins.js';
 import { groveField, groveProps } from './woodland.js';
 
@@ -61,7 +62,9 @@ export class World {
     // `rivers: false` leaves the land without rivers.
     // `woodland: 'dense'` grows groves around the trees (see woodland.js) and
     // brings the flowers unless `flora` says otherwise.
-    const { season = 'summer', maxChunks = 128, woodland, flora, meadow = false, spawnRuins = false, rivers = true } = typeof options === 'number' ? { maxChunks: options } : options;
+    // `relief: 'hill'` raises the hill scene's ground round spawn (see relief.js).
+    const { season = 'summer', maxChunks = 128, woodland, flora, meadow = false, spawnRuins = false, rivers = true,
+      relief = null } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
     this.woodland = woodland === 'dense' ? 'dense' : 'sparse';
     this.flora = !!(flora ?? this.woodland === 'dense');
@@ -109,6 +112,8 @@ export class World {
       this.spawnRuins = createSpawnRuins(seed, this.spawn);
       for (const prop of this.spawnRuins.props) this.measureProp(prop);
     }
+    this.relief = relief === 'hill' ? hillRelief(this.spawn, seed) : null;
+    this.maxLift = this.relief ? MAX_LIFT : 0;
     // Rebuild the few chunks spawn discovery made with their rivers and
     // the starter site's dry ground as their baseline.
     this.chunks.clear();
@@ -232,8 +237,9 @@ export class World {
     const elev = Float32Array.from(height);
     const baseType = type.slice();
     const baseElev = elev.slice();
+    const lifted = this.relief ? chunkLift(this.relief, cx, cy, CHUNK, type) : null;
     const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
-      grove, baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
+      lift: lifted?.lift ?? null, liftRows: lifted?.rows ?? null, grove, baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
       flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null,
       // The water shader times a river's foam by its water's own lines.
       rivers: flow ? this.rivers : null };
@@ -631,6 +637,10 @@ export class World {
         c.props.push(...this.spawnRuins.props.filter(prop =>
           Math.floor(prop.x / CHUNK) === cx && Math.floor(prop.y / CHUNK) === cy));
       }
+      if (this.relief) {
+        c.props.push(...this.relief.props.filter(prop =>
+          Math.floor(prop.x / CHUNK) === cx && Math.floor(prop.y / CHUNK) === cy));
+      }
       this.batchScenery(() => c.props.forEach((prop) => { // the grass regrows once, not per prop
         const hits = this.treeHits.get(prop.id);
         if (hits) {
@@ -722,6 +732,12 @@ export class World {
       }
     }
     return out;
+  }
+
+  // How many rows the ground at (x, y) is lifted; worked out without
+  // generating its chunk.
+  liftAt(x, y) {
+    return this.relief ? liftRows(this.relief, Math.floor(x), Math.floor(y)) : 0;
   }
 
   // The chunk if it has been generated, without generating it.

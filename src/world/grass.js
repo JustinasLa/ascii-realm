@@ -11,6 +11,7 @@ import {
 import { GAIN_FLOOR } from './canopy.js';
 import { PEAK_LIFT, tintRgb } from './moon-tint.js';
 import { ASPECT, CHUNK_SIZE, WATER } from './world.js';
+import { reliefLight } from './relief.js';
 
 // Terrain grows blades up to five cells high; drawn blades are longer than
 // that profile, so they read as separate character stalks, and a flower can top one.
@@ -36,6 +37,9 @@ const MATTED = [flatGlyph(2, 2), flatGlyph(1, 2), flatGlyph(2, 1)];
 // Tips catch the moonlight and pale toward this.
 const TIP = [74, 96, 85];
 const L = (name) => over(dg(name));
+// The view a root on raised ground is drawn through (see relief.js),
+// reused so lifting allocates nothing per root.
+const LIFTED = { x0: 0, y0: 0, cols: 0, rows: 0 };
 // Whatever a stalk carries comes in a glyph for each place its tip can end
 // across the cell (see PLACES in the flora pack).
 const P = (name) => PLACES.map((_, k) => over(dg(`${name}@${k}`)));
@@ -519,12 +523,13 @@ export class Grass {
   // Resolve the small set of contacts once per frame. Blades and their
   // overhanging strokes then use array reads instead of constructing strings
   // and looking up Maps for every segment, twice (scene and reflection).
-  prepare(view, t) {
+  // `extra` rows below the view hold roots raised into it.
+  prepare(view, t, extra = 0) {
     const pad = SIDE_PAD + MAX_GRASS_HEIGHT;
     const x0 = view.x0 - pad;
     const y0 = view.y0 - pad;
     const cols = view.cols + pad * 2;
-    const rows = view.rows + pad * 2;
+    const rows = view.rows + pad * 2 + extra;
     const prev = this.prepared;
     if (prev && prev.t === t && prev.x0 === x0 && prev.y0 === y0 &&
       prev.cols === cols && prev.rows === rows) return;
@@ -590,7 +595,7 @@ export class Grass {
     // A reflected row with no water anywhere below it can skip every root.
     if (write.visible && !write.visible(r, -SIDE_PAD, y - view.y0 - MAX_GRASS_HEIGHT,
       view.cols + SIDE_PAD, y - view.y0, y - view.y0)) return;
-    this.prepare(view, t);
+    this.prepare(view, t, world.relief ? world.maxLift : 0);
     const field = this.field;
     const grid = this.prepared;
     const cy = Math.floor(y / CHUNK_SIZE);
@@ -626,6 +631,8 @@ export class Grass {
       const chunk = world.chunk(cx, cy);
       const row = y - cy * CHUNK_SIZE;
       const blades = chunk.blades;
+      // Reflections stay unlifted: water is never raised.
+      const lifts = write.visible || !world.relief ? null : chunk.lift;
       const first = blades ? blades.rows[row] : row * CHUNK_SIZE;
       const last = blades ? blades.rows[row + 1] : (row + 1) * CHUNK_SIZE;
       for (let root = first; root < last; root++) {
@@ -640,7 +647,15 @@ export class Grass {
         }
         const height = blades ? blades.heights[root] : Math.min(MAX_PROFILE,
           Math.floor(chunk.grassHeight[i] + hash2(x, y, world.seed + 1101)));
-        const base = y - view.y0;
+        const lift = lifts ? lifts[i] : 0;
+        const bv = lift ? LIFTED : view;
+        if (lift) {
+          LIFTED.x0 = view.x0;
+          LIFTED.y0 = view.y0 + lift;
+          LIFTED.cols = view.cols;
+          LIFTED.rows = view.rows;
+        }
+        const base = y - bv.y0;
         const fi = (y - grid.y0) * grid.cols + x - grid.x0;
         const press = field.press[fi];
         const sink = field.sink[fi];
@@ -676,7 +691,8 @@ export class Grass {
           moontint = night.tint;
         }
         const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.1) *
-          (0.82 + variation * 0.36) * (1 - sink * 0.8) * gain;
+          (0.82 + variation * 0.36) * (1 - sink * 0.8) * gain *
+          (lift ? reliefLight(lift, i < CHUNK_SIZE * (CHUNK_SIZE - 1) ? lifts[i + CHUNK_SIZE] : world.liftAt(x, y + 1)) : 1);
         let tone = PALETTES[style];
         if (blades) {
           const k = root * 3;
@@ -690,7 +706,7 @@ export class Grass {
           extraAt(x, y, world.seed, style, height, chunk.elev?.[i] ?? 0.55, chunk.shade[i], variation);
         const flower = blades ? blades.flowers[root] : 0;
         if (extra === FERN) {
-          drawFern(r, view, paint, x, y, height, lean, flat, light, variation);
+          drawFern(r, bv, paint, x, y, height, lean, flat, light, variation);
           continue;
         }
         // Most roots are tufts: a second, shorter blade crosses the first
@@ -699,7 +715,7 @@ export class Grass {
         // tip, and whatever flowers on it, stay on top.
         if ((style === 1 || jitter > 0.5) && !write.visible && !flower) {
           const fan = Math.max(-7, Math.min(7, lean + (variation < 0.5 ? 4 : -4) * (1 - press * 0.7)));
-          drawBlade(r, view, paint, x, y, Math.max(2, length * (0.75 + jitter * 0.2)), fan, flat, light * 0.85,
+          drawBlade(r, bv, paint, x, y, Math.max(2, length * (0.75 + jitter * 0.2)), fan, flat, light * 0.85,
             tone, (jitter - 0.5) * 0.4);
         }
         if (flower) {
@@ -707,9 +723,9 @@ export class Grass {
           STALK[0] = tone[0] * 0.95 + 6;
           STALK[1] = tone[1] * 0.85;
           STALK[2] = tone[2] * 0.6;
-          drawBlade(r, view, paint, x, y, length, lean, flat, light, STALK, (variation - 0.5) * 0.4, true);
+          drawBlade(r, bv, paint, x, y, length, lean, flat, light, STALK, (variation - 0.5) * 0.4, true);
         } else {
-          drawBlade(r, view, paint, x, y, length, lean, flat, light, tone, (variation - 0.5) * 0.4);
+          drawBlade(r, bv, paint, x, y, length, lean, flat, light, tone, (variation - 0.5) * 0.4);
         }
         if (flower) {
           const glow = (0.78 + chunk.shade[i] * 0.35 + variation * 0.2) * (1 - sink * 0.45) * (1 - flat * 0.4) *
@@ -750,7 +766,7 @@ export class Grass {
   // This avoids allocating and sorting a drawable for every meadow blade.
   drawLayered(r, world, view, t, drawables) {
     this.drawRows(r, world, view, t, view.y0,
-      view.y0 + view.rows + MAX_GRASS_HEIGHT, drawables, putCell);
+      view.y0 + view.rows + MAX_GRASS_HEIGHT + (world.relief ? world.maxLift : 0), drawables, putCell);
   }
 
   drawRows(r, world, view, t, first, last, drawables, write) {
