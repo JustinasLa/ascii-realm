@@ -5,13 +5,13 @@ const FORGE = { name: 'forge', title: 'Alloy forge', help: [['Enter', 'Add / pre
 // Drawn around a new alloy's name; it fades once.
 const BURST = '\\ | /\n- * -\n/ | \\';
 
-function box(tag, className, ...children) {
+export function box(tag, className, ...children) {
   const node = element(tag, className);
   node.append(...children);
   return node;
 }
 // A coloured alloy name.
-function named(name, colour) {
+export function named(name, colour) {
   const node = element('span', 'forge-alloy-name', name);
   node.style.color = colour ?? '';
   return node;

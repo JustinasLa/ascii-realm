@@ -429,8 +429,60 @@ function makeAlloyForge(x, y, rand, seed, bake) {
   });
 }
 
-const MAKERS = { crate: makeCrate, barrel: makeBarrel, fence: makeFence,
-  tent: makeTent, campfire: makeCampfire, signpost: makeSignpost, furnace: makeFurnace, 'alloy-forge': makeAlloyForge };
+// The smith's tools hanging from the rack, west to east: hammer, small
+// hammer, etching tool, whittling knife, engraving burin and needle.
+const TOOLS = ['T', 't', '!', '/', 'i', '|'];
+
+// A weapon station: an anvil on a sawn stump, and a rack beside it with the
+// six smithing tools hanging from its bar. No fire, so no glow.
+function makeWeaponStation(x, y, rand, seed, bake) {
+  const sx = -2.8, rx = 1.7 + rand() * 0.2, height = 2;
+  // Lifted as the furnace's stone is, so it holds at night.
+  const iron = IRON.map((v) => v * 1.6), bark = [177, 126, 81], wood = [192, 141, 87];
+  // On whole fine rows, so the face and the bar read as clean lines.
+  const top = -height - 1.5;
+  const rack = { x0: 1, x1: 5.5, top: -5 };
+  const sample = (px, py) => {
+    const ax = px - sx, ay = py - top;
+    // The anvil: a face slab with a horn to the west and a heel to the east,
+    // over a dark waist flaring to its foot on the stump.
+    if (ay >= 0 && ay < 0.5 && ax > -1.5 && ax < 2) return { m: 'iron', l: clamp(0.85 - ax * 0.05), c: iron, g: glyph('=') };
+    if (ay >= 0 && ay < 0.5 && ax <= -1.5 && ax > -2.7) return { m: 'iron', l: 0.7, c: iron, g: glyph(ax < -2.1 ? '<' : '-') };
+    if (ay >= 0.5 && ay < 1 && ax >= 1.3 && ax < 2) return { m: 'iron', l: 0.5, c: iron, g: glyph(']') };
+    if (ay >= 0.5 && py < -height && Math.abs(ax) <= 0.6 + (ay - 0.5) ** 2 * 0.7) {
+      return { m: 'iron', l: clamp(0.4 - ax * 0.1), c: IRON, g: glyph('#') };
+    }
+    // The stump: a lighter sawn top with rings, and grained bark below.
+    const ring = (ax / rx) ** 2 + ((py + height) / 0.5) ** 2;
+    if (ring <= 1) {
+      return { m: 'cut', l: clamp(0.8 - ax * 0.1), c: [228, 182, 118],
+        g: ringGlyph(-ax, -(py + height) * 3, seed, Math.floor(px * 2), Math.floor(py * 2)) };
+    }
+    if (py > -height && Math.abs(ax) <= rx * (1 + (py + height) * 0.05)) {
+      return { m: 'bark', l: clamp(0.6 - ax / rx * 0.4 + grain(px, py, seed)), c: bark };
+    }
+    // The rack: two posts and a bar over a dark board, each tool's head over
+    // its handle. The board keeps every cell whole when a variant stretches it.
+    if (px < rack.x0 - 0.3 || px > rack.x1 + 0.3 || py < rack.top) return null;
+    if (py < rack.top + 0.5) return { m: 'plankh', l: clamp(0.75 + grain(px, py, seed)), c: wood };
+    if (Math.abs(px - rack.x0) < 0.3 || Math.abs(px - rack.x1) < 0.3) return { m: 'plank', l: clamp(0.6 - (px - rack.x0) * 0.03), c: wood };
+    if (py > rack.top + 2) return null;
+    const at = (px - rack.x0 - 0.6) / 0.6;
+    const tool = TOOLS[Math.floor(at)];
+    if (!tool || at % 1 >= 0.5) return { m: 'plain', l: 0.1, c: wood, g: dg('props.shade.1') };
+    const head = py < rack.top + 1;
+    return { m: 'plain', l: head ? 0.8 : 0.55, c: head ? iron : wood, g: glyph(head ? tool : '|') };
+  };
+  const station = prop('weapon-station', x, y, 5.8, -rack.top, 5 * 0.95 / ASPECT, 1.2, sample, seed, bake,
+    { shadow: { rx: 4.8, ry: 0.9, ox: 0.4 } });
+  return withFine(station, function* fine() {
+    return bake((Math.ceil(5.8 / ASPECT) + 1) * FINE, rack.top * FINE, 0,
+      (px, py) => py > 0 ? null : sample(px / FINE, py / FINE), seed);
+  });
+}
+
+const MAKERS = { crate: makeCrate, barrel: makeBarrel, fence: makeFence, tent: makeTent, campfire: makeCampfire,
+  signpost: makeSignpost, furnace: makeFurnace, 'alloy-forge': makeAlloyForge, 'weapon-station': makeWeaponStation };
 
 export function makeCampProp(kind, x, y, rand, seed, bake) {
   const make = Object.hasOwn(MAKERS, kind) ? MAKERS[kind] : null;

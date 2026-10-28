@@ -2,9 +2,10 @@ import { furnaceScreenModel, SLOTS } from '../crafting/furnace.js';
 import { ITEMS } from '../inventory/items.js';
 import { itemArt } from './item-art.js';
 
-const LABELS = { input: 'Input', fuel: 'Fuel', output: 'Output', base: 'Base', catalyst: 'Catalyst' };
+const LABELS = { input: 'Input', fuel: 'Fuel', output: 'Output', base: 'Base', catalyst: 'Catalyst', metal: 'Metal' };
 const HINTS = { input: 'Choose ore from your satchel.', fuel: 'Choose fuel from your satchel.', output: 'Smelted ingots come out here.' };
-const TARGETS = { input: 'the input', fuel: 'the fuel slot', base: 'the base slot', catalyst: 'a catalyst slot' };
+const TARGETS = { input: 'the input', fuel: 'the fuel slot', base: 'the base slot', catalyst: 'a catalyst slot',
+  metal: 'the piece' };
 const FURNACE = { name: 'furnace', title: 'Furnace', help: [['Enter', 'Put in / take out'], ['Arrows', 'Move'], ['Esc', 'Close']] };
 // The flame gauge's rows, top to bottom, shown from the bottom up as fuel is left.
 const FLAME = [' ^ ', '(^)', '/^\\'];
@@ -157,8 +158,9 @@ export class FurnaceScreen {
     this.onToggle(open);
   }
 
-  _notify(done, kind = done.ok ? 'info' : 'error') {
-    this.onNotify(done.message, kind);
+  // Tells what a move did in the feedback line, and as a toast unless `quiet`.
+  _notify(done, kind = done.ok ? 'info' : 'error', quiet = false) {
+    if (!quiet) this.onNotify(done.message, kind);
     this.feedback.textContent = done.message;
     this.feedback.dataset.kind = kind;
     this.feedback.hidden = false;
@@ -229,7 +231,9 @@ export class FurnaceScreen {
     this.rows = rows.map((row) => {
       const node = this._button('furnace-bag-item', () => this._notify(this._put(row.index)),
         { 'aria-label': `${row.name}, ${row.count}. ${row.target ? `Put in ${TARGETS[row.target]}` : row.reason}.` });
-      node.append(element('span', 'furnace-bag-art', art(row.id)), element('span', 'furnace-bag-name', row.name),
+      const name = element('span', 'furnace-bag-name', row.name);
+      name.style.color = row.colour ?? '';
+      node.append(element('span', 'furnace-bag-art', art(row.id)), name,
         element('span', 'furnace-bag-count', `x${row.count}`),
         element('span', 'furnace-bag-target', row.target ? `→ ${LABELS[row.target]}` : row.reason));
       if (row.target) node.dataset.target = row.target;

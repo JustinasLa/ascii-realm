@@ -1145,3 +1145,25 @@ test('a stack with its own description shows its name in its colour, its text an
   assert.equal(screen.itemName.style.color, '');
   assert.equal(bagButton(1).getAttribute('aria-label'), 'Slot 2: Raw Tin, count 2');
 });
+
+test('a smithed sword shows its metal, quality, socket and damage, and its own durability', async (t) => {
+  const { describeWeapon, makeWeapon } = await import('../src/crafting/smithing.js');
+  const blackiron = { id: 'a1', name: 'Blackiron', colour: '5E6568', type: 'metal',
+    stats: { attackDamage: 4.2, durability: 430.4 }, hits: { hit: 1 } };
+  const book = { get: (id) => (id === 'a1' ? blackiron : null) };
+  const { id, count, ...extras } = makeWeapon('shortSword', ['a1', 'a1', 'a1', 'ironIngot'], 92, book.get);
+  const inventory = new Inventory({ starter: false });
+  inventory.add(id, count, extras);
+  const { screen, press } = mount(t, { inventory, describe: (stack) => describeWeapon(stack, book) });
+  press('KeyI');
+  assert.equal(screen.itemName.textContent, 'Blackiron Short Sword');
+  assert.equal(screen.itemName.style.color, '#5E6568');
+  const stats = Object.fromEntries(screen.stats.children.map((node) => node.textContent)
+    .reduce((pairs, text, i) => (i % 2 ? pairs.at(-1).push(text) : pairs.push([text]), pairs), []));
+  assert.equal(stats.Material, 'Blackiron');
+  assert.equal(stats.Quality, 'Gleaming');
+  assert.equal(stats.Socket, 'Radiant (empty)');
+  assert.ok(Number(stats.Damage) > 24);
+  assert.equal(screen.durability.textContent, 'Durability: 448 / 448', '(3 × 430.4 + 500) ÷ 4, rounded');
+  assert.equal(screen.durability.hidden, false);
+});

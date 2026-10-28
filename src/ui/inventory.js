@@ -656,9 +656,10 @@ export class InventoryScreen {
     hidden(this.itemWeight, !item);
     setText(this.itemWeight, item
       ? `${kg(item.weight)} kg each / ${kg(item.weight * stack.count)} kg carried / ${stack.count} ${stack.count === 1 ? 'item' : 'items'}` : '');
-    hidden(this.durability, !item?.durability);
-    setText(this.durability, item?.durability
-      ? `Durability: ${stack.durability ?? item.durability} / ${item.durability}` : '');
+    // A smithed weapon's own maximum comes from its metal.
+    const most = own?.durability ?? item?.durability;
+    hidden(this.durability, !most);
+    setText(this.durability, most ? `Durability: ${stack.durability ?? most} / ${most}` : '');
     hidden(this.assignment, !item);
     const hotbarSlots = item ? this.inventory.hotbar
       .flatMap((id, index) => id === item.id ? [String(index + 1)] : []) : [];
