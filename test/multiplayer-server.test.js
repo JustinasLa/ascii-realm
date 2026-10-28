@@ -12,7 +12,7 @@ test('friends join by code with the same seed and receive movement, jumps and sw
   const host = await create(port, 42);
   assert.match(host.lobby.code, /^[A-Z2-9]{6}$/);
   const world = game.rooms.get(host.lobby.code).world;
-  assert.equal(world.spawnRuins.props.length, 11, 'lobby spawning uses the same ruin map as normal clients');
+  assert.equal(world.spawnRuins.props.length, 12, 'lobby spawning uses the same ruin map as normal clients');
   const gate = world.spawnRuins.props.find(prop => prop.kind === 'stone-gate');
   assert.equal(world.isWalkable(gate.x, gate.y), true);
   const friend = await join(port, ` ${host.lobby.code.toLowerCase()} `);

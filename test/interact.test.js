@@ -108,3 +108,35 @@ test('the button writes to the page only when its target changes and lingers bri
   assert.equal(button.textContent, 'SPORES');
   assert.equal(INTERACT_LINGER, 0.3);
 });
+
+test('a furnace in reach comes after a ground item and before a glowcap or a fire', async () => {
+  const { nearbyFurnace } = await import('../src/crafting/furnace.js');
+  const prop = { id: 'r:spawn:11', kind: 'furnace', x: 0, y: -2, footW: 6, footH: 1.4 };
+  const world = { propsIn: () => [prop] };
+  const furnaces = { nearby: (p) => nearbyFurnace(world, p) };
+  const context = { player: player(), mushrooms: mushroomsWith({ cooldown: 0 }), fires: firesWith({}), furnaces };
+  assert.deepEqual(interaction(context), { kind: 'furnace', label: 'SMELT', ariaLabel: 'Use the furnace' });
+  assert.deepEqual(performInteraction(context), { kind: 'furnace', prop });
+  const item = { ...context, collection: collectionWith({ item: { id: 'arrow', count: 1 } }) };
+  assert.equal(interaction(item).kind, 'pickup');
+  // Out of reach, or in the air, the glowcap is next.
+  assert.equal(interaction({ ...context, player: player({ y: 6 }) }).kind, 'spores');
+  assert.equal(interaction({ ...context, player: player({ air: 0.5 }) }).kind, 'spores');
+});
+
+test('a furnace is reached from its footprint on any side, the nearest first', async () => {
+  const { FURNACE_REACH, nearbyFurnace } = await import('../src/crafting/furnace.js');
+  const wide = { id: 'a', kind: 'furnace', x: 0, y: 0, footW: 6, footH: 1.4 };
+  const crate = { id: 'c', kind: 'crate', x: 0, y: 0, footW: 9, footH: 9 };
+  const world = { propsIn: () => [crate, wide] };
+  assert.equal(FURNACE_REACH, 3.5);
+  // Ten columns from its base along its long side, but 2.4 rows from its end.
+  assert.equal(nearbyFurnace(world, player({ x: 10 })), wide);
+  assert.equal(nearbyFurnace(world, player({ x: 12 })), null);
+  assert.equal(nearbyFurnace(world, player({ y: 4.8 })), wide);
+  assert.equal(nearbyFurnace(world, player({ y: 5 })), null);
+  assert.equal(nearbyFurnace(world, player({ vitals: { health: 0 } })), null);
+  const near = { ...wide, id: 'b', x: 8 };
+  assert.equal(nearbyFurnace({ propsIn: () => [wide, near] }, player({ x: 15 })), near);
+  assert.equal(nearbyFurnace({ propsIn: () => [near, wide] }, player({ x: 3 })), near, 'inside both footprints, the first');
+});

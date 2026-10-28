@@ -1,5 +1,6 @@
 import { stackExtras } from '../inventory/inventory.js';
 import { ITEMS } from '../inventory/items.js';
+import { ASPECT } from '../world/world.js';
 
 // The furnace follows the classic rules: one item smelts in 10 s, and a fuel
 // item is lit only when the burn has run out and the input can smelt into
@@ -236,6 +237,23 @@ export function furnaceScreenModel(furnace, inventory) {
     input: slot(furnace.input), fuel: slot(furnace.fuel), output: slot(output),
     flame, arrow, lit: furnace.lit, status, bag,
   };
+}
+
+// How far from a furnace's footprint it can be used, in row units.
+export const FURNACE_REACH = 3.5;
+
+// The nearest furnace in reach of a player on the ground, measured from its
+// footprint so this wide prop can be used from any side; null if none.
+export function nearbyFurnace(world, player) {
+  if (player.air > 0.3 || player.vitals?.health <= 0) return null;
+  let best = null, bestGap = Infinity;
+  for (const prop of world.propsIn(player.x - 12, player.y - 6, player.x + 12, player.y + 6)) {
+    if (prop.kind !== 'furnace') continue;
+    const gap = Math.hypot(Math.max(0, Math.abs(player.x - prop.x) - prop.footW) * ASPECT,
+      Math.max(0, Math.abs(player.y - prop.y) - prop.footH));
+    if (gap <= FURNACE_REACH && gap < bestGap) [best, bestGap] = [prop, gap];
+  }
+  return best;
 }
 
 // Every furnace's state in one world, kept by prop id. All of them work on

@@ -247,6 +247,13 @@ short version see the [README](../README.md).
   as the bag has room. Furnaces keep working on game time with their screen
   shut and you far away, and are kept on this device for each world (up to
   32 busy ones a world); the page being closed pauses them.
+  A furnace stands on the east side of the spawn forecourt (the scenery
+  builder's Camp palette places more; none can be broken). Press `E` beside
+  one, or tap **SMELT**: its screen shows the input over the fuel with a
+  flame for the burn left, an arrow for the smelting and the output, and
+  below them your satchel's resources, each saying where it goes or why it
+  can't. Pick one to put it in, or a slot to take it back. While it burns,
+  embers flicker in its mouth and a small warm light falls in front of it.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,
