@@ -7,7 +7,7 @@ to play. You can also open the panel by clicking its summary, then choose
 **Start building**. Paint grass, dirt, shore, water or stone with terrain brushes,
 or choose from the **Nature**, **Camp** and **Architecture** prop palettes: trees, pines, rocks,
 bushes, stumps, logs, flowers, mushrooms, pale caps, reeds, crates, barrels, fences,
-tents, campfires and signposts. Flowers, mushrooms, pale caps and reeds are
+tents, campfires, signposts and furnaces. Flowers, mushrooms, pale caps and reeds are
 decorative and can be walked through; the other props block movement. Adjust the brush radius or prop
 scale in the panel and preview props before placing them; the eraser removes
 props only. Every placement gets a fresh variation in shape, proportions and
