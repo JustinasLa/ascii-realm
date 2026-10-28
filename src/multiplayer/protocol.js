@@ -1,4 +1,6 @@
 import { isInstrumentNote } from '../audio/instruments.js';
+import { readForged } from '../crafting/forged.js';
+import { isMaterialId } from '../entities/weapons.js';
 import { nameError, normalName, textLength } from '../character/rules.js';
 import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
 import { parseTint } from './tint.js';
@@ -25,10 +27,9 @@ export const STATE_RANGES = {
   health: [0, 1000], stamina: [0, 1000],
 };
 
-const MATERIALS = ['stone', 'copper', 'bronze', 'iron', 'steel'];
-
 // What a player wears and holds, so friends see their gear and weapon: per
-// slot an item that belongs there, and a weapon's material.
+// slot an item that belongs there, a weapon's material and a forged weapon's
+// look (its metal's name and colour, never its stats).
 export function readEquipment(raw) {
   const equipment = Object.fromEntries(EQUIPMENT_SLOTS.map((slot) => [slot, null]));
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return equipment;
@@ -36,7 +37,8 @@ export function readEquipment(raw) {
     const stack = raw[slot];
     const id = stack?.id;
     if (typeof id !== 'string' || !Object.hasOwn(ITEMS, id) || ITEMS[id].equipmentSlot !== slot) continue;
-    equipment[slot] = { id, count: 1, ...(MATERIALS.includes(stack.material) ? { material: stack.material } : {}) };
+    const forged = readForged(stack.forged, { look: true });
+    equipment[slot] = { id, count: 1, ...(isMaterialId(stack.material) ? { material: stack.material } : {}), ...(forged ? { forged } : {}) };
   }
   return equipment;
 }

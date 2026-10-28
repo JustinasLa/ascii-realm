@@ -1,6 +1,6 @@
 import { DEFAULT_SKIN } from '../character/skin.js';
 import { ITEMS } from '../inventory/items.js';
-import { getWeapon } from './weapons.js';
+import { getWeapon, weaponMaterial } from './weapons.js';
 
 // The outlaw's combat is tuned on the iron short sword; other weapons swing
 // faster or slower relative to it.
@@ -8,13 +8,18 @@ const BASE = getWeapon('sword-shield', 'iron');
 // Blows needed to fell a tree: an axe takes one, heavy blades and hammers two.
 const CHOP = { axe: 3, greatsword: 2, hammer: 2 };
 
-// The weapon in the main hand, with its material, or null when unarmed.
+// The weapon in the main hand, with its material, or null when unarmed. A
+// forged weapon is its own metal; any other takes its tier, else iron.
 export function heldWeapon(equipment) {
   const stack = equipment?.mainHand;
   const item = stack && ITEMS[stack.id];
   if (!item?.weapon) return null;
-  return getWeapon(item.weapon, stack.material ?? item.material ?? 'iron');
+  return getWeapon(item.weapon, stack.forged ? weaponMaterial(stack, 'iron') : stack.material ?? item.material ?? 'iron');
 }
+
+// What a held stack is made of, so changing to another metal of the same
+// weapon still counts as changing weapons.
+export const heldKey = (stack) => stack.forged ? weaponMaterial(stack, 'iron').key : stack.material ?? '';
 
 // How a weapon changes the shared swings: their speed, stamina cost, how
 // far ahead a cut lands (metres) and its power against trees.

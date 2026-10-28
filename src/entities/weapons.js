@@ -225,18 +225,64 @@ export const WEAPONS = freeze({
 export const WEAPON_IDS = freeze(Object.keys(WEAPONS));
 
 const round = (value) => Math.round(value * 100) / 100;
-const profiles = new Map();
+
+// The one weapon-material lookup. Each ingot works into its tier; a forged
+// weapon is its own metal: its Attack Damage ÷ 4 sets the damage (so Steel's
+// 4 is the steel tier's), it swings, tires and weighs like iron, and takes
+// its alloy's colour or else its tier's.
+export const INGOT_TIERS = freeze({ copperIngot: 'copper', bronzeIngot: 'bronze', ironIngot: 'iron', steelIngot: 'steel' });
+export const isMaterialId = (id) => typeof id === 'string' && Object.hasOwn(WEAPON_MATERIALS, id);
+const made = new WeakSet();
+const profile = (fields) => {
+  const result = freeze(fields);
+  made.add(result);
+  return result;
+};
+const TIERS = Object.fromEntries(MATERIAL_IDS.map((id) => [id, profile({ key: id, ...WEAPON_MATERIALS[id] })]));
+const forgedProfiles = new WeakMap();
+const rgb = (hex) => [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+function forgedProfile(stack) {
+  const { forged } = stack;
+  if (!forgedProfiles.has(forged)) {
+    const tier = WEAPON_MATERIALS[isMaterialId(stack.material) ? stack.material : 'iron'];
+    const attack = forged.stats?.attackDamage;
+    const iron = WEAPON_MATERIALS.iron;
+    forgedProfiles.set(forged, profile({
+      key: `forged:${forged.colour ?? tier.id}:${attack ?? '-'}`,
+      id: 'forged', name: forged.metal,
+      damage: attack > 0 ? attack / 4 : iron.damage,
+      speed: iron.speed, staminaCost: iron.staminaCost, weight: iron.weight,
+      color: forged.colour ? rgb(forged.colour) : tier.color,
+    }));
+  }
+  return forgedProfiles.get(forged);
+}
+
+// `source` is a tier id, an ingot id or a weapon stack (its forged metal
+// first, then its tier). Anything else gives the fallback tier.
+export function weaponMaterial(source, fallback = 'steel') {
+  if (source && typeof source === 'object') {
+    if (source.forged && typeof source.forged === 'object') return forgedProfile(source);
+    source = source.material;
+  }
+  const id = isMaterialId(source) ? source : INGOT_TIERS[source];
+  return TIERS[id ?? (isMaterialId(fallback) ? fallback : 'steel')];
+}
+
+const profiles = new WeakMap();
 
 // Invalid selections independently fall back to the familiar steel
-// greatsword. Cached profiles are deeply frozen, so an animation can safely
-// retain one without accidentally changing the catalogue or another player.
+// greatsword. `material` is a tier id or a profile from weaponMaterial.
+// Cached profiles are deeply frozen, so an animation can safely retain one
+// without accidentally changing the catalogue or another player.
 export function getWeapon(id = 'greatsword', material = 'steel') {
   const weaponId = typeof id === 'string' && Object.hasOwn(WEAPONS, id) ? id : 'greatsword';
-  const materialId = typeof material === 'string' && Object.hasOwn(WEAPON_MATERIALS, material) ? material : 'steel';
-  const key = `${weaponId}:${materialId}`;
-  if (!profiles.has(key)) {
+  const tier = made.has(material) ? material : TIERS[isMaterialId(material) ? material : 'steel'];
+  if (!profiles.has(tier)) profiles.set(tier, new Map());
+  const cache = profiles.get(tier);
+  if (!cache.has(weaponId)) {
     const base = WEAPONS[weaponId];
-    const tier = WEAPON_MATERIALS[materialId];
     const stats = {
       damage: round(base.damage * tier.damage),
       reach: base.reach,
@@ -244,14 +290,15 @@ export function getWeapon(id = 'greatsword', material = 'steel') {
       staminaCost: round(base.staminaCost * tier.staminaCost),
       weight: round(base.weight * tier.weight),
     };
-    profiles.set(key, freeze({
+    cache.set(weaponId, freeze({
       ...base,
       ...stats,
-      material: materialId,
+      material: tier.id,
       materialName: tier.name,
       materialColor: tier.color,
+      materialKey: tier.key,
       stats,
     }));
   }
-  return profiles.get(key);
+  return cache.get(weaponId);
 }
