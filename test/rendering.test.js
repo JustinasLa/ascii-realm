@@ -26,7 +26,8 @@ import { createScene, scenarios } from '../bench/scene.js';
 // landscape also draws a tall willow that stands below the view and reaches up into it.
 // Trees' moon shadows now darken the meadow's ground and grass around them,
 // and moonbeams light patches of it, with faint columns of air above; the
-// beams leave the overlay buffer's unshown colours alone.
+// beams leave the overlay buffer's unshown colours alone. Desktop and meadow
+// were re-captured when ore veins came into view.
 // Cover terrain, shoreline reflections, trampled grass, painter order and the
 // supersampled warrior while moving, attacking and jumping. No GPU/font dependency.
 const reference = [
@@ -38,14 +39,14 @@ const reference = [
     'efc0e36e4521b633e98af1a4c99011a7d2dfd3079ca686267af88b362a7b4ce9',
     'f15987a448750736f539822af374586f29f4d91259b2792bdfb336b98e5c3765',
     '1051c6022d53054462fa5d503195491f7c55ad50ce4e1e2d72626b17b4ba64d1'],
-  ['ed160d9edddd86795fa84b9f2f28a7401379718b3123401e3551ea129ab4d01e',
-    '12bee8abfb3716c1ecc9b1d1c3a797b87951e640d699825cb44200a8e01299a9',
-    '9321c1d7d215bd809a6faacc4651159659366bda84d90f8ca233873e2e0d9bb3',
-    '3e423e0f86d0a98cb638e83ac714c1b18c89a11c8267f664016696c7b588818b'],
-  ['4e99c69de306dbd477403bb93e86defbee151bf6315b38011768fa9e2d412867',
-    '66248a7396b16363ab6e95a4f226652c436d3aacc556b69714c687ea7a35cee8',
-    '9a9d8f5868d1251b207e1e5a80d91f4edcb9bf92b5acbc193c1310a4f807f7bd',
-    '0b3941ad8d8303dbe21d3f4e1105eb9448484384f0b8407403a1e9a5ebaf78e5'],
+  ['382750eedd7b37c310c12c2bc8fdc05d1530e06b18d294095260a34bdc2e037b',
+    '8efc6fbf91462c9299c70950bf159bb5a25ce6d218297cafec672479adf87ae7',
+    'd7242b83ea2c8e098e6b3ce0bc7a4bf0181e5598f2cd07c0e657167d1a099c87',
+    'b13ce6cfb9967bd7eeae0b61d3901b10dea0f45521d73cf03140ca1e4f024423'],
+  ['de0e87336c013d5e0f571aca198e904a5cefd119bc20bc34edbc9c549f8a5a07',
+    '9d8eaac3d8b112868a0f4f2c92c5ddbfbc401f21e0276c4bc4e8b98836f8ccc1',
+    'bd4be8e54e21f408ee1dbe37a2a95e5e9a7db52ad72df3f79d99db8cca25233f',
+    '517091f66ffcbd94392a7f800aaff50c6996d347f351048f90399c18df0743c8'],
 ];
 
 // Attack variations and idle blinks roll Math.random; replay a fixed sequence.

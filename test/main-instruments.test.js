@@ -11,16 +11,16 @@ const carried = inventory => inventory.slots.filter(Boolean).map(stack => stack.
 
 test('?instruments puts one of each instrument in the bag, unequipped and without notices', async () => {
   const { game } = await loadGame(undefined, { href: 'http://localhost/?debug&instruments&skeletons=0&goblins=0&trolls=0&elves=0&animals=0' });
-  assert.deepEqual(carried(game.inventory), INSTRUMENT_IDS);
+  assert.deepEqual(carried(game.inventory), ['stonePickaxe', ...INSTRUMENT_IDS]);
   assert.equal(game.inventory.equipment.offHand, null);
   assert.deepEqual(game.inventory.equipment.mainHand, { id: 'shortSword', count: 1 });
   assert.deepEqual(game.inventory.events, []);
-  assert.deepEqual(game.inventory.hotbar.filter(Boolean), ['shortSword']);
+  assert.deepEqual(game.inventory.hotbar.filter(Boolean), ['shortSword', 'stonePickaxe']);
 });
 
 test('without the query nothing hands instruments out', async () => {
   const { game } = await loadGame(undefined, { href: 'http://localhost/?debug&skeletons=0&goblins=0&trolls=0&elves=0&animals=0' });
-  assert.deepEqual(carried(game.inventory), []);
+  assert.deepEqual(carried(game.inventory), ['stonePickaxe']);
 });
 
 // --- Playing the off-hand instrument -------------------------------------

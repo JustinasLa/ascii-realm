@@ -20,7 +20,7 @@ test('ground arrays retain partial counts and depletion after exploration and an
   const world = emptyWorld();
   const ground = new GroundItems(world);
   assert.equal(world.chunks.size, 0);
-  const item = ground.add('ironOre', 8, 4.5, 6.5);
+  const item = ground.add('ironIngot', 8, 4.5, 6.5);
   const original = ground.of(0, 0);
   assert.strictEqual(original, world.chunk(0, 0).items);
   item.count -= 3;
@@ -52,12 +52,12 @@ test('procedurally generated arrays persist every removal on chunk revisit', () 
 
 test('range queries filter exact inclusive coordinates across negative chunk boundaries', () => {
   const ground = new GroundItems(emptyWorld());
-  const low = ground.add('ironOre', 1, -CHUNK_SIZE, -CHUNK_SIZE);
+  const low = ground.add('ironIngot', 1, -CHUNK_SIZE, -CHUNK_SIZE);
   const inside = ground.add('oakLog', 1, -0.25, -0.25);
-  const high = ground.add('ironOre', 1, 0, 0);
-  ground.add('ironOre', 1, 0.01, 0);
-  ground.add('ironOre', 1, -CHUNK_SIZE - 0.01, -CHUNK_SIZE);
-  ground.add('ironOre', 1, -4, 5);
+  const high = ground.add('ironIngot', 1, 0, 0);
+  ground.add('ironIngot', 1, 0.01, 0);
+  ground.add('ironIngot', 1, -CHUNK_SIZE - 0.01, -CHUNK_SIZE);
+  ground.add('ironIngot', 1, -4, 5);
   assert.deepEqual(ground.in(-CHUNK_SIZE, -CHUNK_SIZE, 0, 0), [low, inside, high]);
   assert.deepEqual(ground.in(-0.25, -0.25, -0.25, -0.25), [inside]);
   assert.deepEqual(ground.in(1, 0, -1, 0), []);
@@ -70,10 +70,10 @@ test('drops have independent identities and preserve their pickup metadata', () 
   const world = emptyWorld();
   const ground = new GroundItems(world);
   const origin = { x: 4.5, y: 6.5 };
-  const first = ground.add('ironOre', 25, 4.5, 6.5, { pickupAfter: 2, dropOrigin: origin });
-  const second = ground.add('ironOre', 2, 4.5, 6.5);
+  const first = ground.add('ironIngot', 25, 4.5, 6.5, { pickupAfter: 2, dropOrigin: origin });
+  const second = ground.add('ironIngot', 2, 4.5, 6.5);
   const otherStore = new GroundItems(world);
-  const third = otherStore.add('ironOre', 1, 4.5, 6.5);
+  const third = otherStore.add('ironIngot', 1, 4.5, 6.5);
   assert.equal(new Set([first.uid, second.uid, third.uid]).size, 3);
   assert.notStrictEqual(first, second);
   assert.deepEqual(ground.in(4, 6, 5, 7), [first, second, third]);
@@ -126,29 +126,29 @@ test('invalid additions and moves leave the world and valid items untouched', ()
   for (const [id, count, x, y, options] of [
     ['unknown', 1, 0, 0],
     ['toString', 1, 0, 0],
-    [{ toString: () => 'ironOre' }, 1, 0, 0],
-    ['ironOre', 0, 0, 0],
-    ['ironOre', -1, 0, 0],
-    ['ironOre', 1.5, 0, 0],
-    ['ironOre', Number.MAX_SAFE_INTEGER + 1, 0, 0],
-    ['ironOre', 1, NaN, 0],
-    ['ironOre', 1, 0, Infinity],
-    ['ironOre', 1, Number.MAX_VALUE, 0],
-    ['ironOre', 1, 0, 0, null],
-    ['ironOre', 1, 0, 0, { pickupAfter: NaN }],
-    ['ironOre', 1, 0, 0, { pickupAfter: -1 }],
-    ['ironOre', 1, 0, 0, { dropOrigin: { x: Infinity, y: 0 } }],
+    [{ toString: () => 'ironIngot' }, 1, 0, 0],
+    ['ironIngot', 0, 0, 0],
+    ['ironIngot', -1, 0, 0],
+    ['ironIngot', 1.5, 0, 0],
+    ['ironIngot', Number.MAX_SAFE_INTEGER + 1, 0, 0],
+    ['ironIngot', 1, NaN, 0],
+    ['ironIngot', 1, 0, Infinity],
+    ['ironIngot', 1, Number.MAX_VALUE, 0],
+    ['ironIngot', 1, 0, 0, null],
+    ['ironIngot', 1, 0, 0, { pickupAfter: NaN }],
+    ['ironIngot', 1, 0, 0, { pickupAfter: -1 }],
+    ['ironIngot', 1, 0, 0, { dropOrigin: { x: Infinity, y: 0 } }],
   ]) assert.equal(ground.add(id, count, x, y, options), null);
   assert.equal(world.chunks.size, 0);
 
-  const item = ground.add('ironOre', 1, 1.5, 2.5);
+  const item = ground.add('ironIngot', 1, 1.5, 2.5);
   for (const [x, y] of [[NaN, 0], [0, Infinity], [Number.MAX_VALUE, 0]]) {
     assert.equal(ground.move(item, x, y), false);
   }
   assert.equal(ground.move({ ...item }, CHUNK_SIZE, 0), false);
   assert.equal(ground.remove(null), false);
   assert.equal(ground.remove(undefined), false);
-  assert.equal(ground.remove('ironOre'), false);
+  assert.equal(ground.remove('ironIngot'), false);
   assert.equal(world.chunks.size, 1);
   assert.deepEqual(ground.in(1, 2, 2, 3), [item]);
   assert.equal(item.x, 1.5);

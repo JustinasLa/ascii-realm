@@ -23,7 +23,7 @@
 | `L` / Weather & seasons panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
-| `1`–`9` | Select a quick slot; gear in it is equipped (without an instrument in the off hand) |
+| `1`–`9` | Select a quick slot; gear in it is equipped (without an instrument in the off hand). The stone pickaxe starts on `2`: strike an ore block with it to mine it (the prompt shows what a block needs) |
 | `1`–`8`, instrument in the off hand | Play notes C D E F G A B C; the selection returns to quick slot 9 |
 | `Shift`+`1`–`8`, instrument in the off hand | Play the chords (lute, vielle, celtic harp, dulcimer, kalimba, accordion) or notes 9–16 an octave up (flute, trumpet, bagpipe) |
 | `Q` | Activate the selected quick slot to re-equip the sword |
@@ -155,7 +155,8 @@ run. The other thumb has a cluster in the bottom-right corner:
 - **STRIKE**, the large square in the corner, draws the sword on the first
   strike, chains a combo when tapped again and charges a spin when held. The
   sword is put away by itself after a few quiet seconds standing still. With a
-  bow or spear, hold STRIKE to draw and lift to shoot or throw.
+  bow or spear, hold STRIKE to draw and lift to shoot or throw. With the stone
+  pickaxe (tap quick slot 2), STRIKE mines the ore block you face.
 - **JUMP** sits to its left.
 - **CAST** sits above it. Tap it to cast the bound rune; hold it to open the
   rune wheel on the same finger, slide to a school and lift, then tap a rune

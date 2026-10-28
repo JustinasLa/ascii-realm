@@ -31,7 +31,7 @@ const berryYield = (node) => Number.isInteger(node.berryCount) && node.berryCoun
 // The blade travels from the warrior towards the emitted strike point. A
 // narrow corridor catches trunks near the hands as well as the blade tip,
 // preserving the strike's original circular footprint at its impact centre.
-function inStrike(player, event, node) {
+export function inStrike(player, event, node) {
   const dx = (event.x - player.x) * ASPECT;
   const dy = event.y - player.y;
   const lengthSquared = dx * dx + dy * dy;

@@ -186,6 +186,11 @@ test('weapons ride in the hand when drawn and on the back or hip when put away',
   model.update(1 / 60, player);
   assert.equal(model.armory.held, model.armory.active);
   assert.ok(model.swordLine(), 'a drawn spear leaves a trail');
+  // The stone pickaxe has its own arched head, not the short sword's blade.
+  player.equipment = { mainHand: { id: 'stonePickaxe', count: 1 } };
+  model.update(1 / 60, player);
+  assert.equal(model.armory.held, model.armory.active);
+  assert.equal(model.armory.active.children.length, 4, 'haft, pick, peen and collar');
   player.equipment = { mainHand: { id: 'dagger', count: 1 } };
   player.combat.inHand = false;
   model.update(1 / 60, player);

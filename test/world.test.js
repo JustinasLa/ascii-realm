@@ -43,7 +43,8 @@ test('the sparse world is the same land, grass and props as before dense woods',
     const h = createHash('sha256');
     for (let cy = -1; cy <= 2; cy++) {
       for (let cx = -1; cx <= 2; cx++) {
-        for (const p of world.propsOf(cx, cy)) h.update(JSON.stringify([p.id, p.kind, p.x, p.y, p.footW, p.footH]));
+        // Ore veins come last and leave every other prop as it was.
+        for (const p of world.propsOf(cx, cy).filter((q) => !q.ore)) h.update(JSON.stringify([p.id, p.kind, p.x, p.y, p.footW, p.footH]));
       }
     }
     return h.digest('hex').slice(0, 16);

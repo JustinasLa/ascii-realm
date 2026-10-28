@@ -76,6 +76,7 @@ import { Mushrooms } from './world/mushrooms.js';
 import { drawGround } from './world/ground.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
+import { Mining, toolOf } from './world/mining.js';
 import { drawItem, drawResource } from './world/item-draw.js';
 import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from './world/loot.js';
 import { mulberry32 } from './core/rng.js';
@@ -222,12 +223,14 @@ fitChunks = () => {
 fitChunks();
 const { spawn } = world;
 const player = new Player(spawn.x, spawn.y);
-// For now the outlaw carries only the sword at the hip (and the torch, which
-// is not an item); the bag starts empty and nothing can be gathered.
+// The outlaw sets out with the sword at the hip and a stone pickaxe for ore
+// veins (and the torch, which is not an item). Only ore can be gathered.
 const inventory = new Inventory({ starter: false });
 inventory.add('shortSword');
 inventory.equip(0);
 inventory.assignHotbar(0, 'shortSword');
+inventory.add('stonePickaxe');
+inventory.assignHotbar(1, 'stonePickaxe');
 // Until instruments can be crafted, ?instruments puts one of each in the bag.
 if (params.has('instruments')) for (const id of INSTRUMENT_IDS) inventory.add(id);
 inventory.events.length = 0;
@@ -953,6 +956,11 @@ const lootRandom = mulberry32((seed * 104729) ^ 0x1007);
 const dropLoot = (monster, items = rollLoot(monster.kind.id, lootRandom)) => layLoot(huntDrops, world,
   { x: monster.x, y: monster.y, killer: { x: player.x, y: player.y }, items }, (a, b) => huntCollection.pathClear(a, b));
 debug.loot = { credit: lootCredit, roll: (kind) => rollLoot(kind, lootRandom), drop: dropLoot };
+// Ore veins break a blow at a time; what they drop lies with the loot.
+const mining = new Mining(world, { reachable: (p, block) => harvesting.reachable(p, block), random: lootRandom,
+  drop: (items, block) => layLoot(huntDrops, world, { x: block.x, y: block.y, killer: { x: player.x, y: player.y }, items },
+    (a, b) => huntCollection.pathClear(a, b)) });
+debug.mining = mining;
 // Felling a tree now and then turns up a few coins beside the stump.
 function payGather(tree) {
   const items = rollPay('tree', logsOf(tree), lootRandom);
@@ -1510,6 +1518,10 @@ function frame(now) {
         if (result.message) hud.notify(result.message, 'pickup');
         if (result.status === 'harvested' && result.node?.kind === 'tree') payGather(result.node);
       }
+      for (const result of mining.react(e, player, toolOf(inventory.equipment))) {
+        hud.notify(result.message, 'pickup');
+        dust.sparks(result.block.x, result.block.y - 1, 4);
+      }
       const damage = Math.max(0, (player.weapon?.damage ?? 20) + (player.magicDamage ?? 0));
       const hit = monsters.strike(e, player, damage);
       for (const m of hit) lootCredit.observe(m, true);
@@ -1908,7 +1920,8 @@ function frame(now) {
   weather.draw(renderer, view);
   builder.drawPreview(view);
   // Props near the view queue their fine bakes after those in view.
-  for (const p of props) fineOf(p);
+  let bakes = 4; // Asking bakes an ore block's cells (`unbaked`), so a few of those a frame.
+  for (const p of props) if (!p.unbaked || bakes-- > 0) fineOf(p);
   bakeWhenIdle();
   if (debug.freeze || gate.waiting) sound.pause();
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);
@@ -1926,8 +1939,9 @@ function frame(now) {
   hud.setFoes(woundedFoes(monsterCells));
   hud.setLoot(huntDrops.in(view.x0 - 2, view.y0 - 2, view.x0 + view.cols + 2, view.y0 + view.rows + 4), player, inventory);
   const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
+  const nearbyOre = !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
   hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
-    ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : '');
+    ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : nearbyOre?.prompt ?? '');
   touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
   hud.update(dt, hudView);
   chat.update(dt);

@@ -174,7 +174,7 @@ test('dense woods add grove trees and pale caps after the sparse props, which ke
   const sparse = new World(19);
   const world = dense();
   for (const [cx, cy] of chunksOf(BLOCK)) {
-    const before = sparse.propsOf(cx, cy).map((p) => [p.id, p.kind, p.x, p.y]);
+    const before = sparse.propsOf(cx, cy).filter((p) => !p.ore).map((p) => [p.id, p.kind, p.x, p.y]);
     const after = world.propsOf(cx, cy);
     assert.deepEqual(after.slice(0, before.length).map((p) => [p.id, p.kind, p.x, p.y]), before);
     assert.ok(after.length <= MAX_CHUNK_PROPS);

@@ -219,7 +219,8 @@ test('chunk visitation order preserves props, grass ownership, and the actual sp
     const chunkProps = forward.propsOf(cx, cy);
     generated.set(`${cx},${cy}`, chunkProps);
     // The world tags each generated prop with an id so the builder can erase it.
-    const untagged = chunkProps.map(({ id, ...prop }) => prop);
+    // Ore veins are added by the world, after the generated props.
+    const untagged = chunkProps.filter((p) => !p.ore).map(({ id, ...prop }) => prop);
     assert.deepEqual(generateProps(forward, cx, cy, CHUNK_SIZE), untagged, `${cx},${cy} regeneration`);
     for (const prop of chunkProps) {
       props++;

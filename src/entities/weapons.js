@@ -109,6 +109,24 @@ export const WEAPONS = freeze({
       blob([0, -0.26, 0], 0.04, 0.04, 'trim'),
     ],
   },
+  // A one-handed mining pick that swings and hits like a war hammer of its material.
+  pickaxe: {
+    id: 'pickaxe', name: 'Pickaxe', type: 'pickaxe', category: 'heavy',
+    damage: 44, reach: 0.68, speed: 0.65, staminaCost: 26, weight: 4.6,
+    hands: 1, handedness: 'one', trailColor: [214, 200, 170],
+    combo: ['hammer-sweep', 'hammer-return', 'ground-slam'],
+    sprintAttack: 'hammer-charge', airAttack: 'meteor-slam', chargedAttack: 'charged-slam',
+    sheath: back([0.17, 0.64, -0.2], [-0.18, -0.98, 0], [0.15, 0.53, -0.23], [0.03, -0.14, -0.23], [0.2, 0.78, -0.23]),
+    rig: { gripLength: 0.2, gripOffset: 0.06, guardWidth: 0.06, offGrip: 0 },
+    spriteDimensions: { bladeWidth: 0.03, tipWidth: 0.025, gripLength: 0.26, guardWidth: 0.06, shaftWidth: 0.03, headWidth: 0.48, headLength: 0.1 },
+    spriteParts: [
+      limb([0, -0.26, 0], [0, 0.62, 0], 0.028, 0.024, 'wood'),
+      limb([0, -0.26, 0.004], [0, 0.04, 0.004], 0.031, 0.031, 'leather'),
+      limb([0, 0.6, 0.006], [-0.24, 0.5, 0.006], 0.026, 0.01, 'blade'),
+      limb([0, 0.6, 0.006], [0.22, 0.52, 0.006], 0.026, 0.014, 'blade'),
+      blob([0, 0.6, 0.012], 0.04, 0.04, 'darkPlate'),
+    ],
+  },
   spear: {
     id: 'spear', name: 'Spear', type: 'spear', category: 'polearm',
     damage: 26, reach: 1.45, speed: 1.06, staminaCost: 13, weight: 2,

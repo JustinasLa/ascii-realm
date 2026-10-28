@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { heldWeapon, isBow, isThrown, weaponFeel } from '../src/entities/loadout.js';
+import { heldWeapon, isBow, isThrown, needsBothHands, weaponFeel } from '../src/entities/loadout.js';
+import { getWeapon } from '../src/entities/weapons.js';
 import { Player } from '../src/entities/player.js';
 import { FULL_DRAW, Ranged, TAP } from '../src/entities/ranged.js';
 import { Inventory } from '../src/inventory/inventory.js';
@@ -14,9 +15,10 @@ test('every weapon item maps to a weapon profile in its material', () => {
   for (const item of Object.values(ITEMS).filter((i) => i.weapon)) {
     const weapon = heldWeapon(hand(item.id));
     assert.equal(weapon.id, item.weapon, item.id);
-    assert.equal(weapon.material, 'iron');
+    assert.equal(weapon.material, item.material ?? 'iron');
   }
   assert.equal(heldWeapon(hand('spear', 'steel')).material, 'steel');
+  assert.equal(heldWeapon(hand('stonePickaxe', 'steel')).material, 'steel');
   assert.equal(heldWeapon(hand('healingDraught')), null);
   assert.equal(heldWeapon({}), null);
 });
@@ -96,4 +98,16 @@ test('a heavy blow counts for several hits and a tree never takes more than it n
   assert.equal(world.hitTree(tree, 2), 2);
   assert.equal(world.hitTree(tree, 5), TREE_HITS);
   assert.equal(tree.chopped, true);
+});
+
+test('the stone pickaxe hits and swings like a stone war hammer, in one hand', () => {
+  const pick = heldWeapon(hand('stonePickaxe'));
+  const hammer = getWeapon('hammer', 'stone');
+  assert.deepEqual([pick.id, pick.material], ['pickaxe', 'stone']);
+  for (const key of ['damage', 'speed', 'staminaCost', 'weight']) assert.equal(pick[key], hammer[key], key);
+  const feel = weaponFeel(pick);
+  assert.equal(feel.tempo, weaponFeel(hammer).tempo);
+  assert.equal(feel.chop, 1, 'no tree-feller');
+  assert.equal(needsBothHands(hand('stonePickaxe')), false);
+  assert.equal(ITEMS.stonePickaxe.durability, 120);
 });
