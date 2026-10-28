@@ -59,7 +59,7 @@ export class WeaponStationScreen extends FurnaceScreen {
     this.empty = element('p', 'furnace-empty', 'Nothing in your satchel can be worked. Smelt iron and copper ore, '
       + 'or forge an alloy.');
     return box('div', 'smith-layout',
-      box('div', 'smith-main', this.piece, this.recipes, this.work, this.take, this.report, this.feedback),
+      box('div', 'smith-main', this.piece, this.report, this.recipes, this.work, this.take, this.feedback),
       box('section', 'furnace-satchel', element('h3', 'inventory-heading', 'From your satchel'), this.list, this.empty));
   }
 

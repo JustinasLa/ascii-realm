@@ -347,7 +347,7 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .smith-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .smith-screen :is(.smith-actions button, .smith-take) { min-height: 32px; padding: 4px 10px; }
 .smith-screen button[aria-disabled="true"] { color: var(--quiet); border-style: dotted; }
-.smith-report { margin-top: 8px; padding: 6px 8px; border: 1px solid #dbaf1d; }
+.smith-report { margin: 0 0 8px; padding: 6px 8px; border: 1px solid #dbaf1d; }
 .smith-report p { margin: 0; }
 @media (max-width: 560px) { .smith-hits { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .hud-toast[data-kind="discovery"] { border-left: 3px solid #dbaf1d; }
