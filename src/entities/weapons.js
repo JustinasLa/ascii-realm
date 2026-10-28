@@ -266,7 +266,7 @@ export function weaponMaterial(source, fallback = 'steel') {
     if (source.forged && typeof source.forged === 'object') return forgedProfile(source);
     source = source.material;
   }
-  const id = isMaterialId(source) ? source : INGOT_TIERS[source];
+  const id = isMaterialId(source) ? source : typeof source === 'string' && Object.hasOwn(INGOT_TIERS, source) ? INGOT_TIERS[source] : null;
   return TIERS[id ?? (isMaterialId(fallback) ? fallback : 'steel')];
 }
 

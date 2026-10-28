@@ -121,3 +121,17 @@ test('the portrait wears the player\'s skin and redraws when it changes', () => 
   assert.equal(portrait.update(player), true, 'another skin object redraws');
   assert.equal(player.skin.hood, 'oxblood', 'the player\'s skin is untouched');
 });
+
+test('the portrait redraws when the sword in hand is swapped for a forged one', () => {
+  const { canvas, context } = canvasFixture();
+  const portrait = new CharacterPortrait(canvas, { pixelRatio: 1 });
+  const { player, inventory } = gearedPlayer();
+  portrait.update(player);
+  const starter = structuredClone(context.cells);
+  inventory.add('shortSword', 1, { forged: { metal: 'Blackiron', colour: 'A77C63', quality: 'rusted', hits: 10,
+    stats: { attackDamage: 4 }, inputs: { a1: 4 } } });
+  assert.equal(inventory.equip(inventory.slots.findIndex((stack) => stack?.forged)), true);
+  assert.equal(portrait.update(player), true);
+  assert.notDeepEqual(context.cells, starter, 'its guard and pommel take the alloy\'s colour');
+  assert.equal(portrait.update(player), false);
+});

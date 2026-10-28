@@ -70,6 +70,7 @@ test('the lookup resolves tiers, ingots, stacks and their fallbacks', () => {
   assert.equal(weaponMaterial({ id: 'dagger' }), weaponMaterial('steel'));
   assert.equal(weaponMaterial('gold', 'iron'), weaponMaterial('iron'));
   assert.equal(weaponMaterial(null), weaponMaterial('steel'));
+  assert.equal(weaponMaterial('toString', 'iron'), weaponMaterial('iron'), 'inherited keys are not ingots');
   assert.equal(weaponMaterial('gold', 'gold'), weaponMaterial('steel'));
   assert.equal(weaponMaterial({ forged: 'Iron', material: 'copper' }), weaponMaterial('copper'), 'a forging must be an object');
   assert.ok(Object.isFrozen(weaponMaterial('iron')));
