@@ -247,6 +247,23 @@ short version see the [README](../README.md).
   as the bag has room. Furnaces keep working on game time with their screen
   shut and you far away, and are kept on this device for each world (up to
   32 busy ones a world); the page being closed pauses them.
+- **Alloys.** The alloy forge's rules are in place, though no forge stands in
+  the world yet. A mix is one base, an Iron, Steel or Bronze Ingot, and up to
+  four catalysts; a metal base takes metal or crystal catalysts (Copper Ingot,
+  Raw Tin, Lapis Lazuli or another ingot), each ingredient once. A firing needs
+  at least two ingredients and burns 1 Coal. A mix fired before always gives
+  the same result. A new mix rolls once, succeeding at 2 + 4·√(total value) %
+  (Iron 2, Copper 2, Lapis 2, Steel 4, Bronze 6, Raw Tin 8), plus 8 with a
+  Steel and 12 with a Bronze base, at most 85 %; a failure gives Unusable
+  Scrap, which records what it consumed, and that mix stays scrap for good. A
+  new alloy starts from its base's stats, moved toward the catalysts' and
+  sometimes taking up stats the base lacks, each held to 1.2 times where it
+  started; a stat left unchanged shifts by up to 10 % either way. Each hit kind
+  its inputs name needs 1 to 3 hits to work. It takes a free name from 42 metal
+  names (Ferranite, Blackiron, …), else from its catalysts' lists, and gives
+  scrap when none is free; its colour is one of 49 muted metal shades. Each
+  Alloy Ingot stack keeps its alloy, so different alloys never stack. Steel and
+  Bronze Ingots have no source yet.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,

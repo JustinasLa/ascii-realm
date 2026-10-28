@@ -401,6 +401,17 @@ const ITEM_ART = Object.freeze({
   ),
   ironIngot: ingot('#'),
   copperIngot: ingot('o'),
+  steelIngot: ingot('='),
+  bronzeIngot: ingot('+'),
+  alloyIngot: ingot('%'),
+  // A cracked, jagged lump of slag from a failed alloy.
+  unusableScrap: art(
+    '  __/\\_ __',
+    ' /%&#\\/&%\\',
+    '|&;%#&%;#&\\',
+    ' \\%#/\\_;%&/',
+    "  `-'  `-'",
+  ),
 });
 
 export function itemArt(id, fallbackGlyph = '?') {
