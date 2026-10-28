@@ -919,7 +919,7 @@ onPhoneChange(device.phone);
 // hunt them down. ?skeletons=N, ?goblins=N, ?trolls=N and ?elves=N set how
 // many of each may be about at once; 0 leaves the world free of them.
 const countOf = (name, fallback) => {
-  // The hill scene is left quiet unless asked: its wildlife is not raised yet.
+  // The hill scene is left quiet unless asked, so it looks the same each time.
   const n = Number(params.get(name) ?? (hillScene ? 0 : fallback));
   return Number.isFinite(n) ? Math.max(0, Math.min(8, Math.floor(n))) : fallback;
 };
@@ -1642,6 +1642,8 @@ function frame(now) {
   // Whatever stands on raised ground is drawn through a view lifted with it.
   const lv = (x, y) => world.relief ? liftView(view, world.liftAt(x, y)) : view;
   const pv = pLift ? liftView(view, pLift) : view;
+  // Creatures are drawn each through its own lifted view (null: flat land).
+  const raised = world.relief ? lv : null;
   weather.update(dt, time, world, view, sound.weather);
   if (!paused) {
     debris.update(dt, world, view, player, weather, splashes, debrisBodies());
@@ -1676,7 +1678,8 @@ function frame(now) {
   grass.drawTracks(renderer, view, time, world);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
-  if (!pLift) drawShadow(renderer, view, player.x, player.y, player.air);
+  // On raised ground the shadows laid here rise with the ground's tops.
+  drawShadow(renderer, view, player.x, player.y, player.air);
   const peers = remotePlayers.visible(view);
   for (const peer of peers) {
     drawShadow(renderer, view, peer.player.x, peer.player.y, peer.player.air);
@@ -1745,16 +1748,16 @@ function frame(now) {
   let figure = null;
   if (model) model.rasterise(pv, player.x, player.y);
   else figure = dressFigure(player);
-  const monsterCells = monsterFigures ? monsterFigures.rasterise(view, monsters.list, player) : [];
+  const monsterCells = monsterFigures ? monsterFigures.rasterise(view, monsters.list, player, raised) : [];
   for (const { monster } of monsterCells) {
     if (monster.alive) drawShadow(renderer, view, monster.x, monster.y, 0);
   }
-  const wildCells = animalFigures ? animalFigures.rasterise(view, animals.list, player, [...birds.list, ...fishes.list]) : [];
+  const wildCells = animalFigures ? animalFigures.rasterise(view, animals.list, player, [...birds.list, ...fishes.list], raised) : [];
   const animalCells = wildCells.filter((f) => !f.small);
   const fishCells = wildCells.filter((f) => f.submerged);
   const birdCells = wildCells.filter((f) => f.small && !f.submerged);
   for (const figure of [...animalCells, ...birdCells]) AnimalFigures.drawShadow(renderer, view, figure);
-  const horseCells = horseFigures ? horseFigures.rasterise(view, horses.list, player) : [];
+  const horseCells = horseFigures ? horseFigures.rasterise(view, horses.list, player, raised) : [];
   for (const figure of horseCells) AnimalFigures.drawShadow(renderer, view, figure);
 
   // Match the reveal region to this pose, including a jump or sword swing.
@@ -1844,7 +1847,6 @@ function frame(now) {
     for (const torch of carried) torches.draw(renderer, view, torch, mirror);
   } });
   drawables.push({ y: player.y, draw: () => {
-    if (pLift) drawShadow(renderer, pv, player.x, player.y, player.air);
     if (model) model.draw(renderer, putOutlinedCell);
     else drawFigure(renderer, pv, player, figure, putOutlinedCell);
     for (const torch of carried) torches.draw(renderer, pv, torch);

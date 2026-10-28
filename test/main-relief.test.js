@@ -44,7 +44,7 @@ async function hillGame(query = 'scene=hill', { shape = false } = {}) {
     World, Camera: GridCamera, liftView, Grass, propDepthSlices: () => null,
     raisedRows: (r, world, view) => raisedRows(r, world, view).map((row) => ({ y: row.y, draw: () => order.push(['ground', row.y]) })),
     drawFigure: (_r, view) => { figures.push(view); order.push(['player']); },
-    drawShadow: (_r, view, x, y) => shadows.push({ view, x, y }),
+    drawShadow: (_r, view, x, y) => { shadows.push({ view, x, y }); order.push('shadow'); },
     screenToWorld: () => pointerCell,
     Torches: stub({ prepare: at, draw: sprite('torch') }),
     Harvesting: stub({ resourcesIn: at }),
@@ -98,8 +98,11 @@ for (const shape of [false, true]) test(`on the knoll the camera, ${shape ? 'sha
     assert.ok(sprites.some(([k, y0]) => k === kind && y0 === view.y0 + lift), kind);
   }
   assert.equal(figures.at(-1).y0, view.y0 + lift, 'the figure is drawn its lift higher');
-  assert.equal(shadows.length, 1, 'one shadow, cast on the raised ground');
-  assert.equal(shadows[0].view.y0, view.y0 + lift);
+  // The shadow is laid on the flat ground, whose raised tops carry it up.
+  assert.equal(shadows.length, 1, 'one shadow');
+  assert.equal(shadows[0].view.y0, view.y0);
+  const laid = order.indexOf('shadow');
+  assert.ok(laid >= 0 && order.findIndex(([kind]) => kind === 'ground') > laid, 'before the raised rows');
   // The ground row the player stands on is drawn before them.
   const own = order.findIndex(([kind, y]) => kind === 'ground' && y === Math.floor(player.y));
   assert.ok(own >= 0 && own < order.findIndex(([kind]) => kind === 'player'));

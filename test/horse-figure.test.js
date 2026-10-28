@@ -883,3 +883,15 @@ test('the horse model is credited, CC0, as published bar its duplicate clips, an
   const credits = readFileSync(new URL('../docs/credits.md', import.meta.url), 'utf8');
   assert.match(credits, /horse/);
 });
+
+test('on raised ground a horse and its rider are drawn through the horse\'s lifted view', () => {
+  let f;
+  f = figures({ renderer: fakeGPU(() => f, () => 200) });
+  const h = new Horse(0, 0, { heading: Math.PI / 2 });
+  f.update(dt, [h]);
+  const rows = ([figure]) => [figure.base, figure.cells.map((c) => c.sy)];
+  const [base, plain] = rows(f.rasterise(view, [h], h));
+  assert.ok(plain.length > 0);
+  const lifted = rows(f.rasterise(view, [h], h, () => ({ ...view, y0: view.y0 + 9 })));
+  assert.deepEqual(lifted, [base - 9, plain.map((sy) => sy - 9)]);
+});

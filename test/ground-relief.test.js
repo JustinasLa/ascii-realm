@@ -53,20 +53,46 @@ test('a raised cell draws its top its lift higher and the slope down to the cell
   const { x, y, lift, front } = slopeCell(world);
   const view = { x0: x - 20, y0: y - 40, cols: 40, rows: 50 };
   const r = renderer(view);
+  // The flat pass's letters and colours, with no mask, so only the raised
+  // row's own writes are marked.
+  const flat = renderer(view);
+  drawGround(flat, world, view, 0, null, 0, true);
+  for (const key of ['fg', 'bg', 'ov', 'cellLit']) r[key].set(flat[key]);
   drawRaisedRow(r, world, view, y);
   const written = column(r, x - view.x0).flatMap((set, sy) => (set ? [sy] : []));
   const top = y - lift - view.y0;
   assert.deepEqual(written, Array.from({ length: lift - front + 1 }, (_, k) => top + k));
   assert.ok(written.at(-1) < y + 1 - front - view.y0, 'never reaches the top of the cell in front');
   // The top shows the cell's own ground letter, as the flat pass does.
-  const flat = renderer(view);
-  drawGround(flat, world, view, 0, null, 0, true);
   const at = (buf, sy, sx = x - view.x0) => buf[(sy * view.cols + sx) * 4 + 3];
   const own = (y - view.y0);
   assert.equal(at(r.fg, top), at(flat.fg, own));
   assert.equal(r.mask[top * view.cols + x - view.x0], world.typeAt(x, y));
   // The first slope row takes its neighbour's letter, so none repeats down it.
   assert.equal(at(r.fg, top + 1), at(flat.fg, own, x + 1 - view.x0));
+});
+
+test('a raised top carries what was laid on its flat cell, and reads its ground below the view', () => {
+  const world = knoll();
+  const { x, y, lift } = slopeCell(world, 2);
+  const view = { x0: x - 20, y0: y - 40, cols: 40, rows: 50 };
+  const r = renderer(view);
+  drawGround(r, world, view, 0, null, 0, true);
+  const sx = x - view.x0;
+  const cell = (sy) => (sy * view.cols + sx) * 4;
+  // A shadow (or a track, a footprint, a tree's shade) on the flat cell.
+  for (let c = 0; c < 3; c++) r.bg[cell(y - view.y0) + c] = 7;
+  drawRaisedRow(r, world, view, y);
+  const top = y - lift - view.y0;
+  assert.deepEqual([...r.bg.slice(cell(top), cell(top) + 3)], [7, 7, 7]);
+  assert.notEqual(r.bg[cell(top + 1)], 7, 'its slope shows the bare ground');
+  // Lifted in from below the view, the top is the chunk's own ground.
+  const low = { ...view, rows: y - view.y0 };
+  const below = renderer(low);
+  drawRaisedRow(below, world, low, y);
+  const flat = renderer(view);
+  drawGround(flat, world, view, 0, null, 0, true);
+  assert.equal(below.fg[cell(top) + 3], flat.fg[cell(y - view.y0) + 3]);
 });
 
 test('raised ground hides the small letters of a sprite behind it', () => {

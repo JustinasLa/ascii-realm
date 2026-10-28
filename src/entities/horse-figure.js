@@ -670,24 +670,27 @@ export class HorseFigures {
   // The horses in view, nearest the player first, as cells banded by the
   // ground under them. Those that moved since they were last drawn are
   // drawn into slots along one image, read back at once.
-  rasterise(view, horses, near) {
+  // `viewOf(x, y)`, if given, is the view a horse standing there is drawn
+  // through (raised ground, see relief.js).
+  rasterise(view, horses, near, viewOf = null) {
     const inView = [];
     for (const horse of horses) {
-      const slot = this.slotOf(horse, view);
-      if (slot) inView.push({ horse, slot });
+      const at = viewOf ? viewOf(horse.x, horse.y) : view;
+      const slot = this.slotOf(horse, at);
+      if (slot) inView.push({ horse, slot, at });
     }
     inView.sort((a, b) => Math.hypot(a.horse.x - near.x, a.horse.y - near.y) - Math.hypot(b.horse.x - near.x, b.horse.y - near.y));
     const drawn = inView.slice(0, this.phone() ? MAX_DRAWN_PHONE : MAX_DRAWN);
     const moved = drawn.filter(({ horse, slot }) => !this.rigs.get(horse).fresh(horse, slot));
     if (moved.length) this.paint(moved);
     this.drawn = [];
-    for (const { horse } of drawn) {
+    for (const { horse, at } of drawn) {
       const { cells, top } = this.rigs.get(horse).raster;
       for (const c of cells) {
-        c.sx = c.cx - view.x0;
-        c.sy = c.cy - view.y0;
+        c.sx = c.cx - at.x0;
+        c.sy = c.cy - at.y0;
       }
-      const base = Math.floor(horse.y) - view.y0;
+      const base = Math.floor(horse.y) - at.y0;
       const bands = this.flat ? [{ y: horse.y, cells, base }] : bandCells(cells, horse.y, base);
       this.drawn.push({ horse, animal: horse, cells, bands, depth: horse.y, shadow: HORSE.shadow, top, base });
     }

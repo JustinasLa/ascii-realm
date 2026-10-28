@@ -107,15 +107,17 @@ const SLOPE = [0.8, 0.8, 0.8];
 const FACE = [0.62, 0.55, 0.48];
 const LIT = [1, 1, 1];
 
-function copyCell(r, cached, chunk, i, cell, tint) {
+// Copies ground cell `i` of `chunk` to screen `cell`, read from `src` at
+// `from`: the chunk's shading cache, or the screen itself.
+function copyCell(r, src, from, chunk, i, cell, tint) {
   const o = cell * 4;
-  const s = i * 4;
+  const s = from * 4;
   for (let k = 0; k < 4; k++) {
     const t = k < 3 ? tint[k] : 1;
-    r.fg[o + k] = cached.fg[s + k] * t;
-    r.ov[o + k] = cached.ov[s + k] * t;
-    r.bg[o + k] = cached.bg[s + k];
-    if (r.cellLit) r.cellLit[o + k] = cached.cellLit[s + k];
+    r.fg[o + k] = src.fg[s + k] * t;
+    r.ov[o + k] = src.ov[s + k] * t;
+    r.bg[o + k] = src.bg[s + k];
+    if (r.cellLit) r.cellLit[o + k] = src.cellLit[s + k];
   }
   r.mask[cell] = chunk.type[i];
   if (r.motionUsed) {
@@ -144,6 +146,10 @@ export function drawRaisedRow(r, world, view, wy) {
       if (!lift) continue;
       const sx = cx * CHUNK_SIZE + lx - view.x0;
       const top = wy - lift - view.y0;
+      // A top whose own row is on screen is taken from there, as the flat
+      // pass drew it: with its dew, and the shadows, tracks, footprints and
+      // tree shade laid on it since. Its slope rows show the bare ground.
+      const flat = wy - view.y0 < view.rows ? (wy - view.y0) * r.cols + sx : -1;
       const ahead = front?.lift?.[ny * CHUNK_SIZE + lx] ?? 0;
       const drop = Math.max(0, lift - ahead);
       LIT[0] = LIT[1] = LIT[2] = reliefLight(lift, ahead);
@@ -152,7 +158,8 @@ export function drawRaisedRow(r, world, view, wy) {
         // repeats straight down the slope.
         const side = lx + (k & 1 ? 1 : -1);
         const j = k ? ly * CHUNK_SIZE + (side < 0 || side >= CHUNK_SIZE ? 2 * lx - side : side) : i;
-        copyCell(r, cached, chunk, j, (top + k) * r.cols + sx, !k ? LIT : k <= 2 ? SLOPE : FACE);
+        const own = !k && flat >= 0;
+        copyCell(r, own ? r : cached, own ? flat : j, chunk, j, (top + k) * r.cols + sx, !k ? LIT : k <= 2 ? SLOPE : FACE);
       }
     }
   }
