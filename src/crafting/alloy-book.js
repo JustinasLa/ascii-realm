@@ -4,17 +4,22 @@ import {
   AlloyForge, FIRE_GLOW, NAMING_TIME, listNames, mixOf, nameKey, recipeKey, statLines,
 } from './alloys.js';
 import { HIT_KINDS, INGREDIENTS, PALETTE, STAT_NAMES } from './ingredients.js';
+import { Smithy } from './smithing.js';
 
-// The alloy book (every mix fired so far, as its alloy or as scrap) and each
-// alloy forge's loaded contents, kept per world seed as `ascii-realm-alloys-<seed>`.
+// The alloy book (every mix fired so far, as its alloy or as scrap), each
+// alloy forge's loaded contents and each weapon station's piece, kept per
+// world seed as `ascii-realm-alloys-<seed>`.
 export const ALLOY_KEY = 'ascii-realm-alloys';
 const VERSION = 1;
 const MAX_ALLOYS = 256;
 const MAX_SCRAP = 1024;
-const MAX_FORGES = 32;
+// Forges and weapon stations together.
+const MAX_STATIONS = 32;
 const MAX_NAME = 24;
 const MAX_ID = 64;
 const LAST_ALLOY = 9999;
+// Seconds of game time a deferred change (a hit) may wait before it is saved.
+const SAVE_EVERY = 2;
 const ALLOY_ID = /^a[1-9]\d{0,3}$/;
 const NAME = /^[A-Za-z]+( [A-Za-z]+)*$/;
 
@@ -36,10 +41,13 @@ export class AlloyBook {
     this.alloys = new Map();
     this.recipes = new Map();
     this.forges = new Map();
+    this.benches = new Map();
     this.glows = new Map();
     this.next = 1;
     this.naming = null;
     this.time = 0;
+    this.dirty = false;
+    this.sinceSave = 0;
     // Goes up whenever an alloy is added or renamed, for screens that list them.
     this.version = 0;
     this.load();
@@ -106,25 +114,41 @@ export class AlloyBook {
     return result('kept', `Kept the name ${name}.`, { ok: true, name });
   }
 
-  // The forge with this prop id, made empty on first use. At the cap the oldest
-  // idle one makes way; when all are busy this one can't be used.
+  // The forge with this prop id, made empty on first use.
   forge(id) {
-    if (!validId(id)) throw new TypeError('A forge id is a string of 1 to 64 characters.');
-    if (this.forges.has(id)) return this.forges.get(id);
-    if (this.forges.size >= MAX_FORGES) {
-      const idle = [...this.forges].find(([, forge]) => forge.idle);
-      if (!idle) return null;
-      this.forges.delete(idle[0]);
+    return this.#station(this.forges, id, () => new AlloyForge());
+  }
+
+  // The weapon station with this prop id, made empty on first use.
+  bench(id) {
+    return this.#station(this.benches, id, () => new Smithy());
+  }
+
+  // Forges and weapon stations share one cap. At the cap the oldest idle one
+  // of the same kind makes way, then of the other; when all are busy this one
+  // can't be used.
+  #station(map, id, make) {
+    if (!validId(id)) throw new TypeError('A station id is a string of 1 to 64 characters.');
+    if (map.has(id)) return map.get(id);
+    if (this.forges.size + this.benches.size >= MAX_STATIONS) {
+      const other = map === this.forges ? this.benches : this.forges;
+      const idle = (stations) => [...stations].find(([, station]) => station.idle);
+      const from = [map, other].find(idle);
+      if (!from) return null;
+      from.delete(idle(from)[0]);
     }
-    const forge = new AlloyForge();
-    this.forges.set(id, forge);
-    return forge;
+    const station = make();
+    map.set(id, station);
+    return station;
   }
 
   // Game time runs the naming window and the hearth glows. Returns the
   // timeout result when the naming window runs out in this step.
   update(dt) {
-    this.time += Number.isFinite(dt) && dt > 0 ? dt : 0;
+    const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+    this.time += step;
+    this.sinceSave += step;
+    if (this.dirty && this.sinceSave >= SAVE_EVERY) this.save();
     for (const [id, until] of this.glows) if (this.time >= until) this.glows.delete(id);
     return this.naming && this.time > this.naming.until ? this.#closed() : null;
   }
@@ -137,29 +161,49 @@ export class AlloyBook {
     return this.glows.get(id) > this.time;
   }
 
-  // Runs a bag move on one forge and saves at once when it worked.
+  // Runs a move on one forge and saves at once when it worked.
   saved(id, move) {
-    const forge = this.forge(id);
-    if (!forge) return result('busy', "This alloy forge can't be used: too many forges are busy.");
-    const done = move(forge);
-    if (done.ok) this.save();
+    return this.#saved(this.forge(id), "This alloy forge can't be used: too many stations are busy.", move);
+  }
+
+  // Runs a move on one weapon station and saves at once when it worked, or
+  // with `later` (hits, which come quickly) within SAVE_EVERY of game time.
+  savedBench(id, move, { later = false } = {}) {
+    return this.#saved(this.bench(id), "This weapon station can't be used: too many stations are busy.", move, later);
+  }
+
+  #saved(station, busy, move, later = false) {
+    if (!station) return result('busy', busy);
+    const done = move(station);
+    if (done.ok && later) this.dirty = true;
+    else if (done.ok) this.save();
     return done;
+  }
+
+  // Saves a deferred change now, as the page goes away.
+  flush() {
+    if (this.dirty) this.save();
   }
 
   // The naming window and the glows last only for this visit.
   toJSON() {
     const forges = {};
+    const benches = {};
     for (const [id, forge] of this.forges) if (!forge.idle) forges[id] = forge.toJSON();
+    for (const [id, bench] of this.benches) if (!bench.idle) benches[id] = bench.toJSON();
     return {
       v: VERSION,
       next: this.next,
       alloys: [...this.alloys.values()].map((alloy) => ({ ...alloy, catalysts: [...alloy.catalysts] })),
       scrap: [...this.recipes].filter(([, known]) => known === 'scrap').map(([key]) => key),
       forges,
+      benches,
     };
   }
 
   save() {
+    this.dirty = false;
+    this.sinceSave = 0;
     try {
       this.storage?.setItem(this.key, JSON.stringify(this.toJSON()));
     } catch {
@@ -188,9 +232,14 @@ export class AlloyBook {
     const top = Math.max(0, ...[...this.alloys.keys()].map((id) => Number(id.slice(1))));
     this.next = Number.isSafeInteger(saved.next) && saved.next > top && saved.next <= LAST_ALLOY ? saved.next : top + 1;
     const forges = saved.forges && typeof saved.forges === 'object' ? Object.entries(saved.forges) : [];
-    for (const [id, data] of forges.slice(0, MAX_FORGES)) {
+    for (const [id, data] of forges.slice(0, MAX_STATIONS)) {
       const forge = validId(id) ? AlloyForge.from(data, this) : null;
       if (forge) this.forges.set(id, forge);
+    }
+    const benches = saved.benches && typeof saved.benches === 'object' ? Object.entries(saved.benches) : [];
+    for (const [id, data] of benches.slice(0, MAX_STATIONS - this.forges.size)) {
+      const bench = validId(id) ? Smithy.from(data, this) : null;
+      if (bench) this.benches.set(id, bench);
     }
   }
 
