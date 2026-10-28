@@ -239,7 +239,9 @@ export class World {
     const baseElev = elev.slice();
     const lifted = this.relief ? chunkLift(this.relief, cx, cy, CHUNK, type) : null;
     const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
-      lift: lifted?.lift ?? null, liftRows: lifted?.rows ?? null, grove, baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
+      grove, baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
+      // How many rows each cell is raised, and each row at most (see relief.js).
+      lift: lifted?.lift ?? null, liftRows: lifted?.rows ?? null,
       flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null,
       // The water shader times a river's foam by its water's own lines.
       rivers: flow ? this.rivers : null };
