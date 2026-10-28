@@ -1,6 +1,8 @@
 import { clearInput, isControlTarget } from '../core/input.js';
+import { liftView } from '../world/camera.js';
 import { createProp, drawProp } from '../world/props.js';
 import { PROP_CATALOG, PROP_KINDS, propDefinition } from '../world/prop-catalog.js';
+import { groundUnder } from '../world/relief.js';
 import { ASPECT, DIRT, GRASS, SHORE, STONE, WATER } from '../world/world.js';
 import { brushSize, screenToWorld, worldToScreen } from './coordinates.js';
 import { findPlayPosition } from './recovery.js';
@@ -251,7 +253,16 @@ export class SceneryBuilder {
   }
 
   worldPoint(event, view = this.camera.view(this.renderer)) {
-    return screenToWorld(event.clientX, event.clientY, this.canvas.getBoundingClientRect(), this.renderer, view);
+    return this.onGround(screenToWorld(event.clientX, event.clientY, this.canvas.getBoundingClientRect(), this.renderer, view));
+  }
+
+  // On raised ground (see relief.js) a point on screen is on the ground
+  // drawn there, not on the flat row behind it.
+  onGround(point) {
+    if (!this.world.relief) return point;
+    const row = Math.floor(point.y);
+    point.y += groundUnder((x, y) => this.world.liftAt(x, y), Math.floor(point.x), row) - row;
+    return point;
   }
 
   pointerDown(event) {
@@ -345,10 +356,11 @@ export class SceneryBuilder {
       this.cursor.hidden = true;
       return;
     }
-    const point = screenToWorld(clientX, clientY, rect, this.renderer, view);
+    const point = this.onGround(screenToWorld(clientX, clientY, rect, this.renderer, view));
     const x = Math.floor(point.x) + 0.5;
     const y = Math.floor(point.y) + 0.5;
-    const position = worldToScreen(x, y, rect, this.renderer, view);
+    const lift = this.world.relief ? this.world.liftAt(x, y) : 0;
+    const position = worldToScreen(x, y - lift, rect, this.renderer, view);
     let size = brushSize(this.radius, rect, this.renderer);
     if (PROPS.has(this.tool)) {
       const seed = this.scene.nextPropSeed(this.nextSeed);
@@ -360,7 +372,7 @@ export class SceneryBuilder {
       const prop = { ...this.ghost, x, y };
       size = { width: prop.footW * 2 * this.renderer.cellW * rect.width / this.canvas.width,
         height: prop.footH * 2 * this.renderer.cellH * rect.height / this.canvas.height };
-      drawProp(this.renderer, view, prop, (renderer, sx, sy, g, r, green, b) => {
+      drawProp(this.renderer, liftView(view, lift), prop, (renderer, sx, sy, g, r, green, b) => {
         renderer.put(sx, sy, g, r * 0.55 + 35, green * 0.55 + 55, b * 0.55 + 30);
       });
     }

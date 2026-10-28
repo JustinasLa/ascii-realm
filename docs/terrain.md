@@ -49,12 +49,16 @@ Heights are smooth, rounded to whole rows, not stepped in blocks.
   hides their feet. A bird in the air flies over the ground under it.
 - **Camera and aim.** The camera follows the player's lifted figure, and the
   cursor is read on the player's own height, so a click aims where it looks.
+- **Scenery builder.** The builder's brush and ghost prop sit on the ground
+  drawn under the pointer: the nearest raised top or slope there, else the
+  flat ground.
 
 ## Not raised yet
 
-Reflections next to raised ground, the scenery builder's cursor, and
-friends in a lobby (a lobby plays on flat land). A prop is lifted by its
-base cell, so on a slope its sides can sit a row off the ground.
+Reflections: the grass on raised ground and whatever stands there are
+mirrored in the water as if the ground were flat. A lobby plays on flat
+land, so friends are never raised. A prop is lifted by its base cell, so on
+a slope its sides can sit a row off the ground.
 
 ## Walking on slopes
 
