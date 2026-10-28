@@ -1,3 +1,4 @@
+import { stackExtras } from '../inventory/inventory.js';
 import { ITEMS } from '../inventory/items.js';
 import { generateLooseItems } from './gatherables.js';
 import { CHUNK_SIZE } from './world.js';
@@ -59,8 +60,13 @@ export class GroundItems {
       || !validPosition(x, y) || !options || typeof options !== 'object') return null;
     const pickupAfter = options.pickupAfter ?? 0;
     const dropOrigin = options.dropOrigin ?? null;
+    const given = options.extras ?? {};
     if (!Number.isFinite(pickupAfter) || pickupAfter < 0
-      || (dropOrigin !== null && !validPosition(dropOrigin.x, dropOrigin.y))) return null;
+      || (dropOrigin !== null && !validPosition(dropOrigin.x, dropOrigin.y))
+      || typeof given !== 'object' || Array.isArray(given)) return null;
+    // The stack's own properties (e.g. a weapon's material), read like the
+    // bag reads them, so a dropped stack comes back as it went down.
+    const extras = Object.freeze(stackExtras(given));
 
     const uid = nextDropUid++;
     const item = {
@@ -72,6 +78,7 @@ export class GroundItems {
       phase: (uid * 2.399963229728653) % (Math.PI * 2),
       pickupAfter,
       dropOrigin: dropOrigin === null ? null : { x: dropOrigin.x, y: dropOrigin.y },
+      ...(Object.keys(extras).length ? { extras } : {}),
     };
     const cx = Math.floor(x / CHUNK_SIZE);
     const cy = Math.floor(y / CHUNK_SIZE);

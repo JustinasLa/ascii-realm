@@ -138,6 +138,8 @@ test('invalid additions and moves leave the world and valid items untouched', ()
     ['ironIngot', 1, 0, 0, { pickupAfter: NaN }],
     ['ironIngot', 1, 0, 0, { pickupAfter: -1 }],
     ['ironIngot', 1, 0, 0, { dropOrigin: { x: Infinity, y: 0 } }],
+    ['shortSword', 1, 0, 0, { extras: 'steel' }],
+    ['shortSword', 1, 0, 0, { extras: ['steel'] }],
   ]) assert.equal(ground.add(id, count, x, y, options), null);
   assert.equal(world.chunks.size, 0);
 
@@ -155,4 +157,17 @@ test('invalid additions and moves leave the world and valid items untouched', ()
   assert.equal(item.y, 2.5);
   assert.throws(() => ground.of(0.5, 0), RangeError);
   assert.throws(() => ground.of(0, Infinity), RangeError);
+});
+
+test('a ground stack keeps its own properties, read like the bag reads them', () => {
+  const ground = new GroundItems(emptyWorld());
+  const steel = ground.add('shortSword', 1, 1.5, 2.5, { extras: { material: 'steel', glow: 'red' } });
+  assert.deepEqual(steel.extras, { material: 'steel' });
+  assert.ok(Object.isFrozen(steel.extras));
+  for (const extras of [{ material: 'mithril' }, {}, null, undefined]) {
+    const plain = ground.add('shortSword', 1, 1.5, 2.5, { extras });
+    assert.equal(Object.hasOwn(plain, 'extras'), false, JSON.stringify(extras));
+  }
+  const old = ground.add('ironIngot', 2, 1.5, 2.5);
+  assert.deepEqual(Object.keys(old), ['uid', 'id', 'count', 'x', 'y', 'phase', 'pickupAfter', 'dropOrigin']);
 });

@@ -2,6 +2,15 @@
 // intentional: each outline shares the same visual centre at column five.
 const art = (...rows) => rows.join('\n');
 
+// One bar shape for every smelted ingot; the item colour tints it.
+const INGOT = art(
+  '   _____',
+  '  /=====\\',
+  ' /=======\\',
+  '|=========|',
+  ' \\_______/',
+);
+
 const ITEM_ART = Object.freeze({
   // Held at a slant, so the blade and crossguard read as a sword at hotbar size.
   shortSword: art(
@@ -389,6 +398,8 @@ const ITEM_ART = Object.freeze({
     '    |',
     '    |',
   ),
+  ironIngot: INGOT,
+  copperIngot: INGOT,
 });
 
 export function itemArt(id, fallbackGlyph = '?') {
