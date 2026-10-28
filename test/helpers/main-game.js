@@ -23,7 +23,7 @@ import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrume
 import { toMetres } from '../../src/entities/monsters.js';
 import { InstrumentKeys } from '../../src/core/instrument-keys.js';
 import { MusicNotes } from '../../src/world/music-notes.js';
-import { isBow, isThrown } from '../../src/entities/loadout.js';
+import { heldKey, isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { NightLight } from '../../src/world/night-light.js';
 import { shaftTier } from '../../src/world/moon-shafts.js';
@@ -304,7 +304,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }
     },
-    Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
+    Projectiles, screenToWorld: () => null, heldKey, isBow, isThrown, SCALE: 13, TILT: 0.5,
     Spellcasting: class extends inert() { constructor(options) { super(); this.options = options; this.effects = { draw: noop }; } },
     SpellControls: class extends inert() {
       constructor(casting, options) { super(); this.options = options; }

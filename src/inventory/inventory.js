@@ -1,3 +1,5 @@
+import { readForged } from '../crafting/forged.js';
+import { isMaterialId } from '../entities/weapons.js';
 import { EQUIPMENT_SLOTS, ITEMS } from './items.js';
 
 const SLOT_COUNT = 24;
@@ -14,9 +16,8 @@ function validStack(stack) {
 }
 
 // A stack's own properties beyond its item and count: a weapon's material, an
-// alloy ingot's alloy id, or the inputs a scrap's failed mix consumed. Only
-// stacks with the same properties merge.
-const MATERIALS = ['stone', 'copper', 'bronze', 'iron', 'steel'];
+// alloy ingot's alloy id, the inputs a scrap's failed mix consumed, or a
+// smithed weapon's forging. Only stacks with the same properties merge.
 const ALLOY_ID = /^a[1-9]\d{0,3}$/;
 // Up to five item ids with whole counts of 1–5, kept in id order.
 function inputsOf(value) {
@@ -28,10 +29,12 @@ function inputsOf(value) {
 }
 export function stackExtras(stack) {
   const extras = {};
-  if (MATERIALS.includes(stack?.material)) extras.material = stack.material;
+  if (isMaterialId(stack?.material)) extras.material = stack.material;
   if (typeof stack?.alloy === 'string' && ALLOY_ID.test(stack.alloy)) extras.alloy = stack.alloy;
   const inputs = inputsOf(stack?.inputs);
   if (inputs) extras.inputs = inputs;
+  const forged = readForged(stack?.forged);
+  if (forged) extras.forged = forged;
   return extras;
 }
 const sameExtras = (stack, extras) => JSON.stringify(stackExtras(stack)) === JSON.stringify(stackExtras(extras));

@@ -33,7 +33,7 @@ import { AnimalFigures } from './entities/animal-figures.js';
 import { Horses } from './entities/horses.js';
 import { HorseFigures } from './entities/horse-figure.js';
 import { HuntDrops } from './entities/hunt-drops.js';
-import { isBow, isThrown } from './entities/loadout.js';
+import { heldKey, isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
 import { Spellcasting } from './spells/casting.js';
 import { loadSpells } from './spells/catalog.js';
@@ -715,7 +715,7 @@ debug.projectiles = projectiles;
 // How many arrows are left, or of the weapon being thrown.
 const ammoNote = document.createElement('div');
 hud.attachNote(ammoNote);
-const weaponKeyOf = (stack) => stack ? `${stack.id}:${stack.material ?? ''}` : '';
+const weaponKeyOf = (stack) => stack ? `${stack.id}:${heldKey(stack)}` : '';
 let lastWeapon = weaponKeyOf(inventory.equipment.mainHand);
 // The pointer over the scene and the last frame drawn, for aiming.
 let pointer = null;
