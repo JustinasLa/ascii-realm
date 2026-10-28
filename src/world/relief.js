@@ -86,4 +86,4 @@ export function chunkLift(relief, cx, cy, size, type) {
 // Moonlight on a raised cell `lift` rows up whose neighbour in front is
 // lifted `front`: higher ground catches more of it, and a slope falling
 // toward the viewer, away from the moon in the north, less.
-export const reliefLight = (lift, front) => 1 + lift * 0.015 - Math.max(0, lift - front) * 0.2;
+export const reliefLight = (lift, front) => 1 + lift * 0.025 - Math.max(0, lift - front) * 0.25;

@@ -102,7 +102,7 @@ export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false
 // ground row at a time: each cell's top its lift higher, then the slope it
 // uncovers down to the cell in front. Ridges in front hide what stands
 // behind them, and whatever stands on a row is drawn over its ground.
-const SLOPE = [0.9, 0.9, 0.9];
+const SLOPE = [0.8, 0.8, 0.8];
 // Below a slope's first rows, a steep drop shows earth.
 const FACE = [0.62, 0.55, 0.48];
 const LIT = [1, 1, 1];
