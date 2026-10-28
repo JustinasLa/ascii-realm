@@ -217,28 +217,22 @@ short version see the [README](../README.md).
   that way for the session, even after the land has been unloaded and generated
   again. Cutting plants and felling trees gives no logs, berries or fibre; only
   ore veins can be gathered (see Mining).
-- **Mining.** Ore veins lie on the land: tight clusters of fist-high ore
-  blocks, drawn in small letters like other rocks, in stone tinted by the local
-  rock (dark basalt, grey granite, pale limestone) with clumps of the ore's
-  colour in it. A chunk of land has up to two veins. The first hugs the foot of
-  the chunk's big rock when there is one; others sit on open grass, never in
-  the spawn clearing, in water or at a tree's foot. Veins are coal (four to
-  eight blocks, near-black with shiny glints), copper (three to seven, orange
-  with green patina), iron (two to five, tan), tin (two to five, pale) and lapis
-  (one to four, deep blue); coal is the most common and lapis the rarest.
-  Facing a block within reach shows what it is and what it needs, such as
-  `Iron ore · stone pickaxe` or `Iron ore · needs a stone pickaxe`. Strike it to
-  mine it: a stone pickaxe breaks a block in three blows, anything else takes
-  40, and each blow shows `Mining iron ore: 1/3`. A wooden pickaxe (none exists
-  yet) would take six blows and get coal only; the stone pickaxe gets every ore.
-  A block broken with the wrong tool crumbles and drops nothing. A mined block
-  drops 1 Coal, 1 Raw Iron, 2 to 5 Raw Copper, 1 Raw Tin or 4 to 9 Lapis Lazuli,
-  laid on the ground beside it like loot: walk over it to pick it up. A full
-  bag leaves it lying, and it lasts five minutes. Mined blocks stay gone, with
-  grass growing back, for the session, even after the land has been unloaded and
-  generated again; unfinished blows on a block are forgotten when you leave.
-  The stone pickaxe is a one-handed weapon too: it swings and hits like a stone
-  war hammer.
+- **Mining.** Ore veins lie on the land: tight clusters of fist-high ore blocks,
+  drawn small like other rocks, in stone tinted by the local rock (dark basalt,
+  grey granite, pale limestone) with clumps of the ore's colour. A chunk has up
+  to two veins, the first hugging its big rock if it has one, others on open
+  grass (never in the spawn clearing, in water or at a tree's foot): coal (4–8
+  blocks, near-black with glints), copper (3–7, orange with green patina), iron
+  (2–5, tan), tin (2–5, pale) or lapis (1–4, deep blue), coal the commonest and
+  lapis the rarest. Facing a block in reach shows what it is and needs, such as
+  `Iron ore · stone pickaxe` or `Iron ore · needs a stone pickaxe`. A stone
+  pickaxe breaks a block in three blows (`Mining iron ore: 1/3`); anything else
+  takes 40 and the block crumbles to nothing; a wooden pickaxe would take six and
+  mine coal only. A mined block drops 1 Coal, 1 Raw Iron, 2–5 Raw Copper, 1 Raw
+  Tin or 4–9 Lapis Lazuli beside it like loot, left lying five minutes if the
+  bag is full. Mined blocks stay gone for the session, grass growing back;
+  unfinished blows are forgotten when you leave. As a weapon, the stone pickaxe
+  hits like a stone war hammer.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,

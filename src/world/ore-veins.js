@@ -50,10 +50,9 @@ function pick(weights, roll) {
   return weights.length - 1;
 }
 
-// The ore blocks of a chunk as `{ x, y, ore, host, seed, vein }`, in placement order.
-// `props` are the chunk's generated props; neighbours' scenery comes from their
-// seeds (neighbourSolids), so loading order never matters. A vein hugs the
-// chunk's big rock where it can and otherwise sits on open ground.
+// The ore blocks of a chunk as `{ x, y, ore, host, seed, vein }`, in placement order, among its
+// generated `props`; neighbours' scenery comes from their seeds (neighbourSolids), so loading
+// order never matters. A vein hugs the chunk's big rock where it can, else sits on open ground.
 export function placeVeins(world, cx, cy, size, props) {
   const rand = mulberry32(Math.floor(hash2(cx, cy, world.seed + 2809) * 2 ** 32));
   const step = 2 * 2.4 / ASPECT * 0.8; // side by side and across, block to block in a vein

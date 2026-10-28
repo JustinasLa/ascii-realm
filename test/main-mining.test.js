@@ -56,3 +56,16 @@ test('a glowcap in reach takes the prompt over the ore', async () => {
   frame();
   assert.equal(prompts.at(-1), 'Glowcap · spores settling…');
 });
+
+test('ore blocks near the view are baked a few a frame as their fine bakes are queued', async () => {
+  // Out of view; as the real fineOf does, asking for a prop's fine bake reads its cells.
+  const { game, frame } = await loadGame(undefined, { href: 'http://localhost/?debug&animals=0',
+    real: { fineOf: (p) => p.cells, propInView: () => false } });
+  const near = Array.from({ length: 10 }, (_, i) => makeOreBlock({ x: game.player.x + 2000 + i * 6, y: game.player.y,
+    ore: 'coal', host: 'basalt', seed: 10 + i }));
+  game.world.propsIn = () => near;
+  frame();
+  assert.equal(near.filter((b) => !b.unbaked).length, 4);
+  frame();
+  assert.equal(near.filter((b) => !b.unbaked).length, 8);
+});

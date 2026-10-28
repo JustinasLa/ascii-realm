@@ -1920,7 +1920,8 @@ function frame(now) {
   weather.draw(renderer, view);
   builder.drawPreview(view);
   // Props near the view queue their fine bakes after those in view.
-  for (const p of props) fineOf(p);
+  let bakes = 4; // Asking bakes an ore block's cells (`unbaked`), so a few of those a frame.
+  for (const p of props) if (!p.unbaked || bakes-- > 0) fineOf(p);
   bakeWhenIdle();
   if (debug.freeze || gate.waiting) sound.pause();
   else sound.update(dt, time, player, camera, fireflies.list, fires.list);

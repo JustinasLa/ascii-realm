@@ -188,9 +188,11 @@ test('an ore block is baked on first draw, not with its chunk, the same either w
     return bakeSurface(...args);
   });
   assert.equal(bakes, 0, 'nothing is baked with its chunk');
+  assert.equal(block.unbaked, true);
   const frame = block.bounds;
   fineCells(block);
   assert.deepEqual(block.cells, eager, 'baked after its fine bake, it has no normals');
+  assert.equal(block.unbaked, false);
   assert.equal(block.cells, block.cells, 'baked once');
   assert.equal(bakes, 2);
   const b = block.bounds;
@@ -205,6 +207,22 @@ test('an ore block by water is not checked for damp, so its chunk loads no neigh
   assert.equal(world.dampStone({ ...rock, ore: 'iron' }), false);
   assert.equal(looks, 0);
   assert.equal(world.dampStone(rock), true, 'a plain rock there is damp');
+});
+
+test('the grass of a chunk regrows once for all the ore blocks clearing it, to the same blades', () => {
+  const world = new World(1);
+  const unbatched = new World(1);
+  unbatched.batchScenery = (action) => action();
+  const [cx, cy] = [-2, 1]; // two veins, 15 blocks
+  const c = world.chunk(cx, cy);
+  let { blades } = c, regrows = 0;
+  Object.defineProperty(c, 'blades', { get: () => blades, set: (b) => { regrows++; blades = b; } });
+  assert.equal(oresOf(world, cx, cy).length, 15);
+  assert.equal(regrows, 0, 'not while its props clear the grass');
+  world.chunk(cx, cy);
+  assert.equal(regrows, 1);
+  unbatched.propsOf(cx, cy);
+  assert.deepEqual(world.chunk(cx, cy).blades, unbatched.chunk(cx, cy).blades);
 });
 
 test('a worker rebuilds an ore block from its source exactly', () => {

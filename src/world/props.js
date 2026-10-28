@@ -499,9 +499,9 @@ export function makeOreBlock({ x, y, ore, host, seed }, bakeFn = bake) {
   };
   const rock = boulder(rand, seed, { rx, ry, sides: 5 + Math.floor(rand() * 3), roundness: 0.78, stone,
     mossCoverage: 0, grit: 0.15, lichen: false, cracks: rand() < 0.4 ? 1 : 0, crackWidth: 0.22, flecks });
-  // Baked on first draw, not with its chunk, and never with the fine bake's normals.
+  // Baked when first asked for (`unbaked` till then), not with its chunk, never with fine normals.
   let cells;
-  return withFine({ kind: 'rock', ore, host, x, y, footW: rx * 0.9 / ASPECT, footH: 0.9,
+  return withFine({ kind: 'rock', ore, host, x, y, footW: rx * 0.9 / ASPECT, footH: 0.9, unbaked: true,
     bounds: { minX: -rock.w, maxX: rock.w, minY: rock.top, maxY: 2 },
     get cells() {
       if (cells) return cells;
@@ -509,6 +509,7 @@ export function makeOreBlock({ x, y, ore, host, seed }, bakeFn = bake) {
       rock.normals.on = false;
       this.bounds = cellBounds(cells = bakeBoulder(rock, seed, bakeFn));
       rock.normals.on = fine;
+      this.unbaked = false;
       return cells;
     } }, fineBoulder(rock, seed, bakeFn), { make: 'ore', x, y, ore, host, seed });
 }

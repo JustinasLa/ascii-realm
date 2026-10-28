@@ -631,7 +631,7 @@ export class World {
         c.props.push(...this.spawnRuins.props.filter(prop =>
           Math.floor(prop.x / CHUNK) === cx && Math.floor(prop.y / CHUNK) === cy));
       }
-      c.props.forEach((prop) => {
+      this.batchScenery(() => c.props.forEach((prop) => { // the grass regrows once, not per prop
         const hits = this.treeHits.get(prop.id);
         if (hits) {
           prop.hits = hits;
@@ -643,7 +643,7 @@ export class World {
         if (this.dampStone(prop)) prop.damp = true;
         // Grass is only cleared the first time; it stays bare after eviction.
         if (!this.coveredChunks.has(chunkKey(cx, cy))) this.coverGrass(prop, 1);
-      });
+      }));
       this.coveredChunks.add(chunkKey(cx, cy));
     }
     const added = this.addedPropChunks.get(chunkKey(cx, cy));
