@@ -2,12 +2,13 @@
 // intentional: each outline shares the same visual centre at column five.
 const art = (...rows) => rows.join('\n');
 
-// One bar shape for every smelted ingot; the item colour tints it.
-const INGOT = art(
+// One bar shape for every smelted ingot, filled with its ore's letter, since
+// the bag shows every picture in the same ink.
+const ingot = (fill) => art(
   '   _____',
-  '  /=====\\',
-  ' /=======\\',
-  '|=========|',
+  `  /${fill.repeat(5)}\\`,
+  ` /${fill.repeat(7)}\\`,
+  `|${fill.repeat(9)}|`,
   ' \\_______/',
 );
 
@@ -398,8 +399,8 @@ const ITEM_ART = Object.freeze({
     '    |',
     '    |',
   ),
-  ironIngot: INGOT,
-  copperIngot: INGOT,
+  ironIngot: ingot('#'),
+  copperIngot: ingot('o'),
 });
 
 export function itemArt(id, fallbackGlyph = '?') {

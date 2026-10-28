@@ -52,7 +52,7 @@ test('both ingots stack to 64, weigh what their ore weighs and share a bar pictu
     assert.ok(rows.length <= 9 && rows.every((row) => row.length <= 11), ingot);
   }
   assert.equal(ITEMS.copperIngot.name, 'Copper Ingot');
-  assert.equal(itemArt('copperIngot'), itemArt('ironIngot'));
+  assert.equal(itemArt('copperIngot').replaceAll('o', '#'), itemArt('ironIngot'), 'one bar, filled with its ore');
 });
 
 test('one raw iron and one coal give one ingot in ten seconds', () => {
