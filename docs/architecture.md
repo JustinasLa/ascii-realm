@@ -54,7 +54,7 @@ movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT
 the browser uses its native WebSocket API.
 
 Warm light (`drawFireLight` in `world/fire.js`, used by torches, fires,
-spells and burning furnaces in `world/furnace-glow.js`) rakes across stone
+spells and burning furnaces and alloy forges in `world/furnace-glow.js`) rakes across stone
 by the way it faces (`world/surface-light.js`).
 The renderer keeps a normal, gloss and water clarity per cell (`cellLit`,
 written by the water shader for riverbed stone glyphs and copied with the

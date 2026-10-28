@@ -1,5 +1,6 @@
 import { stackExtras } from '../inventory/inventory.js';
 import { ITEMS } from '../inventory/items.js';
+import { nearbyStation } from './furnace.js';
 import {
   ALLOY_NAMES, BASE_BONUS, COMBINATIONS, INGREDIENTS, MAX_CATALYSTS, MAX_FACTOR, ODDS, PALETTE, STAT_NAMES,
   TYPE_NAMES,
@@ -142,6 +143,7 @@ export function forgeAlloy({ base, catalysts }, { random = Math.random, taken = 
 export const FIRE_FUEL = 'coal';
 export const NAMING_TIME = 60;
 export const FIRE_GLOW = 10;
+export const nearbyForge = (world, player) => nearbyStation(world, player, 'alloy-forge');
 
 // Each refusal's message and the short reason a bag row shows, in the order they are checked.
 const REFUSALS = {

@@ -315,6 +315,17 @@ function makeSignpost(x, y, rand, seed, bake) {
     { shadow: { rx: 2, ry: 0.8, ox: 1.2 } });
 }
 
+// Fitted cobbles in courses a row high, each course shifted half a stone:
+// the stone's light on a side (-1 west to 1 east), its tone and whether the
+// point is on a joint. The furnace and the alloy forge share them.
+function cobble(px, py, seed, side) {
+  const j = Math.floor(-py);
+  const u = px / 1.5 + (j % 2) * 0.5 + (hash2(j, 0, seed + 7) - 0.5) * 0.3;
+  const i = Math.floor(u), tone = hash2(i, j, seed + 7);
+  const edge = Math.min((u - i) * 1.5, (i + 1 - u) * 1.5, -py - j, j + 1 + py);
+  return { l: clamp(0.45 + tone * 0.25 - side * 0.18 + grain(px, py, seed)), tone, joint: edge < 0.2 };
+}
+
 // A furnace: a squat block of fitted cobbles under a stone slab, with a
 // dark arched mouth over an iron grate and a flue in its top. Drawn in
 // small letters on the fine grid; `glow` is the mouth's inner ellipse,
@@ -346,13 +357,9 @@ function makeFurnace(x, y, rand, seed, bake) {
       if (py > -0.6) return { m: 'iron', l: 0.5, c: IRON, g: glyph('=') };
       return { m: 'plain', l: 0.08, c: [30, 22, 18], g: dg('props.shade.1'), back: 0.3 };
     }
-    // Cobbles in courses a row high, each course shifted half a stone.
-    const j = Math.floor(-py);
-    const u = px / 1.5 + (j % 2) * 0.5 + (hash2(j, 0, seed + 7) - 0.5) * 0.3;
-    const i = Math.floor(u), tone = hash2(i, j, seed + 7);
-    const edge = Math.min((u - i) * 1.5, (i + 1 - u) * 1.5, -py - j, j + 1 + py);
-    let l = clamp(0.45 + tone * 0.25 - side * 0.18 + grain(px, py, seed));
-    if (edge < 0.2) l *= 0.4;
+    const { l: lit, tone, joint } = cobble(px, py, seed, side);
+    let l = lit;
+    if (joint) l *= 0.4;
     else if (inMouth > -0.35 && py < -0.2) l = clamp(l + 0.12);
     else if (inMouth > -1 && py < -1.6) l *= 0.6;
     return { m: 'stone', l, c: stone.map((v) => v * (0.9 + tone * 0.2)) };
@@ -366,8 +373,64 @@ function makeFurnace(x, y, rand, seed, bake) {
   });
 }
 
+// An alloy forge: a wide, low cobble hearth with a bed of coals in its top,
+// a clay crucible standing behind them and leather bellows at its west end.
+// The coals' embers are baked in, so they show faintly when it's cold; `glow`
+// is the bed, where furnace-glow.js draws the fire after a firing.
+function makeAlloyForge(x, y, rand, seed, bake) {
+  const rx = 4.4 + rand() * 0.4;
+  const height = 3.2 + rand() * 0.3;
+  const stone = [118, 112, 108].map((v) => v * 1.7);
+  const bed = { x: 0.3, y: -height + 0.4, rx: 2.4, ry: 0.4 };
+  const sample = (px, py) => {
+    // The bellows: plank boards round folded leather, with an iron nozzle.
+    const bx = -rx - px;
+    if (bx > 0) {
+      const dy = py + height * 0.5;
+      if (bx < 0.4) return Math.abs(dy) < 0.25 ? { m: 'iron', l: 0.5, c: IRON, g: glyph('=') } : null;
+      const half = 0.25 + (bx - 0.4) * 0.4;
+      if (bx > 3 || Math.abs(dy) > half) return null;
+      if (Math.abs(dy) > half - 0.25) return { m: 'plankh', l: clamp((dy < 0 ? 0.75 : 0.45) + grain(px, py, seed)), c: [136, 98, 60] };
+      return { m: 'canvas', l: bx % 0.35 < 0.08 ? 0.25 : 0.5, c: [110, 76, 52] };
+    }
+    // The crucible, a clay pot behind the coals, its mouth full of molten metal.
+    const cx = px - bed.x, t = (-height - py) / 2;
+    if (t >= 0 && t <= 1.15) {
+      const mouth = (cx / 0.85) ** 2 + ((t - 1) / 0.13) ** 2;
+      if (mouth <= 0.45) return { m: 'plain', l: 1, c: [240, 150, 60], g: glyph('~'), back: 0.25 };
+      if (mouth <= 1) return { m: 'plain', l: 0.8, c: [170, 112, 82], g: glyph('=') };
+      const half = 1.1 - 0.25 * t - (t < 0.15 ? 0.15 - t : 0);
+      if (t <= 1 && Math.abs(cx) <= half) return { m: 'stone', l: clamp(0.62 - cx / half * 0.22 + grain(px, py, seed)), c: [150, 96, 70] };
+    }
+    if (py < -height || Math.abs(px) > rx) return null;
+    // The hearth: a lighter lip slab over cobbles, its corners rounded.
+    if (py < -height + 0.4 && Math.abs(px) > rx - 0.4 && Math.hypot(Math.abs(px) - rx + 0.4, py + height - 0.4) > 0.4) return null;
+    const side = px / rx;
+    // The coals: a long bed with rounded ends.
+    const ex = Math.max(0, Math.abs(px - bed.x) - bed.rx + bed.ry);
+    if (ex * ex + (py - bed.y) ** 2 <= bed.ry * bed.ry) {
+      // A third of them are faint embers, even when the forge is cold.
+      const ember = hash2(Math.floor(px * 6), Math.floor(py * 6), seed + 11) < 0.33;
+      return ember ? { m: 'plain', l: 0.35, c: [150, 60, 28], g: glyph('.,*'[Math.floor(hash2(Math.floor(px * 6), 0, seed) * 3)]), back: 0.3 }
+        : { m: 'plain', l: 0.08, c: [30, 22, 18], g: dg('props.shade.1'), back: 0.3 };
+    }
+    if (py < -height + 0.5) return { m: 'stone', l: clamp(0.75 - side * 0.1 + grain(px, py, seed)), c: stone };
+    const { l, tone, joint } = cobble(px, py, seed, side);
+    return { m: 'stone', l: joint ? l * 0.4 : l, c: stone.map((v) => v * (0.9 + tone * 0.2)) };
+  };
+  const top = Math.ceil(height + 2.3);
+  const forge = prop('alloy-forge', x, y, rx + 3, top, rx * 0.95 / ASPECT, 1.4, sample, seed, bake,
+    { shadow: { rx: rx * 1.3, ry: 1, ox: rx * 0.3 } });
+  // The coals and the flames licking up round the crucible's foot.
+  forge.glow = { x: bed.x, y: bed.y - 0.3, rx: bed.rx - 0.3, ry: 0.6 };
+  return withFine(forge, function* fine() {
+    return bake((Math.ceil((rx + 3) / ASPECT) + 1) * FINE, -top * FINE, 0,
+      (px, py) => py > 0 ? null : sample(px / FINE, py / FINE), seed);
+  });
+}
+
 const MAKERS = { crate: makeCrate, barrel: makeBarrel, fence: makeFence,
-  tent: makeTent, campfire: makeCampfire, signpost: makeSignpost, furnace: makeFurnace };
+  tent: makeTent, campfire: makeCampfire, signpost: makeSignpost, furnace: makeFurnace, 'alloy-forge': makeAlloyForge };
 
 export function makeCampProp(kind, x, y, rand, seed, bake) {
   const make = Object.hasOwn(MAKERS, kind) ? MAKERS[kind] : null;
