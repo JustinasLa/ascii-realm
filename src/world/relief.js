@@ -6,8 +6,9 @@ import { createProp } from './props.js';
 // high is only drawn that much higher on screen, and everything standing on
 // it with it (see docs/terrain.md).
 
-// Rows a metre of height rises on screen: the character's own scale at the
-// camera's pitch, as a jump lifts it.
+// Rows a metre of height rises on screen at the usual camera pitch: the
+// character's own scale, as a jump lifts it. A relief's `rise` is the rows at
+// the current pitch (see camera.js pitchLook).
 export const LIFT_PER_METRE = SCALE * Math.sqrt(1 - TILT * TILT);
 // The most a cell is ever lifted, in rows.
 export const MAX_LIFT = 24;
@@ -25,7 +26,7 @@ export const HILL = {
 const smooth = (u) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
 
 // The hill scene's relief round `spawn`: its bounds, its height in metres
-// at any point, and the scenery standing on it.
+// at any point, the rows a metre rises and the scenery standing on it.
 export function hillRelief(spawn, seed, scene = HILL) {
   const { ridge, knoll } = scene;
   const sx = Math.floor(spawn.x);
@@ -54,6 +55,7 @@ export function hillRelief(spawn, seed, scene = HILL) {
     y0: sy + ridge.dy - ridge.back - ridge.wander - 1,
     y1: Math.max(sy + ridge.dy + ridge.front + ridge.wander, sy + knoll.dy + knoll.ry) + 1,
     heightAt,
+    rise: LIFT_PER_METRE,
     props,
   };
 }
@@ -61,7 +63,7 @@ export function hillRelief(spawn, seed, scene = HILL) {
 // How many rows the ground cell (x, y) is lifted.
 export function liftRows(relief, x, y) {
   if (x < relief.x0 || x > relief.x1 || y < relief.y0 || y > relief.y1) return 0;
-  return Math.min(MAX_LIFT, Math.round(relief.heightAt(x + 0.5, y + 0.5) * LIFT_PER_METRE));
+  return Math.min(MAX_LIFT, Math.round(relief.heightAt(x + 0.5, y + 0.5) * relief.rise));
 }
 
 // The ground row drawn at row `y` of the flat view in column `x`, given

@@ -70,7 +70,7 @@ import { InventoryScreen } from './ui/inventory.js';
 import { PhoneMenu } from './ui/phone-menu.js';
 import { PlayGate } from './ui/play-gate.js';
 import { FrameClock, FramePacer, FrameQuality, renderSize } from './render/budget.js';
-import { Camera, liftView } from './world/camera.js';
+import { Camera, liftView, PITCH, pitchLook } from './world/camera.js';
 import { Ambience, lightsOf } from './world/ambience-fx.js';
 import { Dust } from './world/dust.js';
 import { Fires } from './world/fire.js';
@@ -223,6 +223,9 @@ const inLobby = params.has('room') || sessionHas('ascii-realm-rejoin') || sessio
 // ?scene=hill raises a ridge and a knoll round spawn (see docs/terrain.md);
 // only this page draws relief, so a lobby plays on flat land.
 const hillScene = params.get('scene') === 'hill' && !inLobby;
+// ?debug&pitch=25…45 and [ ] \ tilt the developer camera (see docs/terrain.md);
+// a lobby draws friends at the usual angle, so it keeps that.
+const pitchAllowed = params.has('debug') && !inLobby;
 const world = new World(seed, { ...woodlandOptions(params, { inLobby }), season: params.get('season') ?? undefined,
   maxChunks: baseChunks, meadow: ruinPreview || hillScene, spawnRuins: !ruinPreview && !hillScene,
   ...(hillScene ? { relief: 'hill', rivers: false } : {}) });
@@ -651,12 +654,14 @@ const multiplayer = new MultiplayerClient({
       location.replace(url);
       return;
     }
+    // Friends are drawn from the usual angle, so a debug pitch goes back there.
+    if (lookScale() !== 1) setPitch(PITCH.base);
     // Meet friends where they are, unless this is the lobby's first player.
     if (lobby.self && multiplayer.players.some((member) => member.id !== lobby.id)) {
       player.x = lobby.self.x;
       player.y = lobby.self.y;
       camera.x = player.x;
-      camera.y = player.y - 11;
+      camera.y = player.y - focusRows();
     }
   },
   onSnapshot: (members, selfId) => remotePlayers.sync(members, selfId),
@@ -749,6 +754,11 @@ canvas.addEventListener('pointerleave', () => { pointer = null; });
 
 // How many rows the ground under the player is raised.
 const playerLift = () => world.relief ? world.liftAt(player.x, player.y) : 0;
+// How much taller than usual the camera pitch draws height (see camera.js
+// pitchLook; a camera without one looks from the usual angle), and how far
+// above the feet the camera aims: the figure's middle.
+const lookScale = () => camera.look?.scale ?? 1;
+const focusRows = () => 11 * lookScale();
 // The ground cell under the cursor, or null when it is off the scene. On
 // raised ground it is read on the player's own height, or with `drawn` on
 // the ground drawn under it, where a foe there stands.
@@ -768,7 +778,7 @@ function cursorHeading(fromHips = false) {
   const cursor = cursorCell();
   if (!cursor) return null;
   const mx = (cursor.x - player.x) * ASPECT / SCALE;
-  const mz = (cursor.y - player.y + (fromHips ? 0.9 * SCALE : 0)) / (SCALE * TILT);
+  const mz = (cursor.y - player.y + (fromHips ? 0.9 * SCALE * lookScale() : 0)) / (SCALE * TILT);
   return Math.hypot(mx, mz) > 0.05 ? Math.atan2(mx, mz) : null;
 }
 
@@ -1194,6 +1204,7 @@ ModelFigure.load('assets/ual1.glb')
   .then((m) => {
     model = m;
     debug.model = m;
+    if (lookScale() !== 1) m.setLook(camera.look);
     player.modelTrail = true;
     // Walk and run a little quicker than the clips' own ground speeds; the
     // cadence rises to match, so the feet still keep pace.
@@ -1202,6 +1213,34 @@ ModelFigure.load('assets/ual1.glb')
     player.runSpeed = gait.jog.speed * 1.2;
   })
   .catch((e) => console.error('Could not load the character model', e));
+
+// Tilts the camera to `deg` degrees above the horizon (see camera.js
+// pitchLook): the raised ground and the outlaw are drawn from there. In a
+// lobby it stays at the usual pitch.
+function setPitch(deg) {
+  const look = pitchLook(multiplayer.room ? PITCH.base : deg);
+  if (look === camera.look) return;
+  camera.look = look;
+  world.setRise(look.rise);
+  model?.setLook(look);
+  hud.notify(`Camera pitch ${look.deg}°`);
+}
+// The torch in hand with its height in the usual pitch's rows, so a throw
+// flies and lands the same at any pitch.
+function baseTorchPose() {
+  const pose = model?.torchPose();
+  return pose && lookScale() !== 1 ? { ...pose, h: pose.h / lookScale() } : pose;
+}
+if (pitchAllowed) {
+  debug.setPitch = setPitch;
+  if (params.has('pitch')) setPitch(params.get('pitch'));
+  window.addEventListener('keydown', (e) => {
+    if (isControlTarget(e.target) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.code === 'BracketLeft') setPitch(camera.look.deg - PITCH.step);
+    if (e.code === 'BracketRight') setPitch(camera.look.deg + PITCH.step);
+    if (e.code === 'Backslash') setPitch(PITCH.base);
+  });
+}
 
 // The name floating above the character's head; `top` is the highest row
 // the character covers.
@@ -1331,7 +1370,7 @@ function fallInBattle() {
   mouseHeld = false;
   hitStop = 0;
   camera.x = player.x;
-  camera.y = player.y - 11 - playerLift();
+  camera.y = player.y - focusRows() - playerLift();
   monsters.clear();
   animals.disengage();
   target.clear();
@@ -1471,7 +1510,7 @@ function frame(now) {
     }
     if (sword && armed) player.toggleSword();
     if (torchKey) fireNotice(torchMessages[torches.toggle(player)]);
-    if (toss) fireNotice(torchMessages[torches.throw(player, model?.torchPose())]);
+    if (toss) fireNotice(torchMessages[torches.throw(player, baseTorchPose())]);
     if (campfire) fireNotice(fireMessages[fires.toggle(world, player)]);
     // E and TAKE do the same nearest thing, a ground item before a glowcap;
     // only TAKE puts out a fire, which the keyboard leaves to C.
@@ -1668,7 +1707,7 @@ function frame(now) {
   // Aim at the wanderer's middle rather than their feet.
   const pLift = playerLift();
   if (builder.enabled) builder.updateCamera(dt, move, isDown('ShiftLeft', 'ShiftRight'));
-  else camera.follow(player.x, player.y - 11 - pLift, dt);
+  else camera.follow(player.x, player.y - focusRows() - pLift, dt);
 
   const view = camera.view(renderer);
   // Whatever stands on raised ground is drawn through a view lifted with it.

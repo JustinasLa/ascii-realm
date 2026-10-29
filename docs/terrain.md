@@ -24,7 +24,9 @@ lobby from the scene first reloads the page onto flat land.
 ## How height is drawn
 
 Height is only a lift on screen: ground `h` metres high is drawn
-`h × 11.26` rows higher (at most 24 rows). That is the scale the character
+`h × 11.26` rows higher (at most 24 rows) from the usual camera, 30° above
+the horizon; in general a metre rises `6.5 × cot(pitch)` rows (see
+[Camera pitch](#camera-pitch-developer)). That is the scale the character
 uses for a jump, so the ground, the player and the props on it agree.
 Heights are smooth, rounded to whole rows, not stepped in blocks. Water and
 shore are never raised, even inside the hill, and ground painted over with
@@ -59,6 +61,41 @@ water drops flat.
 - **Scenery builder.** The builder's brush and ghost prop sit on the ground
   drawn under the pointer: the nearest raised top or slope there, else the
   flat ground.
+
+## Camera pitch (developer)
+
+A developer tool for looking at the land from other angles. It stays out of
+normal play: the game is drawn from one fixed camera.
+
+- **Use.** Add `&pitch=25` to `45` (degrees above the horizon) to an address
+  with `?debug`, e.g. `?debug&scene=hill&pitch=45`. With `?debug`, `[` lowers
+  the camera 5° toward the horizon, `]` raises it 5° and `\` puts it back at
+  30°; `game.setPitch(deg)` does the same from the console, also on a phone.
+  The pitch is rounded to a whole degree and kept in range, and anything else
+  means 30°. Each change shows "Camera pitch N°". Nothing is saved. Friends
+  are drawn from the usual angle, so a lobby page ignores it, and joining a
+  lobby puts the camera back at 30° until you leave. It combines with zoom.
+- **What it changes.** Ground depth stays the same at every pitch (6.5 rows a
+  metre); only how far height rises changes. Raised ground is lifted again:
+  the ridge is 22 rows tall at 25°, 18 at 30° and 10 at 45°, so a low camera
+  hides more behind it and a high one sees over it. Everything standing on
+  the ground goes with it. The 3D outlaw is rendered by its camera at the
+  new angle, so at 45° you see more of the top of the hood, and a jump rises
+  in proportion. The camera keeps aiming at the figure's middle, so a pitch
+  change swings the view round the player.
+- **What it leaves alone.** Movement, collision and aim work on the ground,
+  so they are the same at every pitch; close swings are aimed from the hips
+  as drawn, and a thrown torch or arrow lands where it would from 30°.
+  Trees, rocks, grass blades, the shape-built figure, friends, creatures,
+  spells, weather, things in flight and the length of a held torch keep the
+  30° drawing. Because ground depth cannot change, upright things come out
+  shorter than a true view from that angle would show them, ×0.71 at 45°,
+  and taller, ×1.18, at 25°; at 45° the outlaw is drawn a little over half
+  as tall as at 30° and reads squat. The range stops at 25° so the hill
+  never lifts past 24 rows.
+- **No turning round.** The camera only tilts; it does not orbit round the
+  vertical. Chunks, props and the controls all face the screen, so turning
+  the world would need another renderer.
 
 ## Not raised yet
 
