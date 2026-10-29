@@ -10,11 +10,12 @@ export const INTERACT_LINGER = 0.3;
 const FIRE_REACH = 12;
 
 // What the button would do right now, best first: pick up a ground item,
-// release a glowcap's spores, put out a fire. Null when there is nothing.
-// `douse: false` skips the fire, as E does.
-export function interaction({ player, mushrooms, fires, collection = null }, { douse = true } = {}) {
+// use a furnace, release a glowcap's spores, put out a fire. Null when there
+// is nothing. `douse: false` skips the fire, as E does.
+export function interaction({ player, mushrooms, fires, collection = null, furnaces = null }, { douse = true } = {}) {
   const item = collection?.canCollect(player) ? collection.interactionTarget(player).item : null;
   if (item) return { kind: 'pickup', label: 'TAKE', ariaLabel: `Pick up ${ITEMS[item.id]?.name ?? 'item'}` };
+  if (furnaces?.nearby(player)) return { kind: 'furnace', label: 'SMELT', ariaLabel: 'Use the furnace' };
   const node = mushrooms.nearby(player);
   if (node && node.cooldown <= mushrooms.time) {
     return { kind: 'spores', label: 'SPORES', ariaLabel: 'Release spores from the glowcap' };
@@ -30,8 +31,9 @@ export function interaction({ player, mushrooms, fires, collection = null }, { d
 export function performInteraction(context, options) {
   const target = interaction(context, options);
   if (!target) return null;
-  const { player, mushrooms, fires, world, collection } = context;
+  const { player, mushrooms, fires, world, collection, furnaces } = context;
   if (target.kind === 'pickup') return { kind: 'pickup', result: collection.interact(player) };
+  if (target.kind === 'furnace') return { kind: 'furnace', prop: furnaces.nearby(player) };
   if (target.kind === 'spores') return { kind: 'spores', released: mushrooms.interact(player) };
   return { kind: 'fire', result: fires.toggle(world, player) };
 }

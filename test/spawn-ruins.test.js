@@ -8,7 +8,7 @@ import { blocks, createProp } from '../src/world/props.js';
 import * as architecture from '../src/world/architecture-props.js';
 
 const seeds = [1, 42, 221];
-const ids = Array.from({ length: 11 }, (_, i) => `r:spawn:${i}`);
+const ids = Array.from({ length: 12 }, (_, i) => `r:spawn:${i}`);
 const isRuin = prop => prop.id?.startsWith('r:spawn:');
 const sorted = props => [...props].sort((a, b) => Number(a.id.split(':').at(-1)) - Number(b.id.split(':').at(-1)));
 
@@ -138,7 +138,7 @@ for (const seed of seeds) {
     assert.deepEqual([gate.x, gate.y], [world.spawn.x, world.spawn.y - 30]);
     assert.deepEqual(props.map(prop => prop.kind), ['stone-gate', 'wall-broken', 'wall-broken',
       'column-circular-chipped', 'column-square-snapped', 'column-circular-collapsed',
-      'rubble-large', 'rubble-large', 'wall-low', 'wall-low', 'column-square'],
+      'rubble-large', 'rubble-large', 'wall-low', 'wall-low', 'column-square', 'furnace'],
       'new outer walls append slots without changing the original eight identities');
     assert.equal(props.filter(prop => prop.kind.startsWith('wall-')).length, 4);
     for (const [id, dx, dy] of [[3, -84, -4], [4, 90, -9], [5, 108, -72], [6, -126, -34], [7, 130, -36]]) {
@@ -303,7 +303,7 @@ for (const seed of seeds) {
     const scene = new Scenery(world);
     const baseline = structuredClone(ruins(world));
     const gate = baseline.find(prop => prop.kind === 'stone-gate');
-    const erased = [gate.id, 'r:spawn:8', 'r:spawn:9', 'r:spawn:10'];
+    const erased = [gate.id, 'r:spawn:8', 'r:spawn:9', 'r:spawn:10', 'r:spawn:11'];
     for (const id of erased) {
       const prop = baseline.find(prop => prop.id === id);
       assert.equal(scene.erase(prop.x, prop.y, 0), 1);
@@ -342,7 +342,7 @@ for (const seed of seeds) {
     assert.equal(restored.redo(), true);
     assert.deepEqual(ruins(restoredWorld), baseline);
     const clean = restored.serialize();
-    for (const id of ['r:spawn:11', 'r:spawn:-1', 'r:spawn:08', 'r:spawn:9:0', 'r:spawn:9x']) {
+    for (const id of ['r:spawn:12', 'r:spawn:-1', 'r:spawn:08', 'r:spawn:9:0', 'r:spawn:9x', 'r:spawn:x', 'r:spawn:01']) {
       assert.throws(() => restored.load({ ...clean, removed: [id] }), /Invalid removed prop identifier/,
         `out-of-range or malformed generated slot ${id} is rejected`);
       assert.deepEqual(restored.serialize(), clean, 'invalid removals leave the scene unchanged');
@@ -398,4 +398,54 @@ test('ordinary World fixtures stay opt-in and keep the same spawn and distant te
       assert.deepEqual(enabled.chunk(100, -100)[field], ordinary.chunk(100, -100)[field], 'distant terrain is untouched');
     }
   }
+});
+
+test('the forecourt furnace is slot 11, clear of the other slots, the causeway and the starter glowcap', async () => {
+  const { isSpawnRuinId, SPAWN_SLOTS } = await import('../src/world/spawn-ruins.js');
+  const { Mushrooms } = await import('../src/world/mushrooms.js');
+  const { STONE } = await import('../src/world/world.js');
+  assert.equal(SPAWN_SLOTS, 12);
+  for (const id of ['r:spawn:0', 'r:spawn:10', 'r:spawn:11']) assert.equal(isSpawnRuinId(id), true, id);
+  for (const id of ['r:spawn:12', 'r:spawn:01', 'r:spawn:x', 'r:spawn:', 'p:spawn:1', 11]) assert.equal(isSpawnRuinId(id), false, String(id));
+  for (const seed of [1, 2, 3, 4, 5]) {
+    const world = new World(seed, { spawnRuins: true });
+    const { props, terrainAt, bounds } = world.spawnRuins;
+    const furnace = props[11];
+    assert.equal(furnace.id, 'r:spawn:11');
+    assert.equal(furnace.kind, 'furnace');
+    assert.deepEqual([furnace.x, furnace.y], [world.spawn.x + 34, world.spawn.y - 12]);
+    // The spot sits well inside the landmark, so the cleared ground is as before.
+    assert.ok(furnace.x - furnace.footW - 5 > bounds.minX && furnace.x + furnace.footW + 5 < bounds.maxX
+      && furnace.y - furnace.footH - 3 > bounds.minY && furnace.y + furnace.footH + 2 < bounds.maxY);
+    const foot = { minX: furnace.x - furnace.footW - 2, maxX: furnace.x + furnace.footW + 2,
+      minY: furnace.y - furnace.footH - 2, maxY: furnace.y + furnace.footH + 2 };
+    for (const other of props.slice(0, 11)) {
+      for (let y = Math.floor(foot.minY); y <= foot.maxY; y++) {
+        for (let x = Math.floor(foot.minX); x <= foot.maxX; x++) assert.equal(blocks(other, x + 0.5, y + 0.5), false, `${other.id} at ${x}, ${y}`);
+      }
+    }
+    for (let y = Math.floor(furnace.y - furnace.footH); y <= furnace.y + furnace.footH; y++) {
+      for (let x = Math.floor(furnace.x - furnace.footW); x <= furnace.x + furnace.footW; x++) assert.notEqual(terrainAt(x, y), STONE);
+    }
+    // Walkable from spawn to the furnace's west end.
+    const end = { x: furnace.x - furnace.footW - 1, y: furnace.y };
+    for (let t = 0; t <= 1; t += 0.01) {
+      const x = world.spawn.x + (end.x - world.spawn.x) * t, y = world.spawn.y + (end.y - world.spawn.y) * t;
+      assert.ok(world.isWalkable(x, y), `${x}, ${y}`);
+    }
+    // No glowcap stands in front of it.
+    for (const cap of new Mushrooms(world).starters) {
+      assert.ok(Math.abs(cap.x - furnace.x) > furnace.footW + 8 || cap.y < furnace.y, `glowcap at ${cap.x}, ${cap.y}`);
+    }
+  }
+});
+
+test('a fallen log reaching into the landmark from outside it is left out', async () => {
+  const { createSpawnRuins } = await import('../src/world/spawn-ruins.js');
+  const { exclude, bounds } = createSpawnRuins(1, { x: 0.5, y: 51.5 });
+  const outside = { x: bounds.maxX + 20, y: 40, footW: 1, footH: 1 };
+  assert.equal(exclude(outside), false);
+  assert.equal(exclude({ ...outside, colliders: [{ ax: 0, ay: 0, bx: 3, by: 0, r: 1 }] }), false);
+  assert.equal(exclude({ ...outside, colliders: [{ ax: 0, ay: 0, bx: -14, by: 0, r: 1 }] }), true);
+  assert.equal(exclude({ ...outside, x: 0 }), true);
 });
