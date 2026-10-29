@@ -94,6 +94,13 @@ export function chunkLift(relief, cx, cy, size, type) {
   return { lift, rows };
 }
 
+// Brings a chunk's lift at cell `i` in line with its terrain after an edit.
+export function reliftCell(relief, c, size, i) {
+  const ly = Math.floor(i / size);
+  c.lift[i] = c.type[i] <= SHORE ? 0 : liftRows(relief, c.cx * size + i - ly * size, c.cy * size + ly);
+  c.liftRows[ly] = Math.max(...c.lift.subarray(ly * size, (ly + 1) * size));
+}
+
 // Moonlight on a raised cell `lift` rows up whose neighbour in front is
 // lifted `front`: higher ground catches more of it, and a slope falling
 // toward the viewer, away from the moon in the north, less.

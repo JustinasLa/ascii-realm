@@ -370,12 +370,14 @@ export function guardLobbyConnect(client, { dense, storage, reload }) {
   return true;
 }
 
-// The sparse world a dense page reloads into to make a lobby request. It
+// The plain sparse world a dense or hill-scene page reloads into to make a
+// lobby request. It
 // names the request's lobby server, so the reloaded page's Lobby server field,
 // refreshes and invites keep it.
 export function sparseWorldUrl(href, { server = '' } = {}) {
   const url = new URL(href);
   url.searchParams.delete('woodland');
+  url.searchParams.delete('scene');
   if (server.trim()) url.searchParams.set('server', server);
   else url.searchParams.delete('server');
   return url;
@@ -400,12 +402,13 @@ export function resumePendingLobby(client, storage) {
 export const needsWorldReload = (lobby, seed, woodland) => lobby.seed !== seed || woodland === 'dense';
 
 // The address a lobby's world is played at: its seed and code, the lobby
-// server if one was named, and the sparse woods.
+// server if one was named, and the sparse woods on flat land.
 export function lobbyWorldUrl(href, lobby, server) {
   const url = new URL(href);
   url.searchParams.set('seed', lobby.seed);
   url.searchParams.set('room', lobby.code);
   if (server) url.searchParams.set('server', server);
   url.searchParams.delete('woodland');
+  url.searchParams.delete('scene');
   return url;
 }

@@ -18,14 +18,17 @@ spawn point it raises:
 The scene is the same every time for a given seed. It has no rivers or
 ruins, its grass is the lush meadow, and no monsters, animals, birds or fish
 come by unless the address asks for them (`?scene=hill&deer=4`, `&horse=1`). A page in a
-lobby ignores the scene and plays on flat land.
+lobby ignores the scene and plays on flat land, and creating or joining a
+lobby from the scene first reloads the page onto flat land.
 
 ## How height is drawn
 
 Height is only a lift on screen: ground `h` metres high is drawn
 `h × 11.26` rows higher (at most 24 rows). That is the scale the character
 uses for a jump, so the ground, the player and the props on it agree.
-Heights are smooth, rounded to whole rows, not stepped in blocks.
+Heights are smooth, rounded to whole rows, not stepped in blocks. Water and
+shore are never raised, even inside the hill, and ground painted over with
+water drops flat.
 
 - **Ground.** After the flat ground is drawn, each raised ground row is
   drawn again in painter's order among the sprites: its top its lift higher,
@@ -45,7 +48,8 @@ Heights are smooth, rounded to whole rows, not stepped in blocks.
 - **On the ground:** the player (figure, shadow and nameplate), monsters
   (and their health bars), animals, birds on the ground, horses and their
   riders, props, campfires, torches, plants, glowcaps, hunt drops and river
-  debris are drawn as high as the ground under their base. A ridge in front
+  debris are drawn as high as the ground under their base, and so are a
+  fire's or torch's light and sparks and a glowcap's glow. A ridge in front
   hides their feet. A bird in the air flies over the ground under it.
 - **Camera and aim.** The camera follows the player's lifted figure, and the
   cursor is read on the player's own height, so a click aims where it looks.
@@ -62,6 +66,11 @@ a slope its sides can sit a row off the ground.
 
 ## Walking on slopes
 
-Every slope is walkable for now: height changes nothing about movement or
-speed. How steep a slope may be before it needs a jump or blocks the way is
-to be specified separately.
+Every slope is walkable for now: height changes nothing about movement,
+speed or falling, so the player walks over the ridge as over flat land.
+
+Rules for climbing are planned but not built yet. For each metre walked, a
+rise of up to 0.6 m is a step, a rise of up to 1.25 m needs a jump, and
+anything steeper blocks the way. Any drop can be walked down, but a fall of
+more than 3 m costs a point of health for every metre beyond 3. Slopes will
+not change walking speed.

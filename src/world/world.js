@@ -6,7 +6,7 @@ import { minedKey, placeVeins } from './ore-veins.js';
 import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
-import { chunkLift, hillRelief, liftRows, MAX_LIFT } from './relief.js';
+import { chunkLift, hillRelief, MAX_LIFT, reliftCell } from './relief.js';
 import { createSpawnRuins } from './spawn-ruins.js';
 import { groveField, groveProps } from './woodland.js';
 
@@ -237,11 +237,10 @@ export class World {
     const elev = Float32Array.from(height);
     const baseType = type.slice();
     const baseElev = elev.slice();
-    const lifted = this.relief ? chunkLift(this.relief, cx, cy, CHUNK, type) : null;
     const chunk = { cx, cy, type, elev, baseType, baseElev, shade, rnd, grassHeight, grassDensity, grassStyle,
       grove, baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
       // How many rows each cell is raised, and each row at most (see relief.js).
-      lift: lifted?.lift ?? null, liftRows: lifted?.rows ?? null,
+      lift: null, liftRows: null,
       flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null,
       // The water shader times a river's foam by its water's own lines.
       rivers: flow ? this.rivers : null };
@@ -253,6 +252,9 @@ export class World {
         if (edit !== undefined) this.applyTerrain(chunk, ly * CHUNK + lx, edit);
       }
     }
+    // Lifted once its terrain is final: water and shore are never raised.
+    const lifted = this.relief ? chunkLift(this.relief, cx, cy, CHUNK, type) : null;
+    if (lifted) Object.assign(chunk, { lift: lifted.lift, liftRows: lifted.rows });
     for (const i of this.bareGround.get(chunkKey(cx, cy))?.keys() ?? []) grassHeight[i] = 0;
     chunk.blades = grassRoots(chunk, s, CHUNK, { flora: this.flora, meadow: this.meadow });
     return chunk;
@@ -327,6 +329,7 @@ export class World {
     } else {
       c.grassHeight[i] = 0;
     }
+    if (c.lift) reliftCell(this.relief, c, CHUNK, i);
     // Painting or restoring meadow beneath a solid still respects its footprint.
     const cover = this.meadow && this.bareGround.get(chunkKey(c.cx, c.cy))?.get(i);
     if (cover) {
@@ -736,10 +739,17 @@ export class World {
     return out;
   }
 
-  // How many rows the ground at (x, y) is lifted; worked out without
-  // generating its chunk.
+  // How many rows the ground at (x, y) is lifted, as its ground is drawn:
+  // its chunk's own lift (water and shore are never raised), and none where
+  // no chunk is loaded. It never generates a chunk.
   liftAt(x, y) {
-    return this.relief ? liftRows(this.relief, Math.floor(x), Math.floor(y)) : 0;
+    if (!this.relief) return 0;
+    x = Math.floor(x);
+    y = Math.floor(y);
+    const cx = Math.floor(x / CHUNK);
+    const cy = Math.floor(y / CHUNK);
+    const lift = this.chunks.get(chunkKey(cx, cy))?.lift;
+    return lift ? lift[(y - cy * CHUNK) * CHUNK + x - cx * CHUNK] : 0;
   }
 
   // The chunk if it has been generated, without generating it.
