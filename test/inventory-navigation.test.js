@@ -47,7 +47,7 @@ test('vertical bag navigation wraps within each column, including an incomplete 
 
 test('an empty equipment slot names no key on phones', () => {
   assert.equal(emptySlotHint(false), 'Click gear in the bag to equip it.');
-  assert.equal(emptySlotHint(false, true), 'Tap gear in the bag twice to equip it.');
+  assert.equal(emptySlotHint(false, true), 'Tap gear in the bag to equip it.');
   assert.doesNotMatch(emptySlotHint(false, true), /press|\bE\b/);
   assert.equal(emptySlotHint(true, true), emptySlotHint(true));
 });
