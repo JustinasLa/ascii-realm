@@ -39,7 +39,7 @@ function slotFor(furnace, stack) {
 function stackOf(data, allowed) {
   if (data === null) return null;
   const { id, count } = data ?? {};
-  return allowed(id) && Number.isSafeInteger(count) && count >= 1 && count <= ITEMS[id].stackLimit
+  return typeof id === 'string' && allowed(id) && Number.isSafeInteger(count) && count >= 1 && count <= ITEMS[id].stackLimit
     ? { id, count } : undefined;
 }
 

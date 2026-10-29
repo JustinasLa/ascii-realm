@@ -281,6 +281,7 @@ test('saved states validate every field', () => {
     { ...good, input: { id: 'rawIron', count: 0 } }, { ...good, input: { id: 'rawIron', count: 65 } },
     { ...good, input: { id: 'rawIron', count: 1.5 } }, { ...good, fuel: { id: 'rawIron', count: 1 } },
     { ...good, output: { id: 'rawIron', count: 1 } }, { ...good, output: { id: 'toString', count: 1 } },
+    { ...good, input: { id: { toString: null }, count: 1 } }, { ...good, fuel: { id: ['coal'], count: 1 } },
     { ...good, burnTotal: 50 }, { ...good, burn: 81 }, { ...good, burn: -1 }, { ...good, burn: '4' },
     { ...good, cook: 10.5 }, { ...good, cook: -0.1 }, { ...good, cook: NaN },
   ];
@@ -396,6 +397,8 @@ test('bad saves load nothing, bad entries only themselves', () => {
   const key = 'ascii-realm-furnaces-1';
   const loaded = (value) => new Furnaces({ storage: memory({ [key]: value }), seed: 1 }).states;
   assert.deepEqual([...loaded(JSON.stringify({ v: 1, furnaces: { a: good, b: { ...good, cook: 11 }, ['x'.repeat(65)]: good } })).keys()], ['a']);
+  const odd = JSON.stringify({ v: 1, furnaces: { a: good, b: { ...good, fuel: { id: { toString: null }, count: 1 } } } });
+  assert.deepEqual([...loaded(odd).keys()], ['a'], 'an id that is not a string drops only its entry');
   for (const value of ['{', JSON.stringify({ v: 2, furnaces: { a: good } }), JSON.stringify({ v: 1 }),
     JSON.stringify({ v: 1, furnaces: 'a' }), 'null']) assert.equal(loaded(value).size, 0, value);
   const many = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`s:${i}`, good]));
