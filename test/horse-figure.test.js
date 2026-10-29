@@ -929,3 +929,28 @@ test('a pitched camera frames horse and rider, and reads ground rows, where the 
   const look = pitchLook(45);
   assert.ok(Math.abs(ground(look, { ...frame, sin: look.sin, cos: look.cos })) < 1e-9);
 });
+
+test('a pitch change redraws a horse whose cells were drawn from the old pitch', async () => {
+  const { pitchLook } = await import('../src/world/camera.js');
+  let f;
+  const gpu = fakeGPU(() => f, (i, j, w, h) => 140 + Math.round((j / h) * 80));
+  f = figures({ renderer: gpu });
+  const h = new Horse(0, 0, { heading: Math.PI / 2 });
+  f.update(dt, [h]);
+  const rows = ([figure]) => figure.cells.map((c) => c.row);
+  const usual = rows(f.rasterise(view, [h], h));
+  const was = f.rigOf(h).raster.slot;
+  assert.equal(gpu.reads, 1);
+  f.rasterise(view, [h], h);
+  assert.equal(gpu.reads, 1, 'still and unpitched, the cells serve');
+  const look = pitchLook(45);
+  f.setLook(look);
+  const slot = f.slotOf(h, view);
+  assert.ok(slot.cy0 >= was.cy0 && slot.cy0 + slot.rows <= was.cy0 + was.rows, 'the steeper pitch fits the old slot');
+  const low = rows(f.rasterise(view, [h], h));
+  assert.equal(gpu.reads, 2, 'redrawn from the new pitch');
+  assert.notDeepEqual(low, usual, 'ground rows read at the new pitch');
+  f.setLook(look);
+  f.rasterise(view, [h], h);
+  assert.equal(gpu.reads, 2, 'the same pitch again keeps them');
+});

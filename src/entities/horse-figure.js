@@ -753,10 +753,13 @@ export class HorseFigures {
 
   // Views the horses and riders from the camera pitch `look` (see camera.js pitchLook):
   // ground depth stays as it is and height rises `look.rise` rows a metre.
+  // The cells last drawn were seen from the old pitch, so none still serve.
   setLook(look) {
+    if (look === this.pitch) return;
     this.pitch = look;
     this.camera.position.set(0, look.sin * D, look.cos * D);
     this.camera.lookAt(0, 0, 0);
+    for (const rig of this.rigs.values()) rig.raster = null;
   }
 
   grow(width, height) {
