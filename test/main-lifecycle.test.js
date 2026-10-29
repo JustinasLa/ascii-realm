@@ -82,9 +82,11 @@ test('the bow shoots from the quiver first, and the arrow picked up again rejoin
   };
   const notes = [];
   game.hud.notify = (text) => notes.push(text);
-  game.inventory.add('longbow');
+  // A bronze bow, so the iron arrow cannot borrow its material.
+  game.inventory.add('longbow', 1, { material: 'bronze' });
   game.inventory.equip(game.inventory.slots.findIndex(stack => stack?.id === 'longbow'));
   frame();
+  assert.equal(game.player.weapon.material, 'bronze');
   shoot();
   assert.deepEqual(notes, ['Out of arrows.']);
   assert.equal(game.projectiles.list.length, 0);
@@ -105,7 +107,8 @@ test('the bow shoots from the quiver first, and the arrow picked up again rejoin
   game.projectiles.landed.push(shot);
   frame();
   assert.equal(game.projectiles.landed.length, 0);
-  assert.equal(game.inventory.equipment.quiver.count, 3);
+  assert.deepEqual({ ...game.inventory.equipment.quiver }, { id: 'arrow', count: 3, material: 'iron' },
+    'the picked-up arrow rejoins its iron stack in the quiver');
   assert.equal(game.inventory.countOf('arrow'), 7);
 });
 
