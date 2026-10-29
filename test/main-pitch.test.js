@@ -164,3 +164,11 @@ test('a torch thrown at any pitch leaves the hand at the usual height', async ()
   assert.deepEqual({ ...heights[0] }, { x: 1, y: 2, h: 20 / pitchLook(45).scale });
   assert.deepEqual({ ...heights[1] }, { x: 1, y: 2, h: 20 });
 });
+
+test('meeting friends in a lobby puts the camera over the player from the usual angle', async () => {
+  const { game, camera } = await pitchGame('debug&room=ABC234');
+  game.multiplayer.players = [{ id: 'me' }, { id: 'friend' }];
+  game.multiplayer.onJoin({ seed: 1, code: 'ABC234', id: 'me', self: { x: 40, y: 70 } });
+  assert.deepEqual([game.player.x, game.player.y], [40, 70]);
+  assert.deepEqual([camera.x, camera.y], [40, 59]);
+});
