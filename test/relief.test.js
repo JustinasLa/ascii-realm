@@ -2,13 +2,17 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { liftView } from '../src/world/camera.js';
 import { chunkLift, HILL, hillRelief, LIFT_PER_METRE, liftRows, MAX_LIFT, reliefLight } from '../src/world/relief.js';
-import { CHUNK_SIZE, SHORE, WATER, World } from '../src/world/world.js';
+import { CHUNK_SIZE, GRASS, SHORE, WATER, World } from '../src/world/world.js';
 
 const hill = new World(1, { relief: 'hill', rivers: false });
 const { x: sx0, y: sy0 } = hill.spawn;
 const sx = Math.floor(sx0);
 const sy = Math.floor(sy0);
 const box = hill.relief;
+// The ground is lifted as it is drawn, from its loaded chunks.
+for (let cy = Math.floor((box.y0 - 1) / CHUNK_SIZE); cy <= Math.floor((box.y1 + 2) / CHUNK_SIZE); cy++) {
+  for (let cx = Math.floor((box.x0 - 1) / CHUNK_SIZE); cx <= Math.floor((box.x1 + 1) / CHUNK_SIZE); cx++) hill.chunk(cx, cy);
+}
 
 function* cells() {
   for (let y = box.y0 - 1; y <= box.y1 + 1; y++) for (let x = box.x0 - 1; x <= box.x1 + 1; x++) yield [x, y];
@@ -47,6 +51,52 @@ test('every lift is in range, water is never raised and slopes are gentle', () =
   }
   assert.ok(water > 0, 'the lake edge reaches the box');
   assert.ok(drop <= 2, `steepest drop ${drop}`);
+});
+
+test('the lift of ground no chunk is loaded for is none, and asking loads nothing', () => {
+  const fresh = new World(1, { relief: 'hill', rivers: false });
+  fresh.chunks.clear();
+  assert.equal(fresh.liftAt(sx + 20, sy - 24), 0);
+  assert.equal(fresh.chunks.size, 0);
+  fresh.chunk(Math.floor((sx + 20) / CHUNK_SIZE), Math.floor((sy - 24) / CHUNK_SIZE));
+  assert.equal(fresh.liftAt(sx + 20, sy - 24), hill.liftAt(sx + 20, sy - 24));
+});
+
+test('water and shore inside the relief stay flat for the ground and for whatever stands there', () => {
+  // A relief a metre high over the whole box, lake edge and all.
+  const wet = new World(1, { relief: 'hill', rivers: false });
+  wet.relief.heightAt = () => 1;
+  wet.chunks.clear();
+  const lifts = { [WATER]: new Set(), [SHORE]: new Set(), [GRASS]: new Set() };
+  for (const [x, y] of cells()) {
+    const { c, i } = wet.locate(x, y);
+    if (x < box.x0 || x > box.x1 || y < box.y0 || y > box.y1) continue;
+    lifts[c.type[i]]?.add(wet.liftAt(x + 0.5, y + 0.5));
+    assert.equal(wet.liftAt(x, y), c.lift[i]);
+  }
+  assert.deepEqual([...lifts[WATER]], [0]);
+  assert.deepEqual([...lifts[SHORE]], [0]);
+  assert.deepEqual([...lifts[GRASS]], [11]);
+});
+
+test('painting water on raised ground flattens it, and restoring the ground raises it again', () => {
+  const edited = new World(1, { relief: 'hill', rivers: false });
+  // A crest cell.
+  const x = sx + 20;
+  const y = sy - 50 + Array.from({ length: 60 }, (_, k) => hill.liftAt(x, sy - 50 + k)).indexOf(18);
+  const { c, i } = edited.locate(x, y);
+  const ly = Math.floor(i / CHUNK_SIZE);
+  const row = () => Math.max(...c.lift.subarray(ly * CHUNK_SIZE, (ly + 1) * CHUNK_SIZE));
+  assert.equal(edited.liftAt(x, y), 18);
+  edited.setTerrain(x, y, WATER);
+  assert.equal(edited.liftAt(x, y), 0);
+  assert.equal(c.liftRows[ly], row());
+  // An edit replayed on a regenerated chunk keeps it flat too.
+  edited.chunks.clear();
+  assert.equal(edited.locate(x, y).c.lift[i], 0);
+  edited.setTerrain(x, y, c.baseType[i]);
+  assert.equal(edited.liftAt(x, y), 18);
+  assert.equal(edited.locate(x, y).c.liftRows[ly], 18);
 });
 
 test('a chunk keeps the most any cell of each row is lifted', () => {

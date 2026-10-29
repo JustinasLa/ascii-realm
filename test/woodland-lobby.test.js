@@ -39,13 +39,18 @@ test('a sparse page connects straight away, and a broken or missing request is i
   assert.equal(guardLobbyConnect(client, { dense: false, storage: storage(), reload: () => assert.fail() }), false);
   client.connect({ mode: 'create' });
   assert.equal(client.requests.length, 1);
-  // Without storage the dense page still never connects.
-  const blocked = fakeClient();
-  let reloads = 0;
-  guardLobbyConnect(blocked, { dense: true, storage: null, reload: () => reloads++ });
-  blocked.connect({ mode: 'join', code: 'ABC234' });
-  assert.equal(reloads, 1);
-  assert.equal(blocked.requests.length, 0);
+  // Without storage, or when it refuses the request, the dense page neither
+  // connects nor reloads, which would lose the request, but says so.
+  const refuses = { setItem: () => { throw new Error('QuotaExceededError'); } };
+  for (const kept of [null, refuses]) {
+    const blocked = fakeClient();
+    const told = [];
+    guardLobbyConnect(blocked, { dense: true, storage: kept, reload: () => assert.fail('reloaded'),
+      blocked: (request) => told.push(request) });
+    blocked.connect({ mode: 'join', name: 'Kael', seed: 7, code: 'ABC234' });
+    assert.deepEqual(told, [{ mode: 'join', name: 'Kael', seed: 7, code: 'ABC234', server: '' }]);
+    assert.equal(blocked.requests.length, 0);
+  }
   assert.equal(resumePendingLobby(fakeClient(), null), null);
   assert.equal(resumePendingLobby(fakeClient(), storage({ [PENDING_LOBBY]: '{not json' })), null);
   assert.equal(resumePendingLobby(fakeClient(), storage({ [PENDING_LOBBY]: '{"mode":"steal"}' })), null);

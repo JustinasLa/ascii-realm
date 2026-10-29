@@ -129,7 +129,7 @@ function dress(rig, capeSim, equipment, weapon = null, skin = DEFAULT_SKIN) {
 
   quiverAndBow(d, rig);
   tunic(d, rig, wearing('chest'));
-  if (equipment === undefined || equipment?.mainHand?.id === 'shortSword') sword(d, rig);
+  if (equipment === undefined || equipment?.mainHand?.id === 'shortSword') sword(d, rig, tintOf(equipment?.mainHand, weapon));
   else if (weapon && rig.sword) heldWeapon(d, rig.sword, weapon);
 
   for (const a of rig.arms) {
@@ -149,16 +149,18 @@ function dress(rig, capeSim, equipment, weapon = null, skin = DEFAULT_SKIN) {
 }
 
 // Weapon sprite materials, by the names weapons.js uses. Metal takes the
-// colour of the weapon's material tier.
+// colour of the weapon's material tier: bright on the blade, dark on plates,
+// and in between on the short sword's fittings.
 const WEAPON_MAT = { blade: 'blade', darkPlate: 'iron', trim: 'iron', leather: 'leather', wood: 'wood',
-  string: 'feather', arrow: 'wood', cloth: 'leather' };
+  string: 'feather', arrow: 'wood', cloth: 'leather', fitting: 'iron' };
+const METAL_SHADE = { blade: 1, darkPlate: 0.4, fitting: 0.66 };
 const tinted = new Map();
 function weaponMat(weapon, name) {
   const base = MATERIALS[WEAPON_MAT[name] ?? 'iron'] ?? MATERIALS.iron;
-  if (name !== 'blade' && name !== 'darkPlate' || !weapon.materialColor) return base;
+  if (!METAL_SHADE[name] || !weapon.materialColor) return base;
   const key = `${name}:${weapon.materialColor.join()}`;
   if (!tinted.has(key)) {
-    const color = name === 'darkPlate' ? weapon.materialColor.map((c) => c * 0.4) : weapon.materialColor;
+    const color = weapon.materialColor.map((c) => c * METAL_SHADE[name]);
     tinted.set(key, { ...base, color });
   }
   return tinted.get(key);
@@ -372,9 +374,15 @@ function quiverAndBow(d, rig) {
   }
 }
 
+// Short swords keep their own bright steel; a smithed one is drawn in its
+// metal's colour.
+const tintOf = (stack, weapon) => stack?.forged && weapon ? weapon : null;
+
 // A short sword hung from the belt on the off-hand hip, ready for a cross
 // draw. Once drawn the scabbard hangs empty and the blade is in hand.
-function sword(d, rig) {
+function sword(d, rig, weapon = null) {
+  const blade = weapon ? weaponMat(weapon, 'blade') : 'blade';
+  const fitting = weapon ? weaponMat(weapon, 'fitting') : 'iron';
   const at = rig.at;
   const side = -SWORD_SIDE;
   const mouth = at([side * 0.15, 0.0, 0.07]);
@@ -387,17 +395,17 @@ function sword(d, rig) {
     const grip = sub(mouth, mul(sub(tip, mouth), 0.2));
     const guardA = at([side * 0.1, 0.02, 0.08]);
     const guardB = at([side * 0.2, -0.02, 0.06]);
-    d.limb(guardA, guardB, 0.016, 0.016, 'iron', 0.03);
+    d.limb(guardA, guardB, 0.016, 0.016, fitting, 0.03);
     d.limb(mouth, grip, 0.018, 0.018, 'leather', 0.03);
-    d.blob(grip, 0.026, 0.026, 'iron', 0.031);
+    d.blob(grip, 0.026, 0.026, fitting, 0.031);
     return;
   }
-  // In hand: a bright blade with a dark fuller and a plain iron cross.
-  d.limb(sw.guard, sw.tip, 0.026, 0.005, sw.glow ? 'bladeGlow' : 'blade', 0.03);
-  d.limb(lerp3(sw.guard, sw.tip, 0.05), lerp3(sw.guard, sw.tip, 0.65), 0.007, 0.005, 'iron', 0.031);
-  d.limb(sw.barA, sw.barB, 0.018, 0.018, 'iron', 0.032);
+  // In hand: a bright blade with a dark fuller and a plain cross.
+  d.limb(sw.guard, sw.tip, 0.026, 0.005, sw.glow ? 'bladeGlow' : blade, 0.03);
+  d.limb(lerp3(sw.guard, sw.tip, 0.05), lerp3(sw.guard, sw.tip, 0.65), 0.007, 0.005, fitting, 0.031);
+  d.limb(sw.barA, sw.barB, 0.018, 0.018, fitting, 0.032);
   d.limb(sw.pommel, sw.guard, 0.018, 0.018, 'leather', 0.02);
-  d.blob(sw.pommel, 0.026, 0.026, 'iron', 0.021);
+  d.blob(sw.pommel, 0.026, 0.026, fitting, 0.021);
 }
 
 // The hooded cloak: one cloth panel per link of the simulated chain,

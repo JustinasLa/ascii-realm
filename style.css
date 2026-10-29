@@ -208,10 +208,10 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 /* The inventory is a larger member of the same framed panel family. */
 #inventory-root::before { content: ""; position: absolute; inset: 0; background: #0205059c; opacity: 0; transition: opacity 120ms; }
 #inventory-root.is-open::before { opacity: 1; }
-.inventory-open .hud { opacity: 0.2; }
-.inventory-open .hud button { pointer-events: none; }
-.inventory-open :is(#panel-dock, #touch-controls) { visibility: hidden; }
-.inventory-open #fire-status { opacity: 0; }
+:is(.inventory-open, .station-open) .hud { opacity: 0.2; }
+:is(.inventory-open, .station-open) .hud button { pointer-events: none; }
+:is(.inventory-open, .station-open) :is(#panel-dock, #touch-controls) { visibility: hidden; }
+:is(.inventory-open, .station-open) #fire-status { opacity: 0; }
 .inventory-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(740px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 10px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); color: var(--ink); background: rgba(6, 9, 10, 0.97); border: 1px solid var(--frame); font-size: 11px; pointer-events: auto; }
 .inventory-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding-bottom: 8px; background: var(--solid); border-bottom: 1px solid var(--line); }
 .inventory-identity { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
@@ -278,6 +278,79 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
    one marked [ ]. */
 .inventory-header { flex-wrap: wrap; }
 .inventory-tabs { order: 3; display: flex; flex-basis: 100%; gap: 4px; }
+/* The furnace: input over fuel with the flame between, the arrow, the
+   output; the satchel's resources below. */
+.furnace-screen { width: min(560px, calc(100% - 32px)); }
+.furnace-layout { display: grid; gap: 10px; }
+.furnace-main, .furnace-satchel { min-width: 0; padding: 8px; border: 1px solid var(--line); }
+.furnace-works { display: grid; grid-template-columns: auto 1fr auto; align-items: center; justify-items: center; gap: 8px; }
+.furnace-column { display: grid; justify-items: center; gap: 2px; }
+.furnace-screen .furnace-slot { position: relative; display: grid; place-items: center; width: 64px; height: 64px; padding: 0; }
+.furnace-slot.empty { border-style: dotted; }
+.furnace-slot-art, .furnace-bag-art, .forge-slot-art { width: 11ch; font-size: 5px; line-height: 5px; white-space: pre; text-align: left; }
+.furnace-bag-art { grid-row: span 2; }
+.furnace-slot-count { position: absolute; right: 3px; bottom: 3px; font-size: 9px; line-height: 1; }
+.furnace-slot-caption { position: absolute; top: 3px; left: 3px; color: var(--quiet); font-size: 8px; line-height: 1; }
+.furnace-flame, .furnace-arrow { margin: 0; color: var(--quiet); font-size: 11px; line-height: 1.1; }
+.furnace-flame.lit { color: #f0a050; }
+.furnace-status { margin: 8px 0 0; color: var(--muted); }
+.furnace-bag-list { margin-top: 6px; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; }
+:is(.furnace-screen, .forge-screen, .smith-screen) .furnace-bag-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto auto; align-items: center; column-gap: 6px; min-height: 44px; padding: 3px 6px; text-align: left; }
+.furnace-bag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.furnace-bag-target { grid-column: 2 / 4; color: var(--quiet); font-size: 10px; }
+:is(.furnace-screen, .forge-screen, .smith-screen) .furnace-bag-item[aria-disabled="true"], .furnace-bag-item[aria-disabled="true"] .furnace-bag-name, .furnace-empty { margin: 0; color: var(--quiet); }
+:is(.furnace-screen, .forge-screen, .smith-screen) :is(.furnace-bag-item, button)[aria-disabled="true"]:hover { background: transparent; border-color: var(--line); }
+/* The alloy forge: five slots, Fire, Empty and Take, and the naming row
+   after a discovery; the satchel and the known alloys below. */
+.forge-screen { width: min(620px, calc(100% - 32px)); }
+.forge-layout, .forge-side { display: grid; gap: 10px; min-width: 0; }
+.forge-main, .forge-side > section { min-width: 0; padding: 8px; border: 1px solid var(--line); }
+.forge-slots { display: grid; grid-template-columns: repeat(5, 56px); gap: 6px; }
+.forge-slot { position: relative; display: grid; place-items: center; height: 56px; border: 1px solid var(--frame); }
+.forge-slot.empty { border: 1px dotted var(--line); }
+.forge-slot-caption { position: absolute; right: 3px; bottom: 3px; left: 3px; overflow: hidden; color: var(--quiet); font-size: 8px; line-height: 1; white-space: nowrap; text-overflow: ellipsis; }
+.forge-status, .forge-result { margin: 6px 0 0; color: var(--muted); }
+.forge-actions, .forge-name-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.forge-screen :is(.forge-actions, .forge-name-row) button { min-height: 32px; padding: 4px 10px; }
+.forge-screen button[aria-disabled="true"] { color: var(--quiet); border-style: dotted; }
+.forge-naming { position: relative; margin-top: 10px; padding: 8px 8px 8px 64px; border: 1px solid #dbaf1d; }
+.forge-burst { position: absolute; top: 8px; left: 10px; margin: 0; color: #dbaf1d; font-size: 12px; line-height: 1.1; opacity: 0.45; animation: forge-burst 1.2s ease-out; }
+@keyframes forge-burst { from { opacity: 1; transform: scale(1.4); } }
+.forge-discovered, .forge-countdown { margin: 0; }
+.forge-countdown { color: var(--quiet); font-size: 10px; }
+.forge-name { flex: 1 1 140px; min-width: 0; min-height: 32px; padding: 4px 6px; color: var(--ink); background: transparent; border: 1px solid var(--frame); border-radius: 0; font: inherit; }
+.forge-known { max-height: 220px; margin: 6px 0 0; padding: 0; overflow: auto; list-style: none; }
+.forge-known-item { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+.forge-known-recipe, .forge-known-stats { grid-column: 2; color: var(--quiet); font-size: 10px; }
+/* The weapon station: the recipes, or the piece's metal beside the anvil,
+   the six hit buttons, Finish and Cancel; the report; the satchel below. */
+.smith-screen { width: min(640px, calc(100% - 32px)); }
+.smith-layout { display: grid; gap: 10px; min-width: 0; }
+.smith-main { min-width: 0; padding: 8px; border: 1px solid var(--line); }
+.smith-piece, .smith-total { margin: 0 0 6px; color: var(--muted); }
+.smith-recipes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.smith-screen .smith-recipe { display: grid; min-height: 44px; padding: 4px 8px; text-align: left; }
+.smith-recipe-metal { color: var(--quiet); font-size: 10px; }
+.smith-bench { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.smith-slots { display: grid; grid-template-columns: repeat(4, 56px); gap: 6px; }
+.smith-slot { position: relative; display: grid; place-items: center; height: 56px; border: 1px solid var(--frame); }
+.smith-slot.empty { border: 1px dotted var(--line); }
+.smith-slot-art { width: 11ch; font-size: 5px; line-height: 5px; white-space: pre; text-align: left; }
+.smith-slot .forge-alloy-name { position: absolute; right: 3px; bottom: 3px; left: 3px; overflow: hidden; color: var(--quiet); font-size: 8px; line-height: 1; white-space: nowrap; text-overflow: ellipsis; }
+.smith-anvil { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.1; }
+.smith-anvil.struck { color: #f0a050; }
+.smith-hits { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin: 8px 0 6px; }
+.smith-screen .smith-hit { display: grid; justify-items: center; min-height: 44px; padding: 2px; touch-action: manipulation; }
+.smith-hit kbd { color: var(--quiet); font-size: 9px; }
+.smith-hit-name { font-size: 10px; white-space: nowrap; }
+.smith-hit-count { color: var(--ink); }
+.smith-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.smith-screen :is(.smith-actions button, .smith-take) { min-height: 32px; padding: 4px 10px; }
+.smith-screen button[aria-disabled="true"] { color: var(--quiet); border-style: dotted; }
+.smith-report { margin: 0 0 8px; padding: 6px 8px; border: 1px solid #dbaf1d; }
+.smith-report p { margin: 0; }
+@media (max-width: 560px) { .smith-hits { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.hud-toast[data-kind="discovery"] { border-left: 3px solid #dbaf1d; }
 .inventory-screen .inventory-tab { min-height: 24px; padding: 2px 8px; font-size: 11px; }
 .inventory-screen .inventory-tab.selected { color: var(--ink); border-color: var(--frame); }
 .inventory-tab::before { content: "\00a0"; }
@@ -455,6 +528,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hud, #fire-status, #inventory-root::before, .hud-purse-value { transition: none; }
+  .forge-burst { animation: none; }
 }
 /* The bound rune sits above the hotbar; the rune wheel picks it. */
 
@@ -597,7 +671,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #phone-menu::before { content: ""; position: absolute; inset: 7px; background: var(--surface); border: 1px solid var(--frame); }
   #phone-menu > span { position: relative; }
   #phone-menu:active::before { background: var(--hover); }
-  :is(.inventory-open, .phone-menu-open, .spell-wheel-open) #phone-menu { display: none; }
+  :is(.inventory-open, .station-open, .phone-menu-open, .spell-wheel-open) #phone-menu { display: none; }
 
   /* The menu re-uses the panel dock as a full-screen sheet. */
   body.phone-menu-open #panel-dock { display: flex !important; inset: 0; top: 0; right: 0; left: 0; bottom: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; align-items: stretch; gap: 6px; padding: 0 max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); background: rgba(6, 9, 10, 0.97); overflow-y: auto; overscroll-behavior: contain; pointer-events: auto; }
@@ -620,7 +694,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat-open::before { content: ""; position: absolute; inset: 4px; background: var(--surface); border: 1px solid var(--frame); }
   #chat-open:active::before { background: var(--hover); }
   #chat-open > span { position: relative; }
-  :is(.inventory-open, .phone-menu-open, .spell-wheel-open, .play-gated, .chat-open) #chat-open { display: none; }
+  :is(.inventory-open, .station-open, .phone-menu-open, .spell-wheel-open, .play-gated, .chat-open) #chat-open { display: none; }
   body.chat-open #touch-controls { visibility: hidden; }
   body.chat-open .hud { opacity: 0.6; }
   #chat.open { left: max(8px, env(safe-area-inset-left)); right: max(8px, env(safe-area-inset-right)); bottom: calc(var(--chat-kb, 0px) + max(8px, env(safe-area-inset-bottom))); width: auto; }
@@ -634,6 +708,16 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   /* The inventory is a full-screen sheet too. */
   .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
   .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
+  .furnace-screen .furnace-slot { width: 72px; height: 72px; }
+  .furnace-bag-list { grid-template-columns: minmax(0, 1fr); }
+  :is(.furnace-screen, .forge-screen, .smith-screen) .furnace-bag-item { min-height: 48px; }
+  .forge-screen :is(.forge-actions, .forge-name-row) button { flex: 1 1 100%; min-height: 44px; }
+  .forge-screen .forge-name { min-height: 44px; font-size: 16px; }
+  .forge-known { max-height: none; }
+  .smith-recipes { grid-template-columns: minmax(0, 1fr); }
+  .smith-screen .smith-recipe { min-height: 48px; }
+  .smith-screen .smith-hit { min-height: 56px; }
+  .smith-screen :is(.smith-actions button, .smith-take) { flex: 1 1 100%; min-height: 44px; }
   /* The character creator (see .creator-panel below): a bottom sheet with
      the outlaw framed above it; in landscape a side panel (in the landscape
      block). Both keep to the visual viewport (CharacterCreator sets
@@ -666,6 +750,21 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat:not(.open) .chat-line:nth-last-child(n+3) { display: none; }
   #chat.open { transform: none; }
   #chat.open #chat-log { max-height: calc(5 * 13px + 8px); }
+  /* The furnace beside the satchel, each scrolling on its own. */
+  .furnace-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .furnace-satchel { max-height: calc(100dvh - 72px); overflow: auto; }
+  .furnace-screen .furnace-slot { width: 56px; height: 56px; }
+  :is(.furnace-screen, .forge-screen, .smith-screen) .furnace-bag-item { min-height: 44px; }
+  /* The forge on the left, the satchel and the known alloys on the right. */
+  .forge-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .forge-main, .forge-side { max-height: calc(100dvh - 72px); overflow: auto; }
+  .forge-screen :is(.forge-actions, .forge-name-row) button { flex-basis: auto; }
+  /* The piece and its hit buttons on the left, the satchel on the right. */
+  .smith-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .smith-main, .smith-layout > .furnace-satchel { max-height: calc(100dvh - 72px); overflow: auto; }
+  .smith-recipes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .smith-screen .smith-hit { min-height: 44px; }
+  .smith-screen :is(.smith-actions button, .smith-take) { flex-basis: auto; }
   /* The character creator's side panel (see .creator-panel below). */
   #creator-root .creator-panel { top: var(--creator-kb-top, 0px); left: auto; width: min(50vw, 420px); height: auto; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) 0; border-width: 0 0 0 1px; }
 }

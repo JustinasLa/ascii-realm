@@ -3,7 +3,7 @@ import { before, test } from 'node:test';
 import { worldToScreen } from '../src/editor/coordinates.js';
 import { Camera } from '../src/world/camera.js';
 import { groundUnder } from '../src/world/relief.js';
-import { ASPECT, World } from '../src/world/world.js';
+import { ASPECT, CHUNK_SIZE, World } from '../src/world/world.js';
 
 let SceneryBuilder;
 before(async () => {
@@ -43,6 +43,9 @@ test('on raised ground the builder points at, and draws its cursor on, the groun
   const rect = builder.canvas.getBoundingClientRect();
   const x = Math.floor(world.spawn.x + 75) + 0.5;
   const y = Math.floor(world.spawn.y - 4) + 0.5;
+  // Lift is read from the chunks drawn, so those round the knoll are loaded.
+  const cx = Math.floor(x / CHUNK_SIZE);
+  for (let cy = Math.floor(y / CHUNK_SIZE) - 1; cy <= Math.floor(y / CHUNK_SIZE) + 1; cy++) world.chunk(cx, cy);
   const lift = world.liftAt(x, y);
   assert.ok(lift > 5);
   // The knoll's top there is drawn `lift` rows up.

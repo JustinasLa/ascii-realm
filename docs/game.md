@@ -233,6 +233,110 @@ short version see the [README](../README.md).
   bag is full. Mined blocks stay gone for the session, grass growing back;
   unfinished blows are forgotten when you leave. As a weapon, the stone pickaxe
   hits like a stone war hammer.
+- **Smelting.** A furnace smelts Raw Iron into an Iron Ingot and Raw Copper
+  into a Copper Ingot, 10 seconds an item; both ingots stack to 64 and weigh
+  what their ore weighs. Coal burns 80 seconds (eight items) and a log 15. A
+  fuel item is lit only when the burn has run out and the input can smelt
+  into the output; a burn already started keeps ticking down even with
+  nothing left to smelt. Smelting stops while the output is full or holds the
+  other ingot, and its progress drops back to nothing; with no burn, progress
+  falls back twice as fast as it was made, and a different input item starts
+  from nothing. Raw Tin, Coal and Lapis Lazuli don't smelt: tin goes into
+  alloys raw. A whole bag stack goes in at once, to the input if it smelts or
+  else as fuel, as far as the slot has room, and a slot is taken back as far
+  as the bag has room. Furnaces keep working on game time with their screen
+  shut and you far away, and are kept on this device for each world (up to
+  32 busy ones a world); the page being closed pauses them.
+  A furnace stands on the east side of the spawn forecourt (the scenery
+  builder's Camp palette places more; none can be broken). Press `E` beside
+  one, or tap **SMELT**: its screen shows the input over the fuel with a
+  flame for the burn left, an arrow for the smelting and the output, and
+  below them your satchel's resources, each saying where it goes or why it
+  can't. Pick one to put it in, or a slot to take it back. While it burns,
+  embers flicker in its mouth and a small warm light falls in front of it.
+- **Alloys.** An alloy forge (a cobble hearth with a bed of coals, a clay
+  crucible and bellows) stands east of the furnace in the spawn forecourt, out
+  of its reach; the builder's Camp palette places more, and none can be broken.
+  Press `E` beside one, or tap **FORGE**: its screen shows the base and four
+  catalyst slots, the mix's known result, **Fire**, **Empty forge** and **Take**
+  for a waiting result, your satchel's rows, and **Known alloys** with each
+  alloy's colour swatch, recipe and stats. A new alloy throws sparks, names
+  itself in a gold notice and opens a naming row; the coals burn for 10 s
+  after a firing. The bag shows an alloy ingot by its alloy's name, colour and
+  stats. A mix is one base, an Iron, Steel or Bronze Ingot, and up to
+  four catalysts; a metal base takes metal or crystal catalysts (Copper Ingot,
+  Raw Tin, Lapis Lazuli or another ingot), each ingredient once. A firing needs
+  at least two ingredients and burns 1 Coal. A mix fired before always gives
+  the same result. A new mix rolls once, succeeding at 2 + 4·√(total value) %
+  (Iron 2, Copper 2, Lapis 2, Steel 4, Bronze 6, Raw Tin 8), plus 8 with a
+  Steel and 12 with a Bronze base, at most 85 %; a failure gives Unusable
+  Scrap, which records what it consumed, and that mix stays scrap for good. A
+  new alloy starts from its base's stats, moved toward the catalysts' and
+  sometimes taking up stats the base lacks, each held to 1.2 times where it
+  started; a stat left unchanged shifts by up to 10 % either way. Each hit kind
+  its inputs name needs 1 to 3 hits to work. It takes a free name from 42 metal
+  names (Ferranite, Blackiron, …), else from its catalysts' lists, and gives
+  scrap when none is free; its colour is one of 49 muted metal shades. Each
+  Alloy Ingot stack keeps its alloy, so different alloys never stack. Steel and
+  Bronze Ingots have no source yet. Loading takes one item at a time from the
+  bag, the base first. With a full bag a firing's result waits in the forge to
+  be taken, and the forge won't fire until it is; emptying the forge gives back
+  each catalyst the bag has room for, last loaded first, then the base once no
+  catalyst is left.
+  A new alloy can be renamed within a minute of game time, in letters and
+  underscores (shown as spaces), to a name no other alloy has in any case. The
+  book of alloys and failed mixes, and each forge's loaded mix and waiting
+  result, are kept on this device for each world; the bag is not.
+- **Smithing.** A weapon station (an anvil on a sawn stump, with the six
+  smithing tools hanging on a rack beside it) stands south-east of the alloy
+  forge in the spawn forecourt, out of reach of the forge and the furnace; the
+  builder's Camp palette places more, and none can be broken. Press `E`
+  beside one, or tap **SMITH**: with no piece its screen lists the six
+  pieces; with one it shows the metal slots, the six hit buttons with the
+  hits done of each kind and their total (keys `1`–`6` on a keyboard; a held
+  key or presses under 0.1 s apart count once), **Finish** and **Cancel
+  project**, and your satchel's rows; a weapon that didn't fit the bag shows
+  as **Take**. Each hit throws a few sparks from the anvil. After a finish the
+  report (Hits %, quality, roll and clue) stays until the next piece is
+  chosen. A Short Sword, Dagger, Battle Axe, War Hammer or
+  Spear takes 4 metal and a Greatsword 8: Iron, Copper, Steel or Bronze Ingots
+  or metal alloy ingots. Each unit adds its own hits to what the piece needs
+  (an Iron Ingot 4 Hit and 1 Small Hit; an alloy its own 1 to 3 per kind). The
+  six hit kinds are Hit and Small Hit (metal work) and Etch, Whittle, Engrave
+  and Sew (artisan work); a kind can be struck when the piece needs any hit of
+  its family. Each kind scores its share done up to 100 %, 200 less its share
+  up to 200 % and 0 beyond, an unneeded kind scoring 0; Hits % is the rounded
+  mean, and any kind off keeps it at 99 or less. Quality is Rusted under 50,
+  Tempered from 50 (a Basic socket), Polished from 75 (Polished), Gleaming
+  from 90 (Radiant) and Masterwork at 100 (Mythical). Below 100 a d20 (+0)
+  against 12, a natural 20 always and a natural 1 never meeting it, earns a
+  clue about the kind closest to right ("you sense it needed a little more Hit
+  work"); the roll never changes the piece. A station works one piece at a
+  time: choose the piece, then add its metal one unit at a time from the bag
+  (anything else is refused: "That is not a material you can work", Raw Tin
+  and Lapis "This recipe does not call for that material", a fifth unit "The
+  piece already has enough of that material"). Hits are refused until all the
+  metal is in, and a kind is refused when the piece needs nothing of its
+  family; each hit only says "+1 Hit", never how many are needed. Finishing
+  needs all the metal but not the hits: it reports the Hits %, the quality,
+  and below 100 the roll and its clue, and turns the metal into the weapon at
+  once. With a full bag the weapon waits on the station to be taken, and the
+  station takes no new piece until it is. Cancelling gives back each unit of
+  metal the bag has room for, last loaded first, and loses the hits; what a
+  full bag can't take stays with the piece. Each station's piece and waiting weapon are kept with the alloy
+  book on this device for each world, hits within two seconds.
+- **Forged weapons.** A smithed weapon is named for the metal most of its
+  units were ("Blackiron Dagger", "Iron Short Sword"; a tie goes to the one
+  loaded first) and drawn in its colour, on the 3D blade and the glyph figure,
+  in hand and sheathed. Its stats are the mean of its units' stats, a unit
+  lacking one counting 0. It hits for its kind's damage × Attack Damage ÷ 4,
+  so Steel's 4 matches the steel tier, and swings, tires and weighs like an
+  iron one; its other stats, its durability (the mean Durability), quality,
+  Hits %, inputs and socket are kept with it but don't act yet. The bag lists
+  its metal, quality, Hits %, socket, damage and stats, and its durability out
+  of the mean Durability. Friends see
+  it in its colour. Other weapons, the starter sword among them, hit and look
+  as their tier does.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,

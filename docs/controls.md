@@ -13,7 +13,7 @@
 | `T` | Stow the torch or draw a fresh lit torch |
 | `G` | Throw the carried torch in the direction faced; dry ground ignites on landing |
 | `C` | Build a campfire on dry ground, or extinguish a nearby fire |
-| `E` | Pick up the nearest ground item, or else disturb a nearby glowcap mushroom to release glowing spores (the same as TAKE / SPORES; fires are left to `C`) |
+| `E` | Pick up the nearest ground item, or else use a furnace, an alloy forge or a weapon station in reach, or else disturb a nearby glowcap mushroom to release glowing spores (the same as TAKE / SMELT / FORGE / SMITH / SPORES; fires are left to `C`) |
 | `R` / right click | Cast the rune bound to `R` towards the cursor; the caster turns to face it |
 | Hold middle mouse | Open the rune wheel: point at a school (Oseni, Seithr, Cerrith, Mitlan), then at a rune, and let go to bind it to `R`. Pushing out through a school opens it in one motion; letting go on a school keeps its runes open for a click. Right click or the centre goes back, `Escape` closes |
 | `M` | Mute or unmute all sound |
@@ -34,6 +34,13 @@
 | `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
 | `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `C`, with inventory open | Turn to the next page (Inventory, Character, Characters) |
+| Arrow keys / `Tab`, with a furnace open | Move through its slots, your satchel's resources and Close |
+| `Enter` / `Space`, with a furnace open | Put the chosen resource in, or take a slot's contents back |
+| `Escape` / `E`, with a furnace open | Close the furnace |
+| Arrows / `Tab`, `Enter` / `Space`, `Escape` / `E`, with an alloy forge open | As with a furnace: move through its buttons, satchel rows and Known alloys (when that list is too long to show, arrows up and down, `Page Up` / `Page Down`, `Home`, `End` and `Space` scroll it), add an ingredient or press a button, and close it |
+| `1`–`6` (top row or numpad), with a weapon station open | Strike the piece with Hit, Small Hit, Etch, Whittle, Engrave or Sew |
+| Arrows / `Tab`, `Enter` / `Space`, `Escape` / `E`, with a weapon station open | Move through its pieces, hit buttons, Finish, Cancel, Take and satchel rows, choose a piece, add metal or press a button, and close it |
+| Typing, then `Enter`, after a discovery | Name the new alloy; in the field the keys type, and only `Tab` and `Escape` leave it |
 | `Escape`, in the character creator | Cancel an edit or a new character (a started one asks first); the first character can't be cancelled |
 | `Left` / `Right` / `Home` / `End`, on a page tab | Move between the inventory's pages |
 | `B` | Enter the Scenery builder, or return to play and close its panel |
@@ -136,7 +143,9 @@ alone leaves nothing on your screen. Every stack on the ground, the hunt's
 included, has its name shown above it. Stacks within 4 m are always named;
 farther ones whose names would overlap share one label ("Bone x2, Arrow x1 +2
 more"). Walk close to draw them in, or use E / TAKE. A full bag leaves them
-lying with the name dimmed. They last five minutes.
+lying with the name dimmed. They last five minutes. A stack dropped from the
+bag keeps what makes it its own, such as a weapon's material, and comes back
+as it went down, never joining a bag stack that differs.
 
 ## Denars
 
@@ -164,7 +173,13 @@ run. The other thumb has a cluster in the bottom-right corner:
   steering, but a new touch goes to the wheel.
 - **INTERACT** appears on the diagonal between them only when something is in
   reach: **SPORES** by a ready glowcap, **DOUSE** by a fire (it never builds
-  one) and **TAKE** by a ground item, and it is hidden otherwise.
+  one), **SMELT** by a furnace, **FORGE** by an alloy forge, **SMITH** by a weapon
+  station and **TAKE** by a ground item, and it is hidden otherwise. A furnace opens as a full-screen
+  sheet: tap a resource to put it in, tap a slot to take it back, and
+  **Close** to return to play. An alloy forge opens the same way: tap
+  ingredients, then **Fire**; name a new alloy and tap **Rename** or Done. A
+  weapon station too: tap a piece, then its metal, then the hit buttons, and
+  **Finish**.
 
 Strikes, shots and attack runes from these buttons turn to the nearest enemy
 within 30° either side of your facing, within the weapon's reach plus a stride,

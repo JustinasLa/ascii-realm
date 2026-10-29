@@ -23,7 +23,7 @@ import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrume
 import { toMetres } from '../../src/entities/monsters.js';
 import { InstrumentKeys } from '../../src/core/instrument-keys.js';
 import { MusicNotes } from '../../src/world/music-notes.js';
-import { isBow, isThrown } from '../../src/entities/loadout.js';
+import { heldKey, isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { NightLight } from '../../src/world/night-light.js';
 import { shaftTier } from '../../src/world/moon-shafts.js';
@@ -37,6 +37,10 @@ import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assis
 import { pickStruck, TargetTracker, targetId } from '../../src/core/target.js';
 import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
+import { Furnaces, nearbyFurnace } from '../../src/crafting/furnace.js';
+import { AlloyBook, describeStack } from '../../src/crafting/alloy-book.js';
+import { nearbyForge } from '../../src/crafting/alloys.js';
+import { describeWeapon, nearbySmithy } from '../../src/crafting/smithing.js';
 import { metresBetween } from '../../src/multiplayer/chat.js';
 import { figureTop } from '../../src/ui/bubbles.js';
 import { displayName } from '../../src/multiplayer/protocol.js';
@@ -267,6 +271,33 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
         this.onToggle(open);
       }
     },
+    // The furnace screen records what it opens; the real one is tested on
+    // its own.
+    Furnaces, nearbyFurnace,
+    FurnaceScreen: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.opened = []; this.updates = 0; }
+      open(id) { this.opened.push(id); this.isOpen = true; this.onToggle(true); return true; }
+      close() { this.isOpen = false; this.onToggle(false); }
+      update() { this.updates++; }
+    },
+    drawFurnaceGlow: noop, lightFurnace: noop,
+    // The forge screen does the same, keeping what it was given (main-forge.test.js).
+    AlloyBook, describeStack, nearbyForge,
+    AlloyForgeScreen: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.opened = []; this.told = []; this.updates = 0; }
+      open(id) { this.opened.push(id); this.isOpen = true; this.onToggle(true); return true; }
+      close() { this.isOpen = false; this.onToggle(false); }
+      tell(done) { this.told.push(done); }
+      update() { this.updates++; }
+    },
+    // The weapon station's screen too (main-smithy.test.js).
+    describeWeapon, nearbySmithy,
+    WeaponStationScreen: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.opened = []; this.updates = 0; }
+      open(id) { this.opened.push(id); this.isOpen = true; this.onToggle(true); return true; }
+      close() { this.isOpen = false; this.onToggle(false); }
+      update() { this.updates++; }
+    },
     // The character pages count their renders and the buttons focused.
     CharacterPages: class {
       constructor(options) {
@@ -282,7 +313,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }
     },
-    Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
+    Projectiles, screenToWorld: () => null, heldKey, isBow, isThrown, SCALE: 13, TILT: 0.5,
     Spellcasting: class extends inert() { constructor(options) { super(); this.options = options; this.effects = { draw: noop }; } },
     SpellControls: class extends inert() {
       constructor(casting, options) { super(); this.options = options; }
@@ -389,6 +420,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       // Records lobby requests and how the page left a lobby.
       connect(request) { this.connects.push(request); }
       suspend() { this.suspends++; }
+      setStatus(status, message) { this.status = status; this.message = message; }
       // Records each note offered to the lobby; solo, nothing is sent.
       sendNote(note) { this.notesSent.push(note); return false; }
       leave(notify) { this.leaves.push(notify); }

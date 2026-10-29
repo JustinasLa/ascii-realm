@@ -108,3 +108,92 @@ test('the button writes to the page only when its target changes and lingers bri
   assert.equal(button.textContent, 'SPORES');
   assert.equal(INTERACT_LINGER, 0.3);
 });
+
+test('a furnace in reach comes after a ground item and before a glowcap or a fire', async () => {
+  const { nearbyFurnace } = await import('../src/crafting/furnace.js');
+  const prop = { id: 'r:spawn:11', kind: 'furnace', x: 0, y: -2, footW: 6, footH: 1.4 };
+  const world = { propsIn: () => [prop] };
+  const furnaces = { nearby: (p) => nearbyFurnace(world, p) };
+  const context = { player: player(), mushrooms: mushroomsWith({ cooldown: 0 }), fires: firesWith({}), furnaces };
+  assert.deepEqual(interaction(context), { kind: 'furnace', label: 'SMELT', ariaLabel: 'Use the furnace' });
+  assert.deepEqual(performInteraction(context), { kind: 'furnace', prop });
+  const item = { ...context, collection: collectionWith({ item: { id: 'arrow', count: 1 } }) };
+  assert.equal(interaction(item).kind, 'pickup');
+  // Out of reach, or in the air, the glowcap is next.
+  assert.equal(interaction({ ...context, player: player({ y: 6 }) }).kind, 'spores');
+  assert.equal(interaction({ ...context, player: player({ air: 0.5 }) }).kind, 'spores');
+});
+
+test('a furnace is reached from its footprint on any side, the nearest first', async () => {
+  const { FURNACE_REACH, nearbyFurnace } = await import('../src/crafting/furnace.js');
+  const wide = { id: 'a', kind: 'furnace', x: 0, y: 0, footW: 6, footH: 1.4 };
+  const crate = { id: 'c', kind: 'crate', x: 0, y: 0, footW: 9, footH: 9 };
+  const world = { propsIn: () => [crate, wide] };
+  assert.equal(FURNACE_REACH, 3.5);
+  // Ten columns from its base along its long side, but 2.4 rows from its end.
+  assert.equal(nearbyFurnace(world, player({ x: 10 })), wide);
+  assert.equal(nearbyFurnace(world, player({ x: 12 })), null);
+  assert.equal(nearbyFurnace(world, player({ y: 4.8 })), wide);
+  assert.equal(nearbyFurnace(world, player({ y: 5 })), null);
+  assert.equal(nearbyFurnace(world, player({ vitals: { health: 0 } })), null);
+  const near = { ...wide, id: 'b', x: 8 };
+  assert.equal(nearbyFurnace({ propsIn: () => [wide, near] }, player({ x: 15 })), near);
+  assert.equal(nearbyFurnace({ propsIn: () => [near, wide] }, player({ x: 3 })), near, 'inside both footprints, the first');
+});
+
+test('a scaled builder furnace in the next chunk is reached from its footprint', async () => {
+  const { FURNACE_REACH, nearbyFurnace } = await import('../src/crafting/furnace.js');
+  const { createProp } = await import('../src/world/props.js');
+  const { ASPECT, World } = await import('../src/world/world.js');
+  const world = new World(3, { rivers: false });
+  const furnace = { ...createProp('furnace', 64.5, 10, { scale: 3 }), id: 's:1' };
+  world.addProp(furnace);
+  // Its base is a chunk away, past the old fixed search, but its side is near.
+  const edge = furnace.x - furnace.footW - FURNACE_REACH / ASPECT;
+  assert.ok(furnace.x - edge > 24);
+  assert.equal(nearbyFurnace(world, player({ x: edge + 0.1, y: 10 })), furnace);
+  assert.equal(nearbyFurnace(world, player({ x: edge - 0.1, y: 10 })), null);
+  assert.equal(nearbyFurnace(world, player({ x: furnace.x, y: 10 + furnace.footH + FURNACE_REACH - 0.1 })), furnace);
+});
+
+test('an alloy forge in reach comes after a furnace and before a glowcap', async () => {
+  const { nearbyForge } = await import('../src/crafting/alloys.js');
+  const { FURNACE_REACH, nearbyStation } = await import('../src/crafting/furnace.js');
+  const { ASPECT } = await import('../src/world/world.js');
+  const furnace = { id: 'r:spawn:11', kind: 'furnace', x: -20, y: -2, footW: 6, footH: 1.4 };
+  const forge = { id: 'r:spawn:12', kind: 'alloy-forge', x: 0, y: -2, footW: 7, footH: 1.4 };
+  const seen = [];
+  const world = { propsIn: (...box) => (seen.push(box), [furnace, forge]) };
+  const forges = { nearby: (p) => nearbyForge(world, p) };
+  const furnaces = { nearby: (p) => nearbyStation(world, p, 'furnace') };
+  const context = { player: player(), mushrooms: mushroomsWith({ cooldown: 0 }), fires: firesWith({}), furnaces, forges };
+  assert.deepEqual(interaction(context), { kind: 'forge', label: 'FORGE', ariaLabel: 'Use the alloy forge' });
+  assert.deepEqual(performInteraction(context), { kind: 'forge', prop: forge });
+  // The search reaches past a wide forge's far end, as for a furnace.
+  const reachX = 10 + FURNACE_REACH / ASPECT, reachY = 2 + FURNACE_REACH;
+  assert.deepEqual(seen[0], [-reachX, -reachY, reachX, reachY]);
+  // Beside the furnace, the furnace wins; in the air, the glowcap is next.
+  assert.equal(interaction({ ...context, player: player({ x: -14 }) }).kind, 'furnace');
+  assert.equal(interaction({ ...context, player: player({ air: 0.5 }) }).kind, 'spores');
+  assert.equal(nearbyForge(world, player({ x: 7 + 5.9, y: -2 })), null);
+  assert.equal(nearbyForge(world, player({ x: 7 + 5.8, y: -2 })), forge);
+});
+
+test('a weapon station in reach comes after the forge and before a glowcap', async () => {
+  const { nearbySmithy } = await import('../src/crafting/smithing.js');
+  const { nearbyStation } = await import('../src/crafting/furnace.js');
+  const forge = { id: 'r:spawn:12', kind: 'alloy-forge', x: -24, y: -2, footW: 7, footH: 1.4 };
+  const station = { id: 'r:spawn:13', kind: 'weapon-station', x: 0, y: -2, footW: 7.9, footH: 1.2 };
+  const world = { propsIn: () => [forge, station] };
+  const smithies = { nearby: (p) => nearbySmithy(world, p) };
+  const forges = { nearby: (p) => nearbyStation(world, p, 'alloy-forge') };
+  const context = { player: player(), mushrooms: mushroomsWith({ cooldown: 0 }), fires: firesWith({}), forges, smithies };
+  assert.deepEqual(interaction(context), { kind: 'smithy', label: 'SMITH', ariaLabel: 'Use the weapon station' });
+  assert.deepEqual(performInteraction(context), { kind: 'smithy', prop: station });
+  assert.equal(interaction({ ...context, player: player({ x: -18 }) }).kind, 'forge');
+  assert.equal(interaction({ ...context, player: player({ air: 0.5 }) }).kind, 'spores');
+  assert.equal(performInteraction({ ...context, player: player({ air: 0.5 }), mushrooms: mushroomsWith(null) }), null);
+  // Its reach runs from the footprint's edge.
+  assert.equal(nearbySmithy(world, player({ x: 7.9 + 5.9, y: -2 })), null);
+  assert.equal(nearbySmithy(world, player({ x: 7.9 + 5.8, y: -2 })), station);
+});

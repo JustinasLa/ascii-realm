@@ -140,7 +140,7 @@ export class Armory {
   // Shows `weapon` (a profile from weapons.js, or null) drawn or put away.
   update(weapon, drawn) {
     const type = weapon?.type === 'sword-shield' ? 'sword' : weapon?.type ?? null;
-    const signature = `${type}:${weapon?.material}:${drawn}`;
+    const signature = `${type}:${weapon?.materialKey ?? weapon?.material}:${drawn}`;
     if (signature === this.signature) return;
     this.signature = signature;
     if (this.active) this.active.visible = false;

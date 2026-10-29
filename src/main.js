@@ -12,6 +12,14 @@ import { assistTarget, castAssist, strikeAssist } from './core/aim-assist.js';
 import { pickStruck, TargetTracker, targetId } from './core/target.js';
 import { createHaptics } from './core/haptics.js';
 import { interaction, performInteraction } from './core/interact.js';
+import { Furnaces, nearbyFurnace } from './crafting/furnace.js';
+import { FurnaceScreen } from './ui/furnace.js';
+import { AlloyBook, describeStack } from './crafting/alloy-book.js';
+import { nearbyForge } from './crafting/alloys.js';
+import { AlloyForgeScreen } from './ui/alloy-forge.js';
+import { describeWeapon, nearbySmithy } from './crafting/smithing.js';
+import { WeaponStationScreen } from './ui/weapon-station.js';
+import { drawFurnaceGlow, lightFurnace } from './world/furnace-glow.js';
 import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
 import { watchPhone } from './core/phone.js';
 import { installPinchZoom } from './core/pinch.js';
@@ -27,7 +35,7 @@ import { AnimalFigures } from './entities/animal-figures.js';
 import { Horses } from './entities/horses.js';
 import { HorseFigures } from './entities/horse-figure.js';
 import { HuntDrops } from './entities/hunt-drops.js';
-import { isBow, isThrown } from './entities/loadout.js';
+import { heldKey, isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
 import { Spellcasting } from './spells/casting.js';
 import { loadSpells } from './spells/catalog.js';
@@ -74,6 +82,7 @@ import { MAX_WALKERS } from './world/fog-wake.js';
 import { Footprints } from './world/footprints.js';
 import { Mushrooms } from './world/mushrooms.js';
 import { drawGround, raisedRows } from './world/ground.js';
+import { groundUnder } from './world/relief.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
 import { Mining, toolOf } from './world/mining.js';
@@ -580,10 +589,40 @@ const inventoryScreen = new InventoryScreen({
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
   phone: () => device.phone,
+  isCovered: () => furnaceScreen.isOpen || forgeScreen.isOpen || smithyScreen.isOpen,
+  describe: (stack) => describeWeapon(stack, alloyBook) ?? describeStack(stack, alloyBook),
+  describeVersion: () => alloyBook.version,
 });
+// Furnaces smelt on game time, kept on this device per world.
+const furnaces = new Furnaces({ storage: walletStorage, seed });
+const furnaceScreen = new FurnaceScreen({ furnaces, inventory,
+  onToggle: (open) => {
+    if (open) chat.close();
+    blockGameplay();
+    cancelActions();
+    if (!open) canvas.focus({ preventScroll: true });
+  },
+  onNotify: (message, kind) => hud.notify(message, kind) });
+// The alloy book and forge contents, kept on this device per world; `debug.alloyRandom` pins the rolls.
+const alloyBook = new AlloyBook({ storage: walletStorage, seed });
+let lastForge = null;
+const forgeScreen = new AlloyForgeScreen({ book: alloyBook, inventory, onToggle: furnaceScreen.onToggle,
+  onNotify: furnaceScreen.onNotify, onDiscover: () => dust.sparks(lastForge.x, lastForge.y - 4, 18),
+  random: () => (debug.alloyRandom ?? Math.random)() });
+// The weapon station's screen; sparks fly from the anvil it was opened on, and `debug.smithRandom` pins the roll.
+let lastSmithy = null;
+const smithyScreen = new WeaponStationScreen({ book: alloyBook, inventory, onToggle: furnaceScreen.onToggle,
+  onNotify: furnaceScreen.onNotify, onHit: () => dust.sparks(lastSmithy.x, lastSmithy.y - 3, 4),
+  onFinish: () => dust.sparks(lastSmithy.x, lastSmithy.y - 3, 12), random: () => (debug.smithRandom ?? Math.random)(),
+  reducedMotion: () => reducedMotion });
+Object.assign(debug, { furnaces, furnaceScreen, alloyBook, forgeScreen, smithyScreen });
+const saveStations = () => { furnaces.save(); alloyBook.save(); };
+window.addEventListener('pagehide', saveStations);
+document.addEventListener('visibilitychange', () => document.hidden && saveStations());
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
-  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || chat.isOpen);
+  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen
+    || smithyScreen.isOpen || chat.isOpen);
 }
 debug.hud = hud;
 debug.wallet = wallet;
@@ -595,18 +634,20 @@ debug.skins = { PRESETS, PALETTES };
 debug.inventoryScreen = inventoryScreen;
 
 // Friends in a lobby share the world's seed and see one another walk about.
-// Joining a lobby on another seed reloads the page into that world.
+// Joining a lobby on another seed reloads the page into that world. Lobbies
+// share neither dense woods nor the hill scene's raised ground.
+const reloadsForLobby = world.woodland === 'dense' || hillScene;
 const remotePlayers = new RemotePlayers();
 const multiplayer = new MultiplayerClient({
   getState: () => playerState(player),
   onJoin: (lobby) => {
-    if (needsWorldReload(lobby, seed, world.woodland)) {
+    if (needsWorldReload(lobby, seed, world.woodland) || reloadsForLobby) {
       const url = lobbyWorldUrl(location.href, lobby, multiplayer.options?.server);
       try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
-      // A dense page reloads before it connects (below), so it never gets
+      // A dense or hill page reloads before it connects (below), so it never gets
       // here; if it ever does, it keeps its seat in the lobby while it
       // reloads into the sparse world, rather than leaving it.
-      if (world.woodland === 'dense') multiplayer.suspend();
+      if (reloadsForLobby) multiplayer.suspend();
       else multiplayer.leave(false);
       location.replace(url);
       return;
@@ -623,10 +664,14 @@ const multiplayer = new MultiplayerClient({
 });
 debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
-// Creating or joining a lobby from dense woods reloads into the sparse world
-// first, and the request is made there, so no lobby ever holds a dense page.
-guardLobbyConnect(multiplayer, { dense: world.woodland === 'dense', storage: session,
-  reload: (request) => location.replace(sparseWorldUrl(location.href, request)) });
+// Creating or joining a lobby from dense woods or the hill scene reloads into
+// the sparse world first, and the request is made there, so no lobby ever
+// holds a dense or raised page. Where the browser won't keep the request
+// across the reload, the page stays and says what to do instead.
+const lobbyBlocked = `Leave ${hillScene ? 'the hill scene' : 'the dense woods'} first: lobbies play in the plain world, and this browser won't let the page carry your request there.`;
+guardLobbyConnect(multiplayer, { dense: reloadsForLobby, storage: session,
+  reload: (request) => location.replace(sparseWorldUrl(location.href, request)),
+  blocked: () => { multiplayer.setStatus('error', lobbyBlocked); hud.notify(lobbyBlocked, 'info'); } });
 // While the creator is open the lobby waits; the last join asked for is made
 // once it closes. A dense page's reload waits too, and so does a request
 // resumed after one.
@@ -651,7 +696,8 @@ debug.tint = tintPicker;
 // Escape closes a panel opened over it before the chat. The builder and the
 // rune wheel are declared further down and are read only once a key or tap
 // arrives.
-const panelOpen = () => creator.isOpen || builder.enabled || inventoryScreen.isOpen || phoneMenu.open || !!spellControls.menu?.isOpen;
+const panelOpen = () => creator.isOpen || builder.enabled || inventoryScreen.isOpen || furnaceScreen.isOpen || phoneMenu.open
+  || forgeScreen.isOpen || smithyScreen.isOpen || !!spellControls.menu?.isOpen;
 const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
   isControlTarget,
   mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
@@ -692,7 +738,7 @@ debug.projectiles = projectiles;
 // How many arrows are left, or of the weapon being thrown.
 const ammoNote = document.createElement('div');
 hud.attachNote(ammoNote);
-const weaponKeyOf = (stack) => stack ? `${stack.id}:${stack.material ?? ''}` : '';
+const weaponKeyOf = (stack) => stack ? `${stack.id}:${heldKey(stack)}` : '';
 let lastWeapon = weaponKeyOf(inventory.equipment.mainHand);
 // The pointer over the scene and the last frame drawn, for aiming.
 let pointer = null;
@@ -713,10 +759,14 @@ const playerLift = () => world.relief ? world.liftAt(player.x, player.y) : 0;
 const lookScale = () => camera.look?.scale ?? 1;
 const focusRows = () => 11 * lookScale();
 // The ground cell under the cursor, or null when it is off the scene. On
-// raised ground it is read on the player's own height.
-function cursorCell() {
+// raised ground it is read on the player's own height, or with `drawn` on
+// the ground drawn under it, where a foe there stands.
+function cursorCell(drawn = false) {
   const cell = pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
-  if (cell && world.relief) cell.y += playerLift();
+  if (cell && world.relief) {
+    const row = Math.floor(cell.y);
+    cell.y += drawn ? groundUnder((x, y) => world.liftAt(x, y), Math.floor(cell.x), row) - row : playerLift();
+  }
   return cell;
 }
 
@@ -732,11 +782,11 @@ function cursorHeading(fromHips = false) {
 }
 
 // Where a shot or throw would land: the foe touch aim assist picked, the
-// cursor, or a point straight ahead within the weapon's range when aiming
-// from the keyboard.
+// ground under the cursor, or a point straight ahead within the weapon's
+// range when aiming from the keyboard.
 function aimPoint(weapon, draw, foe = null) {
   const range = (weapon.projectileRange ?? 8) * (0.4 + 0.6 * draw);
-  const cursor = foe ?? cursorCell();
+  const cursor = foe ?? cursorCell(true);
   let mx = cursor ? (cursor.x - player.x) * ASPECT / SCALE : Math.sin(player.heading) * range;
   let mz = cursor ? (cursor.y - player.y) / (SCALE * TILT) : Math.cos(player.heading) * range;
   const distance = Math.hypot(mx, mz);
@@ -1132,7 +1182,9 @@ touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap
   (pointerId) => spellControls.dropTouch(pointerId));
 // What the contextual touch button can reach. Ground items appear once the
 // game keeps a collection of them.
-const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null });
+const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null,
+  furnaces: { nearby: (p) => nearbyFurnace(world, p) }, forges: { nearby: (p) => nearbyForge(world, p) },
+  smithies: { nearby: (p) => nearbySmithy(world, p) } });
 loadSpells().then(spells => {
   void prepareSpellSounds(sound.engine, spells);
   casting.spells = new Map(spells.map(s => [s.id, s]));
@@ -1488,6 +1540,9 @@ function frame(now) {
     if ((interact || touchInteract) && !isGameplayBlocked() && !player.magicStunned) {
       const done = performInteraction(interactables(), { douse: touchInteract });
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
+      if (done?.kind === 'furnace') furnaceScreen.open(done.prop.id);
+      if (done?.kind === 'forge') forgeScreen.open((lastForge = done.prop).id);
+      if (done?.kind === 'smithy') smithyScreen.open((lastSmithy = done.prop).id);
       // What the drop store's collection takes is told once, with its sound,
       // as its pickup events are spent below.
       const told = done?.result?.ok && debug.collection === huntCollection;
@@ -1657,6 +1712,9 @@ function frame(now) {
   }
   huntCollection.events.length = 0;
   huntDrops.expire(huntCollection.currentTime);
+  furnaces.update(dt);
+  const timedOut = alloyBook.update(dt);
+  if (timedOut) forgeScreen.tell(timedOut);
   dust.update(dt);
   splashes.update(dt);
   if (!debug.freeze) {
@@ -1680,6 +1738,13 @@ function frame(now) {
   const pv = pLift ? liftView(view, pLift) : view;
   // Creatures are drawn each through its own lifted view (null: flat land).
   const raised = world.relief ? lv : null;
+  // Each light or glow shines from as high as its source stands.
+  const liftedPass = (sources, pass) => {
+    if (!world.relief) pass(view, sources);
+    else for (const s of sources) pass(s.carried ? pv : lv(s.x, s.y), [s]);
+  };
+  // Sprites as far as the deepest lift below the view can rise into it.
+  const below = world.relief ? world.maxLift : 0;
   weather.update(dt, time, world, view, sound.weather);
   if (!paused) {
     debris.update(dt, world, view, player, weather, splashes, debrisBodies());
@@ -1765,7 +1830,7 @@ function frame(now) {
   const marginX = Math.max(world.propRenderW, MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT) + 2;
   const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
-    view.x0 + view.cols + marginX, view.y0 + view.rows + tall + (world.relief ? world.maxLift : 0), wide);
+    view.x0 + view.cols + marginX, view.y0 + view.rows + tall + below, wide);
   // Trees' shadows darken the ground drawn so far, and the grass and rocks'
   // ground cells as they are drawn, and moonbeams light them; warm light is
   // added over them later.
@@ -1776,9 +1841,10 @@ function frame(now) {
   renderer.night = nightLight.active ? nightLight : null;
   debug.metrics.nightMs = performance.now() - nightStart;
   const mirror = reflector(time, view);
-  const visibleMushrooms = mushrooms.prepare(view, wide);
-  const visibleFires = fires.prepare(view, time);
-  const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
+  const deep = below ? { ...view, rows: view.rows + below } : view;
+  const visibleMushrooms = mushrooms.prepare(view, wide, below);
+  const visibleFires = fires.prepare(deep, time);
+  const visibleTorches = torches.prepare(deep, time, player, model?.torchPose());
   ambience.update(dt, time, world, view, { lights: lightsOf(visibleFires, visibleTorches), wind: weather.wind });
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
@@ -1823,6 +1889,7 @@ function frame(now) {
     draw: () => drawProp(renderer, view, p, mirror, time, null, seed, true) }));
   // While the creator is open, whatever would hide the outlaw is left out.
   const hides = (p, y) => creator.isOpen && hidesPreview(p, y, player);
+  const litFurnaces = [];
   const drawables = props.filter((p) => propInView(lv(p.x, p.y), p, false, MAX_LEAF_DRIFT)).flatMap((p) => {
     const at = lv(p.x, p.y);
     // A turned arch spans several ground rows. Interleave its stone surfaces
@@ -1831,8 +1898,11 @@ function frame(now) {
     if (slices) return slices.filter(({ depth }) => !hides(p, p.y + depth)).map(({ depth, cells }) => ({ y: p.y + depth,
       draw: () => drawProp(renderer, at, p, undefined, time, player, seed, false, cells) }));
     if (hides(p, p.y)) return [];
+    const lit = p.kind === 'furnace' ? furnaces.lit(p.id) : p.kind === 'alloy-forge' && alloyBook.lit(p.id);
+    if (lit) litFurnaces.push(p);
     return [{ y: p.y, draw: () => {
       drawProp(renderer, at, p, undefined, time, player, seed);
+      if (lit) drawFurnaceGlow(renderer, at, p, time);
       drawLeaves(renderer, at, p, time, seed);
     } }];
   });
@@ -1847,7 +1917,7 @@ function frame(now) {
   }
   // Bushes can reach in from below the view or reflect from above it.
   const plants = harvesting.resourcesIn(view.x0 - 9, view.y0 - 12, view.x0 + view.cols + 9,
-    view.y0 + view.rows + 12, wide);
+    view.y0 + view.rows + 12 + below, wide);
   for (const node of plants) {
     reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
     drawables.push({ y: node.y, draw: () => drawResource(renderer, lv(node.x, node.y), node, time) });
@@ -1867,7 +1937,7 @@ function frame(now) {
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
-  for (const item of huntDrops.in(view.x0 - 2, view.y0 - view.rows, view.x0 + view.cols + 2, view.y0 + view.rows + 2)) {
+  for (const item of huntDrops.in(view.x0 - 2, view.y0 - view.rows, view.x0 + view.cols + 2, view.y0 + view.rows + 2 + below)) {
     reflections.push({ y: item.y, draw: () => drawItem(renderer, view, item, time, mirror) });
     // Drawn after the grass a few rows in front, so tall blades never hide it.
     drawables.push({ y: item.y + HUNT_DROP_LIFT, draw: () => drawItem(renderer, lv(item.x, item.y), item, time) });
@@ -1930,15 +2000,16 @@ function frame(now) {
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
-  mushrooms.drawGlow(renderer, view, visibleMushrooms);
+  liftedPass(visibleMushrooms, (v, list) => mushrooms.drawGlow(renderer, v, list));
   splashes.drawContacts(renderer, view, time, contacts);
   // The moonbeams' columns of lit air, under the warm light.
   const shaftStart = performance.now();
   nightLight.drawShafts(renderer, view, time);
   debug.metrics.shaftMs = performance.now() - shaftStart;
   debug.metrics.nightMs += debug.metrics.shaftMs;
-  fires.light(renderer, view, time, visibleFires);
-  torches.light(renderer, view, time, visibleTorches);
+  liftedPass(visibleFires, (v, list) => fires.light(renderer, v, time, list));
+  liftedPass(visibleTorches, (v, list) => torches.light(renderer, v, time, list));
+  for (const p of litFurnaces) lightFurnace(renderer, lv(p.x, p.y), p, time);
   weather.drawAtmosphere(renderer, view, time);
 
   for (const figure of birdCells) if (figure.air) AnimalFigures.draw(renderer, figure, putOutlinedCell);
@@ -1972,7 +2043,7 @@ function frame(now) {
   const bubblesMs = performance.now() - bubblesStarted;
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
-  fires.drawParticles(renderer, view);
+  fires.drawParticles(renderer, view, world.relief ? (x, y) => world.liftAt(x, y) : null);
   fireflies.update(dt, time, world, camera.x, camera.centreY(view), view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   ambience.draw(renderer, view, time);
@@ -1997,14 +2068,25 @@ function frame(now) {
   hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
   hud.setLoot(huntDrops.in(view.x0 - 2, view.y0 - 2, view.x0 + view.cols + 2, view.y0 + view.rows + 4), player, inventory);
-  const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
-  const nearbyOre = !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
-  hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
+  const playing = !paused && !isGameplayBlocked() && !player.magicStunned;
+  // The furnace, the forge and then the weapon station in reach come first, as E and the touch button use them.
+  const nearFurnace = playing ? nearbyFurnace(world, player) : null;
+  const nearForge = playing && !nearFurnace ? nearbyForge(world, player) : null;
+  const nearSmithy = playing && !nearFurnace && !nearForge ? nearbySmithy(world, player) : null;
+  const nearStation = nearFurnace || nearForge || nearSmithy;
+  const nearbyMushroom = playing && !nearStation ? mushrooms.nearby(player) : null;
+  const nearbyOre = !nearStation && !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
+  hud.setPrompt(nearFurnace ? '[E] Use furnace' : nearForge ? '[E] Use alloy forge' : nearSmithy ? '[E] Use weapon station'
+    : nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : nearbyOre?.prompt ?? '');
-  touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
+  touch.interact.update(playing ? interaction({ ...interactables(), furnaces: { nearby: () => nearFurnace }, forges: { nearby: () => nearForge },
+    smithies: { nearby: () => nearSmithy } }) : null, time);
   hud.update(dt, hudView);
   chat.update(dt);
   inventoryScreen.update();
+  furnaceScreen.update();
+  forgeScreen.update();
+  smithyScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;
   // Frames are measured by the real time between them, never the clamped

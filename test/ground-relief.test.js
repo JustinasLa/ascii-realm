@@ -72,27 +72,57 @@ test('a raised cell draws its top its lift higher and the slope down to the cell
   assert.equal(at(r.fg, top + 1), at(flat.fg, own, x + 1 - view.x0));
 });
 
-test('a raised top carries what was laid on its flat cell, and reads its ground below the view', () => {
+test('raised ground carries what was laid on its flat cells before the sprites, down its slope too', () => {
   const world = knoll();
-  const { x, y, lift } = slopeCell(world, 2);
+  const { x, y, lift, front } = slopeCell(world, 2);
   const view = { x0: x - 20, y0: y - 40, cols: 40, rows: 50 };
   const r = renderer(view);
   drawGround(r, world, view, 0, null, 0, true);
   const sx = x - view.x0;
-  const cell = (sy) => (sy * view.cols + sx) * 4;
-  // A shadow (or a track, a footprint, a tree's shade) on the flat cell.
-  for (let c = 0; c < 3; c++) r.bg[cell(y - view.y0) + c] = 7;
-  drawRaisedRow(r, world, view, y);
+  const cell = (sy, at = sx) => (sy * view.cols + at) * 4;
+  const own = y - view.y0;
+  // A shadow (or a track, a footprint, a tree's shade) on the flat cells.
+  for (let at = sx - 1; at <= sx + 1; at++) for (let c = 0; c < 3; c++) r.bg[cell(own, at) + c] = 7;
+  const [held, ...rows] = raisedRows(r, world, view);
+  assert.equal(held.y, -Infinity, 'held before anything is drawn');
+  held.draw();
+  // A sprite further up the screen that reaches down over the flat cells.
+  for (let at = sx - 1; at <= sx + 1; at++) r.bg[cell(own, at)] = 200;
+  rows.find((row) => row.y === y).draw();
   const top = y - lift - view.y0;
-  assert.deepEqual([...r.bg.slice(cell(top), cell(top) + 3)], [7, 7, 7]);
-  assert.notEqual(r.bg[cell(top + 1)], 7, 'its slope shows the bare ground');
-  // Lifted in from below the view, the top is the chunk's own ground.
-  const low = { ...view, rows: y - view.y0 };
-  const below = renderer(low);
-  drawRaisedRow(below, world, low, y);
+  for (let k = 0; k <= lift - front; k++) {
+    assert.deepEqual([...r.bg.slice(cell(top + k), cell(top + k) + 3)], [7, 7, 7], `row ${k}`);
+  }
+  // Without the held ground, or lifted in from below the view, a raised
+  // cell is the chunk's own bare ground.
   const flat = renderer(view);
   drawGround(flat, world, view, 0, null, 0, true);
-  assert.equal(below.fg[cell(top) + 3], flat.fg[cell(y - view.y0) + 3]);
+  const bare = renderer(view);
+  drawRaisedRow(bare, world, view, y);
+  assert.equal(bare.bg[cell(top)], flat.bg[cell(own)]);
+  const low = { ...view, rows: own };
+  const below = renderer(low);
+  for (const row of raisedRows(below, world, low)) row.draw();
+  assert.equal(below.fg[cell(top) + 3], flat.fg[cell(own) + 3]);
+  // A view whose raised rows all lie below it holds nothing.
+  let back = y;
+  while (world.liftAt(x, back - 1)) back--;
+  const above = { x0: x, y0: back - 1, cols: 1, rows: 1 };
+  assert.ok(raisedRows(renderer(above), world, above)[0].y >= back);
+});
+
+test('a slope at the view\'s edge reads its neighbour off screen as bare ground', () => {
+  const world = knoll();
+  const { x, y, lift } = slopeCell(world, 1);
+  const view = { x0: x, y0: y - 40, cols: 1, rows: 50 };
+  const r = renderer(view);
+  drawGround(r, world, view, 0, null, 0, true);
+  r.cellLit = null;
+  for (const row of raisedRows(r, world, view)) row.draw();
+  const flat = renderer({ ...view, x0: x - 1, cols: 3 });
+  drawGround(flat, world, { ...view, x0: x - 1, cols: 3 }, 0, null, 0, true);
+  const top = y - lift - view.y0;
+  assert.equal(r.fg[(top + 1) * 4 + 3], flat.fg[((y - view.y0) * 3 + 2) * 4 + 3]);
 });
 
 test('raised ground hides the small letters of a sprite behind it', () => {
@@ -115,6 +145,23 @@ test('a steep drop shows earth below its first slope rows', () => {
   const r = renderer(view);
   drawRaisedRow(r, world, view, y);
   assert.equal(column(r, x - view.x0).filter(Boolean).length, lift - front + 1);
+  // Each slope row is a neighbouring column's ground, dimmed for the first
+  // two rows and tinted as earth below them.
+  const flat = renderer(view);
+  drawGround(flat, world, view, 0, null, 0, true);
+  const top = y - lift - view.y0;
+  let earth = 0;
+  for (let k = 1; k <= lift - front; k++) {
+    const tint = k <= 2 ? [0.8, 0.8, 0.8] : [0.62, 0.55, 0.48];
+    const o = ((top + k) * view.cols + x - view.x0) * 4;
+    const from = ((y - view.y0) * view.cols + x - view.x0 + (k & 1 ? 1 : -1)) * 4;
+    for (let c = 0; c < 3; c++) {
+      assert.ok(Math.abs(r.fg[o + c] - flat.fg[from + c] * tint[c]) <= 1, `row ${k}, channel ${c}`);
+    }
+    // Where the slope's own tint would miss by more than the rounding.
+    if (k > 2 && [0, 1, 2].some((c) => flat.fg[from + c] * (0.8 - tint[c]) > 2)) earth++;
+  }
+  assert.ok(earth > 0, 'an earth row whose tint tells it from the slope');
 });
 
 test('rows above and below the view are clipped, and flat rows draw nothing', () => {
@@ -133,7 +180,7 @@ test('the painter gets one raised row for every lifted ground row that can show'
   const world = knoll();
   const view = { x0: 0, y0: 0, cols: 160, rows: 40 };
   const rows = raisedRows(renderer(view), world, view);
-  const ys = rows.map((row) => row.y);
+  const ys = rows.map((row) => row.y).filter(Number.isFinite);
   const lifted = [];
   for (let y = 0; y < view.rows + MAX_LIFT; y++) {
     if (Array.from({ length: view.cols }, (_, x) => world.liftAt(x, y)).some(Boolean)) lifted.push(y);
