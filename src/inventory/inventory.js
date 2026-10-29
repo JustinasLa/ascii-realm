@@ -13,13 +13,28 @@ function validStack(stack) {
   return !!item && validCount(stack.count) && stack.count <= item.stackLimit;
 }
 
-// A stack's own properties beyond its item and count, e.g. a weapon's
-// material. Only stacks with the same properties merge.
+// A stack's own properties beyond its item and count: a weapon's material, an
+// alloy ingot's alloy id, or the inputs a scrap's failed mix consumed. Only
+// stacks with the same properties merge.
 const MATERIALS = ['stone', 'copper', 'bronze', 'iron', 'steel'];
-export function stackExtras(stack) {
-  return MATERIALS.includes(stack?.material) ? { material: stack.material } : {};
+const ALLOY_ID = /^a[1-9]\d{0,3}$/;
+// Up to five item ids with whole counts of 1–5, kept in id order.
+function inputsOf(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value);
+  if (!entries.length || entries.length > 5) return null;
+  if (!entries.every(([id, n]) => Object.hasOwn(ITEMS, id) && Number.isSafeInteger(n) && n >= 1 && n <= 5)) return null;
+  return Object.freeze(Object.fromEntries(entries.sort(([a], [b]) => (a < b ? -1 : 1))));
 }
-const sameExtras = (stack, extras) => (stack.material ?? null) === (extras.material ?? null);
+export function stackExtras(stack) {
+  const extras = {};
+  if (MATERIALS.includes(stack?.material)) extras.material = stack.material;
+  if (typeof stack?.alloy === 'string' && ALLOY_ID.test(stack.alloy)) extras.alloy = stack.alloy;
+  const inputs = inputsOf(stack?.inputs);
+  if (inputs) extras.inputs = inputs;
+  return extras;
+}
+const sameExtras = (stack, extras) => JSON.stringify(stackExtras(stack)) === JSON.stringify(stackExtras(extras));
 
 // Fills existing stacks before empty slots. Callers can use a copy of the bag
 // to plan a transfer without changing anything when it cannot fit in full.

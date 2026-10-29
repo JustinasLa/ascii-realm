@@ -233,6 +233,52 @@ short version see the [README](../README.md).
   bag is full. Mined blocks stay gone for the session, grass growing back;
   unfinished blows are forgotten when you leave. As a weapon, the stone pickaxe
   hits like a stone war hammer.
+- **Smelting.** A furnace smelts Raw Iron into an Iron Ingot and Raw Copper
+  into a Copper Ingot, 10 seconds an item; both ingots stack to 64 and weigh
+  what their ore weighs. Coal burns 80 seconds (eight items) and a log 15. A
+  fuel item is lit only when the burn has run out and the input can smelt
+  into the output; a burn already started keeps ticking down even with
+  nothing left to smelt. Smelting stops while the output is full or holds the
+  other ingot, and its progress drops back to nothing; with no burn, progress
+  falls back twice as fast as it was made, and a different input item starts
+  from nothing. Raw Tin, Coal and Lapis Lazuli don't smelt: tin goes into
+  alloys raw. A whole bag stack goes in at once, to the input if it smelts or
+  else as fuel, as far as the slot has room, and a slot is taken back as far
+  as the bag has room. Furnaces keep working on game time with their screen
+  shut and you far away, and are kept on this device for each world (up to
+  32 busy ones a world); the page being closed pauses them.
+  A furnace stands on the east side of the spawn forecourt (the scenery
+  builder's Camp palette places more; none can be broken). Press `E` beside
+  one, or tap **SMELT**: its screen shows the input over the fuel with a
+  flame for the burn left, an arrow for the smelting and the output, and
+  below them your satchel's resources, each saying where it goes or why it
+  can't. Pick one to put it in, or a slot to take it back. While it burns,
+  embers flicker in its mouth and a small warm light falls in front of it.
+- **Alloys.** The alloy forge's rules are in place, though no forge stands in
+  the world yet. A mix is one base, an Iron, Steel or Bronze Ingot, and up to
+  four catalysts; a metal base takes metal or crystal catalysts (Copper Ingot,
+  Raw Tin, Lapis Lazuli or another ingot), each ingredient once. A firing needs
+  at least two ingredients and burns 1 Coal. A mix fired before always gives
+  the same result. A new mix rolls once, succeeding at 2 + 4·√(total value) %
+  (Iron 2, Copper 2, Lapis 2, Steel 4, Bronze 6, Raw Tin 8), plus 8 with a
+  Steel and 12 with a Bronze base, at most 85 %; a failure gives Unusable
+  Scrap, which records what it consumed, and that mix stays scrap for good. A
+  new alloy starts from its base's stats, moved toward the catalysts' and
+  sometimes taking up stats the base lacks, each held to 1.2 times where it
+  started; a stat left unchanged shifts by up to 10 % either way. Each hit kind
+  its inputs name needs 1 to 3 hits to work. It takes a free name from 42 metal
+  names (Ferranite, Blackiron, …), else from its catalysts' lists, and gives
+  scrap when none is free; its colour is one of 49 muted metal shades. Each
+  Alloy Ingot stack keeps its alloy, so different alloys never stack. Steel and
+  Bronze Ingots have no source yet. Loading takes one item at a time from the
+  bag, the base first. With a full bag a firing's result waits in the forge to
+  be taken, and the forge won't fire until it is; emptying the forge gives back
+  each catalyst the bag has room for, last loaded first, then the base once no
+  catalyst is left.
+  A new alloy can be renamed within a minute of game time, in letters and
+  underscores (shown as spaces), to a name no other alloy has in any case. The
+  book of alloys and failed mixes, and each forge's loaded mix and waiting
+  result, are kept on this device for each world; the bag is not.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,

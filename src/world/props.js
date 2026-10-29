@@ -763,6 +763,11 @@ export function createProp(kind, x, y, options = {}) {
     prop.collisionPolygons = prop.collisionPolygons.map((polygon) => polygon.map(([dx, dy]) =>
       [dx * width * scale, dy * height * scale]));
   }
+  // A furnace's mouth glows where its art is drawn, at any size.
+  if (prop.glow) {
+    prop.glow = { x: prop.glow.x * width * scale, y: prop.glow.y * height * scale,
+      rx: prop.glow.rx * width * scale, ry: prop.glow.ry * height * scale };
+  }
   // Culling must see the final image rather than the original.
   prop.bounds = cellBounds(prop.cells);
   prop.scale = scale;

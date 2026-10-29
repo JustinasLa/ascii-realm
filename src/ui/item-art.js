@@ -2,6 +2,16 @@
 // intentional: each outline shares the same visual centre at column five.
 const art = (...rows) => rows.join('\n');
 
+// One bar shape for every smelted ingot, filled with its ore's letter, since
+// the bag shows every picture in the same ink.
+const ingot = (fill) => art(
+  '   _____',
+  `  /${fill.repeat(5)}\\`,
+  ` /${fill.repeat(7)}\\`,
+  `|${fill.repeat(9)}|`,
+  ' \\_______/',
+);
+
 const ITEM_ART = Object.freeze({
   // Held at a slant, so the blade and crossguard read as a sword at hotbar size.
   shortSword: art(
@@ -388,6 +398,19 @@ const ITEM_ART = Object.freeze({
     '    |',
     '    |',
     '    |',
+  ),
+  ironIngot: ingot('#'),
+  copperIngot: ingot('o'),
+  steelIngot: ingot('='),
+  bronzeIngot: ingot('+'),
+  alloyIngot: ingot('%'),
+  // A cracked, jagged lump of slag from a failed alloy.
+  unusableScrap: art(
+    '  __/\\_ __',
+    ' /%&#\\/&%\\',
+    '|&;%#&%;#&\\',
+    ' \\%#/\\_;%&/',
+    "  `-'  `-'",
   ),
 });
 
