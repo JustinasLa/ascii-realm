@@ -56,3 +56,9 @@ export class Camera {
     return this.y - this.bias * view.rows;
   }
 }
+
+// The view shifted so whatever stands on ground lifted `rows` (see
+// relief.js) is drawn that much higher; unlifted, the view itself.
+export function liftView(view, rows) {
+  return rows ? { ...view, y0: view.y0 + rows } : view;
+}

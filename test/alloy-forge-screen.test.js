@@ -241,6 +241,57 @@ test('arrows move over every control in order; E closes from a button', (t) => {
   assert.equal(screen.isOpen, false);
 });
 
+test('on an overflowing Known alloys list the scroll keys scroll it, and never reach the game', (t) => {
+  const { screen, discover, press, document, window, row } = mount(t);
+  screen.open(ID);
+  discover();
+  const keyups = [];
+  window.addEventListener('keyup', (event) => keyups.push(event.code));
+  const release = (code) => {
+    const event = new Event('keyup');
+    event.code = code;
+    window.dispatchEvent(event);
+  };
+  const scrollKeys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', 'Space'];
+  // A list that fits: the arrows rove as on every control.
+  Object.assign(screen.known, { scrollHeight: 120, clientHeight: 120 });
+  screen.known.focus();
+  assert.equal(press('ArrowUp').prevented, true);
+  assert.equal(document.activeElement, row('Ferranite'));
+  screen.known.focus();
+  screen.known.scrollHeight = 600;
+  for (const code of scrollKeys) {
+    const { prevented, reachedGame } = press(code);
+    assert.equal(prevented, false, `${code} scrolls the list`);
+    assert.equal(reachedGame, false, `${code} never reaches the game`);
+    assert.equal(document.activeElement, screen.known, code);
+    release(code);
+  }
+  assert.deepEqual(keyups, []);
+  // Left, right and Tab still leave it, and a shortcut keeps its own default.
+  assert.equal(press('ArrowRight').prevented, true);
+  assert.equal(document.activeElement, screen.closeButton);
+  screen.known.focus();
+  assert.equal(press('Tab', { shiftKey: true }).prevented, true);
+  assert.equal(document.activeElement, row('Ferranite'));
+  screen.known.focus();
+  const shortcut = press('Home', { ctrlKey: true });
+  assert.deepEqual([shortcut.prevented, shortcut.reachedGame], [false, false]);
+  // Down from a button still moves on, however long the list.
+  screen.fire.focus();
+  press('ArrowDown');
+  assert.equal(document.activeElement, screen.emptyButton);
+  // On a phone the sheet around the list scrolls instead.
+  screen.known.scrollHeight = 120;
+  Object.assign(screen.screen, { scrollHeight: 900, clientHeight: 700 });
+  screen.known.focus();
+  assert.equal(press('PageDown').prevented, false);
+  assert.equal(document.activeElement, screen.known);
+  // Shut, the screen leaves every key to the game.
+  press('Escape');
+  assert.equal(press('ArrowDown', { target: screen.known }).reachedGame, true);
+});
+
 test('a full bag leaves the result in the forge to take', (t) => {
   const { screen, row, tap, inventory, forge, notes } = mount(t, { items: [['ironIngot', 1], ['rawTin', 1], ['coal', 2]] });
   screen.open(ID);

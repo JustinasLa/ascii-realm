@@ -141,9 +141,25 @@ test('a furnace is reached from its footprint on any side, the nearest first', a
   assert.equal(nearbyFurnace({ propsIn: () => [near, wide] }, player({ x: 3 })), near, 'inside both footprints, the first');
 });
 
+test('a scaled builder furnace in the next chunk is reached from its footprint', async () => {
+  const { FURNACE_REACH, nearbyFurnace } = await import('../src/crafting/furnace.js');
+  const { createProp } = await import('../src/world/props.js');
+  const { ASPECT, World } = await import('../src/world/world.js');
+  const world = new World(3, { rivers: false });
+  const furnace = { ...createProp('furnace', 64.5, 10, { scale: 3 }), id: 's:1' };
+  world.addProp(furnace);
+  // Its base is a chunk away, past the old fixed search, but its side is near.
+  const edge = furnace.x - furnace.footW - FURNACE_REACH / ASPECT;
+  assert.ok(furnace.x - edge > 24);
+  assert.equal(nearbyFurnace(world, player({ x: edge + 0.1, y: 10 })), furnace);
+  assert.equal(nearbyFurnace(world, player({ x: edge - 0.1, y: 10 })), null);
+  assert.equal(nearbyFurnace(world, player({ x: furnace.x, y: 10 + furnace.footH + FURNACE_REACH - 0.1 })), furnace);
+});
+
 test('an alloy forge in reach comes after a furnace and before a glowcap', async () => {
   const { nearbyForge } = await import('../src/crafting/alloys.js');
-  const { nearbyStation } = await import('../src/crafting/furnace.js');
+  const { FURNACE_REACH, nearbyStation } = await import('../src/crafting/furnace.js');
+  const { ASPECT } = await import('../src/world/world.js');
   const furnace = { id: 'r:spawn:11', kind: 'furnace', x: -20, y: -2, footW: 6, footH: 1.4 };
   const forge = { id: 'r:spawn:12', kind: 'alloy-forge', x: 0, y: -2, footW: 7, footH: 1.4 };
   const seen = [];
@@ -153,8 +169,9 @@ test('an alloy forge in reach comes after a furnace and before a glowcap', async
   const context = { player: player(), mushrooms: mushroomsWith({ cooldown: 0 }), fires: firesWith({}), furnaces, forges };
   assert.deepEqual(interaction(context), { kind: 'forge', label: 'FORGE', ariaLabel: 'Use the alloy forge' });
   assert.deepEqual(performInteraction(context), { kind: 'forge', prop: forge });
-  // The search reaches a wide forge's far end: 16 columns either side.
-  assert.deepEqual(seen[0], [-16, -6, 16, 6]);
+  // The search reaches past a wide forge's far end, as for a furnace.
+  const reachX = 10 + FURNACE_REACH / ASPECT, reachY = 2 + FURNACE_REACH;
+  assert.deepEqual(seen[0], [-reachX, -reachY, reachX, reachY]);
   // Beside the furnace, the furnace wins; in the air, the glowcap is next.
   assert.equal(interaction({ ...context, player: player({ x: -14 }) }).kind, 'furnace');
   assert.equal(interaction({ ...context, player: player({ air: 0.5 }) }).kind, 'spores');

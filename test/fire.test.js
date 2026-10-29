@@ -412,6 +412,16 @@ test('reaction particles and notices stay bounded, render at clipped edges and e
   assert.equal(fires.particles.length, 0);
 });
 
+test('on raised ground a spark rises from the ground under it', () => {
+  const fires = new Fires();
+  fires.particles.push({ x: 3.5, y: 20.5, h: 2, life: 1, max: 1, ash: true, g: 0 });
+  const rows = [];
+  const r = { layer: (_x, y) => rows.push(y) };
+  fires.drawParticles(r, { x0: 0, y0: 0 });
+  fires.drawParticles(r, { x0: 0, y0: 0 }, (x, y) => (x === 3.5 && y === 20.5 ? 5 : 0));
+  assert.deepEqual(rows, [18, 13]);
+});
+
 test('extinguishing leaves burnt terrain at the fire, and rebuilding preserves it', () => {
   const world = grassWorld();
   const fires = new Fires();

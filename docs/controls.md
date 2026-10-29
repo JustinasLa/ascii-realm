@@ -37,7 +37,7 @@
 | Arrow keys / `Tab`, with a furnace open | Move through its slots, your satchel's resources and Close |
 | `Enter` / `Space`, with a furnace open | Put the chosen resource in, or take a slot's contents back |
 | `Escape` / `E`, with a furnace open | Close the furnace |
-| Arrows / `Tab`, `Enter` / `Space`, `Escape` / `E`, with an alloy forge open | As with a furnace: move through its buttons, satchel rows and Known alloys, add an ingredient or press a button, and close it |
+| Arrows / `Tab`, `Enter` / `Space`, `Escape` / `E`, with an alloy forge open | As with a furnace: move through its buttons, satchel rows and Known alloys (when that list is too long to show, arrows up and down, `Page Up` / `Page Down`, `Home`, `End` and `Space` scroll it), add an ingredient or press a button, and close it |
 | `1`–`6` (top row or numpad), with a weapon station open | Strike the piece with Hit, Small Hit, Etch, Whittle, Engrave or Sew |
 | Arrows / `Tab`, `Enter` / `Space`, `Escape` / `E`, with a weapon station open | Move through its pieces, hit buttons, Finish, Cancel, Take and satchel rows, choose a piece, add metal or press a button, and close it |
 | Typing, then `Enter`, after a discovery | Name the new alloy; in the field the keys type, and only `Tab` and `Escape` leave it |

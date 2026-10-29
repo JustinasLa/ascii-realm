@@ -420,6 +420,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       // Records lobby requests and how the page left a lobby.
       connect(request) { this.connects.push(request); }
       suspend() { this.suspends++; }
+      setStatus(status, message) { this.status = status; this.message = message; }
       // Records each note offered to the lobby; solo, nothing is sent.
       sendNote(note) { this.notesSent.push(note); return false; }
       leave(notify) { this.leaves.push(notify); }

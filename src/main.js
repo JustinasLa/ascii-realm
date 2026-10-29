@@ -69,7 +69,7 @@ import { InventoryScreen } from './ui/inventory.js';
 import { PhoneMenu } from './ui/phone-menu.js';
 import { PlayGate } from './ui/play-gate.js';
 import { FrameClock, FramePacer, FrameQuality, renderSize } from './render/budget.js';
-import { Camera } from './world/camera.js';
+import { Camera, liftView } from './world/camera.js';
 import { Ambience, lightsOf } from './world/ambience-fx.js';
 import { Dust } from './world/dust.js';
 import { Fires } from './world/fire.js';
@@ -81,7 +81,7 @@ import { SpellFogStirs } from './world/fog-spells.js';
 import { MAX_WALKERS } from './world/fog-wake.js';
 import { Footprints } from './world/footprints.js';
 import { Mushrooms } from './world/mushrooms.js';
-import { drawGround } from './world/ground.js';
+import { drawGround, raisedRows } from './world/ground.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
 import { Mining, toolOf } from './world/mining.js';
@@ -218,8 +218,12 @@ const seed = Number.isSafeInteger(requestedSeed) && requestedSeed !== 0 ? reques
 const session = (() => { try { return sessionStorage; } catch { return null; } })();
 const sessionHas = (key) => { try { return session.getItem(key) !== null; } catch { return false; } };
 const inLobby = params.has('room') || sessionHas('ascii-realm-rejoin') || sessionHas(PENDING_LOBBY);
+// ?scene=hill raises a ridge and a knoll round spawn (see docs/terrain.md);
+// only this page draws relief, so a lobby plays on flat land.
+const hillScene = params.get('scene') === 'hill' && !inLobby;
 const world = new World(seed, { ...woodlandOptions(params, { inLobby }), season: params.get('season') ?? undefined,
-  maxChunks: baseChunks, meadow: ruinPreview, spawnRuins: !ruinPreview });
+  maxChunks: baseChunks, meadow: ruinPreview || hillScene, spawnRuins: !ruinPreview && !hillScene,
+  ...(hillScene ? { relief: 'hill', rivers: false } : {}) });
 // Keep every chunk a zoomed-out view touches, including the tallest trees
 // above and below it, or chunks would be rebuilt every frame.
 fitChunks = () => {
@@ -626,18 +630,20 @@ debug.skins = { PRESETS, PALETTES };
 debug.inventoryScreen = inventoryScreen;
 
 // Friends in a lobby share the world's seed and see one another walk about.
-// Joining a lobby on another seed reloads the page into that world.
+// Joining a lobby on another seed reloads the page into that world. Lobbies
+// share neither dense woods nor the hill scene's raised ground.
+const reloadsForLobby = world.woodland === 'dense' || hillScene;
 const remotePlayers = new RemotePlayers();
 const multiplayer = new MultiplayerClient({
   getState: () => playerState(player),
   onJoin: (lobby) => {
-    if (needsWorldReload(lobby, seed, world.woodland)) {
+    if (needsWorldReload(lobby, seed, world.woodland) || reloadsForLobby) {
       const url = lobbyWorldUrl(location.href, lobby, multiplayer.options?.server);
       try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
-      // A dense page reloads before it connects (below), so it never gets
+      // A dense or hill page reloads before it connects (below), so it never gets
       // here; if it ever does, it keeps its seat in the lobby while it
       // reloads into the sparse world, rather than leaving it.
-      if (world.woodland === 'dense') multiplayer.suspend();
+      if (reloadsForLobby) multiplayer.suspend();
       else multiplayer.leave(false);
       location.replace(url);
       return;
@@ -654,10 +660,14 @@ const multiplayer = new MultiplayerClient({
 });
 debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
-// Creating or joining a lobby from dense woods reloads into the sparse world
-// first, and the request is made there, so no lobby ever holds a dense page.
-guardLobbyConnect(multiplayer, { dense: world.woodland === 'dense', storage: session,
-  reload: (request) => location.replace(sparseWorldUrl(location.href, request)) });
+// Creating or joining a lobby from dense woods or the hill scene reloads into
+// the sparse world first, and the request is made there, so no lobby ever
+// holds a dense or raised page. Where the browser won't keep the request
+// across the reload, the page stays and says what to do instead.
+const lobbyBlocked = `Leave ${hillScene ? 'the hill scene' : 'the dense woods'} first: lobbies play in the plain world, and this browser won't let the page carry your request there.`;
+guardLobbyConnect(multiplayer, { dense: reloadsForLobby, storage: session,
+  reload: (request) => location.replace(sparseWorldUrl(location.href, request)),
+  blocked: () => { multiplayer.setStatus('error', lobbyBlocked); hud.notify(lobbyBlocked, 'info'); } });
 // While the creator is open the lobby waits; the last join asked for is made
 // once it closes. A dense page's reload waits too, and so does a request
 // resumed after one.
@@ -737,8 +747,15 @@ canvas.addEventListener('pointerleave', () => { pointer = null; });
 const carriedCount = (id) => inventory.slots.reduce((n, s) => n + (s?.id === id ? s.count : 0), 0)
   + (inventory.equipment.mainHand?.id === id ? 1 : 0);
 
-// The ground cell under the cursor, or null when it is off the scene.
-const cursorCell = () => pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
+// How many rows the ground under the player is raised.
+const playerLift = () => world.relief ? world.liftAt(player.x, player.y) : 0;
+// The ground cell under the cursor, or null when it is off the scene. On
+// raised ground it is read on the player's own height.
+function cursorCell() {
+  const cell = pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
+  if (cell && world.relief) cell.y += playerLift();
+  return cell;
+}
 
 // The way the cursor points from the player, or null without one. Close
 // swings are aimed from the hips on screen rather than the feet, so a click
@@ -947,7 +964,8 @@ onPhoneChange(device.phone);
 // hunt them down. ?skeletons=N, ?goblins=N, ?trolls=N and ?elves=N set how
 // many of each may be about at once; 0 leaves the world free of them.
 const countOf = (name, fallback) => {
-  const n = Number(params.get(name) ?? fallback);
+  // The hill scene is left quiet unless asked: its wildlife is not raised yet.
+  const n = Number(params.get(name) ?? (hillScene ? 0 : fallback));
   return Number.isFinite(n) ? Math.max(0, Math.min(8, Math.floor(n))) : fallback;
 };
 const monsters = new Monsters({ seed,
@@ -1328,7 +1346,7 @@ function fallInBattle() {
   mouseHeld = false;
   hitStop = 0;
   camera.x = player.x;
-  camera.y = player.y - 11;
+  camera.y = player.y - 11 - playerLift();
   monsters.clear();
   animals.disengage();
   target.clear();
@@ -1669,10 +1687,21 @@ function frame(now) {
     }
   }
   // Aim at the wanderer's middle rather than their feet.
+  const pLift = playerLift();
   if (builder.enabled) builder.updateCamera(dt, move, isDown('ShiftLeft', 'ShiftRight'));
-  else camera.follow(player.x, player.y - 11, dt);
+  else camera.follow(player.x, player.y - 11 - pLift, dt);
 
   const view = camera.view(renderer);
+  // Whatever stands on raised ground is drawn through a view lifted with it.
+  const lv = (x, y) => world.relief ? liftView(view, world.liftAt(x, y)) : view;
+  const pv = pLift ? liftView(view, pLift) : view;
+  // Each light or glow shines from as high as its source stands.
+  const liftedPass = (sources, pass) => {
+    if (!world.relief) pass(view, sources);
+    else for (const s of sources) pass(s.carried ? pv : lv(s.x, s.y), [s]);
+  };
+  // Sprites as far as the deepest lift below the view can rise into it.
+  const below = world.relief ? world.maxLift : 0;
   weather.update(dt, time, world, view, sound.weather);
   if (!paused) {
     debris.update(dt, world, view, player, weather, splashes, debrisBodies());
@@ -1707,7 +1736,7 @@ function frame(now) {
   grass.drawTracks(renderer, view, time, world);
   drawSkyReflection(renderer, view, time);
   footprints.draw(renderer, view, time);
-  drawShadow(renderer, view, player.x, player.y, player.air);
+  if (!pLift) drawShadow(renderer, view, player.x, player.y, player.air);
   const peers = remotePlayers.visible(view);
   for (const peer of peers) {
     drawShadow(renderer, view, peer.player.x, peer.player.y, peer.player.air);
@@ -1757,7 +1786,7 @@ function frame(now) {
   const marginX = Math.max(world.propRenderW, MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT) + 2;
   const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
-    view.x0 + view.cols + marginX, view.y0 + view.rows + tall, wide);
+    view.x0 + view.cols + marginX, view.y0 + view.rows + tall + below, wide);
   // Trees' shadows darken the ground drawn so far, and the grass and rocks'
   // ground cells as they are drawn, and moonbeams light them; warm light is
   // added over them later.
@@ -1768,13 +1797,14 @@ function frame(now) {
   renderer.night = nightLight.active ? nightLight : null;
   debug.metrics.nightMs = performance.now() - nightStart;
   const mirror = reflector(time, view);
-  const visibleMushrooms = mushrooms.prepare(view, wide);
-  const visibleFires = fires.prepare(view, time);
-  const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
+  const deep = below ? { ...view, rows: view.rows + below } : view;
+  const visibleMushrooms = mushrooms.prepare(view, wide, below);
+  const visibleFires = fires.prepare(deep, time);
+  const visibleTorches = torches.prepare(deep, time, player, model?.torchPose());
   ambience.update(dt, time, world, view, { lights: lightsOf(visibleFires, visibleTorches), wind: weather.wind });
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
-  if (model) model.rasterise(view, player.x, player.y);
+  if (model) model.rasterise(pv, player.x, player.y);
   else figure = dressFigure(player);
   const monsterCells = monsterFigures ? monsterFigures.rasterise(view, monsters.list, player) : [];
   for (const { monster } of monsterCells) {
@@ -1794,8 +1824,8 @@ function frame(now) {
     for (const cell of model.cells) {
       left = Math.min(left, cell.sx + view.x0 - player.x);
       right = Math.max(right, cell.sx + view.x0 - player.x);
-      top = Math.min(top, cell.sy + view.y0 - player.y);
-      bottom = Math.max(bottom, cell.sy + view.y0 - player.y);
+      top = Math.min(top, cell.sy + pv.y0 - player.y);
+      bottom = Math.max(bottom, cell.sy + pv.y0 - player.y);
     }
   } else {
     for (const part of figure) {
@@ -1816,40 +1846,41 @@ function frame(now) {
   // While the creator is open, whatever would hide the outlaw is left out.
   const hides = (p, y) => creator.isOpen && hidesPreview(p, y, player);
   const litFurnaces = [];
-  const drawables = props.filter((p) => propInView(view, p, false, MAX_LEAF_DRIFT)).flatMap((p) => {
+  const drawables = props.filter((p) => propInView(lv(p.x, p.y), p, false, MAX_LEAF_DRIFT)).flatMap((p) => {
+    const at = lv(p.x, p.y);
     // A turned arch spans several ground rows. Interleave its stone surfaces
     // with actors and grass instead of drawing both piers at one anchor depth.
     const slices = propDepthSlices(p);
     if (slices) return slices.filter(({ depth }) => !hides(p, p.y + depth)).map(({ depth, cells }) => ({ y: p.y + depth,
-      draw: () => drawProp(renderer, view, p, undefined, time, player, seed, false, cells) }));
+      draw: () => drawProp(renderer, at, p, undefined, time, player, seed, false, cells) }));
     if (hides(p, p.y)) return [];
     const lit = p.kind === 'furnace' ? furnaces.lit(p.id) : p.kind === 'alloy-forge' && alloyBook.lit(p.id);
     if (lit) litFurnaces.push(p);
     return [{ y: p.y, draw: () => {
-      drawProp(renderer, view, p, undefined, time, player, seed);
-      if (lit) drawFurnaceGlow(renderer, view, p, time);
-      drawLeaves(renderer, view, p, time, seed);
+      drawProp(renderer, at, p, undefined, time, player, seed);
+      if (lit) drawFurnaceGlow(renderer, at, p, time);
+      drawLeaves(renderer, at, p, time, seed);
     } }];
   });
   for (const fire of visibleFires) {
     reflections.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time, mirror) });
-    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, view, fire, time) });
+    drawables.push({ y: fire.y, draw: () => fires.draw(renderer, lv(fire.x, fire.y), fire, time) });
   }
   for (const torch of visibleTorches) {
     if (torch.carried) continue;
     reflections.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch, mirror) });
-    drawables.push({ y: torch.y, draw: () => torches.draw(renderer, view, torch) });
+    drawables.push({ y: torch.y, draw: () => torches.draw(renderer, lv(torch.x, torch.y), torch) });
   }
   // Bushes can reach in from below the view or reflect from above it.
   const plants = harvesting.resourcesIn(view.x0 - 9, view.y0 - 12, view.x0 + view.cols + 9,
-    view.y0 + view.rows + 12, wide);
+    view.y0 + view.rows + 12 + below, wide);
   for (const node of plants) {
     reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
-    drawables.push({ y: node.y, draw: () => drawResource(renderer, view, node, time) });
+    drawables.push({ y: node.y, draw: () => drawResource(renderer, lv(node.x, node.y), node, time) });
   }
   for (const node of visibleMushrooms) {
     reflections.push({ y: node.y, draw: () => mushrooms.draw(renderer, view, node, mirror) });
-    drawables.push({ y: node.y, draw: () => mushrooms.draw(renderer, view, node) });
+    drawables.push({ y: node.y, draw: () => mushrooms.draw(renderer, lv(node.x, node.y), node) });
   }
   for (const spore of [...mushrooms.ambient, ...mushrooms.spores]) {
     drawables.push({ y: spore.y, draw: () => mushrooms.drawSpore(renderer, view, spore) });
@@ -1862,14 +1893,14 @@ function frame(now) {
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
-  for (const item of huntDrops.in(view.x0 - 2, view.y0 - view.rows, view.x0 + view.cols + 2, view.y0 + view.rows + 2)) {
+  for (const item of huntDrops.in(view.x0 - 2, view.y0 - view.rows, view.x0 + view.cols + 2, view.y0 + view.rows + 2 + below)) {
     reflections.push({ y: item.y, draw: () => drawItem(renderer, view, item, time, mirror) });
     // Drawn after the grass a few rows in front, so tall blades never hide it.
-    drawables.push({ y: item.y + HUNT_DROP_LIFT, draw: () => drawItem(renderer, view, item, time) });
+    drawables.push({ y: item.y + HUNT_DROP_LIFT, draw: () => drawItem(renderer, lv(item.x, item.y), item, time) });
   }
   for (const piece of debris.visible(view)) {
     reflections.push({ y: piece.y, draw: () => debris.reflect(renderer, view, piece, mirror) });
-    drawables.push({ y: piece.y, draw: () => debris.draw(renderer, view, piece) });
+    drawables.push({ y: piece.y, draw: () => debris.draw(renderer, lv(piece.x, piece.y), piece) });
   }
   const carried = visibleTorches.filter((torch) => torch.carried);
   reflections.push({ y: player.y, draw: () => {
@@ -1878,9 +1909,10 @@ function frame(now) {
     for (const torch of carried) torches.draw(renderer, view, torch, mirror);
   } });
   drawables.push({ y: player.y, draw: () => {
+    if (pLift) drawShadow(renderer, pv, player.x, player.y, player.air);
     if (model) model.draw(renderer, putOutlinedCell);
-    else drawFigure(renderer, view, player, figure, putOutlinedCell);
-    for (const torch of carried) torches.draw(renderer, view, torch);
+    else drawFigure(renderer, pv, player, figure, putOutlinedCell);
+    for (const torch of carried) torches.draw(renderer, pv, torch);
   } });
   for (const figure of monsterCells) {
     reflections.push({ y: figure.monster.y, draw: () => MonsterFigures.draw(renderer, figure, mirror) });
@@ -1910,6 +1942,8 @@ function frame(now) {
     drawables.push({ y: peer.player.y, draw: () => drawFigure(renderer, view, peer.player, peer.figure) });
   }
   reflections.sort((a, b) => a.y - b.y);
+  // Raised ground rows go first, under whatever stands on the same row.
+  if (world.relief) drawables.unshift(...raisedRows(renderer, world, view));
   drawables.sort((a, b) => a.y - b.y);
   // Fish swim under the water: everything on its surface draws over them.
   for (const figure of fishCells) AnimalFigures.drawSubmerged(renderer, figure);
@@ -1923,16 +1957,16 @@ function frame(now) {
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
-  mushrooms.drawGlow(renderer, view, visibleMushrooms);
+  liftedPass(visibleMushrooms, (v, list) => mushrooms.drawGlow(renderer, v, list));
   splashes.drawContacts(renderer, view, time, contacts);
   // The moonbeams' columns of lit air, under the warm light.
   const shaftStart = performance.now();
   nightLight.drawShafts(renderer, view, time);
   debug.metrics.shaftMs = performance.now() - shaftStart;
   debug.metrics.nightMs += debug.metrics.shaftMs;
-  fires.light(renderer, view, time, visibleFires);
-  torches.light(renderer, view, time, visibleTorches);
-  for (const p of litFurnaces) lightFurnace(renderer, view, p, time);
+  liftedPass(visibleFires, (v, list) => fires.light(renderer, v, time, list));
+  liftedPass(visibleTorches, (v, list) => torches.light(renderer, v, time, list));
+  for (const p of litFurnaces) lightFurnace(renderer, lv(p.x, p.y), p, time);
   weather.drawAtmosphere(renderer, view, time);
 
   for (const figure of birdCells) if (figure.air) AnimalFigures.draw(renderer, figure, putOutlinedCell);
@@ -1947,7 +1981,8 @@ function frame(now) {
   // character's top is unknown while it shows nothing, and so is its name.
   const hudView = { ...view, cellW: renderer.cellW, cellH: renderer.cellH };
   const projection = hud.projector(hudView);
-  const ownTop = model ? model.top : Math.floor(player.y + figureTop(figure));
+  let ownTop = model ? model.top : Math.floor(player.y + figureTop(figure));
+  if (pLift && ownTop !== null) ownTop -= pLift;
   lastOwnTop = ownTop;
   const self = selfMember();
   const plates = Number.isFinite(ownTop) && !creator.isOpen ? [{ key: 'self', x: player.x, row: ownTop - 2, depth: player.y,
@@ -1965,7 +2000,7 @@ function frame(now) {
   const bubblesMs = performance.now() - bubblesStarted;
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
-  fires.drawParticles(renderer, view);
+  fires.drawParticles(renderer, view, world.relief ? (x, y) => world.liftAt(x, y) : null);
   fireflies.update(dt, time, world, camera.x, camera.centreY(view), view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   ambience.draw(renderer, view, time);

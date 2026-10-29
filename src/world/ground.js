@@ -1,6 +1,7 @@
 import { NIGHT } from '../render/palette.js';
 import { CHUNK_SIZE, GRASS, WATER } from './world.js';
 import { atCell } from './terrain/cell.js';
+import { reliefLight } from './relief.js';
 import { TERRAIN_SHADERS } from './terrain/index.js';
 
 // Static terrain is shaded once per chunk, including the expensive stone
@@ -95,4 +96,80 @@ export function drawGround(r, world, view, t, bend, wind = 0, loadedOnly = false
       sx += count;
     }
   }
+}
+
+// Raised ground (see relief.js) is drawn again among the sprites, one
+// ground row at a time: each cell's top its lift higher, then the slope it
+// uncovers down to the cell in front. Ridges in front hide what stands
+// behind them, and whatever stands on a row is drawn over its ground.
+const SLOPE = [0.8, 0.8, 0.8];
+// Below a slope's first rows, a steep drop shows earth.
+const FACE = [0.62, 0.55, 0.48];
+const LIT = [1, 1, 1];
+
+function copyCell(r, cached, chunk, i, cell, tint) {
+  const o = cell * 4;
+  const s = i * 4;
+  for (let k = 0; k < 4; k++) {
+    const t = k < 3 ? tint[k] : 1;
+    r.fg[o + k] = cached.fg[s + k] * t;
+    r.ov[o + k] = cached.ov[s + k] * t;
+    r.bg[o + k] = cached.bg[s + k];
+    if (r.cellLit) r.cellLit[o + k] = cached.cellLit[s + k];
+  }
+  r.mask[cell] = chunk.type[i];
+  if (r.motionUsed) {
+    r.motion[o] = r.motion[o + 1] = 0;
+    r.motion[o + 2] = (r.motionPass * 2) & 255;
+    r.motion[o + 3] = (r.motionPass * 2) >> 8;
+  }
+  // Solid ground hides the small letters of a sprite behind it.
+  if (r.fineMark?.[cell]) r.overFine(cell, 0);
+}
+
+export function drawRaisedRow(r, world, view, wy) {
+  const cy = Math.floor(wy / CHUNK_SIZE);
+  const ly = wy - cy * CHUNK_SIZE;
+  const ny = (ly + 1) % CHUNK_SIZE;
+  for (let cx = Math.floor(view.x0 / CHUNK_SIZE); cx * CHUNK_SIZE < view.x0 + view.cols; cx++) {
+    const chunk = world.loaded(cx, cy);
+    if (!chunk?.liftRows?.[ly]) continue;
+    const front = ny ? chunk : world.loaded(cx, cy + 1);
+    const cached = groundOf(chunk, world.seed);
+    const from = Math.max(0, view.x0 - cx * CHUNK_SIZE);
+    const to = Math.min(CHUNK_SIZE, view.x0 + view.cols - cx * CHUNK_SIZE);
+    for (let lx = from; lx < to; lx++) {
+      const i = ly * CHUNK_SIZE + lx;
+      const lift = chunk.lift[i];
+      if (!lift) continue;
+      const sx = cx * CHUNK_SIZE + lx - view.x0;
+      const top = wy - lift - view.y0;
+      const ahead = front?.lift?.[ny * CHUNK_SIZE + lx] ?? 0;
+      const drop = Math.max(0, lift - ahead);
+      LIT[0] = LIT[1] = LIT[2] = reliefLight(lift, ahead);
+      for (let k = Math.max(0, -top); k <= drop && top + k < view.rows; k++) {
+        // Slope rows take a neighbouring column's letter, so no letter
+        // repeats straight down the slope.
+        const side = lx + (k & 1 ? 1 : -1);
+        const j = k ? ly * CHUNK_SIZE + (side < 0 || side >= CHUNK_SIZE ? 2 * lx - side : side) : i;
+        copyCell(r, cached, chunk, j, (top + k) * r.cols + sx, !k ? LIT : k <= 2 ? SLOPE : FACE);
+      }
+    }
+  }
+}
+
+// The painter's drawables for every raised ground row whose cells can show
+// in the view, which reaches up to MAX_LIFT rows below it.
+export function raisedRows(r, world, view) {
+  const rows = [];
+  for (let wy = view.y0; wy < view.y0 + view.rows + world.maxLift; wy++) {
+    const cy = Math.floor(wy / CHUNK_SIZE);
+    const ly = wy - cy * CHUNK_SIZE;
+    for (let cx = Math.floor(view.x0 / CHUNK_SIZE); cx * CHUNK_SIZE < view.x0 + view.cols; cx++) {
+      if (!world.loaded(cx, cy)?.liftRows?.[ly]) continue;
+      rows.push({ y: wy, draw: () => drawRaisedRow(r, world, view, wy) });
+      break;
+    }
+  }
+  return rows;
 }

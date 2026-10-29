@@ -4,6 +4,8 @@ import { art, attribute, element, FurnaceScreen, setText } from './furnace.js';
 const FORGE = { name: 'forge', title: 'Alloy forge', help: [['Enter', 'Add / press'], ['Arrows', 'Move'], ['Esc', 'Close']] };
 // Drawn around a new alloy's name; it fades once.
 const BURST = '\\ | /\n- * -\n/ | \\';
+// Keys the browser scrolls a focused list with.
+const SCROLL_KEYS = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', 'Space'];
 
 export function box(tag, className, ...children) {
   const node = element(tag, className);
@@ -74,6 +76,25 @@ export class AlloyForgeScreen extends FurnaceScreen {
     const naming = this.naming.hidden ? [] : [this.nameInput, this.renameButton, this.keepButton];
     return [this.fire, this.emptyButton, this.take, ...naming, ...this.rows, this.known, this.closeButton]
       .filter((node) => !node.hidden);
+  }
+
+  // On Known alloys, while it or the sheet around it overflows, the scroll keys
+  // scroll it as the browser does; they still never reach the game.
+  _handleKeydown(event) {
+    if (this.isOpen && !event.defaultPrevented && event.target === this.known && SCROLL_KEYS.includes(event.code)
+      && !(event.altKey || event.ctrlKey || event.metaKey) && this._knownScrolls()) {
+      event.stopImmediatePropagation();
+      this._consumed.add(event.code);
+      return;
+    }
+    super._handleKeydown(event);
+  }
+
+  _knownScrolls() {
+    for (let node = this.known; node && node !== this.root; node = node.parentNode) {
+      if (node.scrollHeight > node.clientHeight) return true;
+    }
+    return false;
   }
 
   _select(id) {

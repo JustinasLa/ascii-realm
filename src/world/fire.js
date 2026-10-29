@@ -637,11 +637,12 @@ export class Fires {
     }
   }
 
-  drawParticles(r, view) {
+  // `liftAt(x, y)`, on raised ground, lifts a spark over the ground under it.
+  drawParticles(r, view, liftAt = null) {
     for (const p of this.particles) {
       const y = p.y - p.h;
       const sx = Math.floor(p.x) - view.x0;
-      const sy = Math.floor(y) - view.y0;
+      const sy = Math.floor(y) - view.y0 - (liftAt ? liftAt(p.x, p.y) : 0);
       const fade = Math.max(0, p.life / p.max);
       if (p.ash) r.layer(sx, sy, p.g, 135 * fade, 112 * fade, 90 * fade);
       else r.layer(sx, sy, subGlyph(EMBER, p.x, y), 255 * fade, (120 + 80 * fade) * fade, 40 * fade);

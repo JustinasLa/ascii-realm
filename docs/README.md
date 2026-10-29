@@ -36,6 +36,8 @@ Technical and player documentation for [ASCII Realm](../README.md).
   reflections fill the view, from the reference clips.
 - [Fire spread](fire-spread.md) — how campfires, torches and lightning burn
   connected vegetation.
+- [Raised terrain](terrain.md) — the hill scene and how raised ground,
+  grass and whatever stands on it are drawn.
 
 ## Pages
 
