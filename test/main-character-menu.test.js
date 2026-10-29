@@ -223,6 +223,24 @@ test('Play as switches name and skin at once, without a reload; the cooldown ref
   assert.deepEqual(debug.notes, ['Now playing as Анна. Others see the new name when you next join.']);
 });
 
+test('the inventory heads its sheet with the class and lists the attributes, and gets the mana', async () => {
+  const harness = await menu();
+  const { game, pages } = harness;
+  assert.equal(game.inventoryScreen.className, 'Bard');
+  assert.deepEqual(game.inventoryScreen.attributes(), { strength: 4, dexterity: 4, constitution: 4, intelligence: 4,
+    wisdom: 6, charisma: 4 });
+  assert.equal(game.inventoryScreen.wallet, game.wallet);
+  assert.deepEqual(game.inventoryScreen.manaSources, [game.casting]);
+  pages.onPlay('c0002');
+  assert.equal(game.inventoryScreen.name, 'Анна');
+  assert.equal(game.inventoryScreen.className, 'Bard');
+  const outlaw = await load('http://localhost/?debug', memory({ [ROSTER_KEY]: saved() }));
+  assert.equal(outlaw.game.inventoryScreen.className, null, 'a sheet without a class');
+  const none = await load('http://localhost/?debug&nocreator', memory());
+  assert.equal(none.game.inventoryScreen.className, null);
+  assert.equal(none.game.inventoryScreen.attributes(), null, 'no character, no attributes');
+});
+
 test('recently hurt: Edit, Create and Play as are refused until 10 s of play pass', async () => {
   const harness = await menu();
   const { game, pages } = harness;

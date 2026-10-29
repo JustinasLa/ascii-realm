@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cleanSkin, presetSkin } from '../src/character/skin.js';
+import { presetSkin } from '../src/character/skin.js';
 import { Inventory } from '../src/inventory/inventory.js';
-import { ITEMS } from '../src/inventory/items.js';
+import { EQUIPMENT_SLOTS, ITEMS } from '../src/inventory/items.js';
 import { itemArt } from '../src/ui/item-art.js';
 import { InventoryScreen } from '../src/ui/inventory.js';
+import { DOLL_BOXES, dollArea } from '../src/ui/paper-doll.js';
 
 // A fake DOM with just enough of the browser for the inventory panel:
 // reflected attributes, focus, simple selectors and element events.
@@ -269,7 +270,8 @@ test('opening the inventory blocks the scene and closing returns focus to the ca
   assert.equal(canvas.inert, true);
   assert.deepEqual(toggles, [true]);
   assert.equal(document.activeElement, bagButton(0), 'the selected slot takes focus');
-  assert.equal(screen.slotCounter.textContent, '15 / 24 slots');
+  assert.deepEqual(bagButton(0).focusOptions.at(-1), { preventScroll: true }, 'the sheet opens at its top');
+  assert.equal(screen.slotCounter.textContent, 'Bag 15/24');
 
   // Key releases never leak into the game while the panel is open.
   assert.equal(press('KeyI', { type: 'keyup' }).reachedGame, false);
@@ -306,6 +308,16 @@ test('opening the inventory blocks the scene and closing returns focus to the ca
   screen.screen.querySelectorAll('.inventory-close')[0].click();
   assert.equal(screen.isOpen, false, 'the Close button closes the panel');
   assert.deepEqual(toggles, [true, false, true, false, true, false]);
+});
+
+test('scrolled down to the bag and closed, the sheet reopens at its top', (t) => {
+  const { screen } = mount(t);
+  screen.setOpen(true);
+  screen.screen.scrollTop = 240;
+  screen.setOpen(false);
+  assert.equal(screen.screen.scrollTop, 240, 'closing leaves the scroll alone');
+  screen.setOpen(true);
+  assert.equal(screen.screen.scrollTop, 0);
 });
 
 test('a blurred window forgets swallowed key releases', (t) => {
@@ -425,29 +437,24 @@ test('arrow keys move through the bag grid and around the equipment figure', (t)
   grid.columns = 'none';
   assert.deepEqual(step('ArrowDown'), { source: 'bag', index: 6 }, 'six columns without a grid template');
 
-  // Lay the gear out around the figure.
-  const places = {
-    helm: [50, 0], hands: [0, 50], chest: [50, 50], cape: [100, 50],
-    mainHand: [0, 100], legs: [50, 100], offHand: [100, 100],
-    quiver: [0, 0], amulet: [100, 0], feet: [100, 150], ringLeft: [0, 150], ringRight: [100, 200],
-  };
-  for (const [slot, [left, top]] of Object.entries(places)) {
-    slotButton(slot).rect = { left, top, width: 20, height: 20 };
+  // Lay the boxes out on the paper doll's grid: cells 50 wide, 40 tall.
+  for (const [slot, { column, row, width, height }] of Object.entries(DOLL_BOXES)) {
+    slotButton(slot).rect = { left: (column - 1) * 50, top: (row - 1) * 40, width: width * 50, height: height * 40 };
   }
   assert.equal(press('KeyG').prevented, true);
   assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
   assert.equal(document.activeElement, slotButton('helm'));
-  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'helm' }, 'nothing lies above the helm');
-  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'chest' });
+  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'helm' }, 'nothing lies above the helmet');
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'amulet' });
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'offHand' });
+  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'feet' });
+  assert.equal(document.activeElement, slotButton('feet'));
+  slotButton('chest').click();
+  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'legs' });
   assert.deepEqual(step('ArrowLeft'), { source: 'equipment', slot: 'hands' });
-  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'chest' });
-  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'cape' });
-  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'offHand' });
-  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'cape' });
-  assert.equal(document.activeElement, slotButton('cape'));
-  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'amulet' });
-  assert.deepEqual(step('ArrowLeft'), { source: 'equipment', slot: 'helm' });
-  assert.deepEqual(step('ArrowLeft'), { source: 'equipment', slot: 'quiver' }, 'the quiver sits beside the helm');
+  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'mainHand' });
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'quiver' }, 'the quiver sits beside the weapon');
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'helm' });
 
   press('KeyG');
   assert.deepEqual(screen.selection, { source: 'bag', index: 0 });
@@ -686,7 +693,7 @@ test('the twelve equipment slots take boots on the feet and arrows in the quiver
   assert.deepEqual([...screen.equipmentNodes.keys()], ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand',
     'feet', 'amulet', 'ringLeft', 'ringRight', 'quiver']);
   assert.deepEqual([...screen.equipmentNodes.values()].map(({ button }) => button.children[0].textContent),
-    ['Helm', 'Chest', 'Legs', 'Hands', 'Cape', 'Main hand', 'Off hand', 'Feet', 'Amulet', 'Left ring', 'Right ring', 'Quiver']);
+    ['helmet', 'body', 'legs', 'gloves', 'cloak', 'weapon', 'shield', 'boots', 'amulet', 'ring', 'ring', 'quiver']);
   assert.equal(slotButton('feet').getAttribute('aria-label'), 'Feet: Riding Boots');
   assert.equal(slotButton('legs').getAttribute('aria-label'), 'Legs: empty');
   slotButton('feet').click();
@@ -700,7 +707,8 @@ test('the twelve equipment slots take boots on the feet and arrows in the quiver
   press('Enter');
   assert.deepEqual(screen.selection, { source: 'equipment', slot: 'quiver' });
   assert.deepEqual(inventory.equipment.quiver, { id: 'arrow', count: 30 });
-  assert.equal(screen.equipmentNodes.get('quiver').count.textContent, 'x30');
+  assert.equal(screen.equipmentNodes.get('quiver').count.textContent, '30');
+  assert.equal(slotButton('quiver').getAttribute('aria-label'), 'Quiver: Arrow');
   assert.equal(screen.equipmentNodes.get('feet').count.textContent, '');
   assert.deepEqual(notes.at(-1), ['Equipped Arrow.', 'success']);
 
@@ -787,8 +795,8 @@ test('feedback shows only while open and fades after three and a half seconds', 
 test('update redraws only when the inventory, selection or vitality changes', (t) => {
   const { screen, inventory, player, press } = mount(t);
   let draws = 0;
-  const draw = screen.portrait.update.bind(screen.portrait);
-  screen.portrait.update = (subject) => { draws++; return draw(subject); };
+  const render = screen._render.bind(screen);
+  screen._render = () => { draws++; return render(); };
 
   screen.update();
   assert.equal(draws, 0, 'a closed panel does no work');
@@ -800,26 +808,24 @@ test('update redraws only when the inventory, selection or vitality changes', (t
   inventory.add('flint', 2);
   screen.update();
   assert.equal(draws, 2);
-  assert.equal(screen.slotCounter.textContent, '16 / 24 slots');
+  assert.equal(screen.slotCounter.textContent, 'Bag 16/24');
   player.vitals.health = 100;
   screen.update();
   assert.equal(draws, 3);
   assert.equal(screen.useButton.disabled, true);
 });
 
-test('a new skin while the bag is open repaints the portrait', (t) => {
+test('a new skin does not redraw the window, which has no portrait', (t) => {
   const { screen, player, press } = mount(t);
   let draws = 0;
-  const draw = screen.portrait.update.bind(screen.portrait);
-  screen.portrait.update = (subject) => { draws++; return draw(subject); };
+  const render = screen._render.bind(screen);
+  screen._render = () => { draws++; return render(); };
   press('KeyI');
   assert.equal(draws, 1);
   player.skin = presetSkin('drover');
   screen.update();
-  assert.equal(draws, 2);
-  player.skin = cleanSkin(player.skin);
-  screen.update();
-  assert.equal(draws, 2, 'an equal skin is no change');
+  assert.equal(draws, 1);
+  assert.equal(screen.screen.querySelectorAll('canvas').length, 0);
 });
 
 test('details describe the selected item, its stats, weight and durability', (t) => {
@@ -843,8 +849,7 @@ test('details describe the selected item, its stats, weight and durability', (t)
   assert.equal(screen.equipButton.hidden, true);
   assert.equal(screen.unequipButton.hidden, true);
 
-  assert.equal(screen.capacity.textContent, '39.75 / 60 kg');
-  assert.equal(screen.loadBar.textContent, '|'.repeat(11) + '.'.repeat(5));
+  assert.equal(stat(screen, 'weight'), '39.8/60 kg');
   const slot = bagButton(0);
   assert.equal(slot.getAttribute('aria-label'), `Slot 1: ${draught.name}, count 3`);
   assert.equal(slot.getAttribute('data-item-kind'), 'consumable');
@@ -876,7 +881,6 @@ test('details describe the selected item, its stats, weight and durability', (t)
   assert.equal(screen.useButton.hidden, true);
   assert.equal(slotButton('mainHand').getAttribute('aria-label'), `Main hand: ${sword.name}`);
   assert.equal(slotButton('mainHand').getAttribute('tabindex'), '0');
-  assert.equal(screen.equipmentNodes.get('mainHand').itemName.textContent, 'Sword');
   assert.equal(screen.equipmentNodes.get('mainHand').icon.textContent, itemArt('shortSword', sword.glyph));
   inventory.equipment.mainHand.durability = 40;
   screen.update();
@@ -885,7 +889,6 @@ test('details describe the selected item, its stats, weight and durability', (t)
   // Empty slots.
   slotButton('offHand').click();
   assert.equal(slotButton('offHand').getAttribute('aria-label'), 'Off hand: empty');
-  assert.equal(screen.equipmentNodes.get('offHand').itemName.textContent, 'Empty');
   assert.equal(screen.itemName.textContent, 'Off hand slot');
   assert.equal(screen.itemType.textContent, '');
   assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
@@ -928,13 +931,115 @@ test('flipping phone mode rewrites the empty-slot hint with the same slot select
   assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
 });
 
-test('the character name can change', (t) => {
+test('the header names the character and its class, an outlaw without one', (t) => {
   const { screen } = mount(t, { name: 'Mira' });
   assert.equal(screen.nameNode.textContent, 'Mira');
+  assert.equal(screen.classNode.textContent, 'Outlaw');
+  assert.equal(screen.nameNode.getAttribute('dir'), 'auto');
+  const identity = screen.nameNode.parentNode;
+  assert.equal(identity.tagName, 'H2');
+  assert.equal(identity.textContent, 'Mira · Outlaw');
+  assert.equal(identity.children[1].getAttribute('aria-hidden'), 'true');
+  screen.setName('Mira', 'Archer');
+  assert.equal(screen.classNode.textContent, 'Archer');
   screen.setName('Tamsin');
   assert.equal(screen.nameNode.textContent, 'Tamsin');
-  screen.setName(7);
+  assert.equal(screen.classNode.textContent, 'Archer', 'a name alone keeps the class');
+  screen.setName(7, null);
   assert.equal(screen.nameNode.textContent, '7');
+  assert.equal(screen.classNode.textContent, 'Outlaw');
+  assert.equal(mount(t, { className: 'Warrior' }).screen.classNode.textContent, 'Warrior');
+});
+
+test('the close button reads close (I), keeps its name and closes the window', (t) => {
+  const { screen, press } = mount(t);
+  press('KeyI');
+  const close = screen.screen.querySelectorAll('.inventory-close')[0];
+  assert.equal(close.textContent, 'closeI');
+  assert.equal(close.children[0].tagName, 'KBD');
+  assert.equal(close.getAttribute('aria-label'), 'Close inventory');
+  assert.equal(screen.screen.getAttribute('role'), 'dialog');
+  assert.equal(screen.screen.getAttribute('aria-modal'), 'true');
+  assert.equal(screen.screen.getAttribute('aria-label'), 'Inventory');
+  close.click();
+  assert.equal(screen.isOpen, false);
+});
+
+test('the paper doll has a box per slot, on its grid area, in slot order', (t) => {
+  const { screen, press, slotButton } = mount(t, { describe: (stack) => stack.id === 'shortSword' ? { name: 'Short Sword' } : null });
+  press('KeyI');
+  const boxes = screen.screen.querySelectorAll('.equipment-slot');
+  assert.deepEqual(boxes.map((button) => button.dataset.equipmentSlot), [...EQUIPMENT_SLOTS]);
+  for (const button of boxes) {
+    const slot = button.dataset.equipmentSlot;
+    assert.equal(button.style.gridArea, dollArea(slot));
+    assert.equal(button.dataset.box, DOLL_BOXES[slot].small ? 'small' : 'large');
+  }
+  assert.equal(boxes.filter((button) => button.dataset.box === 'small').length, 5);
+  const amulet = slotButton('amulet');
+  assert.ok(amulet.classList.contains('empty'));
+  assert.equal(amulet.classList.contains('filled'), false);
+  assert.equal(amulet.children[0].textContent, 'amulet');
+  assert.equal(amulet.hasAttribute('title'), false);
+  assert.equal(slotButton('cape').getAttribute('aria-label'), 'Cloak: Travelling Cloak');
+  assert.equal(slotButton('legs').getAttribute('aria-label'), 'Legs: empty');
+  const weapon = slotButton('mainHand');
+  assert.ok(weapon.classList.contains('filled'));
+  assert.equal(weapon.classList.contains('empty'), false);
+  assert.equal(weapon.getAttribute('title'), 'Short Sword');
+  assert.equal(screen.equipmentNodes.get('mainHand').icon.textContent, itemArt('shortSword', ITEMS.shortSword.glyph));
+  assert.equal(slotButton('feet').getAttribute('title'), 'Riding Boots', "an item's own name without a description");
+  assert.equal(screen.equipmentNodes.get('feet').count.textContent, '', 'only the quiver counts');
+  assert.equal(screen.screen.querySelectorAll('.equipment-slot-name').length, 0);
+  assert.equal(screen.screen.querySelectorAll('canvas').length, 0);
+});
+
+// The value of one pair in the stats strip, by its label.
+function stat(screen, label) {
+  const pair = screen.statsStrip.children.find((node) => node.children[0].textContent === label);
+  return pair?.children[1].textContent;
+}
+
+test('the stats strip shows live HP, stamina and weight, then MP, attributes and the pouch once they exist', (t) => {
+  let attributes = null;
+  const { screen, player, press } = mount(t, { wallet: { cents: 1240 }, attributes: () => attributes });
+  assert.equal(screen.statsStrip.tagName, 'DL');
+  assert.equal(screen.statsStrip.getAttribute('aria-label'), 'Character stats');
+  screen.update();
+  assert.equal(screen.statsStrip.children.length, 0, 'a closed window writes nothing');
+  press('KeyI');
+  assert.deepEqual(screen.statsStrip.children.map((pair) => pair.textContent),
+    ['HP50/100', 'stamina100/100', 'weight39.8/60 kg', 'pouch12.40d']);
+  screen.attachMana({ mana: 40, maxMana: 100 });
+  attributes = { strength: 7, dexterity: 4, constitution: 6, intelligence: 5, wisdom: 3, charisma: 3 };
+  screen.update();
+  assert.deepEqual(screen.statsStrip.children.map((pair) => pair.children[0].textContent),
+    ['HP', 'MP', 'stamina', 'STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA', 'weight', 'pouch']);
+  assert.equal(stat(screen, 'MP'), '40/100');
+  assert.equal(stat(screen, 'STR'), '7');
+
+  // Only the HP value is written when the HP changes, and nothing after.
+  const writes = new Map();
+  for (const pair of screen.statsStrip.children) {
+    const value = pair.children[1];
+    const label = pair.children[0].textContent;
+    const set = Object.getOwnPropertyDescriptor(FakeElement.prototype, 'textContent').set;
+    Object.defineProperty(value, 'textContent', { configurable: true,
+      get: Object.getOwnPropertyDescriptor(FakeElement.prototype, 'textContent').get,
+      set(text) { writes.set(label, (writes.get(label) ?? 0) + 1); set.call(this, text); } });
+  }
+  const pairs = screen.statsStrip.children;
+  player.vitals.health = 37;
+  screen.update();
+  assert.deepEqual([...writes], [['HP', 1]]);
+  assert.equal(stat(screen, 'HP'), '37/100');
+  assert.equal(screen.statsStrip.children, pairs, 'the same pairs');
+  screen.update();
+  assert.deepEqual([...writes], [['HP', 1]]);
+
+  screen.attachMana(null);
+  screen.update();
+  assert.equal(stat(screen, 'MP'), undefined);
 });
 
 test('the panel works without optional callbacks and starts on an empty bag', (t) => {
@@ -948,8 +1053,9 @@ test('the panel works without optional callbacks and starts on an empty bag', (t
   screen.setOpen(true);
   screen.onNotify('Hello.');
   assert.equal(screen.feedback.textContent, 'Hello.');
-  assert.equal(screen.capacity.textContent, '0 / 10 kg');
-  assert.equal(screen.loadBar.textContent, '.'.repeat(16));
+  assert.equal(stat(screen, 'weight'), '0/10 kg');
+  assert.equal(stat(screen, 'pouch'), undefined);
+  assert.equal(stat(screen, 'MP'), undefined);
   assert.equal(screen.description.textContent, 'Drag another item into this slot to move or swap it.');
   screen.destroy();
   assert.equal(env.document.body.classList.contains('inventory-open'), false);
@@ -959,13 +1065,11 @@ test('destroy closes the panel and removes its listeners', (t) => {
   const { screen, toggles, press } = mount(t);
   press('KeyI');
   const root = screen.root;
-  const portrait = screen.portrait;
   screen.destroy();
   assert.equal(screen.isOpen, false);
   assert.deepEqual(toggles, [true, false]);
   assert.equal(root.children.includes(screen.screen), false);
   assert.equal(screen.screen.parentNode, null);
-  assert.equal(portrait.context, null);
   assert.deepEqual(press('KeyI'), { prevented: false, reachedGame: true });
   assert.equal(screen.isOpen, false);
   assert.equal(press('KeyI', { type: 'keyup' }).reachedGame, true);

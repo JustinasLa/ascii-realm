@@ -1,15 +1,15 @@
 import { noteReference } from '../audio/instruments.js';
-import { skinKey } from '../character/skin.js';
-import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
+import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS } from '../inventory/items.js';
 import { itemArt } from './item-art.js';
-import { CharacterPortrait } from './portrait.js';
+import { DOLL_BOXES, dollArea } from './paper-doll.js';
+import { sheetStats } from './sheet-stats.js';
 
 const SLOT_NAMES = {
   helm: 'Helm',
   chest: 'Chest',
   legs: 'Legs',
   hands: 'Hands',
-  cape: 'Cape',
+  cape: 'Cloak',
   mainHand: 'Main hand',
   offHand: 'Off hand',
   feet: 'Feet',
@@ -62,9 +62,13 @@ export class InventoryScreen {
   // `isCovered` is true while another panel (a furnace) holds the keys.
   // `describe(stack)` gives a stack's own { name, colour, description, stats }
   // (an alloy ingot's), or null for its item's; `describeVersion()` changes with them.
-  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false, pages = [],
-    isCovered = () => false, describe = () => null, describeVersion = () => 0 }) {
-    Object.assign(this, { isCovered, describe, describeVersion });
+  // The stats strip reads `wallet.cents` and `attributes()`, the six totals
+  // or null; `className` heads the sheet beside the name.
+  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', className = null, phone = () => false,
+    pages = [], isCovered = () => false, describe = () => null, describeVersion = () => 0, wallet = null,
+    attributes = () => null }) {
+    Object.assign(this, { isCovered, describe, describeVersion, wallet, attributes });
+    this.manaSource = null;
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
     // Drops a bag stack into the world; returns { ok, message }.
@@ -95,21 +99,25 @@ export class InventoryScreen {
       document.body.append(this.root);
     }
 
-    this.screen = element('section', 'inventory-screen');
+    this.screen = element('section', 'inventory-screen inventory-sheet');
     this.screen.hidden = true;
     this.screen.setAttribute('role', 'dialog');
     this.screen.setAttribute('aria-label', 'Inventory');
     this.screen.setAttribute('aria-modal', 'true');
     this.screen.setAttribute('aria-describedby', 'inventory-help');
 
+    // The header: NAME · CLASS, the pages and a boxed close (I).
     const header = element('header', 'inventory-header');
-    const title = element('h2', 'inventory-title', 'Inventory');
-    const identity = element('div', 'inventory-identity');
-    this.nameNode = element('span', 'inventory-character-name', String(name));
+    const identity = element('h2', 'inventory-identity');
+    this.nameNode = element('span', 'inventory-character-name');
     this.nameNode.setAttribute('dir', 'auto');
-    identity.append(title, this.nameNode);
-    const close = element('button', 'inventory-close', 'Close');
-    close.append(element('kbd', '', 'Esc'));
+    const separator = element('span', 'inventory-identity-separator', ' · ');
+    separator.setAttribute('aria-hidden', 'true');
+    this.classNode = element('span', 'inventory-character-class');
+    identity.append(this.nameNode, separator, this.classNode);
+    this.setName(name, className);
+    const close = element('button', 'inventory-close', 'close');
+    close.append(element('kbd', '', 'I'));
     close.type = 'button';
     close.setAttribute('aria-label', 'Close inventory');
     close.addEventListener('click', () => this.setOpen(false));
@@ -132,13 +140,9 @@ export class InventoryScreen {
     header.append(identity, tabs, close);
 
     const body = element('div', 'inventory-body');
-    const equipment = element('section', 'inventory-equipment');
-    equipment.append(element('h3', 'inventory-heading', 'Equipment'));
-    const stage = element('div', 'inventory-character-stage');
-    const portrait = element('canvas', 'inventory-portrait');
-    portrait.setAttribute('aria-hidden', 'true');
-    this.portrait = new CharacterPortrait(portrait, { columns: 36, rows: 39 });
-    stage.append(portrait);
+    // The paper doll: a box per slot on one grid (paper-doll.js).
+    const doll = element('section', 'inventory-doll');
+    const frame = element('div', 'doll-frame');
     this.equipmentGrid = element('div', 'equipment-slots');
     this.equipmentGrid.setAttribute('role', 'group');
     this.equipmentGrid.setAttribute('aria-label', 'Equipped items');
@@ -148,32 +152,32 @@ export class InventoryScreen {
       button.type = 'button';
       button.tabIndex = -1;
       button.dataset.equipmentSlot = slot;
-      const label = element('span', 'equipment-slot-label', SLOT_NAMES[slot]);
+      button.dataset.box = DOLL_BOXES[slot].small ? 'small' : 'large';
+      button.style.gridArea = dollArea(slot);
+      const label = element('span', 'equipment-slot-label', DOLL_BOXES[slot].label);
       const icon = element('pre', 'equipment-slot-icon');
       icon.setAttribute('aria-hidden', 'true');
-      const itemName = element('span', 'equipment-slot-name');
       const count = element('span', 'equipment-slot-count');
       count.setAttribute('aria-hidden', 'true');
-      button.append(label, icon, itemName, count);
+      button.append(label, icon, count);
       button.addEventListener('click', () => this._select({ source: 'equipment', slot }));
       button.addEventListener('dblclick', () => this._unequip());
-      this.equipmentNodes.set(slot, { button, icon, itemName, count });
+      this.equipmentNodes.set(slot, { button, icon, count });
       this.equipmentGrid.append(button);
     }
-    stage.append(this.equipmentGrid);
-    equipment.append(stage);
+    frame.append(this.equipmentGrid);
+    doll.append(frame);
+    // The stats strip: `label value` pairs, built for each set of keys.
+    this.statsStrip = element('dl', 'sheet-stats');
+    this.statsStrip.setAttribute('aria-label', 'Character stats');
+    this._statKeys = null;
+    this._statsLine = null;
 
     const bag = element('section', 'inventory-bag');
     const bagHeading = element('div', 'inventory-bag-heading');
-    bagHeading.append(element('h3', 'inventory-heading', 'Satchel'));
-    this.slotCounter = element('span', 'inventory-slot-total');
-    bagHeading.append(this.slotCounter);
+    this.slotCounter = element('h3', 'inventory-heading');
+    bagHeading.append(this.slotCounter, element('span', 'inventory-bag-hint'));
     bag.append(bagHeading);
-    this.capacity = element('p', 'inventory-capacity');
-    const load = element('div', 'inventory-load');
-    this.loadBar = element('pre', 'inventory-load-bar');
-    this.loadBar.setAttribute('aria-hidden', 'true');
-    load.append(this.capacity, this.loadBar);
     this.bagGrid = element('div', 'inventory-slot-grid');
     this.bagGrid.setAttribute('role', 'group');
     this.bagGrid.setAttribute('aria-label', 'Carried items, 24 slots');
@@ -218,7 +222,7 @@ export class InventoryScreen {
       this.bagGrid.append(button);
       return { button, icon, count };
     });
-    bag.append(this.bagGrid, load);
+    bag.append(this.bagGrid);
 
     this.details = element('section', 'inventory-details inventory-tooltip');
     this.details.id = 'inventory-item-details';
@@ -261,7 +265,7 @@ export class InventoryScreen {
     this.details.append(this.itemPreview, itemInfo);
     const carried = element('div', 'inventory-carried');
     carried.append(bag, this.details);
-    body.append(equipment, carried);
+    body.append(doll, this.statsStrip, carried);
 
     const help = element('div', 'inventory-help');
     for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'],
@@ -320,7 +324,10 @@ export class InventoryScreen {
     this.onToggle(open);
     if (open) {
       this.update();
-      if (this.page === 'inventory') this._selectedButton()?.focus();
+      // The sheet opens at its top, on the doll, wherever the selection is
+      // and however far down it was scrolled when it closed.
+      this.screen.scrollTop = 0;
+      if (this.page === 'inventory') this._selectedButton()?.focus({ preventScroll: true });
       else this._tab().focus();
     } else {
       this._dragFrom = null;
@@ -332,7 +339,15 @@ export class InventoryScreen {
     }
   }
 
-  setName(name) { setText(this.nameNode, String(name)); }
+  // Without a class the character is an outlaw; `setName(name)` keeps the class.
+  setName(name, className = this._className) {
+    this._className = className || 'Outlaw';
+    setText(this.nameNode, String(name));
+    setText(this.classNode, this._className);
+  }
+
+  // Any object with mana and maxMana, such as the spellcasting system.
+  attachMana(source) { this.manaSource = source || null; }
 
   _tab(id = this.page) { return this.pages.find((page) => page.id === id).tab; }
 
@@ -572,19 +587,47 @@ export class InventoryScreen {
   update() {
     if (!this._isOpen) return;
     if (!this.feedback.hidden && performance.now() >= this._feedbackUntil) hidden(this.feedback, true);
+    // The strip is live every frame; the rest redraws when its state changes.
+    this._updateStats();
     const vitals = this.player.vitals;
     const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
       this.inventory.capacity, this.selection,
-      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), skinKey(this.player.skin),
-      this.describeVersion()]);
+      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), this.describeVersion()]);
     if (signature === this._signature) return;
     this._signature = signature;
-    this.portrait.update(this.player);
+    this._render();
+  }
+
+  // Writes only the values that changed, and rebuilds the pairs when the
+  // set of stats does (mana attached, attributes or the pouch appearing).
+  _updateStats() {
+    const pairs = sheetStats({ vitals: this.player.vitals, mana: this.manaSource, attributes: this.attributes(),
+      weight: this.inventory.weight, capacity: this.inventory.capacity, cents: this.wallet?.cents ?? null });
+    const line = pairs.map(({ key, value }) => `${key} ${value}`).join('|');
+    if (line === this._statsLine) return;
+    this._statsLine = line;
+    const keys = pairs.map(({ key }) => key).join(' ');
+    if (keys !== this._statKeys) {
+      this._statKeys = keys;
+      this._statValues = new Map();
+      this.statsStrip.replaceChildren(...pairs.map(({ key, label }) => {
+        const pair = element('div', 'sheet-stat');
+        const value = element('dd');
+        pair.append(element('dt', '', label), value);
+        this._statValues.set(key, value);
+        return pair;
+      }));
+    }
+    for (const { key, value } of pairs) setText(this._statValues.get(key), value);
+  }
+
+  // The only place the doll gets its art, for the box `slot` names.
+  _art(item, slot) { return itemArt(item.id, item.glyph); }
+
+  _render() {
+    const vitals = this.player.vitals;
     const occupied = this.inventory.slots.filter(Boolean).length;
-    setText(this.slotCounter, `${occupied} / ${this.bagNodes.length} slots`);
-    setText(this.capacity, `${kg(this.inventory.weight)} / ${kg(this.inventory.capacity)} kg`);
-    const load = Math.min(16, Math.max(0, Math.ceil(this.inventory.weight / Math.max(1, this.inventory.capacity) * 16)));
-    setText(this.loadBar, '|'.repeat(load) + '.'.repeat(16 - load));
+    setText(this.slotCounter, `Bag ${occupied}/${this.bagNodes.length}`);
 
     for (const [index, nodes] of this.bagNodes.entries()) {
       const stack = this.inventory.slots[index];
@@ -610,14 +653,16 @@ export class InventoryScreen {
       const selected = this.selection.source === 'equipment' && this.selection.slot === slot;
       nodes.button.classList.toggle('selected', selected);
       nodes.button.classList.toggle('empty', !item);
+      nodes.button.classList.toggle('filled', Boolean(item));
       attribute(nodes.button, 'aria-pressed', String(selected));
       attribute(nodes.button, 'aria-label', `${SLOT_NAMES[slot]}: ${item?.name || 'empty'}`);
+      // A stopgap tooltip: filled boxes show no text.
+      attribute(nodes.button, 'title', item ? this.describe(stack)?.name ?? item.name : null);
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'data-item-id', item?.id || '');
       attribute(nodes.button, 'aria-describedby', selected ? this.details.id : null);
-      setText(nodes.icon, item ? itemArt(item.id, item.glyph) : '');
-      setText(nodes.itemName, item?.shortName || (item ? item.name : 'Empty'));
-      setText(nodes.count, stack?.count > 1 ? `x${stack.count}` : '');
+      setText(nodes.icon, item ? this._art(item, slot) : '');
+      setText(nodes.count, item && STACK_SLOTS.includes(slot) ? String(stack.count) : '');
     }
 
     const selected = this._selectedItem();
@@ -673,7 +718,6 @@ export class InventoryScreen {
     window.removeEventListener('keydown', this._keydown, true);
     window.removeEventListener('keyup', this._keyup, true);
     window.removeEventListener('blur', this._blur);
-    this.portrait.destroy();
     this.screen.remove();
   }
 }

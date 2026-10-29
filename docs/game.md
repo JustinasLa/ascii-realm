@@ -202,10 +202,14 @@ short version see the [README](../README.md).
 - **Status frames.** A party-style frame in the top-left
   corner shows the character's name, segmented HP and MP bars and the satchel's weight.
   An Inventory button sits at the bottom. Running and sword strikes have no stamina cost.
-- **Inventory and equipment.** A keyboard-controlled satchel, twelve equipment
-  slots (weapon, shield, helmet, body, legs, gloves, boots, amulet, two rings,
-  cloak and quiver) drawn with the outlaw's own glyphs, item details, 24 bag slots
-  and a 60 kg carrying limit. The bag starts with a short sword, equipped and
+- **Inventory and equipment.** A character sheet over the moving, undimmed
+  world: a header with the character's name and class (`OUTLAW` without one)
+  and `close (I)`; a paper doll of twelve equipment boxes in five columns
+  (weapon over gloves; quiver and a ring; helmet, body and legs; amulet, cloak
+  and a ring; shield over boots), the small ones dashed while empty and filled
+  ones showing the item's art; a stats strip (HP, MP, stamina, the six
+  attributes of the active character, weight and the pouch); then the bag of
+  24 slots with item details, and a 60 kg carrying limit. The bag starts with a short sword, equipped and
   ready, and a stone pickaxe. Arrows can fill the quiver, which the bow shoots
   from and pickups top up first. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
