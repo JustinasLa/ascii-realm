@@ -58,3 +58,28 @@ test('metal parts take the material colour, and go back to plain when it is gone
   armory.update({ type: 'pickaxe', material: 'iron' }, true);
   assert.deepEqual(metal.mesh.material.color.toArray(), metal.color.toArray());
 });
+
+test('a forged blade re-tints when its metal changes, and not frame to frame', async () => {
+  const { getWeapon, weaponMaterial } = await import('../src/entities/weapons.js');
+  const forged = (colour, attackDamage) => ({ id: 'shortSword', material: colour ? undefined : 'iron',
+    forged: { metal: 'Blackiron', ...(colour ? { colour } : {}), quality: 'rusted', hits: 0, stats: { attackDamage }, inputs: { ironIngot: 4 } } });
+  const { model, bones } = rig();
+  const armory = new Armory(model, bones);
+  const iron = getWeapon('sword-shield', weaponMaterial(forged(null, 3.5)));
+  armory.update(getWeapon('sword-shield', 'iron'), true);
+  const [blade] = armory.active.userData.metal;
+  const tierIron = blade.mesh.material.color.clone();
+  armory.update(iron, true);
+  assert.notEqual(armory.signature, 'sword:iron:true');
+  assert.deepEqual(blade.mesh.material.color.toArray(), tierIron.toArray(), 'forged iron looks like iron');
+  const alloy = getWeapon('sword-shield', weaponMaterial(forged('5E6568', 4.2)));
+  armory.update(alloy, true);
+  assert.equal(armory.signature, 'sword:forged:5E6568:4.2:true');
+  const tinted = blade.mesh.material.color.clone();
+  assert.notDeepEqual(tinted.toArray(), tierIron.toArray());
+  blade.mesh.material.color.set(0, 0, 0);
+  armory.update(alloy, true);
+  assert.deepEqual(blade.mesh.material.color.toArray(), [0, 0, 0], 'the same sword again is left alone');
+  armory.update(alloy, false);
+  assert.deepEqual(blade.mesh.material.color.toArray(), tinted.toArray(), 'sheathed, it keeps its metal');
+});

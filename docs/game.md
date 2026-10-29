@@ -279,6 +279,31 @@ short version see the [README](../README.md).
   underscores (shown as spaces), to a name no other alloy has in any case. The
   book of alloys and failed mixes, and each forge's loaded mix and waiting
   result, are kept on this device for each world; the bag is not.
+- **Smithing.** The weapon station's rules are in place, though no station
+  stands in the world yet. A Short Sword, Dagger, Battle Axe, War Hammer or
+  Spear takes 4 metal and a Greatsword 8: Iron, Copper, Steel or Bronze Ingots
+  or metal alloy ingots. Each unit adds its own hits to what the piece needs
+  (an Iron Ingot 4 Hit and 1 Small Hit; an alloy its own 1 to 3 per kind). The
+  six hit kinds are Hit and Small Hit (metal work) and Etch, Whittle, Engrave
+  and Sew (artisan work); a kind can be struck when the piece needs any hit of
+  its family. Each kind scores its share done up to 100 %, 200 less its share
+  up to 200 % and 0 beyond, an unneeded kind scoring 0; Hits % is the rounded
+  mean, and any kind off keeps it at 99 or less. Quality is Rusted under 50,
+  Tempered from 50 (a Basic socket), Polished from 75 (Polished), Gleaming
+  from 90 (Radiant) and Masterwork at 100 (Mythical). Below 100 a d20 (+0)
+  against 12, a natural 20 always and a natural 1 never meeting it, earns a
+  clue about the kind closest to right ("you sense it needed a little more Hit
+  work"); the roll never changes the piece.
+- **Forged weapons.** A smithed weapon is named for the metal most of its
+  units were ("Blackiron Dagger", "Iron Short Sword"; a tie goes to the one
+  loaded first) and drawn in its colour, on the 3D blade and the glyph figure,
+  in hand and sheathed. Its stats are the mean of its units' stats, a unit
+  lacking one counting 0. It hits for its kind's damage × Attack Damage ÷ 4,
+  so Steel's 4 matches the steel tier, and swings, tires and weighs like an
+  iron one; its other stats, its durability (the mean Durability), quality,
+  Hits %, inputs and socket are kept with it but don't act yet. Friends see
+  it in its colour. Other weapons, the starter sword among them, hit and look
+  as their tier does.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,
