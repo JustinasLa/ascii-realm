@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Camera, liftView } from '../src/world/camera.js';
 import { raisedRows } from '../src/world/ground.js';
+import { PENDING_LOBBY } from '../src/world/woodland.js';
 import { World } from '../src/world/world.js';
 import { loadGame } from './helpers/main-game.js';
 
@@ -130,4 +131,30 @@ test('the cursor is read on the raised player\'s own height', async () => {
   tap('mouse');
   for (let i = 0; i < 20; i++) frame();
   assert.ok(Math.abs(Math.atan2(Math.sin(player.heading), Math.cos(player.heading))) < 0.5, `heading ${player.heading}`);
+});
+
+test('creating a lobby from the hill scene reloads onto flat land and creates it there', async () => {
+  const session = new Map();
+  const page = await loadGame(undefined, { href: 'http://localhost/?debug&seed=5&scene=hill', session, real: { World } });
+  assert.ok(page.game.world.relief);
+  page.game.multiplayer.connect({ mode: 'create', name: 'Kael', seed: 5, code: '', server: '' });
+  assert.deepEqual(page.game.multiplayer.connects, [], 'no connection from the hill page');
+  const destination = new URL(page.navigatedTo());
+  assert.equal(destination.searchParams.has('scene'), false);
+  assert.equal(destination.searchParams.get('seed'), '5');
+  const flat = await loadGame(undefined, { href: destination.href, session, real: { World } });
+  assert.equal(flat.game.world.relief, null);
+  assert.deepEqual(flat.game.multiplayer.connects, [{ mode: 'create', name: 'Kael', seed: 5, code: '', server: '' }]);
+  assert.equal(session.has(PENDING_LOBBY), false);
+});
+
+test('a hill page that somehow joins a lobby on its own seed keeps its seat and reloads onto flat land', async () => {
+  const session = new Map();
+  const { game, navigatedTo } = await loadGame(undefined, { href: 'http://localhost/?debug&scene=hill', session });
+  game.multiplayer.onJoin({ seed: 1, code: 'ABC234' });
+  assert.equal(game.multiplayer.suspends, 1);
+  assert.equal(session.get('ascii-realm-rejoin'), 'ABC234');
+  const destination = new URL(navigatedTo());
+  assert.equal(destination.searchParams.has('scene'), false);
+  assert.equal(destination.searchParams.get('room'), 'ABC234');
 });

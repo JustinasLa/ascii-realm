@@ -18,7 +18,8 @@ spawn point it raises:
 The scene is the same every time for a given seed. It has no rivers or
 ruins, its grass is the lush meadow, and no monsters, animals, birds or fish
 come by unless the address asks for them (`?scene=hill&deer=4`). A page in a
-lobby ignores the scene and plays on flat land.
+lobby ignores the scene and plays on flat land, and creating or joining a
+lobby from the scene first reloads the page onto flat land.
 
 ## How height is drawn
 

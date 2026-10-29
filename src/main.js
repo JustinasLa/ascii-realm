@@ -592,18 +592,20 @@ debug.skins = { PRESETS, PALETTES };
 debug.inventoryScreen = inventoryScreen;
 
 // Friends in a lobby share the world's seed and see one another walk about.
-// Joining a lobby on another seed reloads the page into that world.
+// Joining a lobby on another seed reloads the page into that world. Lobbies
+// share neither dense woods nor the hill scene's raised ground.
+const reloadsForLobby = world.woodland === 'dense' || hillScene;
 const remotePlayers = new RemotePlayers();
 const multiplayer = new MultiplayerClient({
   getState: () => playerState(player),
   onJoin: (lobby) => {
-    if (needsWorldReload(lobby, seed, world.woodland)) {
+    if (needsWorldReload(lobby, seed, world.woodland) || reloadsForLobby) {
       const url = lobbyWorldUrl(location.href, lobby, multiplayer.options?.server);
       try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
-      // A dense page reloads before it connects (below), so it never gets
+      // A dense or hill page reloads before it connects (below), so it never gets
       // here; if it ever does, it keeps its seat in the lobby while it
       // reloads into the sparse world, rather than leaving it.
-      if (world.woodland === 'dense') multiplayer.suspend();
+      if (reloadsForLobby) multiplayer.suspend();
       else multiplayer.leave(false);
       location.replace(url);
       return;
@@ -620,9 +622,10 @@ const multiplayer = new MultiplayerClient({
 });
 debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
-// Creating or joining a lobby from dense woods reloads into the sparse world
-// first, and the request is made there, so no lobby ever holds a dense page.
-guardLobbyConnect(multiplayer, { dense: world.woodland === 'dense', storage: session,
+// Creating or joining a lobby from dense woods or the hill scene reloads into
+// the sparse world first, and the request is made there, so no lobby ever
+// holds a dense or raised page.
+guardLobbyConnect(multiplayer, { dense: reloadsForLobby, storage: session,
   reload: (request) => location.replace(sparseWorldUrl(location.href, request)) });
 // While the creator is open the lobby waits; the last join asked for is made
 // once it closes. A dense page's reload waits too, and so does a request
