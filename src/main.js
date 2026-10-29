@@ -12,6 +12,9 @@ import { assistTarget, castAssist, strikeAssist } from './core/aim-assist.js';
 import { pickStruck, TargetTracker, targetId } from './core/target.js';
 import { createHaptics } from './core/haptics.js';
 import { interaction, performInteraction } from './core/interact.js';
+import { Furnaces, nearbyFurnace } from './crafting/furnace.js';
+import { FurnaceScreen } from './ui/furnace.js';
+import { drawFurnaceGlow, lightFurnace } from './world/furnace-glow.js';
 import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
 import { watchPhone } from './core/phone.js';
 import { installPinchZoom } from './core/pinch.js';
@@ -577,10 +580,24 @@ const inventoryScreen = new InventoryScreen({
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
   phone: () => device.phone,
+  isCovered: () => furnaceScreen.isOpen,
 });
+// Furnaces smelt on game time, kept on this device per world.
+const furnaces = new Furnaces({ storage: walletStorage, seed });
+const furnaceScreen = new FurnaceScreen({ furnaces, inventory,
+  onToggle: (open) => {
+    if (open) chat.close();
+    blockGameplay();
+    cancelActions();
+    if (!open) canvas.focus({ preventScroll: true });
+  },
+  onNotify: (message, kind) => hud.notify(message, kind) });
+Object.assign(debug, { furnaces, furnaceScreen });
+window.addEventListener('pagehide', () => furnaces.save());
+document.addEventListener('visibilitychange', () => document.hidden && furnaces.save());
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
-  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || chat.isOpen);
+  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || chat.isOpen);
 }
 debug.hud = hud;
 debug.wallet = wallet;
@@ -654,7 +671,8 @@ debug.tint = tintPicker;
 // Escape closes a panel opened over it before the chat. The builder and the
 // rune wheel are declared further down and are read only once a key or tap
 // arrives.
-const panelOpen = () => creator.isOpen || builder.enabled || inventoryScreen.isOpen || phoneMenu.open || !!spellControls.menu?.isOpen;
+const panelOpen = () => creator.isOpen || builder.enabled || inventoryScreen.isOpen || furnaceScreen.isOpen || phoneMenu.open
+  || !!spellControls.menu?.isOpen;
 const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
   isControlTarget,
   mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
@@ -1130,7 +1148,8 @@ touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap
   (pointerId) => spellControls.dropTouch(pointerId));
 // What the contextual touch button can reach. Ground items appear once the
 // game keeps a collection of them.
-const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null });
+const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null,
+  furnaces: { nearby: (p) => nearbyFurnace(world, p) } });
 loadSpells().then(spells => {
   void prepareSpellSounds(sound.engine, spells);
   casting.spells = new Map(spells.map(s => [s.id, s]));
@@ -1458,6 +1477,7 @@ function frame(now) {
     if ((interact || touchInteract) && !isGameplayBlocked() && !player.magicStunned) {
       const done = performInteraction(interactables(), { douse: touchInteract });
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
+      if (done?.kind === 'furnace') furnaceScreen.open(done.prop.id);
       // What the drop store's collection takes is told once, with its sound,
       // as its pickup events are spent below.
       const told = done?.result?.ok && debug.collection === huntCollection;
@@ -1627,6 +1647,7 @@ function frame(now) {
   }
   huntCollection.events.length = 0;
   huntDrops.expire(huntCollection.currentTime);
+  furnaces.update(dt);
   dust.update(dt);
   splashes.update(dt);
   if (!debug.freeze) {
@@ -1798,6 +1819,7 @@ function frame(now) {
     draw: () => drawProp(renderer, view, p, mirror, time, null, seed, true) }));
   // While the creator is open, whatever would hide the outlaw is left out.
   const hides = (p, y) => creator.isOpen && hidesPreview(p, y, player);
+  const litFurnaces = [];
   const drawables = props.filter((p) => propInView(lv(p.x, p.y), p, false, MAX_LEAF_DRIFT)).flatMap((p) => {
     const at = lv(p.x, p.y);
     // A turned arch spans several ground rows. Interleave its stone surfaces
@@ -1806,8 +1828,11 @@ function frame(now) {
     if (slices) return slices.filter(({ depth }) => !hides(p, p.y + depth)).map(({ depth, cells }) => ({ y: p.y + depth,
       draw: () => drawProp(renderer, at, p, undefined, time, player, seed, false, cells) }));
     if (hides(p, p.y)) return [];
+    const lit = p.kind === 'furnace' && furnaces.lit(p.id);
+    if (lit) litFurnaces.push(p);
     return [{ y: p.y, draw: () => {
       drawProp(renderer, at, p, undefined, time, player, seed);
+      if (lit) drawFurnaceGlow(renderer, at, p, time);
       drawLeaves(renderer, at, p, time, seed);
     } }];
   });
@@ -1915,6 +1940,7 @@ function frame(now) {
   debug.metrics.nightMs += debug.metrics.shaftMs;
   liftedPass(visibleFires, (v, list) => fires.light(renderer, v, time, list));
   liftedPass(visibleTorches, (v, list) => torches.light(renderer, v, time, list));
+  for (const p of litFurnaces) lightFurnace(renderer, lv(p.x, p.y), p, time);
   weather.drawAtmosphere(renderer, view, time);
 
   for (const figure of birdCells) if (figure.air) AnimalFigures.draw(renderer, figure, putOutlinedCell);
@@ -1973,14 +1999,18 @@ function frame(now) {
   hud.setTarget(target.update(time, player, targetPresent));
   hud.setFoes(woundedFoes(monsterCells));
   hud.setLoot(huntDrops.in(view.x0 - 2, view.y0 - 2, view.x0 + view.cols + 2, view.y0 + view.rows + 4), player, inventory);
-  const nearbyMushroom = !paused && !isGameplayBlocked() && !player.magicStunned ? mushrooms.nearby(player) : null;
-  const nearbyOre = !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
-  hud.setPrompt(nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
+  const playing = !paused && !isGameplayBlocked() && !player.magicStunned;
+  // The furnace in reach comes first, as E and the touch button use it.
+  const nearFurnace = playing ? nearbyFurnace(world, player) : null;
+  const nearbyMushroom = playing && !nearFurnace ? mushrooms.nearby(player) : null;
+  const nearbyOre = !nearFurnace && !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
+  hud.setPrompt(nearFurnace ? '[E] Use furnace' : nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : nearbyOre?.prompt ?? '');
-  touch.interact.update(!paused && !isGameplayBlocked() && !player.magicStunned ? interaction(interactables()) : null, time);
+  touch.interact.update(playing ? interaction({ ...interactables(), furnaces: { nearby: () => nearFurnace } }) : null, time);
   hud.update(dt, hudView);
   chat.update(dt);
   inventoryScreen.update();
+  furnaceScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;
   // Frames are measured by the real time between them, never the clamped
