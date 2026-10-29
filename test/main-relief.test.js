@@ -214,6 +214,25 @@ test('creating a lobby from the hill scene reloads onto flat land and creates it
   assert.equal(session.has(PENDING_LOBBY), false);
 });
 
+test('a hill or dense page whose session storage refuses a lobby request stays put and says why', async () => {
+  // The browser won't keep the request across a reload (private mode, full
+  // storage), so reloading would silently lose it.
+  class Refusing extends Map { set(key, value) { if (key === PENDING_LOBBY) throw new Error('QuotaExceededError'); return super.set(key, value); } }
+  for (const [query, place] of [['scene=hill', 'the hill scene'], ['woodland=dense', 'the dense woods']]) {
+    const session = new Refusing();
+    const { game, navigatedTo } = await loadGame(undefined, { href: `http://localhost/?debug&seed=5&${query}`, session });
+    const notes = [];
+    game.hud.notify = (text, kind) => notes.push([text, kind]);
+    for (const mode of ['create', 'join']) game.multiplayer.connect({ mode, name: 'Kael', seed: 5, code: 'ABC234', server: '' });
+    assert.equal(navigatedTo(), undefined, 'no reload');
+    assert.deepEqual(game.multiplayer.connects, [], 'no connection');
+    assert.equal(session.has(PENDING_LOBBY), false);
+    assert.equal(game.multiplayer.status, 'error');
+    assert.match(game.multiplayer.message, new RegExp(`^Leave ${place} first: lobbies play in the plain world`));
+    assert.deepEqual(notes, [[game.multiplayer.message, 'info'], [game.multiplayer.message, 'info']]);
+  }
+});
+
 test('a hill page that somehow joins a lobby on its own seed keeps its seat and reloads onto flat land', async () => {
   const session = new Map();
   const { game, navigatedTo } = await loadGame(undefined, { href: 'http://localhost/?debug&scene=hill', session });
