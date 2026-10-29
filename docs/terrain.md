@@ -36,10 +36,11 @@ water drops flat.
   the feet of whoever stands behind it and the small letters of a prop there.
   Slope rows take a neighbouring column's letter, so no letter repeats
   straight down a slope, and a drop steeper than two rows a row shows earth.
-  A top whose own flat row is on screen is copied from there, so whatever
-  was laid on that ground before the sprites rises with it: shadows,
-  footprints, grass tracks, the trees' night shade and moonbeams, and dew.
-  A top lifted in from below the screen shows its bare ground.
+  A cell whose own flat row is on screen is copied from there, as it stood
+  before any sprite was drawn, so whatever was laid on that ground rises
+  with it and runs on down its slope: shadows, footprints, grass tracks,
+  the trees' night shade and moonbeams, and dew. A cell lifted in from
+  below the screen shows its bare ground.
 - **Light.** Higher ground catches more moonlight and a slope falling toward
   the viewer less, so the crest reads as a lit line over a darker slope.
 - **Grass** rooted on raised ground stands from its lifted root, so the
