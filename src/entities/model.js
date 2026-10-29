@@ -837,6 +837,9 @@ export class ModelFigure {
   // Views the model from the camera pitch `look` (see camera.js pitchLook):
   // ground depth stays as it is and height rises `look.rise` rows a metre.
   setLook(look) {
+    // A jump held mid-air (paused or frozen by a blow) is lifted at the new
+    // angle before the next update.
+    if (this.renderLift) this.renderLift *= look.up / this.up;
     this.up = look.up;
     this.rowsPerUnit = look.rowsPerUnit;
     this.camera.position.set(0, look.sin * 20, look.cos * 20);

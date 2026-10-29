@@ -463,6 +463,19 @@ test('a pitched camera views the model from that angle, with ground depth unchan
   }
 });
 
+test('a pitch change mid-air lifts the held jump at the new angle before the next update', async () => {
+  const model = await figure();
+  model.renderer = fixture().model.renderer;
+  model.update(0, { ...new Player(0, 0), air: 2 });
+  for (const deg of [45, 25, 30]) {
+    model.setLook(pitchLook(deg));
+    assert.ok(Math.abs(model.renderLift - 2 * pitchLook(deg).rise) < 1e-9, `${deg}°`);
+  }
+  model.update(0, { ...new Player(0, 0), air: 0 });
+  model.setLook(pitchLook(45));
+  assert.equal(model.renderLift, 0, 'standing on the ground stays there');
+});
+
 for (const deg of [25, 45]) test(`at ${deg}° Fire Rain's raised arms stay inside the render window`, async () => {
   const model = await figure();
   model.renderer = fixture().model.renderer;
