@@ -217,7 +217,7 @@ export function mixOf(base, catalysts) {
   const forge = new AlloyForge();
   if (base === null) return catalysts.length ? null : forge;
   for (const id of [base, ...catalysts]) {
-    if (forge.refusal({ id })) return null;
+    if (typeof id !== 'string' || forge.refusal({ id })) return null;
     forge.add(id);
   }
   return forge;
