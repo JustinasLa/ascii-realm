@@ -52,8 +52,10 @@ water drops flat.
   debris are drawn as high as the ground under their base, and so are a
   fire's or torch's light and sparks and a glowcap's glow. A ridge in front
   hides their feet. A bird in the air flies over the ground under it.
-- **Camera and aim.** The camera follows the player's lifted figure, and the
-  cursor is read on the player's own height, so a click aims where it looks.
+- **Camera and aim.** The camera follows the player's lifted figure. The
+  way a click turns the player is read on the player's own height, so a
+  click beside the figure cuts that way; a shot, throw or spell lands on
+  the ground drawn under the cursor, where a foe standing there is.
 - **Scenery builder.** The builder's brush and ghost prop sit on the ground
   drawn under the pointer: the nearest raised top or slope there, else the
   flat ground.

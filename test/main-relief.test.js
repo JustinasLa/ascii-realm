@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { HuntDrops } from '../src/entities/hunt-drops.js';
 import { Camera, liftView } from '../src/world/camera.js';
 import { raisedRows } from '../src/world/ground.js';
-import { MAX_LIFT } from '../src/world/relief.js';
+import { groundUnder, MAX_LIFT } from '../src/world/relief.js';
 import { PENDING_LOBBY } from '../src/world/woodland.js';
 import { World } from '../src/world/world.js';
 import { loadGame } from './helpers/main-game.js';
@@ -47,11 +47,12 @@ async function hillGame(query = 'scene=hill', { shape = false, real = {} } = {})
   const sprites = [];
   const sprite = (kind) => (_r, view) => sprites.push([kind, view.y0]);
   const loaded = await loadGame(undefined, { href: `http://localhost/?debug&${query}`, real: {
-    World, Camera: GridCamera, liftView, Grass, propDepthSlices: () => null,
+    World, Camera: GridCamera, liftView, groundUnder, Grass, propDepthSlices: () => null,
     raisedRows: (r, world, view) => raisedRows(r, world, view).map((row) => ({ y: row.y, draw: () => order.push(['ground', row.y]) })),
     drawFigure: (_r, view) => { figures.push(view); order.push(['player']); },
     drawShadow: (_r, view, x, y) => { shadows.push({ view, x, y }); order.push('shadow'); },
-    screenToWorld: () => pointerCell,
+    // A fresh cell each call, as the real one returns.
+    screenToWorld: () => pointerCell && { ...pointerCell },
     Torches: stub({ prepare: at, draw: sprite('torch'), light: glow('torch') }),
     Fires: stub({ prepare: at, light: glow('fire'), nearest: () => null }),
     Harvesting: stub({ resourcesIn: at }),
@@ -144,6 +145,29 @@ test('the cursor is read on the raised player\'s own height', async () => {
   tap('mouse');
   for (let i = 0; i < 20; i++) frame();
   assert.ok(Math.abs(Math.atan2(Math.sin(player.heading), Math.cos(player.heading))) < 0.5, `heading ${player.heading}`);
+});
+
+test('a bow drawn at a foe\'s feet on lower ground aims where they stand', async () => {
+  const { game, frame, aimAt, pointer } = await hillGame();
+  const { player, world, inventory } = game;
+  player.x = world.spawn.x + 75;
+  player.y = world.spawn.y - 4;
+  inventory.add('longbow');
+  inventory.add('arrow', 4);
+  inventory.equip(inventory.slots.findIndex((s) => s?.id === 'longbow'));
+  for (let i = 0; i < 3; i++) frame();
+  // A cell down the knoll's front slope, drawn rows lower than the player's.
+  const x = Math.floor(player.x) + 2;
+  let y = Math.floor(player.y);
+  while (world.liftAt(x, y) > world.liftAt(player.x, player.y) - 4) y++;
+  const lift = world.liftAt(x, y);
+  assert.ok(lift > 0 && world.liftAt(x, y + 1) <= lift, 'its top is in sight');
+  aimAt({ x: x + 0.5, y: y - lift + 0.5 });
+  pointer('pointerdown');
+  for (let i = 0; i < 10; i++) frame();
+  assert.ok(Math.abs(player.aimTarget.x - (x + 0.5)) < 0.01, `x ${player.aimTarget.x}`);
+  assert.ok(Math.abs(player.aimTarget.y - (y + 0.5)) < 0.01, `y ${player.aimTarget.y} for ${y + 0.5}`);
+  pointer('pointerup');
 });
 
 test('on flat land every light and glow is drawn in one pass through the view', async () => {

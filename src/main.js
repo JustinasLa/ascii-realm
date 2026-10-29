@@ -74,6 +74,7 @@ import { MAX_WALKERS } from './world/fog-wake.js';
 import { Footprints } from './world/footprints.js';
 import { Mushrooms } from './world/mushrooms.js';
 import { drawGround, raisedRows } from './world/ground.js';
+import { groundUnder } from './world/relief.js';
 import { Grass } from './world/grass.js';
 import { Harvesting } from './world/harvesting.js';
 import { Mining, toolOf } from './world/mining.js';
@@ -708,10 +709,14 @@ const carriedCount = (id) => inventory.slots.reduce((n, s) => n + (s?.id === id 
 // How many rows the ground under the player is raised.
 const playerLift = () => world.relief ? world.liftAt(player.x, player.y) : 0;
 // The ground cell under the cursor, or null when it is off the scene. On
-// raised ground it is read on the player's own height.
-function cursorCell() {
+// raised ground it is read on the player's own height, or with `drawn` on
+// the ground drawn under it, where a foe there stands.
+function cursorCell(drawn = false) {
   const cell = pointer && lastFrame ? screenToWorld(pointer, lastFrame, canvas.getBoundingClientRect()) : null;
-  if (cell && world.relief) cell.y += playerLift();
+  if (cell && world.relief) {
+    const row = Math.floor(cell.y);
+    cell.y += drawn ? groundUnder((x, y) => world.liftAt(x, y), Math.floor(cell.x), row) - row : playerLift();
+  }
   return cell;
 }
 
@@ -727,11 +732,11 @@ function cursorHeading(fromHips = false) {
 }
 
 // Where a shot or throw would land: the foe touch aim assist picked, the
-// cursor, or a point straight ahead within the weapon's range when aiming
-// from the keyboard.
+// ground under the cursor, or a point straight ahead within the weapon's
+// range when aiming from the keyboard.
 function aimPoint(weapon, draw, foe = null) {
   const range = (weapon.projectileRange ?? 8) * (0.4 + 0.6 * draw);
-  const cursor = foe ?? cursorCell();
+  const cursor = foe ?? cursorCell(true);
   let mx = cursor ? (cursor.x - player.x) * ASPECT / SCALE : Math.sin(player.heading) * range;
   let mz = cursor ? (cursor.y - player.y) / (SCALE * TILT) : Math.cos(player.heading) * range;
   const distance = Math.hypot(mx, mz);
