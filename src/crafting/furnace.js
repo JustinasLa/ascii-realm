@@ -274,9 +274,13 @@ export class Furnaces {
   update(dt) {
     let changed = false;
     let busy = false;
+    const moving = (furnace) => furnace.lit || furnace.cook > 0;
     for (const furnace of this.states.values()) {
+      const was = moving(furnace);
       if (furnace.advance(dt)) changed = true;
-      if (furnace.lit || furnace.cook > 0) busy = true;
+      // A burn or cooling that just ended is saved at once, like a slot.
+      if (moving(furnace)) busy = true;
+      else if (was) changed = true;
     }
     this.sinceSave += Number.isFinite(dt) && dt > 0 ? dt : 0;
     // Contents are saved at once; gauges every few seconds while they move.

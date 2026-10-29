@@ -336,6 +336,29 @@ test('the store saves contents at once and progress every two seconds', () => {
   assert.deepEqual(new Furnaces({ storage, seed: 4 }).states.size, 0, 'another world has its own furnaces');
 });
 
+test('a burn or cooling that ends is saved at once', () => {
+  const storage = memory();
+  const furnaces = new Furnaces({ storage, seed: 5 });
+  Object.assign(furnaces.get('a'), { input: { id: 'rawIron', count: 1 }, fuel: { id: 'coal', count: 1 } });
+  furnaces.update(10);
+  assert.equal(storage.writes, 1, 'the ingot changed a slot');
+  furnaces.update(70);
+  assert.equal(storage.writes, 2, 'the coal burnt out');
+  const reloaded = new Furnaces({ storage, seed: 5 }).get('a');
+  assert.equal(reloaded.burn, 0);
+  assert.equal(reloaded.lit, false);
+  furnaces.update(5);
+  assert.equal(storage.writes, 2, 'an idle furnace writes nothing');
+
+  Object.assign(furnaces.get('b'), { input: { id: 'rawIron', count: 1 }, cook: 1 });
+  furnaces.save();
+  furnaces.update(0.25);
+  assert.equal(storage.writes, 3, 'still cooling');
+  furnaces.update(1);
+  assert.equal(storage.writes, 4, 'cooled back to nothing');
+  assert.equal(new Furnaces({ storage, seed: 5 }).get('b').cook, 0);
+});
+
 test('bag moves through the store survive an immediate reload', () => {
   const storage = memory();
   const furnaces = new Furnaces({ storage, seed: 1 });
