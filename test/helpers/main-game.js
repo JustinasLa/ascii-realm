@@ -40,6 +40,7 @@ import { interaction, performInteraction } from '../../src/core/interact.js';
 import { Furnaces, nearbyFurnace } from '../../src/crafting/furnace.js';
 import { AlloyBook, describeStack } from '../../src/crafting/alloy-book.js';
 import { nearbyForge } from '../../src/crafting/alloys.js';
+import { describeWeapon, nearbySmithy } from '../../src/crafting/smithing.js';
 import { metresBetween } from '../../src/multiplayer/chat.js';
 import { figureTop } from '../../src/ui/bubbles.js';
 import { displayName } from '../../src/multiplayer/protocol.js';
@@ -287,6 +288,14 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       open(id) { this.opened.push(id); this.isOpen = true; this.onToggle(true); return true; }
       close() { this.isOpen = false; this.onToggle(false); }
       tell(done) { this.told.push(done); }
+      update() { this.updates++; }
+    },
+    // The weapon station's screen too (main-smithy.test.js).
+    describeWeapon, nearbySmithy,
+    WeaponStationScreen: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.opened = []; this.updates = 0; }
+      open(id) { this.opened.push(id); this.isOpen = true; this.onToggle(true); return true; }
+      close() { this.isOpen = false; this.onToggle(false); }
       update() { this.updates++; }
     },
     // The character pages count their renders and the buttons focused.

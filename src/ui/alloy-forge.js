@@ -7,13 +7,13 @@ const BURST = '\\ | /\n- * -\n/ | \\';
 // Keys the browser scrolls a focused list with.
 const SCROLL_KEYS = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', 'Space'];
 
-function box(tag, className, ...children) {
+export function box(tag, className, ...children) {
   const node = element(tag, className);
   node.append(...children);
   return node;
 }
 // A coloured alloy name.
-function named(name, colour) {
+export function named(name, colour) {
   const node = element('span', 'forge-alloy-name', name);
   node.style.color = colour ?? '';
   return node;

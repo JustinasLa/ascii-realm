@@ -17,6 +17,8 @@ import { FurnaceScreen } from './ui/furnace.js';
 import { AlloyBook, describeStack } from './crafting/alloy-book.js';
 import { nearbyForge } from './crafting/alloys.js';
 import { AlloyForgeScreen } from './ui/alloy-forge.js';
+import { describeWeapon, nearbySmithy } from './crafting/smithing.js';
+import { WeaponStationScreen } from './ui/weapon-station.js';
 import { drawFurnaceGlow, lightFurnace } from './world/furnace-glow.js';
 import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
 import { watchPhone } from './core/phone.js';
@@ -584,8 +586,8 @@ const inventoryScreen = new InventoryScreen({
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
   phone: () => device.phone,
-  isCovered: () => furnaceScreen.isOpen || forgeScreen.isOpen,
-  describe: (stack) => describeStack(stack, alloyBook),
+  isCovered: () => furnaceScreen.isOpen || forgeScreen.isOpen || smithyScreen.isOpen,
+  describe: (stack) => describeWeapon(stack, alloyBook) ?? describeStack(stack, alloyBook),
   describeVersion: () => alloyBook.version,
 });
 // Furnaces smelt on game time, kept on this device per world.
@@ -604,13 +606,20 @@ let lastForge = null;
 const forgeScreen = new AlloyForgeScreen({ book: alloyBook, inventory, onToggle: furnaceScreen.onToggle,
   onNotify: furnaceScreen.onNotify, onDiscover: () => dust.sparks(lastForge.x, lastForge.y - 4, 18),
   random: () => (debug.alloyRandom ?? Math.random)() });
-Object.assign(debug, { furnaces, furnaceScreen, alloyBook, forgeScreen });
+// The weapon station's screen; sparks fly from the anvil it was opened on, and `debug.smithRandom` pins the roll.
+let lastSmithy = null;
+const smithyScreen = new WeaponStationScreen({ book: alloyBook, inventory, onToggle: furnaceScreen.onToggle,
+  onNotify: furnaceScreen.onNotify, onHit: () => dust.sparks(lastSmithy.x, lastSmithy.y - 3, 4),
+  onFinish: () => dust.sparks(lastSmithy.x, lastSmithy.y - 3, 12), random: () => (debug.smithRandom ?? Math.random)(),
+  reducedMotion: () => reducedMotion });
+Object.assign(debug, { furnaces, furnaceScreen, alloyBook, forgeScreen, smithyScreen });
 const saveStations = () => { furnaces.save(); alloyBook.save(); };
 window.addEventListener('pagehide', saveStations);
 document.addEventListener('visibilitychange', () => document.hidden && saveStations());
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
-  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen || chat.isOpen);
+  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen
+    || smithyScreen.isOpen || chat.isOpen);
 }
 debug.hud = hud;
 debug.wallet = wallet;
@@ -685,7 +694,7 @@ debug.tint = tintPicker;
 // rune wheel are declared further down and are read only once a key or tap
 // arrives.
 const panelOpen = () => creator.isOpen || builder.enabled || inventoryScreen.isOpen || furnaceScreen.isOpen || phoneMenu.open
-  || forgeScreen.isOpen || !!spellControls.menu?.isOpen;
+  || forgeScreen.isOpen || smithyScreen.isOpen || !!spellControls.menu?.isOpen;
 const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
   isControlTarget,
   mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
@@ -1166,7 +1175,8 @@ touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap
 // What the contextual touch button can reach. Ground items appear once the
 // game keeps a collection of them.
 const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null,
-  furnaces: { nearby: (p) => nearbyFurnace(world, p) }, forges: { nearby: (p) => nearbyForge(world, p) } });
+  furnaces: { nearby: (p) => nearbyFurnace(world, p) }, forges: { nearby: (p) => nearbyForge(world, p) },
+  smithies: { nearby: (p) => nearbySmithy(world, p) } });
 loadSpells().then(spells => {
   void prepareSpellSounds(sound.engine, spells);
   casting.spells = new Map(spells.map(s => [s.id, s]));
@@ -1496,6 +1506,7 @@ function frame(now) {
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
       if (done?.kind === 'furnace') furnaceScreen.open(done.prop.id);
       if (done?.kind === 'forge') forgeScreen.open((lastForge = done.prop).id);
+      if (done?.kind === 'smithy') smithyScreen.open((lastSmithy = done.prop).id);
       // What the drop store's collection takes is told once, with its sound,
       // as its pickup events are spent below.
       const told = done?.result?.ok && debug.collection === huntCollection;
@@ -2022,19 +2033,24 @@ function frame(now) {
   hud.setFoes(woundedFoes(monsterCells));
   hud.setLoot(huntDrops.in(view.x0 - 2, view.y0 - 2, view.x0 + view.cols + 2, view.y0 + view.rows + 4), player, inventory);
   const playing = !paused && !isGameplayBlocked() && !player.magicStunned;
-  // The furnace and then the forge in reach come first, as E and the touch button use them.
+  // The furnace, the forge and then the weapon station in reach come first, as E and the touch button use them.
   const nearFurnace = playing ? nearbyFurnace(world, player) : null;
   const nearForge = playing && !nearFurnace ? nearbyForge(world, player) : null;
-  const nearbyMushroom = playing && !nearFurnace && !nearForge ? mushrooms.nearby(player) : null;
-  const nearbyOre = !nearFurnace && !nearForge && !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
-  hud.setPrompt(nearFurnace ? '[E] Use furnace' : nearForge ? '[E] Use alloy forge' : nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
+  const nearSmithy = playing && !nearFurnace && !nearForge ? nearbySmithy(world, player) : null;
+  const nearStation = nearFurnace || nearForge || nearSmithy;
+  const nearbyMushroom = playing && !nearStation ? mushrooms.nearby(player) : null;
+  const nearbyOre = !nearStation && !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
+  hud.setPrompt(nearFurnace ? '[E] Use furnace' : nearForge ? '[E] Use alloy forge' : nearSmithy ? '[E] Use weapon station'
+    : nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : nearbyOre?.prompt ?? '');
-  touch.interact.update(playing ? interaction({ ...interactables(), furnaces: { nearby: () => nearFurnace }, forges: { nearby: () => nearForge } }) : null, time);
+  touch.interact.update(playing ? interaction({ ...interactables(), furnaces: { nearby: () => nearFurnace }, forges: { nearby: () => nearForge },
+    smithies: { nearby: () => nearSmithy } }) : null, time);
   hud.update(dt, hudView);
   chat.update(dt);
   inventoryScreen.update();
   furnaceScreen.update();
   forgeScreen.update();
+  smithyScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;
   // Frames are measured by the real time between them, never the clamped

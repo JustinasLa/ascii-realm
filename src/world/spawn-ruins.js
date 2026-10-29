@@ -5,7 +5,7 @@ import { ASPECT, GRASS, STONE } from './world.js';
 
 // These slots belong to the generated landmark, including after an editor
 // deletes or moves one. Keep them independent of chunk order and prop seeds.
-export const SPAWN_SLOTS = 13;
+export const SPAWN_SLOTS = 14;
 export function isSpawnRuinId(id) {
   const slot = typeof id === 'string' && /^r:spawn:(0|[1-9]\d?)$/.exec(id);
   return !!slot && Number(slot[1]) < SPAWN_SLOTS;
@@ -92,6 +92,9 @@ export function createSpawnRuins(seed, spawn) {
   // The alloy forge further east, out of the furnace's reach and clear of
   // the square column.
   add('alloy-forge', 62, -16);
+  // The weapon station south of the forge, out of reach of it and the
+  // furnace; unstretched, so its hanging tools stay one letter each.
+  add('weapon-station', 66, -4, 1, 0);
 
   // Approach the arch along its rotated tunnel, with an open forecourt
   // between spawn and the wall rather than a tight cluster around the player.

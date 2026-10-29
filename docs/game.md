@@ -287,8 +287,18 @@ short version see the [README](../README.md).
   underscores (shown as spaces), to a name no other alloy has in any case. The
   book of alloys and failed mixes, and each forge's loaded mix and waiting
   result, are kept on this device for each world; the bag is not.
-- **Smithing.** The weapon station's rules are in place, though no station
-  stands in the world yet. A Short Sword, Dagger, Battle Axe, War Hammer or
+- **Smithing.** A weapon station (an anvil on a sawn stump, with the six
+  smithing tools hanging on a rack beside it) stands south-east of the alloy
+  forge in the spawn forecourt, out of reach of the forge and the furnace; the
+  builder's Camp palette places more, and none can be broken. Press `E`
+  beside one, or tap **SMITH**: with no piece its screen lists the six
+  pieces; with one it shows the metal slots, the six hit buttons with the
+  hits done of each kind and their total (keys `1`–`6` on a keyboard; a held
+  key or presses under 0.1 s apart count once), **Finish** and **Cancel
+  project**, and your satchel's rows; a weapon that didn't fit the bag shows
+  as **Take**. Each hit throws a few sparks from the anvil. After a finish the
+  report (Hits %, quality, roll and clue) stays until the next piece is
+  chosen. A Short Sword, Dagger, Battle Axe, War Hammer or
   Spear takes 4 metal and a Greatsword 8: Iron, Copper, Steel or Bronze Ingots
   or metal alloy ingots. Each unit adds its own hits to what the piece needs
   (an Iron Ingot 4 Hit and 1 Small Hit; an alloy its own 1 to 3 per kind). The
@@ -322,7 +332,9 @@ short version see the [README](../README.md).
   lacking one counting 0. It hits for its kind's damage × Attack Damage ÷ 4,
   so Steel's 4 matches the steel tier, and swings, tires and weighs like an
   iron one; its other stats, its durability (the mean Durability), quality,
-  Hits %, inputs and socket are kept with it but don't act yet. Friends see
+  Hits %, inputs and socket are kept with it but don't act yet. The bag lists
+  its metal, quality, Hits %, socket, damage and stats, and its durability out
+  of the mean Durability. Friends see
   it in its colour. Other weapons, the starter sword among them, hit and look
   as their tier does.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,

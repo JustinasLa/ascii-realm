@@ -3,6 +3,7 @@ import { stackExtras } from '../inventory/inventory.js';
 import { ITEMS } from '../inventory/items.js';
 import { listNames, statLines } from './alloys.js';
 import { QUALITIES } from './forged.js';
+import { nearbyStation } from './furnace.js';
 import { HIT_KINDS, INGREDIENTS, STAT_NAMES } from './ingredients.js';
 
 // The weapon station's rules, as plain maths: what a piece needs, how its
@@ -28,6 +29,7 @@ export const CRAFT_MODIFIER = 0;
 export const MAX_HITS = 999;
 export const CLUE_PREFIX = 'Looking the piece over, ';
 export const NO_CLUE = `${CLUE_PREFIX}you can't tell what went wrong with it.`;
+export const nearbySmithy = (world, player) => nearbyStation(world, player, 'weapon-station');
 
 const ALLOY_ID = /^a[1-9]\d{0,3}$/;
 const STAT_ORDER = Object.keys(STAT_NAMES);

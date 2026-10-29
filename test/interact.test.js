@@ -178,3 +178,22 @@ test('an alloy forge in reach comes after a furnace and before a glowcap', async
   assert.equal(nearbyForge(world, player({ x: 7 + 5.9, y: -2 })), null);
   assert.equal(nearbyForge(world, player({ x: 7 + 5.8, y: -2 })), forge);
 });
+
+test('a weapon station in reach comes after the forge and before a glowcap', async () => {
+  const { nearbySmithy } = await import('../src/crafting/smithing.js');
+  const { nearbyStation } = await import('../src/crafting/furnace.js');
+  const forge = { id: 'r:spawn:12', kind: 'alloy-forge', x: -24, y: -2, footW: 7, footH: 1.4 };
+  const station = { id: 'r:spawn:13', kind: 'weapon-station', x: 0, y: -2, footW: 7.9, footH: 1.2 };
+  const world = { propsIn: () => [forge, station] };
+  const smithies = { nearby: (p) => nearbySmithy(world, p) };
+  const forges = { nearby: (p) => nearbyStation(world, p, 'alloy-forge') };
+  const context = { player: player(), mushrooms: mushroomsWith({ cooldown: 0 }), fires: firesWith({}), forges, smithies };
+  assert.deepEqual(interaction(context), { kind: 'smithy', label: 'SMITH', ariaLabel: 'Use the weapon station' });
+  assert.deepEqual(performInteraction(context), { kind: 'smithy', prop: station });
+  assert.equal(interaction({ ...context, player: player({ x: -18 }) }).kind, 'forge');
+  assert.equal(interaction({ ...context, player: player({ air: 0.5 }) }).kind, 'spores');
+  assert.equal(performInteraction({ ...context, player: player({ air: 0.5 }), mushrooms: mushroomsWith(null) }), null);
+  // Its reach runs from the footprint's edge.
+  assert.equal(nearbySmithy(world, player({ x: 7.9 + 5.9, y: -2 })), null);
+  assert.equal(nearbySmithy(world, player({ x: 7.9 + 5.8, y: -2 })), station);
+});
