@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { HuntDrops } from '../src/entities/hunt-drops.js';
 import { Camera, liftView } from '../src/world/camera.js';
 import { raisedRows } from '../src/world/ground.js';
+import { MAX_LIFT } from '../src/world/relief.js';
 import { PENDING_LOBBY } from '../src/world/woodland.js';
 import { World } from '../src/world/world.js';
 import { loadGame } from './helpers/main-game.js';
@@ -32,7 +34,7 @@ const stub = (methods = {}) => class {
 
 // The game on the real world and camera, recording what the frame draws.
 // `shape` keeps the 3D character from loading, so the shape-built figure shows.
-async function hillGame(query = 'scene=hill', { shape = false } = {}) {
+async function hillGame(query = 'scene=hill', { shape = false, real = {} } = {}) {
   const order = [];
   const figures = [];
   const shadows = [];
@@ -52,6 +54,7 @@ async function hillGame(query = 'scene=hill', { shape = false } = {}) {
     drawResource: sprite('plant'),
     Mushrooms: stub({ prepare: at, draw: sprite('mushroom'), nearby: () => null }),
     ...(shape ? { ModelFigure: { load: () => new Promise(noop), library: () => new Promise(noop) }, dressFigure: () => [] } : {}),
+    ...real,
   } });
   Object.assign(loaded.model, { top: 10, cells: [{ sx: 40, sy: 25 }], rasterise: (view) => figures.push(view),
     draw: () => order.push(['player']) });
@@ -131,6 +134,41 @@ test('the cursor is read on the raised player\'s own height', async () => {
   tap('mouse');
   for (let i = 0; i < 20; i++) frame();
   assert.ok(Math.abs(Math.atan2(Math.sin(player.heading), Math.cos(player.heading))) < 0.5, `heading ${player.heading}`);
+});
+
+test('a hunt drop, bush, glowcap, fire or torch on the crest below the view rises into it', async () => {
+  // Standing on the meadow behind the ridge, its crest lies below the view.
+  const items = [];
+  const plants = [];
+  const queried = {};
+  const drawn = [];
+  const inBox = (list, x0, y0, x1, y1) => list.filter((n) => n.x >= x0 && n.x < x1 && n.y >= y0 && n.y < y1);
+  const deep = (kind) => (view) => { queried[kind] = view.y0 + view.rows; return []; };
+  const { game, frame } = await hillGame('scene=hill', { real: {
+    HuntDrops: class extends HuntDrops { in(...box) { return inBox(items, ...box); } },
+    Harvesting: stub({ resourcesIn: (...box) => inBox(plants, ...box) }),
+    drawItem: (_r, view, item, _t, mirror) => mirror || drawn.push(['drop', view.y0]),
+    drawResource: (_r, view, node, _t, mirror) => mirror || drawn.push(['plant', view.y0]),
+    Mushrooms: stub({ prepare: deep('glowcaps'), nearby: () => null }),
+    Fires: stub({ prepare: deep('fires'), nearest: () => null }),
+    Torches: stub({ prepare: deep('torches') }),
+  } });
+  const { player, world, camera } = game;
+  player.x = world.spawn.x + 20;
+  player.y = world.spawn.y - 60;
+  for (let i = 0; i < 30; i++) frame();
+  const view = camera.view(game.renderer);
+  const x = Math.floor(player.x);
+  const crest = Array.from({ length: 60 }, (_, k) => world.liftAt(x, view.y0 + view.rows + k));
+  const y = view.y0 + view.rows + crest.indexOf(Math.max(...crest));
+  const lift = world.liftAt(x, y);
+  assert.ok(lift > 12 && y - lift < view.y0 + view.rows, `crest at ${y} lifted ${lift}`);
+  items.push({ x: x + 0.5, y: y + 0.5 });
+  plants.push({ x: x + 0.5, y: y + 0.5 });
+  drawn.length = 0;
+  frame();
+  assert.deepEqual(drawn.sort(), [['drop', view.y0 + lift], ['plant', view.y0 + lift]]);
+  for (const kind of ['glowcaps', 'fires', 'torches']) assert.equal(queried[kind], view.y0 + view.rows + MAX_LIFT, kind);
 });
 
 test('creating a lobby from the hill scene reloads onto flat land and creates it there', async () => {

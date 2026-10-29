@@ -1645,6 +1645,8 @@ function frame(now) {
   // Whatever stands on raised ground is drawn through a view lifted with it.
   const lv = (x, y) => world.relief ? liftView(view, world.liftAt(x, y)) : view;
   const pv = pLift ? liftView(view, pLift) : view;
+  // Sprites as far as the deepest lift below the view can rise into it.
+  const below = world.relief ? world.maxLift : 0;
   weather.update(dt, time, world, view, sound.weather);
   if (!paused) {
     debris.update(dt, world, view, player, weather, splashes, debrisBodies());
@@ -1729,7 +1731,7 @@ function frame(now) {
   const marginX = Math.max(world.propRenderW, MAX_TREE_HALF_WIDTH + MAX_LEAF_DRIFT) + 2;
   const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
-    view.x0 + view.cols + marginX, view.y0 + view.rows + tall + (world.relief ? world.maxLift : 0), wide);
+    view.x0 + view.cols + marginX, view.y0 + view.rows + tall + below, wide);
   // Trees' shadows darken the ground drawn so far, and the grass and rocks'
   // ground cells as they are drawn, and moonbeams light them; warm light is
   // added over them later.
@@ -1740,9 +1742,10 @@ function frame(now) {
   renderer.night = nightLight.active ? nightLight : null;
   debug.metrics.nightMs = performance.now() - nightStart;
   const mirror = reflector(time, view);
-  const visibleMushrooms = mushrooms.prepare(view, wide);
-  const visibleFires = fires.prepare(view, time);
-  const visibleTorches = torches.prepare(view, time, player, model?.torchPose());
+  const deep = below ? { ...view, rows: view.rows + below } : view;
+  const visibleMushrooms = mushrooms.prepare(deep, wide);
+  const visibleFires = fires.prepare(deep, time);
+  const visibleTorches = torches.prepare(deep, time, player, model?.torchPose());
   ambience.update(dt, time, world, view, { lights: lightsOf(visibleFires, visibleTorches), wind: weather.wind });
   // Once the 3D character has loaded it replaces the shape-built figure.
   let figure = null;
@@ -1811,7 +1814,7 @@ function frame(now) {
   }
   // Bushes can reach in from below the view or reflect from above it.
   const plants = harvesting.resourcesIn(view.x0 - 9, view.y0 - 12, view.x0 + view.cols + 9,
-    view.y0 + view.rows + 12, wide);
+    view.y0 + view.rows + 12 + below, wide);
   for (const node of plants) {
     reflections.push({ y: node.y, draw: () => drawResource(renderer, view, node, time, mirror) });
     drawables.push({ y: node.y, draw: () => drawResource(renderer, lv(node.x, node.y), node, time) });
@@ -1831,7 +1834,7 @@ function frame(now) {
   for (const shaft of [...projectiles.landedDrawables(), ...monsters.arrows.landedDrawables()]) {
     drawables.push({ y: shaft.depth, draw: () => shaft.draw(renderer, view) });
   }
-  for (const item of huntDrops.in(view.x0 - 2, view.y0 - view.rows, view.x0 + view.cols + 2, view.y0 + view.rows + 2)) {
+  for (const item of huntDrops.in(view.x0 - 2, view.y0 - view.rows, view.x0 + view.cols + 2, view.y0 + view.rows + 2 + below)) {
     reflections.push({ y: item.y, draw: () => drawItem(renderer, view, item, time, mirror) });
     // Drawn after the grass a few rows in front, so tall blades never hide it.
     drawables.push({ y: item.y + HUNT_DROP_LIFT, draw: () => drawItem(renderer, lv(item.x, item.y), item, time) });
