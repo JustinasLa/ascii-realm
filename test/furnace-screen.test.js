@@ -211,7 +211,8 @@ function installBrowser(t, { canvas = true, hud = true } = {}) {
 
 const ID = 'r:spawn:11';
 
-function mount(t, { items = [['rawIron', 6], ['coal', 2], ['rawTin', 1], ['stonePickaxe', 1]], browser = {} } = {}) {
+function mount(t, { items = [['rawIron', 6], ['coal', 2], ['rawTin', 1], ['stonePickaxe', 1]], browser = {},
+  bag = null } = {}) {
   const env = installBrowser(t, browser);
   // The inventory's root, which the game makes first.
   const root = env.document.createElement('div');
@@ -222,9 +223,15 @@ function mount(t, { items = [['rawIron', 6], ['coal', 2], ['rawTin', 1], ['stone
   const saves = [];
   const storage = { getItem: () => null, setItem: (key, value) => saves.push([key, value]) };
   const furnaces = new Furnaces({ storage, seed: 1 });
+  // The bag, made before the furnace screen as main.js does, so its key
+  // listener runs first.
+  let screen;
+  const satchel = bag && new InventoryScreen({ inventory: new Inventory({ starter: false }),
+    player: { vitals: { health: 1, maxHealth: 1, stamina: 1, maxStamina: 1 } },
+    isCovered: () => bag(screen) });
   const toggles = [];
   const notes = [];
-  const screen = new FurnaceScreen({ furnaces, inventory, onToggle: (open) => toggles.push(open),
+  screen = new FurnaceScreen({ furnaces, inventory, onToggle: (open) => toggles.push(open),
     onNotify: (message, kind) => notes.push([message, kind]) });
   // Game controls listen after the screen, as main.js does.
   const gameKeys = [];
@@ -245,7 +252,7 @@ function mount(t, { items = [['rawIron', 6], ['coal', 2], ['rawTin', 1], ['stone
     env.clock.now += 1000;
     return node.dispatch('click', { detail: 1 });
   };
-  return { ...env, screen, furnaces, inventory, toggles, notes, saves, gameKeys, press, rows, row, tap,
+  return { ...env, screen, satchel, furnaces, inventory, toggles, notes, saves, gameKeys, press, rows, row, tap,
     furnace: () => furnaces.get(ID) };
 }
 
@@ -503,14 +510,19 @@ test('Escape and E close it; no key reaches the game, browser shortcuts still wo
 });
 
 test('the bag cannot open over the furnace', (t) => {
-  const { screen, press } = mount(t);
-  const inventory = new Inventory({ starter: false });
-  const bag = new InventoryScreen({ inventory, player: { vitals: { health: 1, maxHealth: 1, stamina: 1, maxStamina: 1 } },
-    isCovered: () => screen.isOpen });
+  let guarded = true;
+  const { screen, satchel: bag, press } = mount(t, { bag: (furnace) => guarded && furnace.isOpen });
   screen.open(ID);
   press('KeyI');
   assert.equal(bag.isOpen, false);
+  assert.equal(screen.isOpen, true);
   screen.close();
   press('KeyI');
   assert.equal(bag.isOpen, true);
+  press('KeyI');
+  // The bag hears keys first, so only its cover check keeps it shut.
+  guarded = false;
+  screen.open(ID);
+  press('KeyI');
+  assert.equal(bag.isOpen, true, 'unguarded, the bag would open over the furnace');
 });
