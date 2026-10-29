@@ -57,6 +57,11 @@ so on a slope its sides can sit a row off the ground.
 
 ## Walking on slopes
 
-Every slope is walkable for now: height changes nothing about movement or
-speed. How steep a slope may be before it needs a jump or blocks the way is
-to be specified separately.
+Every slope is walkable for now: height changes nothing about movement,
+speed or falling, so the player walks over the ridge as over flat land.
+
+Rules for climbing are planned but not built yet. For each metre walked, a
+rise of up to 0.6 m is a step, a rise of up to 1.25 m needs a jump, and
+anything steeper blocks the way. Any drop can be walked down, but a fall of
+more than 3 m costs a point of health for every metre beyond 3. Slopes will
+not change walking speed.
