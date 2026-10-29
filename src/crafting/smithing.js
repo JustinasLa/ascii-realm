@@ -330,13 +330,14 @@ export function finishSmithy(smithy, inventory, book, random = Math.random) {
   return result('finished', lines.join('\n'), { ok: true, id, name, percent, quality: quality.id, roll, clue, waiting, lines });
 }
 
-// Gives the units back, last loaded first, as far as the bag has room; the
-// hits are lost. What doesn't fit stays with the recipe. A waiting weapon is
-// left alone.
+// Gives back each unit the bag has room for, last loaded first; the hits are
+// lost. What doesn't fit stays with the recipe. A waiting weapon is left alone.
 export function cancelSmithy(smithy, inventory, book) {
   if (!smithy.recipe) return result('empty', 'There is no project to cancel.');
   const back = [];
-  while (smithy.units.length && giveBack(inventory, smithy.units.at(-1))) back.push(smithy.units.pop());
+  for (let i = smithy.units.length - 1; i >= 0; i--) {
+    if (giveBack(inventory, smithy.units[i])) back.push(...smithy.units.splice(i, 1));
+  }
   if (smithy.units.length && !back.length) return result('full', 'Your bag is full.');
   smithy.done = {};
   const took = back.length ? ` Took back ${namesOf(back, book)}.` : '';

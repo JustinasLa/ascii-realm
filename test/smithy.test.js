@@ -224,6 +224,24 @@ test('cancel with a full bag gives back what fits and keeps the rest with the re
   assert.equal(snapshot(smithy, inventory), before);
 });
 
+test('a unit the bag can\'t take doesn\'t hold back an earlier one whose stack has room', () => {
+  // No free slot: the iron joins its stack, the alloy has nowhere to go.
+  const book = makeBook();
+  const inventory = fullBag({ id: 'ironIngot', count: 63 });
+  const smithy = bench('dagger', ['ironIngot', 'a1'], { hit: 2 });
+  assert.deepEqual(cancelSmithy(smithy, inventory, book), {
+    ok: true, status: 'cancelled', message: 'Took back Iron Ingot. Your bag has no room for the rest.', units: ['ironIngot'],
+  });
+  assert.deepEqual(inventory.slots[0], { id: 'ironIngot', count: 64 });
+  assert.deepEqual([smithy.recipe, smithy.units, smithy.done], ['dagger', ['a1'], {}]);
+
+  inventory.slots[1] = null;
+  assert.deepEqual(cancelSmithy(smithy, inventory, book), {
+    ok: true, status: 'cancelled', message: 'Project cancelled. Took back Blackiron.', units: ['a1'],
+  });
+  assert.equal(smithy.idle, true);
+});
+
 test('the screen model lists recipes when idle and the piece while it is worked, never a needed count', () => {
   const book = makeBook();
   const inventory = bag(
