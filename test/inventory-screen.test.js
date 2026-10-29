@@ -1917,3 +1917,51 @@ test('a smithed sword shows its metal once, its quality, socket and damage, and 
   assert.deepEqual(tipLines(screen).filter((line) => /^material/i.test(line)), ['material Steel']);
   assert.equal(screen.bagNodes[2].count.textContent, 'wool', 'plain gear reads its own material');
 });
+
+test('a redraw keeps the tooltip where the pointer moved it on the same card', (t) => {
+  const { screen, inventory, press, bagButton, indexOf, hover } = mount(t);
+  press('KeyI');
+  const arrows = indexOf('arrow');
+  hover(bagButton(arrows));
+  hover(bagButton(arrows), 300, 200);
+  inventory.slots[arrows].count = 12;
+  screen.update();
+  assert.equal(tipLines(screen).at(-1), 'weight 0.03 kg each · 0.36 kg');
+  assert.equal(screen.tooltip.node.style.transform, 'translate(314px, 214px)', 'not back where it first was');
+});
+
+test('using up the focused stack with Enter shows the tooltip of the card that takes focus', (t) => {
+  const { document, screen, inventory, press, bagButton } = mount(t);
+  press('KeyI');
+  press('ArrowRight');
+  press('ArrowLeft');
+  assert.equal(screen.tooltip.nameNode.textContent, 'Healing Draught');
+  inventory.slots[0].count = 1;
+  press('Enter');
+  assert.equal(inventory.slots[0], null);
+  const focused = document.activeElement;
+  assert.notEqual(focused, bagButton(0));
+  assert.equal(screen.tooltip.shown, true);
+  assert.equal(screen.tooltip.nameNode.textContent, screen._selectedItem().item.name);
+});
+
+test('a resize re-places a pinned panel by its card', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const { window, screen, bagButton, indexOf } = mount(t, { phone: () => true });
+  screen.setOpen(true);
+  window.dispatchEvent(new Event('resize'));
+  assert.equal(screen.tooltip.shown, false);
+  const tonic = bagButton(indexOf('staminaTonic'));
+  tonic.rect = { left: 40, top: 300, width: 56, height: 112 };
+  screen.screen.dispatch('pointerdown', { pointerType: 'touch', target: tonic, pointerId: 1, button: 0, timeStamp: 0 });
+  t.mock.timers.tick(450);
+  assert.equal(screen.tooltip.node.style.transform, 'translate(40px, 416px)');
+  // Turned to landscape: the card is higher and the screen shorter.
+  tonic.rect = { left: 600, top: 100, width: 56, height: 112 };
+  override(t, 'innerWidth', 800);
+  override(t, 'innerHeight', 400);
+  window.dispatchEvent(new Event('resize'));
+  assert.equal(screen.tooltip.pinned, true);
+  assert.equal(screen.tooltip.node.style.transform, 'translate(600px, 216px)');
+  assert.deepEqual(screen.tooltip.actions.children.map((button) => button.textContent), ['use'], 'its button kept');
+});

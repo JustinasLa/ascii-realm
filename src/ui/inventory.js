@@ -321,8 +321,11 @@ export class InventoryScreen {
       if (event.pointerType === 'touch' || this.tooltip.pinned) return;
       const source = this._sourceOf(event.target);
       if (!source) this._hideTip();
-      else if (this._tip?.node === source.node && !this._tip.keyboard) this.tooltip.move(event.clientX, event.clientY);
-      else this._showTip(source, { x: event.clientX, y: event.clientY });
+      else if (this._tip?.node === source.node && !this._tip.keyboard) {
+        // A redraw shows it where the pointer is now.
+        this._tip.point = { x: event.clientX, y: event.clientY };
+        this.tooltip.move(event.clientX, event.clientY);
+      } else this._showTip(source, { x: event.clientX, y: event.clientY });
     });
     this.screen.addEventListener('pointerleave', () => { if (!this.tooltip.pinned) this._hideTip(); });
     // A scroll moves the cards away from a tooltip; one the keys showed
@@ -361,6 +364,9 @@ export class InventoryScreen {
     window.addEventListener('keydown', this._keydown, true);
     window.addEventListener('keyup', this._keyup, true);
     window.addEventListener('blur', this._blur);
+    // A turned phone re-places a pinned panel, its buttons on screen.
+    this._resize = () => { if (this.tooltip.pinned) this._pin(this._tip); };
+    window.addEventListener('resize', this._resize);
   }
 
   get isOpen() { return this._isOpen; }
@@ -630,6 +636,8 @@ export class InventoryScreen {
     if (document.activeElement?.hidden && this.screen.contains(document.activeElement)) {
       this._focusTarget().focus({ preventScroll: true });
     }
+    // The keys' tooltip follows focus to the card that now has it.
+    if (this._keyboard) this._tipAtFocus();
   }
 
   _select(selection, focus = false) {
@@ -916,6 +924,7 @@ export class InventoryScreen {
     window.removeEventListener('keydown', this._keydown, true);
     window.removeEventListener('keyup', this._keyup, true);
     window.removeEventListener('blur', this._blur);
+    window.removeEventListener('resize', this._resize);
     this._fine.removeEventListener?.('change', this._fineChange);
     this.gestures.destroy();
     this.tooltip.destroy();
