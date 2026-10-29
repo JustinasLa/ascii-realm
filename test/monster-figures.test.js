@@ -410,3 +410,26 @@ test('on raised ground a monster is drawn through its own lifted view, its healt
   // The top is a row of the plain view, so the bar rides up with the figure.
   assert.equal(liftedTop, top - 6);
 });
+
+test('a pitched camera frames a monster where the pitch draws it', async () => {
+  const { BASE_LOOK, pitchLook } = await import('../src/world/camera.js');
+  const { assertPitched } = await import('./helpers/pitch-check.js');
+  const view = { x0: -200, y0: -200, cols: 400, rows: 400 };
+  const f = figures();
+  const t = new Monster(0.3, 0.6, { kind: KINDS.troll, heading: 0.7 });
+  for (let i = 0; i < 10; i++) f.update(dt, [t]);
+  const rig = f.rigs.get(t);
+  assert.equal(f.pitch, BASE_LOOK);
+  assert.deepEqual(rig.reach(), rig.reach(BASE_LOOK.up), 'the usual pitch by default');
+  const rows = {};
+  for (const deg of [30, 25, 45]) {
+    const look = pitchLook(deg);
+    f.setLook(look);
+    const dir = f.camera.position.clone().normalize();
+    assert.ok(Math.abs(dir.y - look.sin) < 1e-9 && Math.abs(dir.z - look.cos) < 1e-9);
+    const slot = f.slotOf(t, view);
+    rows[deg] = slot.rows;
+    assert.ok(assertPitched(f, rig.model, t.x, t.y, slot, look) > 10);
+  }
+  assert.ok(rows[25] > rows[30] && rows[30] > rows[45], JSON.stringify(rows));
+});

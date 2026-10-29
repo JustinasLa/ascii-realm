@@ -30,6 +30,9 @@ export class Torches {
     this.list = [];
     this.nextId = 1;
     this.carried = { id: 'torch-held', seed: 447, intensity: 0.9, carried: true, cells: [] };
+    // How much taller than usual a thrown torch's height is drawn (the
+    // camera pitch's `scale`); the one in hand already comes at its pitch.
+    this.heightScale = 1;
   }
 
   hold(player, pose = torchGrip(player)) {
@@ -101,11 +104,12 @@ export class Torches {
       const spin = torch.carried ? 0 : torch.age * 9;
       const dx = Math.sin(spin) / ASPECT;
       const dy = -Math.cos(spin);
+      const h = torch.carried ? torch.h : torch.h * this.heightScale;
       const stick = Math.abs(dy) < 0.35 ? '-' : Math.abs(dx) < 0.4 ? '|' : dx * dy < 0 ? '/' : '\\';
       const cells = [];
       for (let i = -1; i <= SHAFT; i++) {
         const wrap = i >= SHAFT - 1;
-        const at = { dx: Math.round(dx * i), dy: Math.round(-torch.h + dy * i) };
+        const at = { dx: Math.round(dx * i), dy: Math.round(-h + dy * i) };
         cells.push({ ...at, g: wrap ? WRAP : glyph(stick), r: wrap ? 150 : 142, gg: wrap ? 98 : 82,
           b: wrap ? 52 : 32, bg: [24, 14, 7] });
         // The pitch-soaked wrap smoulders under the flame.
@@ -113,7 +117,7 @@ export class Torches {
         if (wrap) cells.push({ ...at, g: over(SMOULDER), r: 255 * glow, gg: 120 * glow, b: 30 * glow });
       }
       torch.flameX = dx * SHAFT;
-      torch.flameH = torch.h - dy * SHAFT;
+      torch.flameH = h - dy * SHAFT;
       // A single tongue of flame licking up from the wrap, swaying as it
       // goes and leaning further near its tip.
       const fx = Math.round(torch.flameX);

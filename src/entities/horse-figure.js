@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from '../../vendor/three/utils/SkeletonUtils.js';
 import { glyph } from '../render/glyphs.js';
+import { BASE_LOOK } from '../world/camera.js';
 import { ASPECT } from '../world/world.js';
 import { measure, relight } from './animal-figures.js';
 import { HORSE } from './horses.js';
@@ -286,12 +287,14 @@ export function mergeFigure(root, size = 0) {
 // `pixelRow` its row down the slot, which is `frame.pxHeight` pixels tall
 // and spans `frame.top` to `frame.bottom` metres on the camera's plane. The
 // camera is D metres from the figure, so a point (y up, z toward the
-// camera) is t = D - TILT·y - COS·z deep and u = COS·y - TILT·z up the
-// plane; z follows from t and u.
+// camera) is t = D - sin·y - cos·z deep and u = cos·y - sin·z up the
+// plane, at the camera's pitch (`frame.sin`, `frame.cos`; 30° without);
+// z follows from t and u.
 export function groundRowOf(byte, pixelRow, frame) {
+  const { sin = TILT, cos = COS } = frame;
   const t = NEAR + ((byte - 128) / 127) * (FAR - NEAR);
   const u = frame.top - ((pixelRow + 0.5) / frame.pxHeight) * (frame.top - frame.bottom);
-  const z = COS * (D - t) - TILT * u;
+  const z = cos * (D - t) - sin * u;
   return frame.y + z * SCALE * TILT;
 }
 
@@ -519,13 +522,14 @@ class HorseRig {
 
   // How far horse and rider reach round the hooves on screen, in metres:
   // left, right, up and down, from their bones (as last posed) and the
-  // flesh on them.
-  reach() {
+  // flesh on them, where a metre of height rises `rise` (the camera pitch's
+  // `up`).
+  reach(rise = COS) {
     const box = { left: Infinity, right: -Infinity, up: -Infinity, down: Infinity };
     const v = new THREE.Vector3();
     const add = (o, pad) => {
       v.setFromMatrixPosition(o.matrixWorld);
-      const up = v.y * COS - v.z * TILT;
+      const up = v.y * rise - v.z * TILT;
       box.left = Math.min(box.left, v.x - pad);
       box.right = Math.max(box.right, v.x + pad);
       box.up = Math.max(box.up, up + pad);
@@ -582,6 +586,7 @@ export class HorseFigures {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, D - 6, D + 6);
     this.camera.position.set(0, TILT * D, COS * D);
     this.camera.lookAt(0, 0, 0);
+    this.pitch = BASE_LOOK;
     this.width = 56 * SX * MAX_DRAWN;
     this.height = 48 * SY;
     this.pixels = new Uint8Array(this.width * this.height * 4);
@@ -736,7 +741,7 @@ export class HorseFigures {
   slotOf(horse, view) {
     if (horse.x < view.x0 - MAX_COLS / 2 || horse.x > view.x0 + view.cols + MAX_COLS / 2
       || horse.y < view.y0 - MAX_ROWS * 0.3 || horse.y > view.y0 + view.rows + MAX_ROWS * 0.7) return null;
-    const reach = this.rigOf(horse).reach();
+    const reach = this.rigOf(horse).reach(this.pitch.up);
     const cols = SCALE / ASPECT;
     const cx0 = Math.max(Math.floor(horse.x + reach.left * cols) - PAD, view.x0 - 1, Math.floor(horse.x) - MAX_COLS / 2);
     const cx1 = Math.min(Math.ceil(horse.x + reach.right * cols) + PAD, view.x0 + view.cols + 1, Math.floor(horse.x) + MAX_COLS / 2);
@@ -744,6 +749,17 @@ export class HorseFigures {
     const cy1 = Math.min(Math.ceil(horse.y - reach.down * SCALE) + PAD, view.y0 + view.rows + 1, Math.floor(horse.y) + MAX_ROWS * 0.3);
     if (cx1 <= cx0 || cy1 <= cy0) return null;
     return { x: 0, cx0, cy0, cols: cx1 - cx0, rows: cy1 - cy0 };
+  }
+
+  // Views the horses and riders from the camera pitch `look` (see camera.js pitchLook):
+  // ground depth stays as it is and height rises `look.rise` rows a metre.
+  // The cells last drawn were seen from the old pitch, so none still serve.
+  setLook(look) {
+    if (look === this.pitch) return;
+    this.pitch = look;
+    this.camera.position.set(0, look.sin * D, look.cos * D);
+    this.camera.lookAt(0, 0, 0);
+    for (const rig of this.rigs.values()) rig.raster = null;
   }
 
   grow(width, height) {
@@ -758,8 +774,8 @@ export class HorseFigures {
     const cam = this.camera;
     cam.left = -((x - slot.cx0) * ASPECT) / SCALE;
     cam.right = cam.left + (slot.cols * ASPECT) / SCALE;
-    cam.top = (y - slot.cy0) / SCALE;
-    cam.bottom = cam.top - slot.rows / SCALE;
+    cam.top = (y - slot.cy0) / this.pitch.rowsPerUnit;
+    cam.bottom = cam.top - slot.rows / this.pitch.rowsPerUnit;
     cam.updateProjectionMatrix();
   }
 
@@ -772,7 +788,9 @@ export class HorseFigures {
     const w = this.readWidth;
     const h = slot.rows * SY;
     const px = this.pixels;
-    const frame = { top: (horse.y - cy0) / SCALE, bottom: (horse.y - cy0 - slot.rows) / SCALE, pxHeight: h, y: horse.y };
+    const { rowsPerUnit, sin, cos } = this.pitch;
+    const frame = { top: (horse.y - cy0) / rowsPerUnit, bottom: (horse.y - cy0 - slot.rows) / rowsPerUnit, pxHeight: h, y: horse.y,
+      sin, cos };
     // The ground row is linear in the depth byte and the pixel row, so it
     // is found from the steps of each.
     const ground0 = groundRowOf(128, 0, frame);

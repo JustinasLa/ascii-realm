@@ -79,20 +79,22 @@ normal play: the game is drawn from one fixed camera.
   metre); only how far height rises changes. Raised ground is lifted again:
   the ridge is 22 rows tall at 25°, 18 at 30° and 10 at 45°, so a low camera
   hides more behind it and a high one sees over it. Everything standing on
-  the ground goes with it. The 3D outlaw is rendered by its camera at the
-  new angle, so at 45° you see more of the top of the hood, and a jump rises
-  in proportion. The camera keeps aiming at the figure's middle, so a pitch
-  change swings the view round the player.
+  the ground goes with it. The 3D outlaw, monsters, animals, birds, fish
+  and horses with their riders are rendered by their cameras at the new
+  angle, so at 45° you see more of the top of the hood, and a jump or a
+  bird's flight rises in proportion, as do arrows and thrown torches in the
+  air. The camera keeps aiming at the figure's middle, so a pitch change
+  swings the view round the player.
 - **What it leaves alone.** Movement, collision and aim work on the ground,
   so they are the same at every pitch; close swings are aimed from the hips
   as drawn, and a thrown torch or arrow lands where it would from 30°.
-  Trees, rocks, grass blades, the shape-built figure, friends, creatures,
-  spells, weather, things in flight and the length of a held torch keep the
-  30° drawing. Because ground depth cannot change, upright things come out
-  shorter than a true view from that angle would show them, ×0.71 at 45°,
-  and taller, ×1.18, at 25°; at 45° the outlaw is drawn a little over half
-  as tall as at 30° and reads squat. The range stops at 25° so the hill
-  never lifts past 24 rows.
+  Trees, rocks, grass blades, the shape-built figure, friends, spells,
+  weather, arrows stuck where they struck and the length of a torch keep
+  the 30° drawing. Because ground depth cannot change, upright things come
+  out shorter than a true view from that angle would show them, ×0.71 at
+  45°, and taller, ×1.18, at 25°; at 45° the outlaw and the creatures are
+  drawn a little over half as tall as at 30° and read squat. The range stops
+  at 25° so the hill never lifts past 24 rows.
 - **No turning round.** The camera only tilts; it does not orbit round the
   vertical. Chunks, props and the controls all face the screen, so turning
   the world would need another renderer.

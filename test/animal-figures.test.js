@@ -864,3 +864,25 @@ test('on raised ground each animal and bird is drawn through its own lifted view
     return [base - up, cells.map((sy) => sy - up)];
   }));
 });
+
+test('a pitched camera frames animals and flying birds where the pitch draws them', async () => {
+  const { BASE_LOOK, pitchLook } = await import('../src/world/camera.js');
+  const { assertPitched } = await import('./helpers/pitch-check.js');
+  const f = new AnimalFigures(gltfs, { renderer: fakeGPU() });
+  const view = { x0: -150, y0: -100, cols: 300, rows: 200 };
+  const d = stag();
+  const b = pigeon('fly', { x: 0, y: 40, alt: 6, clip: 'glide' });
+  for (let i = 0; i < 10; i++) f.update(dt, [d], [b]);
+  assert.equal(f.pitch, BASE_LOOK);
+  assert.deepEqual(f.rigs.get(d).reach(), f.rigs.get(d).reach(BASE_LOOK.up));
+  for (const deg of [30, 25, 45]) {
+    const look = pitchLook(deg);
+    f.setLook(look);
+    for (const s of [d, b]) {
+      const slot = f.slotOf(s, view);
+      const y = s.y - (s.alt ?? 0) * 13 * look.up;
+      assert.ok(Math.abs(slot.anchor - y) < 1e-9, `${deg}° altitude`);
+      assert.ok(assertPitched(f, f.rigs.get(s).model, s.x, slot.anchor, slot, look) > 3);
+    }
+  }
+});
