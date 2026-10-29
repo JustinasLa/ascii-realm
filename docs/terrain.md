@@ -80,9 +80,12 @@ normal play: the game is drawn from one fixed camera.
   so they are the same at every pitch; close swings are aimed from the hips
   as drawn, and a thrown torch or arrow lands where it would from 30°.
   Trees, rocks, grass blades, the shape-built figure, friends, creatures,
-  spells, weather and things in flight keep the 30° drawing, so upright
-  things look a little squashed at 45° (×0.71) and stretched at 25°
-  (×1.18). The range stops there so the hill never lifts past 24 rows.
+  spells, weather, things in flight and the length of a held torch keep the
+  30° drawing. Because ground depth cannot change, upright things come out
+  shorter than a true view from that angle would show them, ×0.71 at 45°,
+  and taller, ×1.18, at 25°; at 45° the outlaw is drawn a little over half
+  as tall as at 30° and reads squat. The range stops at 25° so the hill
+  never lifts past 24 rows.
 - **No turning round.** The camera only tilts; it does not orbit round the
   vertical. Chunks, props and the controls all face the screen, so turning
   the world would need another renderer.
