@@ -1,5 +1,6 @@
 import { stackExtras } from '../inventory/inventory.js';
 import { ITEMS } from '../inventory/items.js';
+import { ASPECT } from '../world/world.js';
 
 // The furnace follows the classic rules: one item smelts in 10 s, and a fuel
 // item is lit only when the burn has run out and the input can smelt into
@@ -39,7 +40,7 @@ function slotFor(furnace, stack) {
 function stackOf(data, allowed) {
   if (data === null) return null;
   const { id, count } = data ?? {};
-  return allowed(id) && Number.isSafeInteger(count) && count >= 1 && count <= ITEMS[id].stackLimit
+  return typeof id === 'string' && allowed(id) && Number.isSafeInteger(count) && count >= 1 && count <= ITEMS[id].stackLimit
     ? { id, count } : undefined;
 }
 
@@ -238,6 +239,27 @@ export function furnaceScreenModel(furnace, inventory) {
   };
 }
 
+// How far from a furnace's footprint it can be used, in row units.
+export const FURNACE_REACH = 3.5;
+
+// The nearest furnace in reach of a player on the ground, measured from its
+// footprint so this wide prop can be used from any side; null if none.
+export function nearbyFurnace(world, player) {
+  if (player.air > 0.3 || player.vitals?.health <= 0) return null;
+  let best = null, bestGap = Infinity;
+  // Search as far as the widest footprint in the world reaches, so a scaled
+  // builder furnace in the next chunk is still found.
+  const reachX = Math.max(world.propFootW ?? 0, 10) + FURNACE_REACH / ASPECT;
+  const reachY = Math.max(world.propFootH ?? 0, 2) + FURNACE_REACH;
+  for (const prop of world.propsIn(player.x - reachX, player.y - reachY, player.x + reachX, player.y + reachY)) {
+    if (prop.kind !== 'furnace') continue;
+    const gap = Math.hypot(Math.max(0, Math.abs(player.x - prop.x) - prop.footW) * ASPECT,
+      Math.max(0, Math.abs(player.y - prop.y) - prop.footH));
+    if (gap <= FURNACE_REACH && gap < bestGap) [best, bestGap] = [prop, gap];
+  }
+  return best;
+}
+
 // Every furnace's state in one world, kept by prop id. All of them work on
 // game time, with the screen shut and the player far away.
 export class Furnaces {
@@ -274,9 +296,13 @@ export class Furnaces {
   update(dt) {
     let changed = false;
     let busy = false;
+    const moving = (furnace) => furnace.lit || furnace.cook > 0;
     for (const furnace of this.states.values()) {
+      const was = moving(furnace);
       if (furnace.advance(dt)) changed = true;
-      if (furnace.lit || furnace.cook > 0) busy = true;
+      // A burn or cooling that just ended is saved at once, like a slot.
+      if (moving(furnace)) busy = true;
+      else if (was) changed = true;
     }
     this.sinceSave += Number.isFinite(dt) && dt > 0 ? dt : 0;
     // Contents are saved at once; gauges every few seconds while they move.

@@ -20,6 +20,7 @@ export const PROP_CATALOG = Object.freeze([
   { kind: 'tent', label: 'Tent', symbol: 'A', group: 'Camp', solid: true },
   { kind: 'campfire', label: 'Campfire', symbol: '*', group: 'Camp', solid: true },
   { kind: 'signpost', label: 'Signpost', symbol: '>', group: 'Camp', solid: true },
+  { kind: 'furnace', label: 'Furnace', symbol: 'n', group: 'Camp', solid: true },
   { kind: 'stone-gate', label: 'Stone gate', symbol: 'n', group: 'Architecture', solid: true },
   { kind: 'stone-tower', label: 'Stone tower', symbol: '#', group: 'Architecture', solid: true },
   { kind: 'column-short', label: 'Short column', symbol: 'i', group: 'Architecture', solid: true },

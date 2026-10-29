@@ -54,7 +54,10 @@ export function emptySlotHint(carried, phone = false) {
 export class InventoryScreen {
   // `pages` are more tabs after the bag's: `{ id, label, node, onShow }`,
   // `onShow` running each time the page shows.
-  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false, pages = [] }) {
+  // `isCovered` is true while another panel (a furnace) holds the keys.
+  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false, pages = [],
+    isCovered = () => false }) {
+    this.isCovered = isCovered;
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
     // Drops a bag stack into the world; returns { ok, message }.
@@ -351,7 +354,7 @@ export class InventoryScreen {
   }
 
   _handleKeydown(event) {
-    if (event.defaultPrevented) return;
+    if (event.defaultPrevented || (!this._isOpen && this.isCovered())) return;
     const modified = event.altKey || event.ctrlKey || event.metaKey;
     const editing = event.target?.isContentEditable
       || event.target?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]');
