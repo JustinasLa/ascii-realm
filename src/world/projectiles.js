@@ -18,9 +18,11 @@ const RECOVERABLE = new Set(['arrow', 'spear', 'javelin']);
 // Landed shafts left lying about; past this the oldest are lost.
 export const MAX_LANDED = 64;
 
-function projectedDirection(p) {
+// The way a shaft points on screen, its height drawn `rise` times its own
+// (see drawShaft).
+function projectedDirection(p, rise = 1) {
   const dx = p.vx * ASPECT;
-  const dy = p.vy - p.vh;
+  const dy = p.vy - p.vh * rise;
   const length = Math.hypot(dx, dy);
   return length > 0 ? { x: dx / length, y: dy / length } : { x: 0, y: 1 };
 }
@@ -29,7 +31,7 @@ function projectedDirection(p) {
 // pitchLook); the flight itself keeps its own.
 function drawShaft(renderer, view, p, rise = 1) {
   const h = p.h * rise;
-  const { x: ux, y: uy } = p.orientation ?? projectedDirection(p);
+  const { x: ux, y: uy } = p.orientation ?? projectedDirection(p, rise);
   const shaft = Math.abs(uy) < 0.4 ? SHAFT.horizontal : Math.abs(ux) < 0.4 ? SHAFT.vertical :
     ux * uy < 0 ? SHAFT.rising : SHAFT.falling;
   const head = p.kind === 'magic' ? MAGIC : Math.abs(ux) > Math.abs(uy) ?
