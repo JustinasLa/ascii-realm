@@ -515,10 +515,10 @@ test('E equips, U unequips and Enter uses or swaps the selected item', (t) => {
   assert.deepEqual(notes.at(-1), ['Used Healing Draught.', 'success']);
   assert.equal(document.activeElement, bagButton(0));
 
-  // Materials and empty slots have no action.
+  // Materials and an empty tab have no action.
   pick(indexOf('rawIron'));
   press('Enter');
-  pick(20);
+  screen._filterBy('cloaks');
   press('Enter');
   press('KeyE');
   // Hidden action buttons do nothing even when clicked.
@@ -706,8 +706,8 @@ test('X drops the selected bag stack through onDrop', (t) => {
   assert.equal(notes.length, 2, 'a silent drop sends no message');
   assert.deepEqual(drops, [ore, ore, ore]);
 
-  bagButton(20).click();
-  assert.equal(screen.dropButton.hidden, true, 'an empty slot cannot drop');
+  screen._filterBy('cloaks');
+  assert.equal(screen.dropButton.hidden, true, 'an empty tab cannot drop');
   press('KeyX');
   slotButton('helm').click();
   press('KeyX');
@@ -975,6 +975,109 @@ test('a touch selects a bag card first, so phones can read and drop it, and acts
   assert.deepEqual(drops, []);
 });
 
+test('a stack that hides under the filter is never left selected, so no key acts on it', (t) => {
+  const drops = [];
+  const { document, screen, inventory, notes, press, bagButton, slotButton, indexOf } = mount(t, {
+    onDrop: (index) => {
+      drops.push(inventory.slots[index].id);
+      inventory.remove(index, inventory.slots[index].count);
+      return { ok: true, message: 'Dropped.' };
+    },
+  });
+  for (const [slot, { column, row, width, height }] of Object.entries(DOLL_BOXES)) {
+    slotButton(slot).rect = { left: (column - 1) * 50, top: (row - 1) * 40, width: width * 50, height: height * 40 };
+  }
+  press('KeyI');
+  screen.filterNodes.get('weapons').button.click();
+  press('KeyG');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  press('KeyU');
+  const hood = indexOf('outlawHood');
+  assert.ok(hood >= 0, 'the helm is in the bag');
+  assert.equal(bagButton(hood).hidden, true, 'under Weapons');
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('longbow') }, 'on the first shown card');
+  assert.equal(document.activeElement, bagButton(indexOf('longbow')));
+  press('KeyX');
+  assert.deepEqual(drops, ['longbow'], 'X drops what shows, never the hidden helm');
+  assert.equal(inventory.slots[hood].id, 'outlawHood');
+
+  // A change from outside before the next frame (a pickup, a world drop)
+  // is caught by the key itself.
+  const spear = screen.selection.index;
+  assert.equal(inventory.slots[spear].id, 'spear');
+  inventory.remove(spear, 1);
+  press('KeyX');
+  assert.deepEqual(drops, ['longbow', 'javelin']);
+
+  // On an empty tab the gear taken off hides too, and nothing is selected.
+  screen.filterNodes.get('cloaks').button.click();
+  press('KeyG');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  press('ArrowDown');
+  const slot = screen.selection.slot;
+  const gear = inventory.equipment[slot].id;
+  assert.notEqual(ITEMS[gear].equipmentSlot, 'cape');
+  press('KeyU');
+  assert.equal(inventory.equipment[slot], null);
+  assert.equal(screen.selection, null);
+  assert.equal(document.activeElement, slotButton(slot), 'focus stays on the box');
+  const before = JSON.stringify([inventory.slots, inventory.equipment]);
+  for (const code of ['KeyX', 'Enter', 'KeyE']) press(code);
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment]), before);
+  assert.deepEqual(drops, ['longbow', 'javelin']);
+  assert.equal(notes.filter(([message]) => message.startsWith('Equipped')).length, 0);
+
+  // Using the last of a stack, or a pickup into an empty tab, lands on a shown card.
+  screen.filterNodes.get('all').button.click();
+  inventory.slots[0].count = 1;
+  screen._select({ source: 'bag', index: 0 }, true);
+  press('Enter');
+  assert.equal(inventory.slots[0], null);
+  assert.equal(bagButton(0).hidden, true);
+  assert.equal(screen.selection.index, 1);
+  screen.filterNodes.get('cloaks').button.click();
+  assert.equal(screen.selection, null);
+  inventory.unequip('cape');
+  screen.update();
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('travelCloak') });
+});
+
+test('a touch acts only on a second tap of a card the first tap selected', (t) => {
+  const { screen, inventory, press, bagButton, indexOf } = mount(t);
+  screen.setOpen(true);
+  const tap = (button) => {
+    screen.screen.dispatch('pointerdown', { pointerType: 'touch', target: button });
+    button.click();
+  };
+  // Choosing Weapons selects its first card, but a tap still only selects it.
+  tap(screen.filterNodes.get('weapons').button);
+  const bow = indexOf('longbow');
+  assert.deepEqual(screen.selection, { source: 'bag', index: bow });
+  tap(bagButton(bow));
+  assert.equal(inventory.equipment.mainHand.id, 'shortSword', 'the first tap only selects');
+  tap(bagButton(bow));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'the second tap equips');
+
+  // An arrow key, a filter change or a bag change in between disarms it.
+  const dagger = indexOf('dagger');
+  tap(bagButton(dagger));
+  press('ArrowRight');
+  press('ArrowLeft');
+  assert.deepEqual(screen.selection, { source: 'bag', index: dagger });
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'moved away and back: still a first tap');
+  tap(screen.filterNodes.get('all').button);
+  assert.deepEqual(screen.selection, { source: 'bag', index: dagger });
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'after a filter change: a first tap');
+  inventory.add('rawIron', 1);
+  screen.update();
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'after the bag changed: a first tap');
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'dagger');
+});
+
 test('a right-click drops a card, and the browser menu never opens in the window', (t) => {
   const drops = [];
   const { screen, inventory, notes, bagButton, slotButton, indexOf } = mount(t, {
@@ -1134,7 +1237,9 @@ test('details describe the selected item, its stats, weight and durability', (t)
   assert.equal(screen.itemPreview.hidden, true);
   assert.equal(screen.itemWeight.hidden, true);
   assert.equal(screen.unequipButton.hidden, true);
-  pick(20);
+  pick(0);
+  screen._filterBy('cloaks');
+  assert.equal(screen.selection, null);
   assert.equal(screen.itemName.textContent, 'Empty slot');
   assert.equal(screen.description.textContent, 'Drag another item into this slot to move or swap it.');
   assert.equal(screen.details.getAttribute('data-item-id'), '');

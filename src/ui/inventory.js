@@ -473,6 +473,8 @@ export class InventoryScreen {
     if (['KeyG', 'KeyE', 'KeyU', 'KeyX', 'Enter', 'NumpadEnter'].includes(event.code)) {
       this._consume(event);
       if (event.repeat) return;
+      // The bag may have changed since the last frame; act on what shows.
+      this.update();
       const first = this._view.visible[0];
       if (event.code === 'KeyG') {
         if (this.selection?.source !== 'equipment') this._select({ source: 'equipment', slot: EQUIPMENT_SLOTS[0] }, true);
@@ -498,20 +500,29 @@ export class InventoryScreen {
   _focusTarget() { return this._selectedButton() ?? this.filterNodes.get(this.filter).button; }
 
   // A click acts at once, without moving focus. A touch selects a bag card
-  // first, so its details show with a Drop button, and acts on a second tap.
+  // first, so its details show with a Drop button, and acts on a second tap
+  // of the same card, only if nothing else moved the selection or changed
+  // the bag in between.
   _press(selection) {
-    const first = this._pointerType === 'touch' && selection.source === 'bag'
-      && (this.selection?.source !== 'bag' || this.selection.index !== selection.index);
+    if (this._pointerType === 'touch' && selection.source === 'bag') {
+      const armed = this._touchArmed;
+      const confirmed = armed?.index === selection.index && armed.key === this._bagKey()
+        && this.selection?.source === 'bag' && this.selection.index === selection.index;
+      if (!confirmed) {
+        this._select(selection);
+        this._touchArmed = { source: 'bag', index: selection.index, key: this._bagKey() };
+        return;
+      }
+    }
     this._select(selection);
-    if (!first) this._activate({ pointer: true });
+    this._activate({ pointer: true });
   }
+
+  _bagKey() { return JSON.stringify(this.inventory.slots); }
 
   _filterBy(id) {
     this.filter = id;
-    const { visible } = bagView(this.inventory.slots, id);
-    if (this.selection?.source !== 'equipment' && !visible.includes(this.selection?.index)) {
-      this.selection = visible.length ? { source: 'bag', index: visible[0] } : null;
-    }
+    this._touchArmed = null;
     this.update();
   }
 
@@ -530,6 +541,7 @@ export class InventoryScreen {
 
   _select(selection, focus = false) {
     this.selection = selection;
+    this._touchArmed = null;
     this.update();
     if (focus) this._selectedButton()?.focus();
   }
@@ -653,13 +665,26 @@ export class InventoryScreen {
     if (!this.feedback.hidden && performance.now() >= this._feedbackUntil) hidden(this.feedback, true);
     // The strip is live every frame; the rest redraws when its state changes.
     this._updateStats();
+    if (this._state() === this._signature) return;
+    // A bag selection is always a shown card: the first when the selected
+    // one hid (taken off, swapped, used, dropped or filtered out), none
+    // when the tab is empty.
+    const view = bagView(this.inventory.slots, this.filter);
+    this._view = view;
+    this.filter = view.filter;
+    if (this.selection?.source !== 'equipment' && !view.visible.includes(this.selection?.index)) {
+      this.selection = view.visible.length ? { source: 'bag', index: view.visible[0] } : null;
+      this._touchArmed = null;
+    }
+    this._signature = this._state();
+    this._render();
+  }
+
+  _state() {
     const vitals = this.player.vitals;
-    const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
+    return JSON.stringify([this.inventory.slots, this.inventory.equipment,
       this.inventory.capacity, this.selection, this.filter,
       vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), this.describeVersion()]);
-    if (signature === this._signature) return;
-    this._signature = signature;
-    this._render();
   }
 
   // Writes only the values that changed, and rebuilds the pairs when the
@@ -693,9 +718,7 @@ export class InventoryScreen {
 
   _render() {
     const vitals = this.player.vitals;
-    const view = bagView(this.inventory.slots, this.filter);
-    this._view = view;
-    this.filter = view.filter;
+    const view = this._view;
     setText(this.slotCounter, `Bag ${view.used}/${view.total}`);
     setText(this.bagHint, this.phone() ? 'tap \u2014 select \u00b7 tap again \u2014 equip / take off'
       : `LMB \u2014 equip / take off${this.onDrop ? ' \u00b7 RMB \u2014 drop' : ''}`);
