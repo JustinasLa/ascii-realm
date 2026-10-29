@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from '../../vendor/three/utils/SkeletonUtils.js';
 import { BLANK_GLYPH, GLYPH_KIND, family, glyph } from '../render/glyphs.js';
+import { BASE_LOOK } from '../world/camera.js';
 import { ASPECT, WATER } from '../world/world.js';
 import { KINDS } from './animals.js';
 import { BIRD } from './birds.js';
@@ -365,15 +366,16 @@ class Rig {
   }
 
   // How far the figure reaches round its feet on screen, in metres: left,
-  // right, up and down, from its bones and the flesh on them.
-  reach() {
+  // right, up and down, from its bones and the flesh on them, where a metre
+  // of height rises `rise` (the camera pitch's `up`).
+  reach(rise = COS) {
     const box = { left: Infinity, right: -Infinity, up: -Infinity, down: Infinity };
     const v = new THREE.Vector3();
     const pad = this.flesh;
     this.model.updateMatrixWorld(true);
     for (const o of Object.values(this.bones)) {
       o.getWorldPosition(v);
-      const up = v.y * COS - v.z * TILT;
+      const up = v.y * rise - v.z * TILT;
       box.left = Math.min(box.left, v.x - pad);
       box.right = Math.max(box.right, v.x + pad);
       box.up = Math.max(box.up, up + pad);
@@ -463,6 +465,7 @@ export class AnimalFigures {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50);
     this.camera.position.set(0, TILT * 20, COS * 20);
     this.camera.lookAt(0, 0, 0);
+    this.pitch = BASE_LOOK;
     this.width = COLS * SX * MAX_DRAWN;
     this.height = ROWS * SY;
     this.pixels = new Uint8Array(this.width * this.height * 4);
@@ -525,7 +528,7 @@ export class AnimalFigures {
     const view = this.view;
     const [mx, my] = [(2 * SCALE) / ASPECT, 2 * SCALE * TILT];
     const near = (s) => !phone && view && s.x > view.x0 - mx && s.x < view.x0 + view.cols + mx
-      && s.y > view.y0 - my && s.y < view.y0 + view.rows + my + (s.alt ?? 0) * SCALE * COS;
+      && s.y > view.y0 - my && s.y < view.y0 + view.rows + my + (s.alt ?? 0) * SCALE * this.pitch.up;
     const due = [...small.filter((s) => this.shown.has(s)), ...small.filter((s) => !this.shown.has(s) && near(s))];
     this.posedCount = 0;
     for (const s of due.slice(0, cap)) {
@@ -651,10 +654,10 @@ export class AnimalFigures {
   // The cells a figure covers on screen. A bird in the air is framed round
   // its body, its altitude above the ground row it flies over.
   slotOf(s, view) {
-    const y = s.y - (s.alt ?? 0) * SCALE * COS;
+    const y = s.y - (s.alt ?? 0) * SCALE * this.pitch.up;
     if (s.x < view.x0 - MAX_COLS / 2 || s.x > view.x0 + view.cols + MAX_COLS / 2
       || y < view.y0 - MAX_ROWS * 0.3 || y > view.y0 + view.rows + MAX_ROWS * 0.7) return null;
-    const reach = this.rigOf(s).reach();
+    const reach = this.rigOf(s).reach(this.pitch.up);
     const cols = SCALE / ASPECT;
     let cx0 = Math.floor(s.x + reach.left * cols) - PAD;
     let cx1 = Math.ceil(s.x + reach.right * cols) + PAD;
@@ -666,6 +669,14 @@ export class AnimalFigures {
     cy1 = Math.min(cy1, view.y0 + view.rows + 1, Math.floor(y) + MAX_ROWS * 0.3);
     if (cx1 <= cx0 || cy1 <= cy0) return null;
     return { x: 0, y: 0, anchor: y, cx0, cy0, cols: cx1 - cx0, rows: cy1 - cy0 };
+  }
+
+  // Views the animals, birds and fish from the camera pitch `look` (see camera.js pitchLook):
+  // ground depth stays as it is and height rises `look.rise` rows a metre.
+  setLook(look) {
+    this.pitch = look;
+    this.camera.position.set(0, look.sin * 20, look.cos * 20);
+    this.camera.lookAt(0, 0, 0);
   }
 
   fit(width, height) {
@@ -680,8 +691,8 @@ export class AnimalFigures {
     const cam = this.camera;
     cam.left = -((x - slot.cx0) * ASPECT) / SCALE;
     cam.right = cam.left + (slot.cols * ASPECT) / SCALE;
-    cam.top = (y - slot.cy0) / SCALE;
-    cam.bottom = cam.top - slot.rows / SCALE;
+    cam.top = (y - slot.cy0) / this.pitch.rowsPerUnit;
+    cam.bottom = cam.top - slot.rows / this.pitch.rowsPerUnit;
     cam.updateProjectionMatrix();
   }
 

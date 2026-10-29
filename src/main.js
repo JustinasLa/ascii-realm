@@ -1209,14 +1209,14 @@ let lastHurt = -Infinity;
 // stands in. The monsters are drawn from the same animation library.
 let model = null;
 ModelFigure.library('assets/ual1.glb').then((gltf) => {
-  monsterFigures = new MonsterFigures(gltf);
+  monsterFigures = pitched(new MonsterFigures(gltf));
   debug.monsterFigures = monsterFigures;
 }).catch((e) => console.error('Could not set up the monsters', e));
 // The animals' own models; they live unseen until these arrive.
 let animalFigures = null;
 if (animals.enabled) {
   AnimalFigures.load({ phone: () => device.phone }).then((f) => {
-    animalFigures = f;
+    animalFigures = pitched(f);
     debug.animalFigures = f;
   }).catch((e) => console.error('Could not set up the animals', e));
 }
@@ -1224,7 +1224,7 @@ ModelFigure.load('assets/ual1.glb')
   .then((m) => {
     model = m;
     debug.model = m;
-    if (lookScale() !== 1) m.setLook(camera.look);
+    pitched(m);
     player.modelTrail = true;
     // Walk and run a little quicker than the clips' own ground speeds; the
     // cadence rises to match, so the feet still keep pace.
@@ -1242,8 +1242,15 @@ function setPitch(deg) {
   if (look === camera.look) return;
   camera.look = look;
   world.setRise(look.rise);
-  model?.setLook(look);
+  for (const figures of [model, monsterFigures, animalFigures, horseFigures]) figures?.setLook(look);
+  projectiles.heightScale = monsters.arrows.heightScale = torches.heightScale = look.scale;
   hud.notify(`Camera pitch ${look.deg}°`);
+}
+// A 3D renderer as it loads (null without WebGL), viewed from the camera
+// pitch unless that is the usual one.
+function pitched(figures) {
+  if (figures && lookScale() !== 1) figures.setLook(camera.look);
+  return figures;
 }
 // The torch in hand with its height in the usual pitch's rows, so a throw
 // flies and lands the same at any pitch.
@@ -1798,7 +1805,7 @@ function frame(now) {
     animalFigures?.update(foeDt, animals.list, [...birds.list, ...fishes.list]);
     if (horses.list.length && !horseLoad) {
       horseLoad = HorseFigures.load({ phone: () => device.phone }).then((f) => {
-        horseFigures = f;
+        horseFigures = pitched(f);
         debug.horseFigures = f;
       }).catch((e) => console.error('Could not set up the horses', e));
     }

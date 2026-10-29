@@ -895,3 +895,37 @@ test('on raised ground a horse and its rider are drawn through the horse\'s lift
   const lifted = rows(f.rasterise(view, [h], h, () => ({ ...view, y0: view.y0 + 9 })));
   assert.deepEqual(lifted, [base - 9, plain.map((sy) => sy - 9)]);
 });
+
+test('a pitched camera frames horse and rider, and reads ground rows, where the pitch draws them', async () => {
+  const { BASE_LOOK, pitchLook } = await import('../src/world/camera.js');
+  const { assertPitched } = await import('./helpers/pitch-check.js');
+  const f = figures();
+  const h = new Horse(0.4, 0.2, { heading: 0.6, rider: { look: 'outlaw' } });
+  for (let i = 0; i < 6; i++) f.update(dt, [h]);
+  const rig = f.rigOf(h);
+  assert.equal(f.pitch, BASE_LOOK);
+  assert.deepEqual(rig.reach(), rig.reach(BASE_LOOK.up));
+  const view = { x0: -100, y0: -100, cols: 200, rows: 200 };
+  for (const deg of [30, 25, 45]) {
+    const look = pitchLook(deg);
+    f.setLook(look);
+    const dir = f.camera.position.clone().normalize();
+    assert.ok(Math.abs(dir.y - look.sin) < 1e-9 && Math.abs(dir.z - look.cos) < 1e-9);
+    const slot = f.slotOf(h, view);
+    assert.ok(assertPitched(f, rig.model, h.x, h.y, slot, look) > 10);
+  }
+  // A point on the ground 0.3 m nearer the viewer, read back from its depth
+  // and its pixel row, is put on its own ground row at any pitch.
+  const ground = (look, frame) => {
+    const z = 0.3;
+    const t = 20 - look.cos * z;
+    const u = -look.sin * z;
+    const byte = 128 + ((t - NEAR) / (FAR - NEAR)) * 127;
+    const pixelRow = ((frame.top - u) / (frame.top - frame.bottom)) * frame.pxHeight - 0.5;
+    return groundRowOf(byte, pixelRow, frame) - (frame.y + z * SCALE * TILT);
+  };
+  const frame = { top: 3, bottom: -1, pxHeight: 300, y: 7 };
+  assert.ok(Math.abs(ground(BASE_LOOK, frame)) < 1e-9, 'the usual pitch without sin and cos');
+  const look = pitchLook(45);
+  assert.ok(Math.abs(ground(look, { ...frame, sin: look.sin, cos: look.cos })) < 1e-9);
+});

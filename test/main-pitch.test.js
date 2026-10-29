@@ -26,7 +26,7 @@ const stub = (methods = {}) => class {
 // The hill scene at the address `query`, with the 3D character loading only
 // once `loadModel()` is called; records the pitch toasts, the model's looks
 // and the torch throws.
-async function pitchGame(query, move) {
+async function pitchGame(query, move, extra = {}) {
   cameras = [];
   const toasts = [];
   const looks = [];
@@ -42,6 +42,7 @@ async function pitchGame(query, move) {
     Hud: stub({ notify: (message) => toasts.push(message) }),
     Torches: stub({ throw: (player, pose) => { throws.push(pose); } }), Footprints: stub(),
     ModelFigure: { load: () => modelReady, library: () => new Promise(noop) },
+    ...extra,
   } });
   Object.assign(loaded.model, { top: 10, cells: [], setLook: (look) => looks.push(look),
     torchPose: () => ({ x: 1, y: 2, h: 20 }) });
@@ -190,4 +191,28 @@ test('joining a lobby from a tilted solo page puts the camera back and keeps it 
   assert.equal(camera.look.deg, 35, 'solo again, the keys work');
   assert.deepEqual(toasts, ['Camera pitch 45°', 'Camera pitch 30°', 'Camera pitch 35°']);
   assert.deepEqual(looks.map((l) => l.deg), [45, 30, 35]);
+});
+
+test('the creatures\' renderers and things in flight follow the pitch as they load and after', async () => {
+  const seen = [];
+  // Not thenable, so an async loader resolves to it.
+  const spy = (name) => stub({ then: undefined, setLook: (look) => seen.push([name, look.deg]) });
+  const Horses = spy('horses');
+  const Animals = spy('animals');
+  const { game, frame, keydown, looks, loadModel } = await pitchGame('debug&scene=hill&pitch=45&deer=1&horse=1', undefined, {
+    MonsterFigures: spy('monsters'),
+    ModelFigure: { load: () => new Promise(noop), library: () => Promise.resolve({}) },
+    AnimalFigures: { load: async () => new Animals() },
+    HorseFigures: { load: async () => new Horses() },
+  });
+  for (let i = 0; i < 3; i++) frame();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.deepEqual(seen.sort(), [['animals', 45], ['horses', 45], ['monsters', 45]]);
+  seen.length = 0;
+  keydown(...code('BracketLeft'));
+  assert.deepEqual(seen.sort(), [['animals', 40], ['horses', 40], ['monsters', 40]]);
+  const { scale } = pitchLook(40);
+  assert.deepEqual([game.projectiles.heightScale, game.torches.heightScale, game.monsters.arrows.heightScale], [scale, scale, scale]);
+  assert.equal(looks.length, 0, 'the player model has not loaded');
 });

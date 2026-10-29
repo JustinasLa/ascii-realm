@@ -25,7 +25,10 @@ function projectedDirection(p) {
   return length > 0 ? { x: dx / length, y: dy / length } : { x: 0, y: 1 };
 }
 
-function drawShaft(renderer, view, p) {
+// `rise` scales the drawn height (the camera pitch's, see camera.js
+// pitchLook); the flight itself keeps its own.
+function drawShaft(renderer, view, p, rise = 1) {
+  const h = p.h * rise;
   const { x: ux, y: uy } = p.orientation ?? projectedDirection(p);
   const shaft = Math.abs(uy) < 0.4 ? SHAFT.horizontal : Math.abs(ux) < 0.4 ? SHAFT.vertical :
     ux * uy < 0 ? SHAFT.rising : SHAFT.falling;
@@ -34,12 +37,12 @@ function drawShaft(renderer, view, p) {
   for (let offset = p.length; offset > 0; offset -= 0.45) {
     renderer.put(
       Math.floor(p.x - ux * offset / ASPECT) - view.x0,
-      Math.floor(p.y - p.h - uy * offset) - view.y0,
+      Math.floor(p.y - h - uy * offset) - view.y0,
       p.kind === 'magic' ? TRAIL : shaft,
       p.color[0] * 0.85, p.color[1] * 0.85, p.color[2] * 0.85,
     );
   }
-  renderer.put(Math.floor(p.x) - view.x0, Math.floor(p.y - p.h) - view.y0,
+  renderer.put(Math.floor(p.x) - view.x0, Math.floor(p.y - h) - view.y0,
     head, ...p.color);
 }
 
@@ -72,6 +75,9 @@ export class Projectiles {
     this.landed = [];
     this.events = [];
     this.nextId = 1;
+    // How much taller than usual things in flight are drawn (the camera
+    // pitch's `scale`); landed ones stay as they lie.
+    this.heightScale = 1;
   }
 
   launch(event) {
@@ -274,10 +280,10 @@ export class Projectiles {
       for (let i = 0; i < p.trail.length; i++) {
         const t = p.trail[i];
         const fade = 0.15 + (i / p.trail.length) * 0.3;
-        renderer.put(Math.floor(t.x) - view.x0, Math.floor(t.y - t.h) - view.y0,
+        renderer.put(Math.floor(t.x) - view.x0, Math.floor(t.y - t.h * this.heightScale) - view.y0,
           TRAIL, p.color[0] * fade, p.color[1] * fade, p.color[2] * fade);
       }
-      drawShaft(renderer, view, p);
+      drawShaft(renderer, view, p, this.heightScale);
     }
   }
 

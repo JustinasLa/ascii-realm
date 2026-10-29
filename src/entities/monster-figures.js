@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from '../../vendor/three/utils/SkeletonUtils.js';
 import { glyph } from '../render/glyphs.js';
+import { BASE_LOOK } from '../world/camera.js';
 import { ASPECT } from '../world/world.js';
 import { Armory } from './armory.js';
 import { outline } from './model.js';
@@ -635,14 +636,15 @@ class Rig {
   }
 
   // How far the pose reaches from the feet on screen, in metres: to the
-  // left and right, and up and down. Measured at the joints, padded for the
-  // flesh round them, and at the corners of anything rigid hung on them:
-  // bones, cloth, weapons.
-  reach() {
+  // left and right, and up and down, where a metre of height rises `rise`
+  // (the camera pitch's `up`). Measured at the joints, padded for the flesh
+  // round them, and at the corners of anything rigid hung on them: bones,
+  // cloth, weapons.
+  reach(rise = COS) {
     const box = { left: Infinity, right: -Infinity, up: -Infinity, down: Infinity };
     const v = new THREE.Vector3();
     const add = (pad) => {
-      const up = v.y * COS - v.z * TILT;
+      const up = v.y * rise - v.z * TILT;
       box.left = Math.min(box.left, v.x - pad);
       box.right = Math.max(box.right, v.x + pad);
       box.up = Math.max(box.up, up + pad);
@@ -734,6 +736,7 @@ export class MonsterFigures {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50);
     this.camera.position.set(0, TILT * 20, COS * 20);
     this.camera.lookAt(0, 0, 0);
+    this.pitch = BASE_LOOK;
     this.width = COLS * SX * MAX_DRAWN;
     this.height = ROWS * SY;
     this.pixels = new Uint8Array(this.width * this.height * 4);
@@ -850,7 +853,7 @@ export class MonsterFigures {
   slotOf(s, view) {
     if (s.x < view.x0 - MAX_COLS / 2 || s.x > view.x0 + view.cols + MAX_COLS / 2
       || s.y < view.y0 - MAX_ROWS * 0.3 || s.y > view.y0 + view.rows + MAX_ROWS * 0.7) return null;
-    const reach = this.rigOf(s).reach();
+    const reach = this.rigOf(s).reach(this.pitch.up);
     const cols = SCALE / ASPECT;
     let cx0 = Math.floor(s.x + reach.left * cols) - PAD;
     let cx1 = Math.ceil(s.x + reach.right * cols) + PAD;
@@ -862,6 +865,14 @@ export class MonsterFigures {
     cy1 = Math.min(cy1, view.y0 + view.rows + 1, Math.floor(s.y) + MAX_ROWS * 0.3);
     if (cx1 <= cx0 || cy1 <= cy0) return null;
     return { x: 0, cx0, cy0, cols: cx1 - cx0, rows: cy1 - cy0 };
+  }
+
+  // Views the monsters from the camera pitch `look` (see camera.js pitchLook):
+  // ground depth stays as it is and height rises `look.rise` rows a metre.
+  setLook(look) {
+    this.pitch = look;
+    this.camera.position.set(0, look.sin * 20, look.cos * 20);
+    this.camera.lookAt(0, 0, 0);
   }
 
   // Grows the image, never shrinking it, to hold `width` by `height` pixels.
@@ -879,8 +890,8 @@ export class MonsterFigures {
     const cam = this.camera;
     cam.left = -((x - slot.cx0) * ASPECT) / SCALE;
     cam.right = cam.left + (slot.cols * ASPECT) / SCALE;
-    cam.top = (y - slot.cy0) / SCALE;
-    cam.bottom = cam.top - slot.rows / SCALE;
+    cam.top = (y - slot.cy0) / this.pitch.rowsPerUnit;
+    cam.bottom = cam.top - slot.rows / this.pitch.rowsPerUnit;
     cam.updateProjectionMatrix();
   }
 
