@@ -301,7 +301,20 @@ short version see the [README](../README.md).
   from 90 (Radiant) and Masterwork at 100 (Mythical). Below 100 a d20 (+0)
   against 12, a natural 20 always and a natural 1 never meeting it, earns a
   clue about the kind closest to right ("you sense it needed a little more Hit
-  work"); the roll never changes the piece.
+  work"); the roll never changes the piece. A station works one piece at a
+  time: choose the piece, then add its metal one unit at a time from the bag
+  (anything else is refused: "That is not a material you can work", Raw Tin
+  and Lapis "This recipe does not call for that material", a fifth unit "The
+  piece already has enough of that material"). Hits are refused until all the
+  metal is in, and a kind is refused when the piece needs nothing of its
+  family; each hit only says "+1 Hit", never how many are needed. Finishing
+  needs all the metal but not the hits: it reports the Hits %, the quality,
+  and below 100 the roll and its clue, and turns the metal into the weapon at
+  once. With a full bag the weapon waits on the station to be taken, and the
+  station takes no new piece until it is. Cancelling gives back each unit of
+  metal the bag has room for, last loaded first, and loses the hits; what a
+  full bag can't take stays with the piece. Each station's piece and waiting weapon are kept with the alloy
+  book on this device for each world, hits within two seconds.
 - **Forged weapons.** A smithed weapon is named for the metal most of its
   units were ("Blackiron Dagger", "Iron Short Sword"; a tie goes to the one
   loaded first) and drawn in its colour, on the 3D blade and the glyph figure,

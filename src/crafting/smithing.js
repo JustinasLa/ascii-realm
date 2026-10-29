@@ -1,5 +1,7 @@
-import { INGOT_TIERS } from '../entities/weapons.js';
+import { INGOT_TIERS, getWeapon, weaponMaterial } from '../entities/weapons.js';
+import { stackExtras } from '../inventory/inventory.js';
 import { ITEMS } from '../inventory/items.js';
+import { listNames, statLines } from './alloys.js';
 import { QUALITIES } from './forged.js';
 import { HIT_KINDS, INGREDIENTS, STAT_NAMES } from './ingredients.js';
 
@@ -142,3 +144,266 @@ export function makeWeapon(recipe, units, percent, alloyOf) {
 
 // "Blackiron Dagger".
 export const weaponName = (stack) => `${stack.forged.metal} ${ITEMS[stack.id].name}`;
+
+// The weapon station: a piece in the making and the one weapon a full bag
+// couldn't take. Every move below runs all its checks before it changes
+// anything, and returns { ok, status, message, … } as the forge's moves do.
+
+const result = (status, message, details = {}) => ({ ok: false, status, message, ...details });
+const refusal = (code, message, reason) => ({ code, message, reason });
+const NO_RECIPE = 'No recipe on this station. Select a recipe first.';
+const LACKING = 'You have to add all the items before smithing.';
+const alloyColour = (unit, book) => {
+  const colour = ALLOY_ID.test(unit) ? book.get(unit)?.colour : null;
+  return colour ? `#${colour}` : null;
+};
+// A unit's name: its alloy's, or its ingot's.
+const unitName = (unit, book) => (ALLOY_ID.test(unit) ? book.get(unit)?.name ?? 'Unknown alloy' : ITEMS[unit].name);
+// Puts one unit back in the bag as its ingot; 1 when it fit, else 0.
+const giveBack = (inventory, unit) => (ALLOY_ID.test(unit) ? inventory.add('alloyIngot', 1, { alloy: unit }) : inventory.add(unit, 1));
+// "Iron Ingot x2 and Blackiron", in the order given.
+const namesOf = (units, book) => listNames([...countsOf(units)]
+  .map(([unit, n]) => `${unitName(unit, book)}${n > 1 ? ` x${n}` : ''}`));
+
+export class Smithy {
+  constructor() {
+    this.recipe = null;
+    this.units = [];
+    this.done = {};
+    this.output = null;
+  }
+
+  get idle() {
+    return !this.recipe && !this.output;
+  }
+
+  get need() {
+    return this.recipe ? RECIPES[this.recipe].metal : 0;
+  }
+
+  get ready() {
+    return !!this.recipe && this.units.length === this.need;
+  }
+
+  status() {
+    return `Metal ${this.units.length}/${this.need}`;
+  }
+
+  // Why the piece can't be worked on now: a weapon waits, or no recipe is chosen.
+  blocked() {
+    if (this.output) return refusal('waiting', `Take the ${weaponName(this.output)} first.`, 'Take the weapon first');
+    if (!this.recipe) return refusal('recipe', NO_RECIPE, 'Choose a piece first');
+    return null;
+  }
+
+  // Why `unit` (an ingot's item id or an alloy id) can't go in next, or null.
+  unitRefusal(unit, book) {
+    const blocked = this.blocked();
+    if (blocked) return blocked;
+    const type = ALLOY_ID.test(unit) ? book.get(unit)?.type : INGREDIENTS[unit]?.type;
+    if (!type) return refusal('material', 'That is not a material you can work.', "Can't be worked");
+    if (type !== 'metal') return refusal('type', 'This recipe does not call for that material.', 'Not for this piece');
+    if (this.units.length >= this.need) return refusal('full', 'The piece already has enough of that material.', 'Piece has enough');
+    return null;
+  }
+
+  // The unit a bag stack would add: a plain ingredient's id or an alloy ingot's alloy id.
+  static unitOf(stack) {
+    const extras = Object.entries(stackExtras(stack));
+    if (stack?.id === 'alloyIngot') return extras.length === 1 && extras[0][0] === 'alloy' ? extras[0][1] : null;
+    return Object.hasOwn(INGREDIENTS, stack?.id) && !extras.length ? stack.id : null;
+  }
+
+  refusal(stack, book) {
+    return this.unitRefusal(Smithy.unitOf(stack) ?? '', book);
+  }
+
+  // Why the piece can't be hit or finished yet: it needs all its metal first.
+  finishRefusal() {
+    const blocked = this.blocked();
+    if (blocked || this.ready) return blocked;
+    return refusal('missing', `You only have ${this.units.length} out of ${this.need} Metal items. ${LACKING}`, 'Add all the metal first');
+  }
+
+  // Why `kind` can't be struck now, or null.
+  hitRefusal(kind, book) {
+    const blocked = this.finishRefusal();
+    if (blocked) return blocked;
+    if (!Object.hasOwn(HIT_KINDS, kind)) return refusal('invalid', 'You cannot work the piece with that tool.', null);
+    if (!familyNeeded(neededHits(this.units, (id) => book.get(id)), kind)) {
+      return refusal('tool', 'This tool is not needed for this craft.', 'Not needed for this piece');
+    }
+    if ((this.done[kind] ?? 0) >= MAX_HITS) return refusal('limit', "That piece can't take more work.", 'No more work fits');
+    return null;
+  }
+
+  toJSON() {
+    return { recipe: this.recipe, units: [...this.units], done: { ...this.done }, output: this.output && { ...this.output } };
+  }
+
+  // A saved state, or null when it breaks the station's rules: units only
+  // with a recipe and never past it, hits only once the metal is in and only
+  // of a needed family, and a waiting weapon only on an empty station.
+  static from(data, book) {
+    if (!data || typeof data !== 'object') return null;
+    const { recipe, units, done, output } = data;
+    const smithy = new Smithy();
+    if (recipe !== null && !Object.hasOwn(RECIPES, recipe)) return null;
+    smithy.recipe = recipe;
+    if (!Array.isArray(units) || (units.length && !recipe)) return null;
+    for (const unit of units) {
+      if (typeof unit !== 'string' || smithy.unitRefusal(unit, book)) return null;
+      smithy.units.push(unit);
+    }
+    if (!done || typeof done !== 'object' || Array.isArray(done)) return null;
+    for (const [kind, n] of Object.entries(done)) {
+      if (!Number.isInteger(n) || n < 1 || n > MAX_HITS || smithy.hitRefusal(kind, book)) return null;
+      smithy.done[kind] = n;
+    }
+    if (output === null) return smithy;
+    const extras = stackExtras(output);
+    const kept = output && typeof output === 'object' && Object.keys(output).every((key) => key === 'id' || key === 'count' || Object.hasOwn(extras, key));
+    if (!kept || recipe || output.count !== 1 || !Object.hasOwn(RECIPES, output.id) || !extras.forged) return null;
+    smithy.output = { id: output.id, count: 1, ...extras };
+    return smithy;
+  }
+}
+
+export function chooseRecipe(smithy, recipe) {
+  if (smithy.output) return result('waiting', smithy.blocked().message);
+  if (smithy.recipe) return result('chosen', 'Station already has a recipe selected.');
+  if (!Object.hasOwn(RECIPES, recipe)) return result('invalid', 'That is not a piece you can make.');
+  smithy.recipe = recipe;
+  return result('selected', `Recipe ${RECIPES[recipe].name} selected!`, { ok: true, recipe });
+}
+
+// Moves one unit of the bag stack at `index` onto the piece, or nothing.
+export function loadSmithy(smithy, inventory, index, book) {
+  const selected = inventory.getItem(index);
+  if (!selected) return result('invalid', 'Select something in your bag.');
+  const { item, stack } = selected;
+  const refused = smithy.refusal(stack, book);
+  if (refused) return result('refused', refused.message, { id: item.id, code: refused.code });
+  const unit = Smithy.unitOf(stack);
+  const original = { ...stack };
+  const removed = inventory.remove(index, 1);
+  if (removed?.id !== original.id || removed.count !== 1) {
+    inventory.slots[index] = original;
+    return result('invalid', 'That could not be moved.', { id: item.id });
+  }
+  smithy.units.push(unit);
+  return result('loaded', `Added ${unitName(unit, book)}. ${smithy.status()}`, { ok: true, id: item.id, unit });
+}
+
+// One hit of `kind`. Its message never tells how many the piece needs.
+export function hitSmithy(smithy, kind, book) {
+  const refused = smithy.hitRefusal(kind, book);
+  if (refused) return result(refused.code, refused.message);
+  smithy.done[kind] = (smithy.done[kind] ?? 0) + 1;
+  return result('hit', `+1 ${HIT_KINDS[kind].name}`, { ok: true, kind, done: smithy.done[kind] });
+}
+
+// Scores the piece, rolls for a clue below 100 %, and turns the units into
+// the weapon in one step: nothing after the checks can fail. The weapon goes
+// in the bag, or waits on the station when the bag has no room.
+export function finishSmithy(smithy, inventory, book, random = Math.random) {
+  const refused = smithy.finishRefusal();
+  if (refused) return result(refused.code, refused.message);
+  const alloyOf = (id) => book.get(id);
+  const needed = neededHits(smithy.units, alloyOf);
+  const percent = hitsPercent(smithy.done, needed);
+  const quality = qualityOf(percent);
+  const roll = percent < 100 ? craftRoll(random) : null;
+  const clue = roll && (roll.meets ? hitClue(smithy.done, needed) ?? NO_CLUE : NO_CLUE);
+  const { id, count, ...extras } = makeWeapon(smithy.recipe, smithy.units, percent, alloyOf);
+  smithy.recipe = null;
+  smithy.units = [];
+  smithy.done = {};
+  const waiting = !inventory.add(id, count, extras);
+  if (waiting) smithy.output = { id, count, ...extras };
+  const name = weaponName({ id, ...extras });
+  const lines = [`Hit Percentage: ${percent}%`, `Quality: ${quality.name}`,
+    ...(roll ? [`Craft roll: ${roll.text}`, clue] : []),
+    `You made a${/^[AEIOU]/.test(name) ? 'n' : ''} ${name}.${waiting ? ' Your bag is full: it waits on the station.' : ''}`];
+  return result('finished', lines.join('\n'), { ok: true, id, name, percent, quality: quality.id, roll, clue, waiting, lines });
+}
+
+// Gives back each unit the bag has room for, last loaded first; the hits are
+// lost. What doesn't fit stays with the recipe. A waiting weapon is left alone.
+export function cancelSmithy(smithy, inventory, book) {
+  if (!smithy.recipe) return result('empty', 'There is no project to cancel.');
+  const back = [];
+  for (let i = smithy.units.length - 1; i >= 0; i--) {
+    if (giveBack(inventory, smithy.units[i])) back.push(...smithy.units.splice(i, 1));
+  }
+  if (smithy.units.length && !back.length) return result('full', 'Your bag is full.');
+  smithy.done = {};
+  const took = back.length ? ` Took back ${namesOf(back, book)}.` : '';
+  if (smithy.units.length) return result('cancelled', `${took.trim()} Your bag has no room for the rest.`, { ok: true, units: back });
+  smithy.recipe = null;
+  return result('cancelled', `Project cancelled.${took}`, { ok: true, units: back });
+}
+
+export function takeSmithy(smithy, inventory) {
+  const held = smithy.output;
+  if (!held) return result('empty', 'Nothing to take.');
+  const { id, count, ...extras } = held;
+  if (!inventory.add(id, count, extras)) return result('full', 'Your bag is full.', { id });
+  smithy.output = null;
+  return result('took', `Took ${weaponName(held)}.`, { ok: true, id });
+}
+
+// What the station screen shows. It never holds how many hits the piece needs.
+export function smithyScreenModel(smithy, inventory, book) {
+  const slot = (unit) => (unit ? { unit, name: unitName(unit, book), colour: alloyColour(unit, book) } : null);
+  const finish = smithy.finishRefusal();
+  const bag = [];
+  inventory.slots.forEach((stack, index) => {
+    const id = inventory.getItem(index)?.item.id;
+    if (!Object.hasOwn(INGREDIENTS, id) && id !== 'alloyIngot' && id !== 'unusableScrap') return;
+    const unit = Smithy.unitOf(stack);
+    const refused = smithy.refusal(stack, book);
+    bag.push({
+      index, id, name: unit ? unitName(unit, book) : ITEMS[id].name, colour: unit ? alloyColour(unit, book) : null,
+      count: stack.count, target: refused ? null : 'metal', reason: refused?.reason ?? null,
+    });
+  });
+  return {
+    recipes: smithy.idle
+      ? Object.entries(RECIPES).map(([id, { name, metal }]) => ({ id, name, metal, label: `Metal x${metal}` })) : null,
+    recipe: smithy.recipe && { id: smithy.recipe, name: RECIPES[smithy.recipe].name },
+    slots: Array.from({ length: smithy.need }, (_, i) => slot(smithy.units[i])),
+    status: smithy.status(),
+    ready: smithy.ready,
+    hits: HIT_ORDER.map((kind, i) => {
+      const refused = smithy.hitRefusal(kind, book);
+      return { kind, key: i + 1, name: HIT_KINDS[kind].name, done: smithy.done[kind] ?? 0, allowed: !refused, reason: refused?.reason ?? null };
+    }),
+    total: Object.values(smithy.done).reduce((sum, n) => sum + n, 0),
+    canFinish: !finish, finishReason: finish?.reason ?? null,
+    canCancel: !!smithy.recipe,
+    output: smithy.output && { name: weaponName(smithy.output), colour: smithy.output.forged.colour ? `#${smithy.output.forged.colour}` : null },
+    bag,
+  };
+}
+
+// What the bag shows for a smithed weapon, or null for any other stack.
+export function describeWeapon(stack, book) {
+  const { forged } = stackExtras(stack);
+  if (!forged || !ITEMS[stack.id]?.weapon) return null;
+  const name = weaponName({ id: stack.id, forged });
+  const inputs = Object.entries(forged.inputs).map(([unit, n]) => `${n} ${unitName(unit, book)}`);
+  const quality = QUALITIES.find((q) => q.id === forged.quality);
+  const damage = getWeapon(ITEMS[stack.id].weapon, weaponMaterial({ ...stack, forged })).damage;
+  return {
+    name,
+    colour: forged.colour ? `#${forged.colour}` : null,
+    description: `${/^[AEIOU]/.test(name) ? 'An' : 'A'} ${name} smithed from ${listNames(inputs)}.`,
+    stats: {
+      Material: forged.metal, Quality: quality.name, Hits: `${forged.hits}%`,
+      Socket: quality.socket ? `${quality.socket} (empty)` : 'none', Damage: String(damage),
+      ...Object.fromEntries(statLines(forged)),
+    },
+    durability: Number.isFinite(forged.stats.durability) ? Math.round(forged.stats.durability) : null,
+  };
+}

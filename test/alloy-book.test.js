@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ALLOY_KEY, AlloyBook, describeStack } from '../src/crafting/alloy-book.js';
 import { AlloyForge, fireForge, loadForge } from '../src/crafting/alloys.js';
+import { chooseRecipe, finishSmithy, hitSmithy, loadSmithy } from '../src/crafting/smithing.js';
 import { Inventory } from '../src/inventory/inventory.js';
 
 function memory(initial = {}) {
@@ -153,7 +154,7 @@ test('at 32 busy forges another is refused, and an idle one makes way', () => {
   for (let i = 0; i < 32; i++) book.forge(`f${i}`).base = 'ironIngot';
   assert.equal(book.forge('f32'), null);
   assert.deepEqual(book.saved('f32', () => assert.fail('no forge to move')), {
-    ok: false, status: 'busy', message: "This alloy forge can't be used: too many forges are busy.",
+    ok: false, status: 'busy', message: "This alloy forge can't be used: too many stations are busy.",
   });
   book.forge('f5').base = null;
   assert.ok(book.forge('f32'));
@@ -257,6 +258,81 @@ test('each invalid forge is dropped on its own, and at most 32 load', () => {
   const many = Object.fromEntries(Array.from({ length: 40 }, (_, i) => [`f${i}`, ok]));
   assert.equal(loaded(save({ forges: many })).forges.size, 32);
   assert.equal(loaded(save({ forges: 'none' })).forges.size, 0);
+});
+
+test('each weapon station\'s piece and waiting weapon survive a reload', () => {
+  const storage = memory();
+  const book = new AlloyBook({ storage, seed: 7 });
+  book.record('ironIngot|rawTin', plan(IRON_TIN));
+  const inventory = bag({ id: 'alloyIngot', count: 1, alloy: 'a1' }, { id: 'ironIngot', count: 7 }, { id: 'rawTin', count: 1 });
+  assert.equal(book.savedBench('r:spawn:13', (s) => chooseRecipe(s, 'shortSword')).ok, true);
+  assert.equal(storage.writes, 1);
+  assert.equal(book.savedBench('r:spawn:13', (s) => loadSmithy(s, inventory, 2, book)).status, 'refused');
+  assert.equal(storage.writes, 1, 'a refusal writes nothing');
+  for (const index of [0, 1, 1, 1]) book.savedBench('r:spawn:13', (s) => loadSmithy(s, inventory, index, book));
+  book.savedBench('r:spawn:13', (s) => hitSmithy(s, 'hit', book), { later: true });
+  assert.equal(storage.writes, 5, 'a hit waits');
+  book.flush();
+  book.flush();
+  assert.equal(storage.writes, 6, 'the page going away saves it once');
+  book.savedBench('r:spawn:13', (s) => hitSmithy(s, 'etch', book), { later: true });
+  book.update(1.99);
+  assert.equal(storage.writes, 6);
+  book.update(0.01);
+  assert.equal(storage.writes, 7, 'two seconds later it is saved');
+  book.update(5);
+  assert.equal(storage.writes, 7, 'and only once');
+  book.savedBench('r:spawn:13', (s) => hitSmithy(s, 'hit', book), { later: true });
+  book.update(1);
+  book.savedBench('r:spawn:13', (s) => hitSmithy(s, 'hit', book), { later: true });
+  book.update(1);
+  assert.equal(storage.writes, 8, 'hits in a row save every two seconds');
+  // A dagger finished into a full bag waits on its station.
+  const full = bag(...Array.from({ length: 24 }, () => ({ id: 'bandage', count: 1 })));
+  book.savedBench('r:west', (s) => chooseRecipe(s, 'dagger'));
+  for (let i = 0; i < 3; i++) book.savedBench('r:west', (s) => loadSmithy(s, inventory, 1, book));
+  assert.equal(book.savedBench('r:west', (s) => finishSmithy(s, full, book, () => 0)).status, 'missing');
+  book.bench('r:west').units.push('ironIngot');
+  assert.equal(book.savedBench('r:west', (s) => finishSmithy(s, full, book, () => 0)).waiting, true);
+  book.bench('r:idle');
+
+  const again = new AlloyBook({ storage, seed: 7 });
+  assert.deepEqual(again.toJSON(), book.toJSON());
+  assert.deepEqual(again.toJSON().benches['r:spawn:13'], {
+    recipe: 'shortSword', units: ['a1', 'ironIngot', 'ironIngot', 'ironIngot'], done: { hit: 3, etch: 1 }, output: null,
+  });
+  assert.equal(again.bench('r:west').output.forged.metal, 'Iron');
+  assert.deepEqual([...again.benches.keys()], ['r:spawn:13', 'r:west']);
+  assert.deepEqual(loaded(save()).benches.size, 0, 'a file without stations loads');
+});
+
+test('forges and weapon stations share the cap of 32, and an idle one of either makes way', () => {
+  const book = new AlloyBook({ storage: null, seed: 1 });
+  for (let i = 0; i < 16; i++) book.forge(`f${i}`).base = 'ironIngot';
+  for (let i = 0; i < 16; i++) book.bench(`b${i}`).recipe = 'dagger';
+  assert.deepEqual([book.forge('f16'), book.bench('b16')], [null, null]);
+  assert.deepEqual(book.savedBench('b16', () => assert.fail('no station to move')), {
+    ok: false, status: 'busy', message: "This weapon station can't be used: too many stations are busy.",
+  });
+  book.forge('f3').base = null;
+  assert.ok(book.bench('b16'), 'an idle forge makes way for a station');
+  assert.deepEqual([book.forges.has('f3'), book.forges.size + book.benches.size], [false, 32]);
+  book.bench('b16').recipe = 'dagger';
+  book.bench('b2').recipe = null;
+  assert.ok(book.forge('f3'), 'an idle station makes way for a forge');
+  assert.equal(book.benches.has('b2'), false);
+  for (const id of ['', 'x'.repeat(65), 7]) assert.throws(() => book.bench(id), TypeError);
+});
+
+test('each invalid weapon station is dropped on its own, and forges and stations load 32 at most', () => {
+  const piece = { recipe: 'shortSword', units: ['a1'], done: {}, output: null };
+  const benches = { ok: piece, bad: { ...piece, units: ['rawTin'] }, ['x'.repeat(65)]: piece, empty: null };
+  assert.deepEqual([...loaded(save({ benches })).benches.keys()], ['ok']);
+  assert.equal(loaded(save({ benches: 'none' })).benches.size, 0);
+  const forges = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`f${i}`, { base: 'ironIngot', catalysts: [], output: null }]));
+  const many = Object.fromEntries(Array.from({ length: 5 }, (_, i) => [`b${i}`, piece]));
+  const book = loaded(save({ forges, benches: many }));
+  assert.deepEqual([book.forges.size, [...book.benches.keys()]], [30, ['b0', 'b1']]);
 });
 
 test('the bag describes alloy ingots by their alloy and scrap by what it consumed', () => {
