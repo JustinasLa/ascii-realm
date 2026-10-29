@@ -4,8 +4,6 @@ import { PITCH, pitchLook } from '../src/world/camera.js';
 import { LIFT_PER_METRE, MAX_LIFT } from '../src/world/relief.js';
 import { CHUNK_SIZE, World } from '../src/world/world.js';
 
-const hillWorld = () => new World(1, { relief: 'hill', rivers: false });
-
 // The hill's chunks round spawn, generated.
 function loadHill(world) {
   const { relief } = world;
@@ -13,6 +11,13 @@ function loadHill(world) {
     for (let cx = Math.floor(relief.x0 / CHUNK_SIZE); cx <= Math.floor(relief.x1 / CHUNK_SIZE); cx++) world.chunk(cx, cy);
   }
   return [...world.chunks.values()];
+}
+
+// The hill scene's world with the hill loaded, as liftAt reads loaded chunks.
+function hillWorld() {
+  const world = new World(1, { relief: 'hill', rivers: false });
+  loadHill(world);
+  return world;
 }
 
 const column = (world, dx, dy0, n) => Array.from({ length: n }, (_, k) => world.liftAt(world.spawn.x + dx, world.spawn.y + dy0 + k));
@@ -43,7 +48,7 @@ test('re-lifting keeps every chunk in step with liftAt, in range, and back to a 
           const y = c.cy * CHUNK_SIZE + ly;
           const lift = c.lift[ly * CHUNK_SIZE + lx];
           assert.ok(lift <= MAX_LIFT, `${deg}° ${x},${y}`);
-          if (c.baseType[ly * CHUNK_SIZE + lx] > 1) assert.equal(lift, world.liftAt(x, y), `${deg}° ${x},${y}`);
+          if (c.type[ly * CHUNK_SIZE + lx] > 1) assert.equal(lift, world.liftAt(x, y), `${deg}° ${x},${y}`);
           most = Math.max(most, lift);
         }
         assert.equal(c.liftRows[ly], most);
@@ -55,9 +60,21 @@ test('re-lifting keeps every chunk in step with liftAt, in range, and back to a 
   // A chunk generated later is lifted at the pitch of the time.
   world.setRise(pitchLook(45).rise);
   world.chunks.clear();
+  loadHill(world);
   assert.equal(Math.max(...column(world, 0, -50, 60)), 10);
   const crest = world.chunk(Math.floor(world.spawn.x / CHUNK_SIZE), Math.floor((world.spawn.y - 24) / CHUNK_SIZE));
   assert.equal(Math.max(...crest.liftRows), 10);
+});
+
+test('ground painted over with water stays flat at any pitch', () => {
+  const world = hillWorld();
+  const x = Math.floor(world.spawn.x) + 75;
+  const y = Math.floor(world.spawn.y) - 6;
+  world.setTerrain(x, y, 0);
+  assert.equal(world.liftAt(x, y), 0);
+  world.setRise(pitchLook(25).rise);
+  assert.equal(world.liftAt(x, y), 0);
+  assert.equal(world.liftAt(x, y + 1), 14);
 });
 
 test('the flat world has nothing to re-lift', () => {

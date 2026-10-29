@@ -59,6 +59,7 @@ test('?debug&pitch= tilts the camera, re-lifts the hill and views the model from
   const { game, camera, toasts, looks, loadModel } = await pitchGame('debug&scene=hill&pitch=45');
   assert.equal(camera.look, pitchLook(45));
   assert.equal(game.world.relief.rise, pitchLook(45).rise);
+  game.world.typeAt(game.world.spawn.x + 75, game.world.spawn.y - 6);
   assert.equal(game.world.liftAt(game.world.spawn.x + 75, game.world.spawn.y - 6), 7);
   assert.deepEqual(toasts, ['Camera pitch 45°']);
   await loadModel();
