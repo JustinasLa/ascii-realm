@@ -273,6 +273,7 @@ test('ordinary and fine bakes keep their glyphs, colours and random draws', () =
     if (kind === 'standing-stone') continue;
     if (kind === 'pale-caps') continue;
     if (kind === 'furnace') continue; // furnace-prop.test.js
+    if (kind === 'alloy-forge') continue; // alloy-forge-prop.test.js
     for (const variant of [0, 1]) (kind === 'rock' ? rocks : scenery).push(createProp(kind, 4.5, 6.5, { seed: 3, variant }));
   }
   assert.deepEqual({ rocks: bakeDigest(rocks), scenery: bakeDigest(scenery) }, BAKE_PINS);

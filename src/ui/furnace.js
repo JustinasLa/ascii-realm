@@ -2,9 +2,10 @@ import { furnaceScreenModel, SLOTS } from '../crafting/furnace.js';
 import { ITEMS } from '../inventory/items.js';
 import { itemArt } from './item-art.js';
 
-const LABELS = { input: 'Input', fuel: 'Fuel', output: 'Output' };
+const LABELS = { input: 'Input', fuel: 'Fuel', output: 'Output', base: 'Base', catalyst: 'Catalyst' };
 const HINTS = { input: 'Choose ore from your satchel.', fuel: 'Choose fuel from your satchel.', output: 'Smelted ingots come out here.' };
-const TARGETS = { input: 'the input', fuel: 'the fuel slot' };
+const TARGETS = { input: 'the input', fuel: 'the fuel slot', base: 'the base slot', catalyst: 'a catalyst slot' };
+const FURNACE = { name: 'furnace', title: 'Furnace', help: [['Enter', 'Put in / take out'], ['Arrows', 'Move'], ['Esc', 'Close']] };
 // The flame gauge's rows, top to bottom, shown from the bottom up as fuel is left.
 const FLAME = [' ^ ', '(^)', '/^\\'];
 // The tap that opened the screen ends with a click on whatever is now under
@@ -12,32 +13,38 @@ const FLAME = [' ^ ', '(^)', '/^\\'];
 const GHOST_MS = 500;
 
 // An element with its class, text and attributes.
-function element(tag, className, text, attributes = {}) {
+export function element(tag, className, text, attributes = {}) {
   const node = document.createElement(tag);
   node.className = className;
   if (text !== undefined) node.textContent = text;
   for (const [name, value] of Object.entries(attributes)) node.setAttribute(name, value);
   return node;
 }
-const setText = (node, text) => node.textContent !== text && (node.textContent = text);
-const attribute = (node, name, value) => node.getAttribute(name) !== value && node.setAttribute(name, value);
-const art = (id) => itemArt(id, ITEMS[id].glyph);
+export const setText = (node, text) => node.textContent !== text && (node.textContent = text);
+export const attribute = (node, name, value) => node.getAttribute(name) !== value && node.setAttribute(name, value);
+export const art = (id) => itemArt(id, ITEMS[id].glyph);
 const flameArt = (flame) => FLAME.map((row, i) => (3 - i <= Math.ceil(flame * 3) ? row : ' . ')).join('\n');
 const arrowArt = (step) => `[${'='.repeat(step)}>${' '.repeat(10 - step)}]`;
 
 /** A furnace's screen: its three slots and gauges, and the satchel's resources to load. */
+// Other stations extend it with their own `kind`, `_layout`, `_controls`, `_select`, `_put` and `update`.
 export class FurnaceScreen {
-  constructor({ furnaces, inventory, onToggle = () => {}, onNotify = () => {} }) {
-    Object.assign(this, { furnaces, inventory, onToggle, onNotify, isOpen: false, id: null, rows: [],
+  constructor({ onToggle = () => {}, onNotify = () => {}, ...options }, kind = FURNACE) {
+    Object.assign(this, options, { onToggle, onNotify, isOpen: false, id: null, rows: [],
       _consumed: new Set(), _openedAt: -Infinity });
     this.root = document.getElementById('inventory-root');
-    this.screen = element('section', 'inventory-screen furnace-screen', undefined, { role: 'dialog', 'aria-modal': 'true',
-      'aria-labelledby': 'furnace-title', 'aria-describedby': 'furnace-help' });
+    this.screen = element('section', `inventory-screen ${kind.name}-screen`, undefined, { role: 'dialog',
+      'aria-modal': 'true', 'aria-labelledby': `${kind.name}-title`, 'aria-describedby': `${kind.name}-help` });
     this.screen.hidden = true;
     const header = element('header', 'inventory-header');
-    this.closeButton = this._button('inventory-close', () => this.close(), { 'aria-label': 'Close the furnace' });
+    this.closeButton = this._button('inventory-close', () => this.close(), { 'aria-label': `Close the ${kind.title.toLowerCase()}` });
     this.closeButton.append(element('span', '', 'Close'), element('kbd', '', 'Esc'));
-    header.append(element('h2', 'inventory-title', 'Furnace', { id: 'furnace-title' }), this.closeButton);
+    header.append(element('h2', 'inventory-title', kind.title, { id: `${kind.name}-title` }), this.closeButton);
+    this._mount(header, this._layout(), kind);
+  }
+
+  // The slots and gauges over the satchel's list, with the feedback line.
+  _layout() {
     this.slots = {};
     for (const slot of SLOTS) {
       const node = this.slots[slot] = this._button('furnace-slot',
@@ -66,8 +73,13 @@ export class FurnaceScreen {
     satchel.append(element('h3', 'inventory-heading', 'From your satchel'), this.list, this.empty);
     const layout = element('div', 'furnace-layout');
     layout.append(furnace, satchel);
-    const help = element('div', 'inventory-help', undefined, { id: 'furnace-help' });
-    help.append(...[['Enter', 'Put in / take out'], ['Arrows', 'Move'], ['Esc', 'Close']].map(([keys, action]) => {
+    return layout;
+  }
+
+  // Puts the layout between the header and the key hints, and the dialog in the page.
+  _mount(header, layout, kind) {
+    const help = element('div', 'inventory-help', undefined, { id: `${kind.name}-help` });
+    help.append(...kind.help.map(([keys, action]) => {
       const hint = element('span', 'inventory-key-hint');
       hint.append(element('kbd', '', keys), element('span', '', action));
       return hint;
@@ -83,6 +95,21 @@ export class FurnaceScreen {
     window.addEventListener('keyup', (event) => this._consumed.delete(event.code) && event.stopImmediatePropagation(), true);
   }
 
+  // Every control in visual order: the slots, the satchel's rows, Close.
+  _controls() {
+    return [this.slots.input, this.slots.fuel, this.slots.output, ...this.rows, this.closeButton];
+  }
+
+  // The furnace with this prop id, or why it can't be used.
+  _select(id) {
+    this.furnace = this.furnaces.get(id);
+    return this.furnace ? null : "This furnace can't be used: too many furnaces are busy.";
+  }
+
+  _put(index) {
+    return this.furnaces.putIn(this.id, this.inventory, index);
+  }
+
   _button(className, onClick, attributes) {
     const node = element('button', className, undefined, { type: 'button', ...attributes });
     node.addEventListener('click', (event) => {
@@ -91,11 +118,11 @@ export class FurnaceScreen {
     return node;
   }
 
-  // Opens the furnace with this prop id; false when it can't be used.
+  // Opens the station with this prop id; false when it can't be used.
   open(id) {
-    this.furnace = this.furnaces.get(id);
-    if (!this.furnace) {
-      this.onNotify("This furnace can't be used: too many furnaces are busy.", 'error');
+    const busy = this._select(id);
+    if (busy) {
+      this.onNotify(busy, 'error');
       return false;
     }
     this.id = id;
@@ -106,7 +133,7 @@ export class FurnaceScreen {
       this._setOpen(true);
     }
     this.update();
-    (this.rows.find((row) => row.dataset.target) ?? this.slots.input).focus();
+    (this.rows.find((row) => row.dataset.target) ?? this._controls()[0]).focus();
     return true;
   }
 
@@ -130,8 +157,7 @@ export class FurnaceScreen {
     this.onToggle(open);
   }
 
-  _notify(done) {
-    const kind = done.ok ? 'info' : 'error';
+  _notify(done, kind = done.ok ? 'info' : 'error') {
     this.onNotify(done.message, kind);
     this.feedback.textContent = done.message;
     this.feedback.dataset.kind = kind;
@@ -142,9 +168,11 @@ export class FurnaceScreen {
 
   _handleKeydown(event) {
     if (!this.isOpen || event.defaultPrevented) return;
-    // Browser shortcuts keep their defaults; no key reaches the game.
+    // Browser shortcuts keep their defaults; no key reaches the game. A text
+    // field keeps every key but Esc and Tab, and Enter submits its form.
     event.stopImmediatePropagation();
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    const typing = event.target?.tagName === 'INPUT' && !['Escape', 'Tab'].includes(event.code);
+    if (event.altKey || event.ctrlKey || event.metaKey || typing) return;
     event.preventDefault();
     const code = event.code;
     this._consumed.add(code);
@@ -152,8 +180,7 @@ export class FurnaceScreen {
       if (!event.repeat) this.close();
       return;
     }
-    // Every control in visual order: the slots, the satchel's rows, Close.
-    const controls = [this.slots.input, this.slots.fuel, this.slots.output, ...this.rows, this.closeButton];
+    const controls = this._controls();
     const at = controls.indexOf(document.activeElement);
     const step = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1, Tab: event.shiftKey ? -1 : 1 }[code];
     if (step) controls[(Math.max(at, step > 0 ? -1 : 0) + step + controls.length) % controls.length].focus();
@@ -200,7 +227,7 @@ export class FurnaceScreen {
   _fillBag(rows) {
     const focused = this.rows.indexOf(document.activeElement);
     this.rows = rows.map((row) => {
-      const node = this._button('furnace-bag-item', () => this._notify(this.furnaces.putIn(this.id, this.inventory, row.index)),
+      const node = this._button('furnace-bag-item', () => this._notify(this._put(row.index)),
         { 'aria-label': `${row.name}, ${row.count}. ${row.target ? `Put in ${TARGETS[row.target]}` : row.reason}.` });
       node.append(element('span', 'furnace-bag-art', art(row.id)), element('span', 'furnace-bag-name', row.name),
         element('span', 'furnace-bag-count', `x${row.count}`),
@@ -211,6 +238,6 @@ export class FurnaceScreen {
     });
     this.list.replaceChildren(...this.rows);
     this.empty.hidden = rows.length > 0;
-    if (focused >= 0) (this.rows[Math.min(focused, this.rows.length - 1)] ?? this.slots.input).focus();
+    if (focused >= 0) (this.rows[Math.min(focused, this.rows.length - 1)] ?? this._controls()[0]).focus();
   }
 }

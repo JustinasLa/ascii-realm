@@ -155,3 +155,26 @@ test('a scaled builder furnace in the next chunk is reached from its footprint',
   assert.equal(nearbyFurnace(world, player({ x: edge - 0.1, y: 10 })), null);
   assert.equal(nearbyFurnace(world, player({ x: furnace.x, y: 10 + furnace.footH + FURNACE_REACH - 0.1 })), furnace);
 });
+
+test('an alloy forge in reach comes after a furnace and before a glowcap', async () => {
+  const { nearbyForge } = await import('../src/crafting/alloys.js');
+  const { FURNACE_REACH, nearbyStation } = await import('../src/crafting/furnace.js');
+  const { ASPECT } = await import('../src/world/world.js');
+  const furnace = { id: 'r:spawn:11', kind: 'furnace', x: -20, y: -2, footW: 6, footH: 1.4 };
+  const forge = { id: 'r:spawn:12', kind: 'alloy-forge', x: 0, y: -2, footW: 7, footH: 1.4 };
+  const seen = [];
+  const world = { propsIn: (...box) => (seen.push(box), [furnace, forge]) };
+  const forges = { nearby: (p) => nearbyForge(world, p) };
+  const furnaces = { nearby: (p) => nearbyStation(world, p, 'furnace') };
+  const context = { player: player(), mushrooms: mushroomsWith({ cooldown: 0 }), fires: firesWith({}), furnaces, forges };
+  assert.deepEqual(interaction(context), { kind: 'forge', label: 'FORGE', ariaLabel: 'Use the alloy forge' });
+  assert.deepEqual(performInteraction(context), { kind: 'forge', prop: forge });
+  // The search reaches past a wide forge's far end, as for a furnace.
+  const reachX = 10 + FURNACE_REACH / ASPECT, reachY = 2 + FURNACE_REACH;
+  assert.deepEqual(seen[0], [-reachX, -reachY, reachX, reachY]);
+  // Beside the furnace, the furnace wins; in the air, the glowcap is next.
+  assert.equal(interaction({ ...context, player: player({ x: -14 }) }).kind, 'furnace');
+  assert.equal(interaction({ ...context, player: player({ air: 0.5 }) }).kind, 'spores');
+  assert.equal(nearbyForge(world, player({ x: 7 + 5.9, y: -2 })), null);
+  assert.equal(nearbyForge(world, player({ x: 7 + 5.8, y: -2 })), forge);
+});

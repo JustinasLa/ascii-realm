@@ -242,23 +242,24 @@ export function furnaceScreenModel(furnace, inventory) {
 // How far from a furnace's footprint it can be used, in row units.
 export const FURNACE_REACH = 3.5;
 
-// The nearest furnace in reach of a player on the ground, measured from its
-// footprint so this wide prop can be used from any side; null if none.
-export function nearbyFurnace(world, player) {
+// The nearest station of this kind in reach of a player on the ground,
+// measured from its footprint so a wide prop can be used from any side; null if none.
+export function nearbyStation(world, player, kind) {
   if (player.air > 0.3 || player.vitals?.health <= 0) return null;
   let best = null, bestGap = Infinity;
   // Search as far as the widest footprint in the world reaches, so a scaled
-  // builder furnace in the next chunk is still found.
+  // builder station in the next chunk is still found.
   const reachX = Math.max(world.propFootW ?? 0, 10) + FURNACE_REACH / ASPECT;
   const reachY = Math.max(world.propFootH ?? 0, 2) + FURNACE_REACH;
   for (const prop of world.propsIn(player.x - reachX, player.y - reachY, player.x + reachX, player.y + reachY)) {
-    if (prop.kind !== 'furnace') continue;
+    if (prop.kind !== kind) continue;
     const gap = Math.hypot(Math.max(0, Math.abs(player.x - prop.x) - prop.footW) * ASPECT,
       Math.max(0, Math.abs(player.y - prop.y) - prop.footH));
     if (gap <= FURNACE_REACH && gap < bestGap) [best, bestGap] = [prop, gap];
   }
   return best;
 }
+export const nearbyFurnace = (world, player) => nearbyStation(world, player, 'furnace');
 
 // Every furnace's state in one world, kept by prop id. All of them work on
 // game time, with the screen shut and the player far away.

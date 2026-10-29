@@ -55,9 +55,11 @@ export class InventoryScreen {
   // `pages` are more tabs after the bag's: `{ id, label, node, onShow }`,
   // `onShow` running each time the page shows.
   // `isCovered` is true while another panel (a furnace) holds the keys.
+  // `describe(stack)` gives a stack's own { name, colour, description, stats }
+  // (an alloy ingot's), or null for its item's; `describeVersion()` changes with them.
   constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false, pages = [],
-    isCovered = () => false }) {
-    this.isCovered = isCovered;
+    isCovered = () => false, describe = () => null, describeVersion = () => 0 }) {
+    Object.assign(this, { isCovered, describe, describeVersion });
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
     // Drops a bag stack into the world; returns { ok, message }.
@@ -577,7 +579,8 @@ export class InventoryScreen {
     const vitals = this.player.vitals;
     const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
       this.inventory.hotbar, this.inventory.capacity, this.selection,
-      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), skinKey(this.player.skin)]);
+      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), skinKey(this.player.skin),
+      this.describeVersion()]);
     if (signature === this._signature) return;
     this._signature = signature;
     this.portrait.update(this.player);
@@ -595,7 +598,7 @@ export class InventoryScreen {
       nodes.button.classList.toggle('empty', !item);
       attribute(nodes.button, 'aria-pressed', String(selected));
       attribute(nodes.button, 'aria-label', item
-        ? `Slot ${index + 1}: ${item.name}, count ${stack.count}` : `Slot ${index + 1}: empty`);
+        ? `Slot ${index + 1}: ${this.describe(stack)?.name ?? item.name}, count ${stack.count}` : `Slot ${index + 1}: empty`);
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'draggable', Boolean(item));
       attribute(nodes.button, 'data-item-kind', !item ? 'empty'
@@ -624,12 +627,14 @@ export class InventoryScreen {
     const item = selected?.item;
     const stack = selected?.stack;
     const carried = this.selection.source === 'bag';
+    const own = stack ? this.describe(stack) : null;
     attribute(this.details, 'data-item-id', item?.id || '');
     setText(this.itemPreview, item ? itemArt(item.id, item.glyph) : '');
     hidden(this.itemPreview, !item);
     setText(this.itemType, item ? item.use ? 'Consumable' : item.equipmentSlot ? 'Equipment' : 'Material' : '');
-    setText(this.itemName, item ? item.name : carried ? 'Empty slot' : `${SLOT_NAMES[this.selection.slot]} slot`);
-    setText(this.description, item?.description || emptySlotHint(carried, this.phone()));
+    setText(this.itemName, item ? own?.name ?? item.name : carried ? 'Empty slot' : `${SLOT_NAMES[this.selection.slot]} slot`);
+    this.itemName.style.color = own?.colour ?? '';
+    setText(this.description, own?.description ?? (item?.description || emptySlotHint(carried, this.phone())));
     const notes = noteReference(item?.id);
     if (notes.length && this.phone()) notes.push('Played with a keyboard for now.');
     for (const [index, line] of this.noteLines.entries()) {
@@ -637,16 +642,17 @@ export class InventoryScreen {
       hidden(line, !notes[index]);
     }
     hidden(this.notes, !notes.length);
-    const statsSignature = JSON.stringify(item?.stats || {});
+    const stats = own?.stats ?? item?.stats ?? {};
+    const statsSignature = JSON.stringify(stats);
     if (statsSignature !== this._statsSignature) {
       this._statsSignature = statsSignature;
       this.stats.replaceChildren();
-      for (const [key, value] of Object.entries(item?.stats || {})) {
+      for (const [key, value] of Object.entries(stats)) {
         this.stats.append(element('dt', '', statName(key)), element('dd', '',
           typeof value === 'number' && value > 0 ? `+${value}` : String(value)));
       }
     }
-    hidden(this.stats, !item || !Object.keys(item.stats || {}).length);
+    hidden(this.stats, !item || !Object.keys(stats).length);
     hidden(this.itemWeight, !item);
     setText(this.itemWeight, item
       ? `${kg(item.weight)} kg each / ${kg(item.weight * stack.count)} kg carried / ${stack.count} ${stack.count === 1 ? 'item' : 'items'}` : '');

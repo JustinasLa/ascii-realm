@@ -254,8 +254,16 @@ short version see the [README](../README.md).
   below them your satchel's resources, each saying where it goes or why it
   can't. Pick one to put it in, or a slot to take it back. While it burns,
   embers flicker in its mouth and a small warm light falls in front of it.
-- **Alloys.** The alloy forge's rules are in place, though no forge stands in
-  the world yet. A mix is one base, an Iron, Steel or Bronze Ingot, and up to
+- **Alloys.** An alloy forge (a cobble hearth with a bed of coals, a clay
+  crucible and bellows) stands east of the furnace in the spawn forecourt, out
+  of its reach; the builder's Camp palette places more, and none can be broken.
+  Press `E` beside one, or tap **FORGE**: its screen shows the base and four
+  catalyst slots, the mix's known result, **Fire**, **Empty forge** and **Take**
+  for a waiting result, your satchel's rows, and **Known alloys** with each
+  alloy's colour swatch, recipe and stats. A new alloy throws sparks, names
+  itself in a gold notice and opens a naming row; the coals burn for 10 s
+  after a firing. The bag shows an alloy ingot by its alloy's name, colour and
+  stats. A mix is one base, an Iron, Steel or Bronze Ingot, and up to
   four catalysts; a metal base takes metal or crystal catalysts (Copper Ingot,
   Raw Tin, Lapis Lazuli or another ingot), each ingredient once. A firing needs
   at least two ingredients and burns 1 Coal. A mix fired before always gives
