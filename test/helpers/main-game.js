@@ -37,6 +37,7 @@ import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assis
 import { pickStruck, TargetTracker, targetId } from '../../src/core/target.js';
 import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
+import { Furnaces, nearbyFurnace } from '../../src/crafting/furnace.js';
 import { metresBetween } from '../../src/multiplayer/chat.js';
 import { figureTop } from '../../src/ui/bubbles.js';
 import { displayName } from '../../src/multiplayer/protocol.js';
@@ -267,6 +268,16 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
         this.onToggle(open);
       }
     },
+    // The furnace screen records what it opens; the real one is tested on
+    // its own.
+    Furnaces, nearbyFurnace,
+    FurnaceScreen: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.opened = []; this.updates = 0; }
+      open(id) { this.opened.push(id); this.isOpen = true; this.onToggle(true); return true; }
+      close() { this.isOpen = false; this.onToggle(false); }
+      update() { this.updates++; }
+    },
+    drawFurnaceGlow: noop, lightFurnace: noop,
     // The character pages count their renders and the buttons focused.
     CharacterPages: class {
       constructor(options) {

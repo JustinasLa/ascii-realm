@@ -1,6 +1,7 @@
 import { hash2 } from '../core/rng.js';
-import { dg } from '../render/glyphs.js';
-import { ringGlyph } from './prop-art.js';
+import { FINE } from '../render/cells.js';
+import { dg, glyph } from '../render/glyphs.js';
+import { ringGlyph, withFine } from './prop-art.js';
 import { ASPECT } from './world.js';
 
 // The sampler uses physical row units; bake converts its surface to cells
@@ -314,8 +315,59 @@ function makeSignpost(x, y, rand, seed, bake) {
     { shadow: { rx: 2, ry: 0.8, ox: 1.2 } });
 }
 
+// A furnace: a squat block of fitted cobbles under a stone slab, with a
+// dark arched mouth over an iron grate and a flue in its top. Drawn in
+// small letters on the fine grid; `glow` is the mouth's inner ellipse,
+// where furnace-glow.js draws the fire while it burns.
+function makeFurnace(x, y, rand, seed, bake) {
+  const rx = 4 + rand() * 0.4;
+  const height = 6.2 + rand() * 0.6;
+  // The campfire ring's stone, lifted as rocks are so it holds at night.
+  const stone = [118, 112, 108].map((v) => v * 1.7);
+  const corner = 0.8;
+  // The mouth: a round arch of half-width 1.3 from the sill to 2.3 up.
+  const arch = (px, py) => py > -1 ? 1.3 - Math.abs(px) : 1.3 - Math.hypot(px, py + 1);
+  const sample = (px, py) => {
+    if (py < -height) return null;
+    const half = rx * (1 + 0.08 * py / height);
+    const ax = Math.abs(px);
+    if (ax > half) return null;
+    const cy = -height + corner;
+    if (py < cy && ax > half - corner && Math.hypot(ax - half + corner, py - cy) > corner) return null;
+    const side = px / half;
+    if (py < -height + 0.9) {
+      if (((px - rx * 0.45) / 0.5) ** 2 + ((py + height - 0.45) / 0.25) ** 2 <= 1) {
+        return { m: 'plain', l: 0.08, c: [26, 20, 18], g: dg('props.shade.1'), back: 0.3 };
+      }
+      return { m: 'stone', l: clamp(0.8 - side * 0.1 + grain(px, py, seed)), c: stone };
+    }
+    const inMouth = arch(px, py);
+    if (inMouth > 0 && py > -2.3 && py < -0.2) {
+      if (py > -0.6) return { m: 'iron', l: 0.5, c: IRON, g: glyph('=') };
+      return { m: 'plain', l: 0.08, c: [30, 22, 18], g: dg('props.shade.1'), back: 0.3 };
+    }
+    // Cobbles in courses a row high, each course shifted half a stone.
+    const j = Math.floor(-py);
+    const u = px / 1.5 + (j % 2) * 0.5 + (hash2(j, 0, seed + 7) - 0.5) * 0.3;
+    const i = Math.floor(u), tone = hash2(i, j, seed + 7);
+    const edge = Math.min((u - i) * 1.5, (i + 1 - u) * 1.5, -py - j, j + 1 + py);
+    let l = clamp(0.45 + tone * 0.25 - side * 0.18 + grain(px, py, seed));
+    if (edge < 0.2) l *= 0.4;
+    else if (inMouth > -0.35 && py < -0.2) l = clamp(l + 0.12);
+    else if (inMouth > -1 && py < -1.6) l *= 0.6;
+    return { m: 'stone', l, c: stone.map((v) => v * (0.9 + tone * 0.2)) };
+  };
+  const furnace = prop('furnace', x, y, rx, height, rx * 0.9 / ASPECT, 1.4, sample, seed, bake,
+    { shadow: { rx: rx * 1.2, ry: 1, ox: rx * 0.3 } });
+  furnace.glow = { x: 0, y: -1.35, rx: 1.05, ry: 0.85 };
+  return withFine(furnace, function* fine() {
+    return bake((Math.ceil(rx / ASPECT) + 1) * FINE, -Math.ceil(height) * FINE, 0,
+      (px, py) => py > 0 ? null : sample(px / FINE, py / FINE), seed);
+  });
+}
+
 const MAKERS = { crate: makeCrate, barrel: makeBarrel, fence: makeFence,
-  tent: makeTent, campfire: makeCampfire, signpost: makeSignpost };
+  tent: makeTent, campfire: makeCampfire, signpost: makeSignpost, furnace: makeFurnace };
 
 export function makeCampProp(kind, x, y, rand, seed, bake) {
   const make = Object.hasOwn(MAKERS, kind) ? MAKERS[kind] : null;

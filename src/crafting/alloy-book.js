@@ -257,7 +257,8 @@ export class AlloyBook {
     const valid = typeof id === 'string' && ALLOY_ID.test(id) && !this.alloys.has(id)
       && typeof name === 'string' && name.length <= MAX_NAME && NAME.test(name) && !this.taken(name)
       && PALETTE.includes(colour)
-      && Array.isArray(catalysts) && catalysts.length > 0 && this.#freeMix(recipeKey(base, catalysts))
+      && Array.isArray(catalysts) && catalysts.length > 0 && !!mixOf(base, catalysts)
+      && this.#freeMix(recipeKey(base, catalysts))
       && sorted(catalysts)
       && type === INGREDIENTS[base].type && tier === INGREDIENTS[base].tier
       && entriesOk(stats, STAT_NAMES, (amount) => between(amount, -1e6, 1e6))
