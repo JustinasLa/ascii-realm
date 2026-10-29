@@ -213,12 +213,15 @@ short version see the [README](../README.md).
   Weapons, Armor and Cloaks always; Ammo, Consumables, Instruments and
   Materials while it holds some), a scrolling grid of tall item cards, each
   showing its art and its stack count (`×30`) or its gear's material
-  (`iron`), and the selected item's details beside them. Clicking a card
-  equips it (swapping out what was worn) or uses it, clicking a filled box
-  takes the gear off, and right-clicking a card drops the whole stack on the
-  ground. On a touch screen the first tap on a card selects it, showing its
-  details and a Drop button, and a second tap equips or uses it; a tap on a
-  filled box takes the gear off. The window keeps one
+  (`iron`). Clicking a card equips it (swapping out what was worn) or uses
+  it, clicking a filled box takes the gear off, and right-clicking a card
+  drops the whole stack on the ground. Hovering a card or a filled box, or
+  selecting it with the keys, shows the item tooltip: a black box with the
+  name in bold light blue (an alloy's own colour), then its kind and grip,
+  description, material, stats, weight, durability and what it restores, and
+  a dim line naming the clicks. On a touch screen a tap acts as a click, and
+  holding a card or a filled box pins its tooltip under it with buttons for
+  its action (`equip`, `use` or `take off`) and `drop`. The window keeps one
   height on desktops and tablets; on phones the full-screen sheet scrolls. A
   60 kg carrying limit applies. The bag starts with a short sword, equipped and
   ready, and a stone pickaxe. Arrows can fill the quiver, which the bow shoots

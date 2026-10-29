@@ -25,7 +25,7 @@ world is generated as you walk, and up to eight friends can share it.
 - **Monsters** — skeletons that climb from the ground, goblins that stab and flee, trolls with a ground-shaking club and elves that lead their arrows.
 - **Fire** — carry and throw a lit torch that sets dry ground alight, and build contained campfires that grow and react to wind and footsteps.
 - **Weather and seasons** — 17 weather presets with rain, snow, hail, fog and lightning that lights the ground and can start fires.
-- **Satchel and equipment** — a status frame, a 24-slot bag with filter tabs and item cards and a carrying limit, and a character sheet: the name and class, a paper doll of twelve equipment boxes (weapon, shield, helmet, body, legs, gloves, boots, amulet, two rings, cloak and quiver) and a stats strip.
+- **Satchel and equipment** — a status frame, a 24-slot bag with filter tabs, item cards and an item tooltip, and a carrying limit, and a character sheet: the name and class, a paper doll of twelve equipment boxes (weapon, shield, helmet, body, legs, gloves, boots, amulet, two rings, cloak and quiver) and a stats strip.
 - **Sound and music** — recorded footsteps and water, weather and wildlife ambience, and 42 original songs chosen by season and weather.
 - **Multiplayer lobbies** — share a six-character code to explore the same world together and see each other's movement, swings and rune casts, and talk in ranged chat.
 - **Scenery builder** — paint terrain and place props, with undo, local saves and JSON export.
