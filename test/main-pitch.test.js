@@ -173,3 +173,21 @@ test('meeting friends in a lobby puts the camera over the player from the usual 
   assert.deepEqual([game.player.x, game.player.y], [40, 70]);
   assert.deepEqual([camera.x, camera.y], [40, 59]);
 });
+
+test('joining a lobby from a tilted solo page puts the camera back and keeps it there', async () => {
+  const { game, camera, keydown, toasts, looks, loadModel } = await pitchGame('debug&pitch=45');
+  await loadModel();
+  game.multiplayer.room = { code: 'ABC234', seed: 1 };
+  game.multiplayer.players = [{ id: 'me' }, { id: 'friend' }];
+  game.multiplayer.onJoin({ seed: game.world.seed, code: 'ABC234', id: 'me', self: { x: 40, y: 70 } });
+  assert.equal(camera.look, BASE_LOOK);
+  assert.deepEqual([camera.x, camera.y], [40, 59], 'the camera snaps over the player from the usual angle');
+  keydown(...code('BracketRight'));
+  game.setPitch(40);
+  assert.equal(camera.look, BASE_LOOK, 'the keys and the console leave it alone in the lobby');
+  game.multiplayer.room = null;
+  keydown(...code('BracketRight'));
+  assert.equal(camera.look.deg, 35, 'solo again, the keys work');
+  assert.deepEqual(toasts, ['Camera pitch 45°', 'Camera pitch 30°', 'Camera pitch 35°']);
+  assert.deepEqual(looks.map((l) => l.deg), [45, 30, 35]);
+});

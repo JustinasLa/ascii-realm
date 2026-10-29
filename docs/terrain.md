@@ -72,9 +72,9 @@ normal play: the game is drawn from one fixed camera.
   the camera 5° toward the horizon, `]` raises it 5° and `\` puts it back at
   30°; `game.setPitch(deg)` does the same from the console, also on a phone.
   The pitch is rounded to a whole degree and kept in range, and anything else
-  means 30°. Each change shows "Camera pitch N°". Nothing is saved, and a
-  lobby page ignores it, because friends are drawn from the usual angle. It
-  combines with zoom.
+  means 30°. Each change shows "Camera pitch N°". Nothing is saved. Friends
+  are drawn from the usual angle, so a lobby page ignores it, and joining a
+  lobby puts the camera back at 30° until you leave. It combines with zoom.
 - **What it changes.** Ground depth stays the same at every pitch (6.5 rows a
   metre); only how far height rises changes. Raised ground is lifted again:
   the ridge is 22 rows tall at 25°, 18 at 30° and 10 at 45°, so a low camera

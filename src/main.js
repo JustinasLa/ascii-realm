@@ -652,6 +652,8 @@ const multiplayer = new MultiplayerClient({
       location.replace(url);
       return;
     }
+    // Friends are drawn from the usual angle, so a debug pitch goes back there.
+    if (lookScale() !== 1) setPitch(PITCH.base);
     // Meet friends where they are, unless this is the lobby's first player.
     if (lobby.self && multiplayer.players.some((member) => member.id !== lobby.id)) {
       player.x = lobby.self.x;
@@ -1233,9 +1235,10 @@ ModelFigure.load('assets/ual1.glb')
   .catch((e) => console.error('Could not load the character model', e));
 
 // Tilts the camera to `deg` degrees above the horizon (see camera.js
-// pitchLook): the raised ground and the outlaw are drawn from there.
+// pitchLook): the raised ground and the outlaw are drawn from there. In a
+// lobby it stays at the usual pitch.
 function setPitch(deg) {
-  const look = pitchLook(deg);
+  const look = pitchLook(multiplayer.room ? PITCH.base : deg);
   if (look === camera.look) return;
   camera.look = look;
   world.setRise(look.rise);
