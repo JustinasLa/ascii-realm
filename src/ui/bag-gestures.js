@@ -6,33 +6,27 @@ export const TOUCH_SLOP = 10;
 /**
  * Tap and hold on bag cards and doll boxes, for touch and pen. A tap stays a
  * native click; a hold calls `onHold(selection, rect)` and swallows the click
- * its lift sends. Mice are left to click, right-click and drag.
+ * its lift sends, on `swallowOn`, which holds whatever the hold shows under
+ * the finger. Mice are left to click, right-click and drag.
  * `sourceOf(target)` gives `{ selection, node }` for a filled card or box, else null.
- * The click is swallowed on `swallowOn`, which holds whatever a hold may
- * show under the finger.
  */
 export class BagGestures {
   constructor({ surface, sourceOf, onHold, swallowOn = surface, timers = globalThis }) {
-    Object.assign(this, { surface, sourceOf, onHold, swallowOn, timers });
-    this._press = null;
-    this._held = false;
-    this._swallow = false;
+    Object.assign(this, { surface, sourceOf, onHold, swallowOn, timers, _press: null, _held: false, _swallow: false });
     this._listeners = {
       pointerdown: (event) => this._down(event),
-      pointermove: (event) => {
+      pointermove: ({ pointerId, clientX, clientY }) => {
         const press = this._press;
-        if (press && press.id === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > TOUCH_SLOP) {
-          this.cancel();
-        }
+        if (press && press.id === pointerId && Math.hypot(clientX - press.x, clientY - press.y) > TOUCH_SLOP) this.cancel();
       },
       // A busy page may run the lift before the timer: a long press is a hold all the same.
-      pointerup: (event) => {
-        if (this._press && !this._held && event.timeStamp - this._press.t >= HOLD_MS) this._hold();
-        this._end();
+      pointerup: ({ timeStamp }) => {
+        if (this._press && !this._held && timeStamp - this._press.t >= HOLD_MS) this._hold();
+        this.cancel();
       },
       pointercancel: () => this.cancel(),
       // While held, the finger must not scroll the sheet under the panel.
-      touchmove: (event) => { if (this.active) event.preventDefault(); },
+      touchmove: (event) => { if (this._held) event.preventDefault(); },
     };
     this._click = (event) => {
       if (!this._swallow) return;
@@ -51,8 +45,8 @@ export class BagGestures {
     // A click that never came after the last hold must not eat this tap.
     this._swallow = false;
     this.cancel();
-    if (event.pointerType === 'mouse' || event.isPrimary === false || event.button > 0) return;
-    const source = this.sourceOf(event.target);
+    const { pointerType, isPrimary, button } = event;
+    const source = pointerType !== 'mouse' && isPrimary !== false && !(button > 0) && this.sourceOf(event.target);
     if (!source) return;
     this._press = { id: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp, source,
       timer: this.timers.setTimeout(() => this._hold(), HOLD_MS) };
@@ -60,26 +54,20 @@ export class BagGestures {
 
   _hold() {
     this.timers.clearTimeout(this._press.timer);
-    this._held = true;
-    this._swallow = true;
-    const { selection, node } = this._press.source;
-    this.onHold(selection, node.getBoundingClientRect());
+    this._held = this._swallow = true;
+    this.onHold(this._press.source.selection, this._press.source.node.getBoundingClientRect());
   }
 
-  _end() {
+  // Drops any press or hold (a lift, a scroll, closing the window).
+  cancel() {
     if (this._press) this.timers.clearTimeout(this._press.timer);
     this._press = null;
     this._held = false;
   }
 
-  // Drops any press or hold (a scroll, Esc, closing the window).
-  cancel() {
-    this._end();
-  }
-
   destroy() {
     this.cancel();
-    for (const [type, listener] of Object.entries(this._listeners)) this.surface.removeEventListener(type, listener, { passive: false });
+    for (const [type, listener] of Object.entries(this._listeners)) this.surface.removeEventListener(type, listener);
     this.swallowOn.removeEventListener('click', this._click, true);
   }
 }

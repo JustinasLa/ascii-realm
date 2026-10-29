@@ -213,9 +213,10 @@ short version see the [README](../README.md).
   Weapons, Armor and Cloaks always; Ammo, Consumables, Instruments and
   Materials while it holds some), a scrolling grid of tall item cards, each
   showing its art and its stack count (`×30`) or its gear's material
-  (`iron`). Clicking a card equips it (swapping out what was worn) or uses
-  it, clicking a filled box takes the gear off, and right-clicking a card
-  drops the whole stack on the ground. Hovering a card or a filled box, or
+  (`iron`), and the selected item's details beside them. Clicking a card
+  equips it (swapping out what was worn) or uses it, clicking a filled box
+  takes the gear off, and right-clicking a card drops the whole stack on the
+  ground. Hovering a card or a filled box, or
   selecting it with the keys, shows the item tooltip: a black box with the
   name in bold light blue (an alloy's own colour), then its kind and grip,
   description, material, stats, weight, durability and what it restores, and

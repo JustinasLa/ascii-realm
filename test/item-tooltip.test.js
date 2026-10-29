@@ -43,7 +43,8 @@ test('a pinned panel sits under the card, above it, or beside it, and labels lin
   const node = (tag) => {
     const el = { tag, children: [], style: {}, attributes: new Map(), listeners: new Map(), hidden: false, className: '',
       offsetWidth: 100, offsetHeight: 50, scrollHeight: 0, clientHeight: 0,
-      classList: { set: new Set(), add(n) { this.set.add(n); }, remove(n) { this.set.delete(n); }, contains(n) { return this.set.has(n); } },
+      classList: { set: new Set(), toggle(n, on) { if (on) this.set.add(n); else this.set.delete(n); },
+        remove(n) { this.set.delete(n); }, contains(n) { return this.set.has(n); } },
       append(...nodes) { this.children.push(...nodes); },
       replaceChildren(...nodes) { this.children = nodes; },
       setAttribute(name, value) { this.attributes.set(name, value); },
@@ -86,7 +87,7 @@ test('a pinned panel sits under the card, above it, or beside it, and labels lin
     // Showing at a pointer unpins it.
     tip.show(content, 10, 10);
     assert.equal(tip.pinned, false);
-    assert.equal(tip.actions.hidden, true);
+    assert.equal(tip.actions.children.length, 0, 'and drops its buttons');
     tip.hide();
     assert.equal(tip.shown, false);
     tip.destroy();

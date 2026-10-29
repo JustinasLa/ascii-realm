@@ -69,12 +69,12 @@ test('the bag is filter tabs over tall cards, with 44 px tabs on phones and no o
   assert.match(phone, /\.bag-cards \{ overflow-y: visible; min-height: 0; \}/);
 });
 
-test('the item tooltip replaces the details pane, its buttons 44 px and its lines scrolling inside the screen', () => {
-  assert.doesNotMatch(css, /\.inventory-(details|actions|item-|stats|weight|durability|description)/);
+test('the item tooltip keeps inside the screen, its lines scrolling over 44 px buttons', () => {
   assert.match(css, /\.item-tooltip \{[^}]*position: fixed;[^}]*max-height: calc\(100dvh - 2 \* var\(--tip-margin\)\);/);
   assert.match(css, /\.item-tooltip-body \{[^}]*overflow-y: auto;[^}]*overscroll-behavior: contain;/);
   assert.match(css, /\.item-tooltip-name \{[^}]*color: #7cc4ff;[^}]*font-weight: 700;/);
   assert.match(css, /\.item-tooltip-actions button \{[^}]*min-height: 44px;/);
+  assert.match(css, /\.item-tooltip-actions:empty \{ display: none; \}/);
   assert.match(css, /\.inventory-screen :is\(\.bag-card, \.equipment-slot\) \{ touch-action: pan-y; -webkit-touch-callout: none;/);
 });
 

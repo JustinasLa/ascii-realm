@@ -179,9 +179,10 @@ run. The other thumb has a cluster in the bottom-right corner:
   **Finish**.
 - The **inventory** (in the phone menu) is a full-screen sheet that scrolls as
   a whole. Tap a filter tab to show one kind. Tap a bag card to equip or use
-  it, and a filled equipment box to take its gear off. Hold a card or a
-  filled box to pin its details, with buttons to **equip**, **use** or
-  **take off** and to **drop**; tap anywhere else to close them.
+  it, and a filled equipment box to take its gear off; the selected item's
+  details show below the bag. Hold a card or a filled box to pin its
+  tooltip, with buttons to **equip**, **use** or **take off** and to
+  **drop**; tap anywhere else to close it.
 
 Strikes, shots and attack runes from these buttons turn to the nearest enemy
 within 30° either side of your facing, within the weapon's reach plus a stride,
