@@ -377,3 +377,24 @@ test('room for a ground stack counts only bag stacks with the same properties', 
   inventory.slots[0] = { id: 'ironIngot', count: 10, material: 'steel' };
   assert.equal(collection.prompt(player), 'E Pick up Iron Ingot x2');
 });
+
+test('a dropped alloy ingot and scrap come back with their alloy and inputs', () => {
+  const { inventory, ground, collection, player } = setup();
+  inventory.add('alloyIngot', 1, { alloy: 'a3' });
+  inventory.add('unusableScrap', 1, { inputs: { rawTin: 1, ironIngot: 1 } });
+  const ingot = collection.drop(player, 0).item;
+  const scrap = collection.drop(player, 1).item;
+  assert.deepEqual(ingot.extras, { alloy: 'a3' });
+  assert.deepEqual(scrap.extras, { inputs: { ironIngot: 1, rawTin: 1 } });
+  player.y += 20;
+  collection.update(1, player);
+  for (const item of [ingot, scrap]) {
+    player.x = item.x;
+    player.y = item.y;
+    collection.update(0, player);
+  }
+  assert.deepEqual(inventory.slots.slice(0, 2).sort((a, b) => (a.id < b.id ? -1 : 1)), [
+    { id: 'alloyIngot', count: 1, alloy: 'a3' }, { id: 'unusableScrap', count: 1, inputs: { ironIngot: 1, rawTin: 1 } },
+  ]);
+  assert.deepEqual(ground.of(0, 0), []);
+});

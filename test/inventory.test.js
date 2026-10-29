@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Vitals } from '../src/entities/vitals.js';
 import { ITEMS, EQUIPMENT_SLOTS } from '../src/inventory/items.js';
-import { Inventory } from '../src/inventory/inventory.js';
+import { Inventory, stackExtras } from '../src/inventory/inventory.js';
 
 const emptyInventory = (capacity = 1000) => new Inventory({ starter: false, capacity });
 const carriedCount = (inventory, id) => [...inventory.slots, ...Object.values(inventory.equipment)]
@@ -468,4 +468,44 @@ test('the nine instruments are off-hand items that leave the main hand alone', a
   const bag = new Inventory({ starter: false });
   bag.add('shortSword');
   for (const id of INSTRUMENT_IDS) assert.equal(bag.add(id), 1, id);
+});
+
+test('alloy ids and scrap inputs are kept only when well formed', () => {
+  for (const alloy of ['a1', 'a9', 'a42', 'a9999']) assert.deepEqual(stackExtras({ alloy }), { alloy });
+  for (const alloy of ['b1', 'a0', 'a01', 'a12345', 'A1', ' a1', 1, null, ['a1']]) {
+    assert.deepEqual(stackExtras({ alloy }), {}, String(alloy));
+  }
+  const inputs = stackExtras({ inputs: { rawTin: 1, ironIngot: 2, lapisLazuli: 1 } }).inputs;
+  assert.deepEqual(Object.keys(inputs), ['ironIngot', 'lapisLazuli', 'rawTin']);
+  assert.ok(Object.isFrozen(inputs));
+  for (const bad of [
+    { nothing: 1 }, { rawTin: 0 }, { rawTin: 6 }, { rawTin: 1.5 }, { rawTin: '1' }, {},
+    { ironIngot: 1, steelIngot: 1, bronzeIngot: 1, copperIngot: 1, rawTin: 1, lapisLazuli: 1 },
+    [['rawTin', 1]], 'rawTin', null, { toString: 1 },
+  ]) assert.deepEqual(stackExtras({ inputs: bad }), {}, JSON.stringify(bad));
+  assert.deepEqual(Object.keys(stackExtras({ inputs: { rawTin: 1 }, alloy: 'a2', material: 'steel', other: 1 })),
+    ['material', 'alloy', 'inputs']);
+});
+
+test('different alloys and scrap from different mixes never merge', () => {
+  const inventory = emptyInventory();
+  const tin = { ironIngot: 1, rawTin: 1 };
+  assert.equal(inventory.add('alloyIngot', 2, { alloy: 'a1' }), 2);
+  assert.equal(inventory.add('alloyIngot', 1, { alloy: 'a2' }), 1);
+  assert.equal(inventory.add('alloyIngot', 3, { alloy: 'a1' }), 3);
+  assert.equal(inventory.add('unusableScrap', 1, { inputs: tin }), 1);
+  assert.equal(inventory.add('unusableScrap', 1, { inputs: { rawTin: 1, ironIngot: 1 } }), 1);
+  assert.equal(inventory.add('unusableScrap', 1, { inputs: { ironIngot: 1, lapisLazuli: 1 } }), 1);
+  assert.deepEqual(inventory.slots.slice(0, 4), [
+    { id: 'alloyIngot', count: 5, alloy: 'a1' }, { id: 'alloyIngot', count: 1, alloy: 'a2' },
+    { id: 'unusableScrap', count: 2, inputs: tin }, { id: 'unusableScrap', count: 1, inputs: { ironIngot: 1, lapisLazuli: 1 } },
+  ]);
+  assert.equal(inventory.move(1, 0), true);
+  assert.deepEqual(inventory.slots.slice(0, 2).map((stack) => stack.alloy), ['a2', 'a1'], 'swapped, not merged');
+  assert.deepEqual(inventory.remove(1, 2), { id: 'alloyIngot', count: 2, alloy: 'a1' });
+
+  inventory.slots = Array.from({ length: 24 }, () => ({ id: 'longbow', count: 1 }));
+  inventory.slots[0] = { id: 'alloyIngot', count: 1, alloy: 'a2' };
+  assert.equal(inventory.spaceFor('alloyIngot', 1, { alloy: 'a1' }), 0);
+  assert.equal(inventory.spaceFor('alloyIngot', 1, { alloy: 'a2' }), 1);
 });
