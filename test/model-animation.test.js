@@ -3,7 +3,9 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
 import { GRASS } from '../src/world/world.js';
-import { SCALE } from '../src/entities/rig.js';
+import { SCALE, TILT } from '../src/entities/rig.js';
+import { ASPECT } from '../src/world/world.js';
+import { pitchLook } from '../src/world/camera.js';
 import { Vector3 } from '../vendor/three/three.module.min.js';
 import { runeScene } from '../test-support/spells.js';
 import fireRain from '../src/spells/definitions/fire-rain.js';
@@ -420,4 +422,61 @@ test('a plunge plays its cut through the landing', async () => {
   step(6);
   assert.ok(model.oneShot?.swing === 'plunge', 'the landing does not replace the plunge');
   assert.ok(model.actions[model.oneShot.key].time > 0.4);
+});
+
+test('at the usual pitch the model draws height and depth as it always has', async () => {
+  const model = await figure();
+  model.renderer = fixture().model.renderer;
+  const cos = Math.sqrt(1 - TILT * TILT);
+  const v = new Vector3(0.3, 1.1, -0.4);
+  assert.deepEqual(model.toScreen(v), [(v.x * SCALE) / ASPECT, (-v.y * cos + v.z * TILT) * SCALE]);
+  model.update(0, { ...new Player(0, 0), air: 0.5 });
+  assert.equal(model.renderLift, 0.5 * cos * SCALE);
+  const pose = model.torchPose();
+  const hand = model.torchArm.hand.getWorldPosition(new Vector3());
+  assert.equal(pose.h, hand.y * SCALE * cos);
+  model.renderPose(10.5, 20.5);
+  assert.ok(Math.abs((model.camera.top - model.camera.bottom) * SCALE - 52) < 1e-9);
+});
+
+test('a pitched camera views the model from that angle, with ground depth unchanged', async () => {
+  const model = await figure();
+  model.renderer = fixture().model.renderer;
+  const look = pitchLook(45);
+  model.posePending = true;
+  model.setLook(look);
+  assert.equal(model.posePending, false, 'a pose from the old angle is not read back');
+  const dir = model.camera.position.clone().normalize();
+  assert.ok(Math.abs(dir.y - look.sin) < 1e-9 && Math.abs(dir.z - look.cos) < 1e-9);
+  assert.ok(Math.abs(model.toScreen(new Vector3(0, 1, 0))[1] + SCALE * TILT) < 1e-9, 'a metre up rises 6.5 rows');
+  assert.ok(Math.abs(model.toScreen(new Vector3(0, 0, 1))[1] - SCALE * TILT) < 1e-9, 'a metre nearer drops 6.5 rows');
+  model.update(0, { ...new Player(0, 0), air: 0.5 });
+  assert.ok(Math.abs(model.renderLift - 0.5 * look.rise) < 1e-9);
+  assert.ok(Math.abs(model.torchPose().h - model.torchArm.hand.getWorldPosition(new Vector3()).y * look.rise) < 1e-9);
+  // The real camera's image lands where toScreen says, row for row.
+  model.renderPose(10.5, 20.5);
+  model.camera.updateMatrixWorld(true);
+  for (const p of [new Vector3(0, 1.2, 0), new Vector3(0.2, 0.4, 0.7), new Vector3(0, 0, -0.5)]) {
+    const ndc = p.clone().project(model.camera);
+    const row = -(model.camera.bottom + (ndc.y + 1) / 2 * (model.camera.top - model.camera.bottom)) * look.rowsPerUnit;
+    assert.ok(Math.abs(row - model.toScreen(p)[1]) < 1e-6, `${p.toArray()} row ${row}`);
+  }
+});
+
+for (const deg of [25, 45]) test(`at ${deg}° Fire Rain's raised arms stay inside the render window`, async () => {
+  const model = await figure();
+  model.renderer = fixture().model.renderer;
+  model.setLook(pitchLook(deg));
+  const { player, cast } = runeScene(fireRain);
+  assert.equal(cast().ok, true);
+  for (let frame = 0; frame < 150; frame++) {
+    player.updateJump(1 / 60);
+    model.update(1 / 60, player);
+    model.renderPose(100.25, 100.75);
+    model.camera.updateMatrixWorld(true);
+    for (const joint of Object.values(model.bones)) {
+      const point = joint.getWorldPosition(new Vector3()).project(model.camera);
+      assert.ok(point.y > -1 && point.y < 0.98, `${joint.name} at ${point.y}, height ${player.air}`);
+    }
+  }
 });

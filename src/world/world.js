@@ -742,6 +742,20 @@ export class World {
     return this.relief ? liftRows(this.relief, Math.floor(x), Math.floor(y)) : 0;
   }
 
+  // Lifts the relief again for a new camera pitch: `rise` rows a metre (see
+  // camera.js pitchLook), on the ground each chunk was generated with.
+  // Chunks made later read it as they are generated.
+  setRise(rise) {
+    if (!this.relief || this.relief.rise === rise) return;
+    this.relief.rise = rise;
+    for (const c of this.chunks.values()) {
+      if (!c.lift) continue;
+      const lifted = chunkLift(this.relief, c.cx, c.cy, CHUNK, c.baseType);
+      c.lift = lifted.lift;
+      c.liftRows = lifted.rows;
+    }
+  }
+
   // The chunk if it has been generated, without generating it.
   loaded(cx, cy) {
     const c = this.chunks.get(chunkKey(cx, cy));

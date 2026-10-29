@@ -300,6 +300,10 @@ export class ModelFigure {
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 50);
     this.camera.position.set(0, TILT * 20, COS * 20);
     this.camera.lookAt(0, 0, 0);
+    // Rows a metre of height rises, as a fraction of SCALE, and rows per unit
+    // across the camera's image: both follow the camera pitch (see setLook).
+    this.up = COS;
+    this.rowsPerUnit = SCALE;
 
     // The captured jumps are put onto the skeleton while it still stands in
     // its rest pose, with the hands held as in the library's jump.
@@ -432,7 +436,7 @@ export class ModelFigure {
   // Sets the pose for this frame from the player's state.
   update(dt, p) {
     this.posePending = false;
-    this.renderLift = p.air * COS * SCALE;
+    this.renderLift = p.air * this.up * SCALE;
     const cb = p.combat;
     // The legs follow the ground actually covered this frame: as soon as the
     // body stops, so do they, rather than running on in place while a
@@ -830,9 +834,20 @@ export class ModelFigure {
     this.oneShot = { key, rate, t: 0, from, until: Math.min(until, a.getClip().duration) };
   }
 
+  // Views the model from the camera pitch `look` (see camera.js pitchLook):
+  // ground depth stays as it is and height rises `look.rise` rows a metre.
+  setLook(look) {
+    this.up = look.up;
+    this.rowsPerUnit = look.rowsPerUnit;
+    this.camera.position.set(0, look.sin * 20, look.cos * 20);
+    this.camera.lookAt(0, 0, 0);
+    // A pose rendered at the old angle is never read back.
+    this.posePending = false;
+  }
+
   // Where a point on the model ends up on screen, in cells from the feet.
   toScreen(v) {
-    return [(v.x * SCALE) / ASPECT, (-v.y * COS + v.z * TILT) * SCALE];
+    return [(v.x * SCALE) / ASPECT, (-v.y * this.up + v.z * TILT) * SCALE];
   }
 
   // The sword's base and tip on screen, in cells from the feet, if drawn.
@@ -847,7 +862,7 @@ export class ModelFigure {
   // Hand coordinates locate the ASCII torch, its glow and its throw origin.
   torchPose() {
     const hand = this.torchArm.hand.getWorldPosition(new THREE.Vector3());
-    return { x: hand.x * SCALE / ASPECT, y: hand.z * SCALE * TILT, h: hand.y * SCALE * COS };
+    return { x: hand.x * SCALE / ASPECT, y: hand.z * SCALE * TILT, h: hand.y * SCALE * this.up };
   }
 
   // Submit this frame's pose before the CPU draws the terrain. Flushing
@@ -856,7 +871,7 @@ export class ModelFigure {
     const cx0 = Math.floor(x) - (COLS >> 1);
     const cy0 = Math.floor(y - (this.renderLift ?? 0)) - FEET_ROW;
     const widthM = (COLS * ASPECT) / SCALE;
-    const heightM = ROWS / SCALE;
+    const heightM = ROWS / this.rowsPerUnit;
     // Keep projection anchored to the ground while the image window follows
     // the airborne body; its cells still land at their exact world positions.
     const fx = (x - cx0) / COLS;
