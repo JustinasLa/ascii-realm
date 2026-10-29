@@ -41,7 +41,7 @@ export class CharacterPortrait {
     const signature = equipment === undefined ? 'legacy'
       : JSON.stringify(EQUIPMENT_SLOTS.map((slot) => {
         const stack = equipment?.[slot];
-        return stack ? [stack.id, stack.count] : null;
+        return stack ? [stack.id, stack.count, stack.material, stack.forged?.metal, stack.forged?.colour] : null;
       }));
     if (signature === this.signature && player.skin === this.skin) return false;
 

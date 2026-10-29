@@ -54,7 +54,7 @@ export const HIT_KINDS = Object.freeze({
   etch: Object.freeze({ name: 'Etch', family: 'artisan' }),
   whittle: Object.freeze({ name: 'Whittle', family: 'artisan' }),
   engrave: Object.freeze({ name: 'Engrave', family: 'artisan' }),
-  sew: Object.freeze({ name: 'Sew', family: 'other' }),
+  sew: Object.freeze({ name: 'Sew', family: 'artisan' }),
 });
 
 export const STAT_NAMES = Object.freeze({

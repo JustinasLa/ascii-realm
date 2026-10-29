@@ -10,7 +10,7 @@ src/
   multiplayer/       lobby client, controls, snapshot validation and interpolation
   editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
-  crafting/          furnace smelting, alloy forging, the kept furnace and forge states and the alloy book
+  crafting/          furnace smelting, alloy forging, weapon smithing, the kept furnace and forge states and the alloy book
   inventory/         items, satchel, equipment, quick slots and carry weight
   render/            glyph atlas, WebGL renderer (with a fine grid for trees and rocks), cell writers
   spells/            rune casting simulation, rune definitions by element, animations and sounds
@@ -54,7 +54,7 @@ movement validation. The server uses [ws](https://github.com/websockets/ws) (MIT
 the browser uses its native WebSocket API.
 
 Warm light (`drawFireLight` in `world/fire.js`, used by torches, fires,
-spells and burning furnaces in `world/furnace-glow.js`) rakes across stone
+spells and burning furnaces and alloy forges in `world/furnace-glow.js`) rakes across stone
 by the way it faces (`world/surface-light.js`).
 The renderer keeps a normal, gloss and water clarity per cell (`cellLit`,
 written by the water shader for riverbed stone glyphs and copied with the

@@ -23,7 +23,7 @@ import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrume
 import { toMetres } from '../../src/entities/monsters.js';
 import { InstrumentKeys } from '../../src/core/instrument-keys.js';
 import { MusicNotes } from '../../src/world/music-notes.js';
-import { isBow, isThrown } from '../../src/entities/loadout.js';
+import { heldKey, isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { NightLight } from '../../src/world/night-light.js';
 import { shaftTier } from '../../src/world/moon-shafts.js';
@@ -38,6 +38,8 @@ import { pickStruck, TargetTracker, targetId } from '../../src/core/target.js';
 import { createHaptics } from '../../src/core/haptics.js';
 import { interaction, performInteraction } from '../../src/core/interact.js';
 import { Furnaces, nearbyFurnace } from '../../src/crafting/furnace.js';
+import { AlloyBook, describeStack } from '../../src/crafting/alloy-book.js';
+import { nearbyForge } from '../../src/crafting/alloys.js';
 import { metresBetween } from '../../src/multiplayer/chat.js';
 import { figureTop } from '../../src/ui/bubbles.js';
 import { displayName } from '../../src/multiplayer/protocol.js';
@@ -278,6 +280,15 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       update() { this.updates++; }
     },
     drawFurnaceGlow: noop, lightFurnace: noop,
+    // The forge screen does the same, keeping what it was given (main-forge.test.js).
+    AlloyBook, describeStack, nearbyForge,
+    AlloyForgeScreen: class {
+      constructor(options) { Object.assign(this, options); this.isOpen = false; this.opened = []; this.told = []; this.updates = 0; }
+      open(id) { this.opened.push(id); this.isOpen = true; this.onToggle(true); return true; }
+      close() { this.isOpen = false; this.onToggle(false); }
+      tell(done) { this.told.push(done); }
+      update() { this.updates++; }
+    },
     // The character pages count their renders and the buttons focused.
     CharacterPages: class {
       constructor(options) {
@@ -293,7 +304,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }
     },
-    Projectiles, screenToWorld: () => null, isBow, isThrown, SCALE: 13, TILT: 0.5,
+    Projectiles, screenToWorld: () => null, heldKey, isBow, isThrown, SCALE: 13, TILT: 0.5,
     Spellcasting: class extends inert() { constructor(options) { super(); this.options = options; this.effects = { draw: noop }; } },
     SpellControls: class extends inert() {
       constructor(casting, options) { super(); this.options = options; }

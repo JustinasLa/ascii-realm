@@ -14,6 +14,9 @@ import { createHaptics } from './core/haptics.js';
 import { interaction, performInteraction } from './core/interact.js';
 import { Furnaces, nearbyFurnace } from './crafting/furnace.js';
 import { FurnaceScreen } from './ui/furnace.js';
+import { AlloyBook, describeStack } from './crafting/alloy-book.js';
+import { nearbyForge } from './crafting/alloys.js';
+import { AlloyForgeScreen } from './ui/alloy-forge.js';
 import { drawFurnaceGlow, lightFurnace } from './world/furnace-glow.js';
 import { FRAME_BIAS, phoneDefaultCell, watchLayout, ZoomSlots } from './core/layout.js';
 import { watchPhone } from './core/phone.js';
@@ -30,7 +33,7 @@ import { AnimalFigures } from './entities/animal-figures.js';
 import { Horses } from './entities/horses.js';
 import { HorseFigures } from './entities/horse-figure.js';
 import { HuntDrops } from './entities/hunt-drops.js';
-import { isBow, isThrown } from './entities/loadout.js';
+import { heldKey, isBow, isThrown } from './entities/loadout.js';
 import { Player } from './entities/player.js';
 import { Spellcasting } from './spells/casting.js';
 import { loadSpells } from './spells/catalog.js';
@@ -581,7 +584,9 @@ const inventoryScreen = new InventoryScreen({
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
   phone: () => device.phone,
-  isCovered: () => furnaceScreen.isOpen,
+  isCovered: () => furnaceScreen.isOpen || forgeScreen.isOpen,
+  describe: (stack) => describeStack(stack, alloyBook),
+  describeVersion: () => alloyBook.version,
 });
 // Furnaces smelt on game time, kept on this device per world.
 const furnaces = new Furnaces({ storage: walletStorage, seed });
@@ -593,12 +598,19 @@ const furnaceScreen = new FurnaceScreen({ furnaces, inventory,
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind) => hud.notify(message, kind) });
-Object.assign(debug, { furnaces, furnaceScreen });
-window.addEventListener('pagehide', () => furnaces.save());
-document.addEventListener('visibilitychange', () => document.hidden && furnaces.save());
+// The alloy book and forge contents, kept on this device per world; `debug.alloyRandom` pins the rolls.
+const alloyBook = new AlloyBook({ storage: walletStorage, seed });
+let lastForge = null;
+const forgeScreen = new AlloyForgeScreen({ book: alloyBook, inventory, onToggle: furnaceScreen.onToggle,
+  onNotify: furnaceScreen.onNotify, onDiscover: () => dust.sparks(lastForge.x, lastForge.y - 4, 18),
+  random: () => (debug.alloyRandom ?? Math.random)() });
+Object.assign(debug, { furnaces, furnaceScreen, alloyBook, forgeScreen });
+const saveStations = () => { furnaces.save(); alloyBook.save(); };
+window.addEventListener('pagehide', saveStations);
+document.addEventListener('visibilitychange', () => document.hidden && saveStations());
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
-  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || chat.isOpen);
+  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen || chat.isOpen);
 }
 debug.hud = hud;
 debug.wallet = wallet;
@@ -673,7 +685,7 @@ debug.tint = tintPicker;
 // rune wheel are declared further down and are read only once a key or tap
 // arrives.
 const panelOpen = () => creator.isOpen || builder.enabled || inventoryScreen.isOpen || furnaceScreen.isOpen || phoneMenu.open
-  || !!spellControls.menu?.isOpen;
+  || forgeScreen.isOpen || !!spellControls.menu?.isOpen;
 const chat = new ChatUi({ doc: document, win: window, phone: device, client: multiplayer, scene: canvas,
   isControlTarget,
   mayOpen: () => !!multiplayer.room && !gate.waiting && !panelOpen() && !isGameplayBlocked(),
@@ -714,7 +726,7 @@ debug.projectiles = projectiles;
 // How many arrows are left, or of the weapon being thrown.
 const ammoNote = document.createElement('div');
 hud.attachNote(ammoNote);
-const weaponKeyOf = (stack) => stack ? `${stack.id}:${stack.material ?? ''}` : '';
+const weaponKeyOf = (stack) => stack ? `${stack.id}:${heldKey(stack)}` : '';
 let lastWeapon = weaponKeyOf(inventory.equipment.mainHand);
 // The pointer over the scene and the last frame drawn, for aiming.
 let pointer = null;
@@ -1154,7 +1166,7 @@ touch.setCastHold((pointerId, isTap) => spellControls.openTouch(pointerId, isTap
 // What the contextual touch button can reach. Ground items appear once the
 // game keeps a collection of them.
 const interactables = () => ({ player, mushrooms, fires, world, collection: debug.collection ?? null,
-  furnaces: { nearby: (p) => nearbyFurnace(world, p) } });
+  furnaces: { nearby: (p) => nearbyFurnace(world, p) }, forges: { nearby: (p) => nearbyForge(world, p) } });
 loadSpells().then(spells => {
   void prepareSpellSounds(sound.engine, spells);
   casting.spells = new Map(spells.map(s => [s.id, s]));
@@ -1483,6 +1495,7 @@ function frame(now) {
       const done = performInteraction(interactables(), { douse: touchInteract });
       if (done?.kind === 'fire') fireNotice(fireMessages[done.result]);
       if (done?.kind === 'furnace') furnaceScreen.open(done.prop.id);
+      if (done?.kind === 'forge') forgeScreen.open((lastForge = done.prop).id);
       // What the drop store's collection takes is told once, with its sound,
       // as its pickup events are spent below.
       const told = done?.result?.ok && debug.collection === huntCollection;
@@ -1653,6 +1666,8 @@ function frame(now) {
   huntCollection.events.length = 0;
   huntDrops.expire(huntCollection.currentTime);
   furnaces.update(dt);
+  const timedOut = alloyBook.update(dt);
+  if (timedOut) forgeScreen.tell(timedOut);
   dust.update(dt);
   splashes.update(dt);
   if (!debug.freeze) {
@@ -1836,7 +1851,7 @@ function frame(now) {
     if (slices) return slices.filter(({ depth }) => !hides(p, p.y + depth)).map(({ depth, cells }) => ({ y: p.y + depth,
       draw: () => drawProp(renderer, at, p, undefined, time, player, seed, false, cells) }));
     if (hides(p, p.y)) return [];
-    const lit = p.kind === 'furnace' && furnaces.lit(p.id);
+    const lit = p.kind === 'furnace' ? furnaces.lit(p.id) : p.kind === 'alloy-forge' && alloyBook.lit(p.id);
     if (lit) litFurnaces.push(p);
     return [{ y: p.y, draw: () => {
       drawProp(renderer, at, p, undefined, time, player, seed);
@@ -2007,17 +2022,19 @@ function frame(now) {
   hud.setFoes(woundedFoes(monsterCells));
   hud.setLoot(huntDrops.in(view.x0 - 2, view.y0 - 2, view.x0 + view.cols + 2, view.y0 + view.rows + 4), player, inventory);
   const playing = !paused && !isGameplayBlocked() && !player.magicStunned;
-  // The furnace in reach comes first, as E and the touch button use it.
+  // The furnace and then the forge in reach come first, as E and the touch button use them.
   const nearFurnace = playing ? nearbyFurnace(world, player) : null;
-  const nearbyMushroom = playing && !nearFurnace ? mushrooms.nearby(player) : null;
-  const nearbyOre = !nearFurnace && !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
-  hud.setPrompt(nearFurnace ? '[E] Use furnace' : nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
+  const nearForge = playing && !nearFurnace ? nearbyForge(world, player) : null;
+  const nearbyMushroom = playing && !nearFurnace && !nearForge ? mushrooms.nearby(player) : null;
+  const nearbyOre = !nearFurnace && !nearForge && !nearbyMushroom && !paused && !isGameplayBlocked() ? mining.nearby(player, toolOf(inventory.equipment)) : null;
+  hud.setPrompt(nearFurnace ? '[E] Use furnace' : nearForge ? '[E] Use alloy forge' : nearbyMushroom ? (nearbyMushroom.cooldown > mushrooms.time
     ? 'Glowcap · spores settling…' : '[E] Disturb glowcap · release spores') : nearbyOre?.prompt ?? '');
-  touch.interact.update(playing ? interaction({ ...interactables(), furnaces: { nearby: () => nearFurnace } }) : null, time);
+  touch.interact.update(playing ? interaction({ ...interactables(), furnaces: { nearby: () => nearFurnace }, forges: { nearby: () => nearForge } }) : null, time);
   hud.update(dt, hudView);
   chat.update(dt);
   inventoryScreen.update();
   furnaceScreen.update();
+  forgeScreen.update();
   spellControls.update();
   const workMs = performance.now() - started;
   // Frames are measured by the real time between them, never the clamped

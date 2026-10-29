@@ -71,7 +71,7 @@ test('the six ingredients carry the forge numbers', () => {
   assert.equal(MAX_CATALYSTS, 4);
   assert.deepEqual(JSON.parse(JSON.stringify(COMBINATIONS)), { metal: ['metal', 'crystal'] });
   assert.deepEqual(Object.fromEntries(Object.entries(HIT_KINDS).map(([kind, { family }]) => [kind, family])), {
-    hit: 'metal', smallHit: 'metal', etch: 'artisan', whittle: 'artisan', engrave: 'artisan', sew: 'other',
+    hit: 'metal', smallHit: 'metal', etch: 'artisan', whittle: 'artisan', engrave: 'artisan', sew: 'artisan',
   });
 });
 

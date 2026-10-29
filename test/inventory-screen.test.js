@@ -1116,3 +1116,32 @@ test('on the bag page arrows still move through the slots, even from its tab', (
   assert.equal(screen.selection.index, 7);
   assert.equal(document.activeElement, screen._selectedButton());
 });
+
+test('a stack with its own description shows its name in its colour, its text and stats', (t) => {
+  let version = 0;
+  let name = 'Ferranite';
+  const inventory = new Inventory({ starter: false });
+  inventory.add('alloyIngot', 1, { alloy: 'a1' });
+  inventory.add('rawTin', 2);
+  const { screen, press, bagButton } = mount(t, { inventory, describeVersion: () => version,
+    describe: (stack) => (stack.id === 'alloyIngot' ? { name, colour: '#B0B3B5', description: `An ingot of ${name}.`,
+      stats: { 'Attack Damage': '3.15', Tier: '1' } } : null) });
+  press('KeyI');
+  assert.equal(screen.itemName.textContent, 'Ferranite');
+  assert.equal(screen.itemName.style.color, '#B0B3B5');
+  assert.equal(screen.description.textContent, 'An ingot of Ferranite.');
+  assert.deepEqual(screen.stats.children.map((node) => node.textContent), ['Attack Damage', '3.15', 'Tier', '1']);
+  assert.equal(bagButton(0).getAttribute('aria-label'), 'Slot 1: Ferranite, count 1');
+  // A rename shows once the describer's version moves.
+  name = 'Moon Iron';
+  screen.update();
+  assert.equal(screen.itemName.textContent, 'Ferranite');
+  version++;
+  screen.update();
+  assert.equal(screen.itemName.textContent, 'Moon Iron');
+  // Anything else keeps its item's own text and the default ink.
+  press('ArrowRight');
+  assert.equal(screen.itemName.textContent, 'Raw Tin');
+  assert.equal(screen.itemName.style.color, '');
+  assert.equal(bagButton(1).getAttribute('aria-label'), 'Slot 2: Raw Tin, count 2');
+});
