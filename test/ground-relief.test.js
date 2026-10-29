@@ -89,6 +89,23 @@ test('a steep drop shows earth below its first slope rows', () => {
   const r = renderer(view);
   drawRaisedRow(r, world, view, y);
   assert.equal(column(r, x - view.x0).filter(Boolean).length, lift - front + 1);
+  // Each slope row is a neighbouring column's ground, dimmed for the first
+  // two rows and tinted as earth below them.
+  const flat = renderer(view);
+  drawGround(flat, world, view, 0, null, 0, true);
+  const top = y - lift - view.y0;
+  let earth = 0;
+  for (let k = 1; k <= lift - front; k++) {
+    const tint = k <= 2 ? [0.8, 0.8, 0.8] : [0.62, 0.55, 0.48];
+    const o = ((top + k) * view.cols + x - view.x0) * 4;
+    const from = ((y - view.y0) * view.cols + x - view.x0 + (k & 1 ? 1 : -1)) * 4;
+    for (let c = 0; c < 3; c++) {
+      assert.ok(Math.abs(r.fg[o + c] - flat.fg[from + c] * tint[c]) <= 1, `row ${k}, channel ${c}`);
+    }
+    // Where the slope's own tint would miss by more than the rounding.
+    if (k > 2 && [0, 1, 2].some((c) => flat.fg[from + c] * (0.8 - tint[c]) > 2)) earth++;
+  }
+  assert.ok(earth > 0, 'an earth row whose tint tells it from the slope');
 });
 
 test('rows above and below the view are clipped, and flat rows draw nothing', () => {
