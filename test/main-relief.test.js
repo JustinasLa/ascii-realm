@@ -83,9 +83,9 @@ for (const shape of [false, true]) test(`on the knoll the camera, ${shape ? 'sha
   const { player, world, camera } = game;
   player.x = world.spawn.x + 75;
   player.y = world.spawn.y - 4;
+  for (let i = 0; i < 120; i++) frame();
   const lift = world.liftAt(player.x, player.y);
   assert.equal(lift, 11);
-  for (let i = 0; i < 120; i++) frame();
   assert.ok(Math.abs(camera.y - (player.y - 11 - lift)) < 0.5, `camera ${camera.y}`);
   figures.length = 0;
   shadows.length = 0;

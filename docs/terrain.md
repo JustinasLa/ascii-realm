@@ -25,7 +25,9 @@ lobby ignores the scene and plays on flat land.
 Height is only a lift on screen: ground `h` metres high is drawn
 `h × 11.26` rows higher (at most 24 rows). That is the scale the character
 uses for a jump, so the ground, the player and the props on it agree.
-Heights are smooth, rounded to whole rows, not stepped in blocks.
+Heights are smooth, rounded to whole rows, not stepped in blocks. Water and
+shore are never raised, even inside the hill, and ground painted over with
+water drops flat.
 
 - **Ground.** After the flat ground is drawn, each raised ground row is
   drawn again in painter's order among the sprites: its top its lift higher,
