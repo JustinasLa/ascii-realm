@@ -585,6 +585,8 @@ const inventoryScreen = new InventoryScreen({
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
+  // A dropped card goes down as a whole stack.
+  onDrop: (index) => huntCollection.drop(player, index, inventory.slots[index]?.count ?? 1),
   phone: () => device.phone,
   isCovered: () => furnaceScreen.isOpen || forgeScreen.isOpen || smithyScreen.isOpen,
   describe: (stack) => describeWeapon(stack, alloyBook) ?? describeStack(stack, alloyBook),
