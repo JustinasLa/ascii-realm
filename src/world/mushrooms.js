@@ -315,9 +315,11 @@ export class Mushrooms {
     this.spores = this.spores.filter(s => s.age < s.life);
   }
 
-  prepare(view, loadedOnly = false) {
+  // `below` reaches further south only, for caps raised into the view from
+  // below it.
+  prepare(view, loadedOnly = false, below = 0) {
     const nodes = this.nodesIn(view.x0 - 13, view.y0 - view.rows - 20,
-      view.x0 + view.cols + 13, view.y0 + view.rows + 20, loadedOnly);
+      view.x0 + view.cols + 13, view.y0 + view.rows + 20 + below, loadedOnly);
     // A few long-lived motes hang around each patch even at rest, as in the
     // reference. Derive them from time and position rather than accumulating
     // particles for unloaded countryside.
