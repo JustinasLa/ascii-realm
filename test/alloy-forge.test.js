@@ -304,6 +304,21 @@ test('with a full bag emptying gives back what fits, and the base stays while a 
   assert.deepEqual(base.toJSON(), { base: 'steelIngot', catalysts: [], output: null });
 });
 
+test('a catalyst the bag can\'t take doesn\'t hold back an earlier one whose stack has room', () => {
+  // No free slot: the tin joins its stack, the lapis has nowhere to go.
+  const inventory = fill(bag({ id: 'rawTin', count: 1 }));
+  const forge = mix('ironIngot', 'copperIngot', 'rawTin', 'lapisLazuli');
+  assert.deepEqual(emptyForge(forge, inventory), {
+    ok: true, status: 'emptied', message: 'Took back Raw Tin. Your bag has no room for the rest.', ids: ['rawTin'],
+  });
+  assert.deepEqual(inventory.slots[0], { id: 'rawTin', count: 2 });
+  assert.deepEqual(forge.ingredients, ['ironIngot', 'copperIngot', 'lapisLazuli']);
+
+  inventory.slots[1] = null;
+  assert.equal(emptyForge(forge, inventory).message, 'Took back Lapis Lazuli. Your bag has no room for the rest.');
+  assert.deepEqual(forge.ingredients, ['ironIngot', 'copperIngot']);
+});
+
 test('the screen model shows the slots, the known result and why the forge can or cannot fire', () => {
   const alloys = book();
   const inventory = bag(

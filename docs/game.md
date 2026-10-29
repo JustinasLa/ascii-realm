@@ -281,7 +281,8 @@ short version see the [README](../README.md).
   Bronze Ingots have no source yet. Loading takes one item at a time from the
   bag, the base first. With a full bag a firing's result waits in the forge to
   be taken, and the forge won't fire until it is; emptying the forge gives back
-  the catalysts, last loaded first, then the base, as far as the bag has room.
+  each catalyst the bag has room for, last loaded first, then the base once no
+  catalyst is left.
   A new alloy can be renamed within a minute of game time, in letters and
   underscores (shown as spaces), to a name no other alloy has in any case. The
   book of alloys and failed mixes, and each forge's loaded mix and waiting

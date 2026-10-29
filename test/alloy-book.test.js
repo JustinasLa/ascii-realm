@@ -206,6 +206,8 @@ test('each invalid alloy is dropped on its own', () => {
     { type: 'crystal' }, { tier: 2 }, { stats: [] }, { stats: null }, { stats: { speed: 1 } },
     { stats: { attackDamage: 2e6 } }, { stats: { attackDamage: '3' } }, { hits: { hit: 0 } }, { hits: { hit: 4 } },
     { hits: { hit: 1.5 } }, { hits: { punch: 1 } }, { xp: -1 }, { xp: '2' },
+    // Ids that can't become strings are dropped before they are keyed.
+    { base: { toString: null } }, { catalysts: [{ toString: null }] },
   ];
   for (const variant of variants) {
     const bad = variant && typeof variant === 'object' ? { ...IRON_LAPIS, id: 'a3', name: 'Other', ...variant } : variant;
@@ -240,7 +242,8 @@ test('each invalid forge is dropped on its own, and at most 32 load', () => {
     d: { ...ok, base: null }, e: { ...ok, catalysts: 'rawTin' }, f: { ...ok, catalysts: ['rawTin', 'rawTin'] },
     g: { ...ok, output: { id: 'alloyIngot', count: 2, alloy: 'a1' } }, h: { ...ok, output: { id: 'alloyIngot', count: 1, alloy: 'a9' } },
     i: { ...ok, output: { id: 'unusableScrap', count: 1 } }, j: { ...ok, output: { id: 'ironIngot', count: 1 } },
-    k: { base: 'ironIngot', catalysts: [] },
+    k: { base: 'ironIngot', catalysts: [] }, o: { ...ok, base: { toString: null } },
+    p: { ...ok, catalysts: [{ toString: null }] },
   };
   const good = {
     l: ok, m: { base: null, catalysts: [], output: { id: 'unusableScrap', count: 1, inputs: { rawTin: 1, ironIngot: 1 } } },
