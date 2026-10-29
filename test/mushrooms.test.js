@@ -217,6 +217,16 @@ test('wide views skip ungenerated chunks and terrain edits hide mushrooms', () =
   assert.deepEqual(mushrooms.prepare(view, true), []);
 });
 
+test('a deeper reach below the view looks further south only', () => {
+  const mushrooms = new Mushrooms(new Meadow());
+  const boxes = [];
+  mushrooms.nodesIn = (...box) => { boxes.push(box); return []; };
+  const view = { x0: 0, y0: 0, cols: 80, rows: 60 };
+  mushrooms.prepare(view, true);
+  mushrooms.prepare(view, true, 24);
+  assert.deepEqual(boxes, [[-13, -80, 93, 80, true], [-13, -80, 93, 104, true]]);
+});
+
 test('bending keeps roots fixed and the reflection uses the same deformed cells', () => {
   const { mushrooms, node } = setup();
   const view = { x0: -50, y0: -50, cols: 120, rows: 120 };

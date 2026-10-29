@@ -357,14 +357,16 @@ export function groveProps(world, cx, cy, size, props) {
 
 // Dense woods are this page's own: lobbies share the sparse world. A dense
 // page asked to join or create a lobby keeps the request, reloads into the
-// sparse world without opening a connection, and makes it from there.
+// sparse world without opening a connection, and makes it from there. If the
+// request can't be kept (no session storage, or it refuses), a reload would
+// lose it, so the page stays put and `blocked` tells the player why.
 export const PENDING_LOBBY = 'ascii-realm-pending-lobby';
 
-export function guardLobbyConnect(client, { dense, storage, reload }) {
+export function guardLobbyConnect(client, { dense, storage, reload, blocked }) {
   if (!dense) return false;
   client.connect = ({ mode, name, seed, code, server = '' }) => {
     const request = { mode, name, seed, code, server };
-    try { storage.setItem(PENDING_LOBBY, JSON.stringify(request)); } catch {}
+    try { storage.setItem(PENDING_LOBBY, JSON.stringify(request)); } catch { blocked(request); return; }
     reload(request);
   };
   return true;

@@ -625,9 +625,12 @@ debug.multiplayer = multiplayer;
 debug.remotePlayers = remotePlayers;
 // Creating or joining a lobby from dense woods or the hill scene reloads into
 // the sparse world first, and the request is made there, so no lobby ever
-// holds a dense or raised page.
+// holds a dense or raised page. Where the browser won't keep the request
+// across the reload, the page stays and says what to do instead.
+const lobbyBlocked = `Leave ${hillScene ? 'the hill scene' : 'the dense woods'} first: lobbies play in the plain world, and this browser won't let the page carry your request there.`;
 guardLobbyConnect(multiplayer, { dense: reloadsForLobby, storage: session,
-  reload: (request) => location.replace(sparseWorldUrl(location.href, request)) });
+  reload: (request) => location.replace(sparseWorldUrl(location.href, request)),
+  blocked: () => { multiplayer.setStatus('error', lobbyBlocked); hud.notify(lobbyBlocked, 'info'); } });
 // While the creator is open the lobby waits; the last join asked for is made
 // once it closes. A dense page's reload waits too, and so does a request
 // resumed after one.
@@ -1756,7 +1759,7 @@ function frame(now) {
   debug.metrics.nightMs = performance.now() - nightStart;
   const mirror = reflector(time, view);
   const deep = below ? { ...view, rows: view.rows + below } : view;
-  const visibleMushrooms = mushrooms.prepare(deep, wide);
+  const visibleMushrooms = mushrooms.prepare(view, wide, below);
   const visibleFires = fires.prepare(deep, time);
   const visibleTorches = torches.prepare(deep, time, player, model?.torchPose());
   ambience.update(dt, time, world, view, { lights: lightsOf(visibleFires, visibleTorches), wind: weather.wind });
