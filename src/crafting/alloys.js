@@ -307,12 +307,14 @@ export function fireForge(forge, inventory, book, propId, random = Math.random) 
   return result('fired', message, { ok: true, outcome, alloy, waiting });
 }
 
-// Gives the catalysts back, last loaded first, then the base, as far as the bag
-// has room. The base stays while any catalyst does; the output is left alone.
+// Gives back each catalyst the bag has room for, last loaded first, then the
+// base. The base stays while any catalyst does; the output is left alone.
 export function emptyForge(forge, inventory) {
   if (!forge.base) return result('empty', 'The forge is empty.');
   const back = [];
-  while (forge.catalysts.length && inventory.add(forge.catalysts.at(-1), 1)) back.push(forge.catalysts.pop());
+  for (let i = forge.catalysts.length - 1; i >= 0; i--) {
+    if (inventory.add(forge.catalysts[i], 1)) back.push(...forge.catalysts.splice(i, 1));
+  }
   if (!forge.catalysts.length && inventory.add(forge.base, 1)) {
     back.push(forge.base);
     forge.base = null;
