@@ -324,7 +324,9 @@ export class InventoryScreen {
     this.onToggle(open);
     if (open) {
       this.update();
-      // The sheet opens at its top, on the doll, wherever the selection is.
+      // The sheet opens at its top, on the doll, wherever the selection is
+      // and however far down it was scrolled when it closed.
+      this.screen.scrollTop = 0;
       if (this.page === 'inventory') this._selectedButton()?.focus({ preventScroll: true });
       else this._tab().focus();
     } else {

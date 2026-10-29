@@ -310,6 +310,16 @@ test('opening the inventory blocks the scene and closing returns focus to the ca
   assert.deepEqual(toggles, [true, false, true, false, true, false]);
 });
 
+test('scrolled down to the bag and closed, the sheet reopens at its top', (t) => {
+  const { screen } = mount(t);
+  screen.setOpen(true);
+  screen.screen.scrollTop = 240;
+  screen.setOpen(false);
+  assert.equal(screen.screen.scrollTop, 240, 'closing leaves the scroll alone');
+  screen.setOpen(true);
+  assert.equal(screen.screen.scrollTop, 0);
+});
+
 test('a blurred window forgets swallowed key releases', (t) => {
   const { window, screen, press } = mount(t);
   press('KeyI');
