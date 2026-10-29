@@ -21,11 +21,10 @@ async function start() {
   return { ...loaded, block, notes, prompts };
 }
 
-test('the outlaw sets out with the sword drawn and a stone pickaxe on hotbar 2', async () => {
+test('the outlaw sets out with the sword drawn and a stone pickaxe in the bag', async () => {
   const { game } = await start();
   assert.equal(game.inventory.equipment.mainHand.id, 'shortSword');
-  assert.equal(game.inventory.hotbar[0], 'shortSword');
-  assert.equal(game.inventory.hotbar[1], 'stonePickaxe');
+  assert.deepEqual(game.inventory.slots.filter(Boolean), [{ id: 'stonePickaxe', count: 1 }]);
 });
 
 test('swinging a pickaxe at ore mines it, and the ore lies with the loot', async () => {

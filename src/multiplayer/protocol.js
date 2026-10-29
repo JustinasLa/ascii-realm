@@ -2,7 +2,7 @@ import { isInstrumentNote } from '../audio/instruments.js';
 import { readForged } from '../crafting/forged.js';
 import { isMaterialId } from '../entities/weapons.js';
 import { nameError, normalName, textLength } from '../character/rules.js';
-import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
+import { EQUIPMENT_SLOTS, ITEMS, fitsSlot } from '../inventory/items.js';
 import { parseTint } from './tint.js';
 
 export { PLAYER_COLORS } from './tint.js';
@@ -36,7 +36,7 @@ export function readEquipment(raw) {
   for (const slot of EQUIPMENT_SLOTS) {
     const stack = raw[slot];
     const id = stack?.id;
-    if (typeof id !== 'string' || !Object.hasOwn(ITEMS, id) || ITEMS[id].equipmentSlot !== slot) continue;
+    if (typeof id !== 'string' || !Object.hasOwn(ITEMS, id) || !fitsSlot(ITEMS[id], slot)) continue;
     const forged = readForged(stack.forged, { look: true });
     equipment[slot] = { id, count: 1, ...(isMaterialId(stack.material) ? { material: stack.material } : {}), ...(forged ? { forged } : {}) };
   }

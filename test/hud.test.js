@@ -75,32 +75,18 @@ test('the status frame shows the attached caster mana under health', (t) => {
   assert.equal(meter(document.body, 'hud-mana').current, 100);
 });
 
-test('HUD hotbar reflects equipment, selection, and consumed quick-item counts', (t) => {
-  const selections = [];
+test('the HUD has no quick slots, only the inventory button in its frame', (t) => {
   let inventoryOpened = 0;
-  const { document, player, inventory, hud } = mount(t, {
-    onSelect: (index) => selections.push(index),
-    onInventory: () => { inventoryOpened++; },
-  });
-  const slots = byClass(document.body, 'hud-slot');
-  assert.equal(slots.length, 9);
-  assert.equal(slots[0].getAttribute('aria-pressed'), 'true');
-  assert.ok(slots[0].classList.contains('equipped'));
-  assert.match(slots[0].getAttribute('aria-label'), new RegExp(ITEMS.shortSword.name));
-  slots[1].click();
-  assert.deepEqual(selections, [1]);
-
-  inventory.selectHotbar(1);
-  player.vitals.health = 20;
-  assert.equal(inventory.useSelected(player.vitals), true);
-  hud.update(0, view);
-  assert.equal(slots[0].getAttribute('aria-pressed'), 'false');
-  assert.equal(slots[1].getAttribute('aria-pressed'), 'true');
-  assert.match(slots[1].getAttribute('aria-label'), /Healing Draught/);
-  assert.match(slots[1].textContent, /x\s*2/);
-  const inventoryButton = allElements(document.body,
-    (element) => element.tagName === 'BUTTON' && /inventory/i.test(element.getAttribute('aria-label') ?? ''))[0];
-  assert.ok(inventoryButton, 'inventory control is labeled');
+  const { document } = mount(t, { onInventory: () => { inventoryOpened++; } });
+  for (const name of ['hud-hotbar', 'hud-hotbar-wrap', 'hud-quick-hint', 'hud-selected-item']) {
+    assert.equal(byClass(document.body, name).length, 0, name);
+  }
+  assert.doesNotMatch(document.body.textContent, /1–9|quick slot/i);
+  // The note slots wait, hidden, for an instrument.
+  assert.equal(byClass(document.body, 'hud-notes')[0].hidden, true);
+  const wrap = byClass(document.body, 'hud-inventory-wrap')[0];
+  const inventoryButton = byClass(wrap, 'hud-inventory-button')[0];
+  assert.match(inventoryButton.getAttribute('aria-label'), /inventory/i);
   inventoryButton.click();
   assert.equal(inventoryOpened, 1);
 });
@@ -116,20 +102,14 @@ test('pickup events and arbitrary player, item, and toast text are displayed as 
   const name = '<img src=x>';
   const itemName = '<svg onload=evil()>';
   const message = '<script>alert(1)</script>';
-  const inventory = {
-    selectedHotbar: 0,
-    getHotbar: (index) => index === 0
-      ? { item: { id: 'custom', name: itemName, glyph: '<b>' }, count: 1, equipped: false }
-      : null,
-  };
-  const { document, hud } = mount(t, { name, inventory });
+  const { document, hud } = mount(t, { name });
   assert.ok(document.body.textContent.includes(name));
-  assert.ok(byClass(document.body, 'hud-slot')[0].getAttribute('aria-label').includes(itemName));
-  assert.equal(byClass(document.body, 'hud-slot-glyph')[0].textContent, '<b>');
+  hud.notify(itemName);
   hud.notify(message);
   hud.showEvent({ type: 'pickup', id: 'healingDraught', count: 2 });
   const messages = byClass(document.body, 'hud-toast').map((element) => element.textContent);
   assert.ok(messages.some((text) => text.includes(message)));
+  assert.ok(messages.some((text) => text.includes(itemName)));
   assert.ok(messages.some((text) => text.includes(ITEMS.healingDraught.name) && text.includes('2')));
   assert.equal(allElements(document.body, (element) => ['IMG', 'SCRIPT', 'SVG', 'B'].includes(element.tagName)).length, 0);
 });

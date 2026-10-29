@@ -61,9 +61,9 @@ function mount(t) {
   const model = focusModel(canvas);
   const selected = [];
   const inventory = new Inventory();
-  // As the game does: play or select, then hand the keys back to the canvas.
+  // As the game does: play, then hand the keys back to the canvas.
   const hud = new Hud({ player: new Player(104, 206), inventory, name: 'Kael',
-    onSelect: (index, event) => { selected.push([index, Boolean(event?.shiftKey)]); canvas.focus(); } });
+    onNote: (index, event) => { selected.push([index, Boolean(event?.shiftKey)]); canvas.focus(); } });
   t.after(() => hud.destroy());
   hud.update(0, view);
   return { hud, model, selected, slots: byClass(document.body, 'hud-slot') };
@@ -92,20 +92,4 @@ test('a Shift-click on a note slot keeps focus, Shift and running', (t) => {
   assert.equal(model.active.tagName, 'CANVAS');
   assert.equal(isDown('ShiftLeft', 'ShiftRight'), true);
   assert.deepEqual(moveAxis(), { x: 1, y: 0 });
-});
-
-test('quick slots without an instrument, and slot 9 with one, still take focus as before', (t) => {
-  const { hud, model, selected, slots } = mount(t);
-  holdShiftAndRun();
-  press(slots[1], model, { shiftKey: true });
-  // The button takes focus and the game lets go of held keys, then gets focus back.
-  assert.deepEqual(model.log, ['focusout:CANVAS', 'focusin:BUTTON', 'focusout:BUTTON', 'focusin:CANVAS']);
-  assert.equal(isDown('ShiftLeft'), false);
-
-  hud.setInstrument({ id: 'lute', shifted: false });
-  hud.update(0, view);
-  model.log.length = 0;
-  press(slots[8], model);
-  assert.deepEqual(model.log, ['focusout:CANVAS', 'focusin:BUTTON', 'focusout:BUTTON', 'focusin:CANVAS']);
-  assert.deepEqual(selected, [[1, true], [8, false]]);
 });

@@ -9,8 +9,6 @@ const countOf = (inventory, id) => inventory.slots.reduce(
 const stateOf = (inventory) => structuredClone({
   slots: inventory.slots,
   equipment: inventory.equipment,
-  hotbar: inventory.hotbar,
-  selectedHotbar: inventory.selectedHotbar,
   capacity: inventory.capacity,
   events: inventory.events,
   weight: inventory.weight,
@@ -46,16 +44,14 @@ test('a new collection bag is empty and emits no starter pickups', () => {
   assert.equal(inventory.slots.length, 24);
   assert.ok(inventory.slots.every((stack) => stack === null));
   assert.ok(Object.values(inventory.equipment).every((stack) => stack === null));
-  assert.ok(inventory.hotbar.every((id) => id === null));
   assert.equal(inventory.capacity, 60);
   assert.equal(inventory.weight, 0);
   assert.deepEqual(inventory.events, []);
 });
 
-test('space checks do not mutate live stacks, bindings or pickup events', () => {
+test('space checks do not mutate live stacks or pickup events', () => {
   const inventory = bag();
   inventory.add('stick', 4);
-  inventory.assignHotbar(2, 'stick');
   const stack = inventory.slots[0];
   const before = stateOf(inventory);
   assert.equal(inventory.spaceFor('stick', 50), 50);
@@ -116,14 +112,12 @@ test('a large collection request fills bounded stacks and conserves rejected qua
 test('equipped gear still uses capacity and cannot be removed through a bag index', () => {
   const inventory = bag(ITEMS.longbow.weight + 0.3);
   inventory.add('longbow');
-  inventory.assignHotbar(0, 'longbow');
   inventory.equip(0);
   const before = stateOf(inventory);
   assert.equal(inventory.remove(0), null);
   assert.deepEqual(stateOf(inventory), before);
   assert.equal(inventory.spaceFor('stick', 10), 3);
   assert.equal(inventory.add('stick', 10), 3);
-  assert.equal(inventory.getHotbar().source, 'equipment');
   assert.deepEqual(inventory.equipment.mainHand, { id: 'longbow', count: 1 });
   assert.ok(Math.abs(inventory.weight - inventory.capacity) < 1e-9);
 });
@@ -132,8 +126,6 @@ test('dropping from a selected bag stack conserves quantities across re-collecti
   const inventory = bag();
   const limit = ITEMS.fibre.stackLimit;
   inventory.add('fibre', limit + 3);
-  inventory.assignHotbar(4, 'fibre');
-  inventory.selectHotbar(4);
   const priorEvents = structuredClone(inventory.events);
   const dropped = inventory.remove(1, 2);
   assert.deepEqual(dropped, { id: 'fibre', count: 2 });
@@ -141,24 +133,20 @@ test('dropping from a selected bag stack conserves quantities across re-collecti
   assert.deepEqual(inventory.slots[1], { id: 'fibre', count: 1 });
   assert.equal(countOf(inventory, 'fibre') + dropped.count, limit + 3);
   assert.deepEqual(inventory.events, priorEvents, 'removal does not invent pickup events');
-  assert.equal(inventory.hotbar[4], 'fibre');
   assert.equal(inventory.add(dropped.id, dropped.count), 2);
   assert.equal(countOf(inventory, 'fibre'), limit + 3);
-  assert.equal(inventory.selectedHotbar, 4);
 });
 
-test('exhausting a stack frees weight and space while retaining its hotbar binding', () => {
+test('exhausting a stack frees weight and space', () => {
   const inventory = bag();
   inventory.add('clay', 3);
-  inventory.assignHotbar(0, 'clay');
   assert.deepEqual(inventory.remove(0, 100), { id: 'clay', count: 3 });
   assert.equal(inventory.slots[0], null);
   assert.equal(inventory.weight, 0);
-  assert.equal(inventory.hotbar[0], 'clay');
-  assert.equal(inventory.getHotbar(), null);
+  assert.equal(inventory.countOf('clay'), 0);
   assert.equal(inventory.remove(0), null);
   inventory.add('clay');
-  assert.equal(inventory.getHotbar().count, 1);
+  assert.equal(inventory.countOf('clay'), 1);
 });
 
 test('invalid collection and removal requests leave all inventory state unchanged', () => {

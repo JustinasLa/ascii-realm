@@ -15,7 +15,7 @@ test('?instruments puts one of each instrument in the bag, unequipped and withou
   assert.equal(game.inventory.equipment.offHand, null);
   assert.deepEqual(game.inventory.equipment.mainHand, { id: 'shortSword', count: 1 });
   assert.deepEqual(game.inventory.events, []);
-  assert.deepEqual(game.inventory.hotbar.filter(Boolean), ['shortSword', 'stonePickaxe']);
+  assert.equal(game.inventory.hotbar, undefined, 'no quick slots');
 });
 
 test('without the query nothing hands instruments out', async () => {
@@ -90,14 +90,13 @@ async function performer(id = 'lute', options = {}) {
 
 const noteOf = ({ instrument, degree, octave, chord }) => ({ instrument, degree, octave, chord });
 
-test('keys 1-8 play the off-hand instrument at once and snap the selection to slot 9', async () => {
+test('keys 1-8 play the off-hand instrument at once', async () => {
   const { game, keydown, instrumentNotes, hud } = await performer('lute');
   const sword = game.inventory.equipment.mainHand;
   const event = keydown(undefined, { code: 'Digit1' });
   assert.equal(event.defaultPrevented, true);
   assert.deepEqual(instrumentNotes().map(noteOf), [{ instrument: 'lute', degree: 0, octave: 0, chord: false }]);
   assert.equal(instrumentNotes()[0].x, game.player.x);
-  assert.equal(game.inventory.selectedHotbar, 8);
   assert.equal(game.inventory.equipment.mainHand, sword, 'the main hand is untouched');
   assert.equal(game.musicNotes.list.length, 1);
   assert.deepEqual(hud.flashed, [0]);
@@ -115,32 +114,20 @@ test('Shift plays the second layer: chords on the lute, the octave above on the 
   assert.deepEqual(noteOf(instrumentNotes()[1]), { instrument: 'flute', degree: 7, octave: 1, chord: false });
 });
 
-test('a held key never replays, and 9 still selects quick slot 9', async () => {
+test('a held key never replays, and 9 is left alone', async () => {
   const { game, keydown, tap, frame, instrumentNotes } = await performer('lute');
   assert.equal(keydown(undefined, { code: 'Digit2', repeat: true }).defaultPrevented, true);
   assert.equal(instrumentNotes().length, 0);
   assert.equal(keydown(undefined, { code: 'Digit9' }).defaultPrevented, false);
-  game.inventory.selectHotbar(0);
+  const worn = JSON.stringify(game.inventory.equipment);
   tap('Digit9');
+  tap('KeyQ');
   frame();
-  assert.equal(game.inventory.selectedHotbar, 8);
+  assert.equal(JSON.stringify(game.inventory.equipment), worn, 'neither 9 nor Q changes gear');
   assert.equal(instrumentNotes().length, 0);
 });
 
-test('a quick-slot tap on 1-8 never equips while an instrument is carried', async () => {
-  const { game, tap, frame } = await performer('lute');
-  game.inventory.selectHotbar(4);
-  tap('Digit1');
-  frame();
-  assert.equal(game.inventory.selectedHotbar, 4);
-  assert.equal(game.inventory.equipment.offHand.id, 'lute');
-  game.inventory.unequip('offHand');
-  tap('Digit1');
-  frame();
-  assert.equal(game.inventory.selectedHotbar, 0);
-});
-
-test('a two-handed weapon takes the instrument off, and 1-8 are quick slots again', async () => {
+test('a two-handed weapon takes the instrument off, and 1-8 play no more', async () => {
   const { game, keydown, instrumentNotes } = await performer('lute');
   const bow = Object.values(ITEMS).find(item => item.twoHanded && item.equipmentSlot === 'mainHand').id;
   game.inventory.add(bow);
@@ -182,7 +169,7 @@ test('the glyph rises from the drawn head when the 3D figure is known', async ()
   assert.equal(game.musicNotes.list[1].row, 80 - 23 - 26, 'placed from the feet while the figure is unknown');
 });
 
-test('the hotbar shows the note layout, with Shift held for the second layer, and nothing without an instrument', async () => {
+test('the note slots show the layout, with Shift held for the second layer, and nothing without an instrument', async () => {
   const { game, frame, hold, release, hud } = await performer('lute');
   assert.deepEqual({ ...hud.views.at(-1) }, { id: 'lute', shifted: false });
   hold('ShiftLeft');
@@ -233,14 +220,11 @@ test('a note that cannot start its sound still shows, and stays silent', async (
 
 test('one check refuses keys and clicks: builder, typing, inventory, rune wheel, chat, death', async () => {
   const { game, keydown, hud, instrumentNotes, document, frame } = await performer('lute');
-  const click = (index, shiftKey = false) => hud.options.onSelect(index, { shiftKey });
+  const click = (index, shiftKey = false) => hud.options.onNote(index, { shiftKey });
   click(1, true);
   assert.deepEqual(noteOf(instrumentNotes()[0]), { instrument: 'lute', degree: 1, octave: 0, chord: true });
   click(1);
   assert.equal(instrumentNotes()[1].chord, false);
-  game.inventory.selectHotbar(0);
-  click(8);
-  assert.equal(game.inventory.selectedHotbar, 8, 'slot 9 is still a quick slot');
   const count = () => instrumentNotes().length;
   const refused = (label) => {
     const before = count();
@@ -288,13 +272,12 @@ test('a key from a text field types instead of playing', async () => {
   assert.equal(instrumentNotes().length, 0);
 });
 
-test('phones keep their quick slots: keys and taps never play', async () => {
-  const { game, keydown, hud, instrumentNotes, frame } = await performer('lute', { phone: true });
+test('phones play nothing yet: keys and taps never play', async () => {
+  const { keydown, hud, instrumentNotes, frame } = await performer('lute', { phone: true });
   assert.equal(keydown(undefined, { code: 'Digit1' }).defaultPrevented, false, 'even from a Bluetooth keyboard');
   assert.equal(hud.views.at(-1), null);
-  hud.options.onSelect(0, {});
+  hud.options.onNote(0, {});
   frame();
-  assert.equal(game.inventory.selectedHotbar, 0);
   assert.equal(instrumentNotes().length, 0);
 });
 

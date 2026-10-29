@@ -11,7 +11,7 @@ src/
   editor/            scenery builder controls, scene history and persistence
   audio/             lazy Web Audio engine, sampled grass steps, effects, weather, ambience and music
   crafting/          furnace smelting, alloy forging, weapon smithing, the kept furnace, forge and weapon station states and the alloy book
-  inventory/         items, satchel, equipment, quick slots and carry weight
+  inventory/         items, satchel, equipment and carry weight
   render/            glyph atlas, WebGL renderer (with a fine grid for trees and rocks), cell writers
   spells/            rune casting simulation, rune definitions by element, animations and sounds
   ui/                status frames, inventory panel, item art and notifications

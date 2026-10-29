@@ -7,7 +7,7 @@ import { buildVoice, prepareStrings, prepareVoice, STRING_VOICES } from './instr
 // Notes 1-8 are C D E F G A B C, rising from the instrument's first note.
 export const SCALE = Object.freeze([0, 2, 4, 5, 7, 9, 11]);
 export const NOTE_LETTERS = Object.freeze(['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C']);
-// The triad on each degree of C major, named in ASCII for the hotbar.
+// The triad on each degree of C major, named in ASCII for the note slots.
 export const CHORD_NAMES = Object.freeze(['C', 'Dm', 'Em', 'F', 'G', 'Am', 'Bdim', 'C']);
 // At most this many pitches sound at once, counting chords note by note and
 // stolen voices until their release has ended.
@@ -46,7 +46,7 @@ const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
 const step = index => 12 * Math.floor(index / 7) + SCALE[index % 7];
 const octaveName = midi => `C${Math.floor(midi / 12) - 1}`;
 
-/** What Shift+1-8 plays on the hotbar: 'chords', or 'notes' an octave up (9-16). */
+/** What Shift+1-8 plays: 'chords', or 'notes' an octave up (9-16). */
 export function secondLayer(id) {
   const instrument = instrumentOf(id);
   if (!instrument) return null;
@@ -56,7 +56,7 @@ export function secondLayer(id) {
 /**
  * Checks a played note { instrument, degree, octave, chord }: a known
  * instrument, degree 0-7, octave -1, 0 or 1 and a boolean chord. Any
- * instrument may play a chord; the hotbar's Shift layer is a separate matter.
+ * instrument may play a chord; the note slots' Shift layer is a separate matter.
  */
 export function isInstrumentNote(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -77,7 +77,7 @@ export function noteMidi(id, degree, octave = 0, chord = false) {
   return degrees.map(index => base + step(index));
 }
 
-/** The note a hotbar slot (1-8) plays, with or without Shift. Slot 9 never plays. */
+/** The note a slot (1-8) plays, with or without Shift. */
 export function layerNote(id, slot, shifted = false) {
   const layer = secondLayer(id);
   if (!layer || !Number.isInteger(slot) || slot < 1 || slot > 8) return null;
@@ -113,7 +113,7 @@ export function pitchName(midi) {
 }
 
 /**
- * What slots 1-8 play, for the hotbar: { slot, label, pitches, degree,
+ * What slots 1-8 play, for the note slots: { slot, label, pitches, degree,
  * octave, chord }. Single notes carry their octave ('C4'); chords list only
  * their letters ('D F A'), which is all a slot has room for.
  */

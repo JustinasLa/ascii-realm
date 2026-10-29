@@ -13,7 +13,7 @@ const ingot = (fill) => art(
 );
 
 const ITEM_ART = Object.freeze({
-  // Held at a slant, so the blade and crossguard read as a sword at hotbar size.
+  // Held at a slant, so the blade and crossguard read as a sword at slot size.
   shortSword: art(
     '          /',
     '         //',

@@ -429,6 +429,7 @@ test('arrow keys move through the bag grid and around the equipment figure', (t)
   const places = {
     helm: [50, 0], hands: [0, 50], chest: [50, 50], cape: [100, 50],
     mainHand: [0, 100], legs: [50, 100], offHand: [100, 100],
+    quiver: [0, 0], amulet: [100, 0], feet: [100, 150], ringLeft: [0, 150], ringRight: [100, 200],
   };
   for (const [slot, [left, top]] of Object.entries(places)) {
     slotButton(slot).rect = { left, top, width: 20, height: 20 };
@@ -444,6 +445,9 @@ test('arrow keys move through the bag grid and around the equipment figure', (t)
   assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'offHand' });
   assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'cape' });
   assert.equal(document.activeElement, slotButton('cape'));
+  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'amulet' });
+  assert.deepEqual(step('ArrowLeft'), { source: 'equipment', slot: 'helm' });
+  assert.deepEqual(step('ArrowLeft'), { source: 'equipment', slot: 'quiver' }, 'the quiver sits beside the helm');
 
   press('KeyG');
   assert.deepEqual(screen.selection, { source: 'bag', index: 0 });
@@ -663,29 +667,53 @@ test('without onDrop there is no drop key or button', (t) => {
   assert.ok(indexOf('rawIron') >= 0);
 });
 
-test('number keys assign the selected bag item to a quick slot', (t) => {
+test('number keys do nothing in the window and never reach the game', (t) => {
+  const { document, screen, inventory, notes, press, bagButton, indexOf } = mount(t);
+  press('KeyI');
+  assert.doesNotMatch(document.body.textContent, /1-9|quick slot/i);
+  bagButton(indexOf('rawIron')).click();
+  const before = JSON.stringify([inventory.slots, inventory.equipment, screen.selection]);
+  for (const code of ['Digit3', 'Numpad4', 'Digit9']) {
+    assert.deepEqual(press(code), { prevented: false, reachedGame: false }, code);
+  }
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment, screen.selection]), before);
+  assert.equal(notes.length, 0);
+});
+
+test('the twelve equipment slots take boots on the feet and arrows in the quiver', (t) => {
   const { screen, inventory, notes, press, bagButton, slotButton, indexOf } = mount(t);
   press('KeyI');
-  bagButton(indexOf('rawIron')).click();
-  assert.equal(screen.assignment.textContent, 'Quick slot unassigned');
+  assert.deepEqual([...screen.equipmentNodes.keys()], ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand',
+    'feet', 'amulet', 'ringLeft', 'ringRight', 'quiver']);
+  assert.deepEqual([...screen.equipmentNodes.values()].map(({ button }) => button.children[0].textContent),
+    ['Helm', 'Chest', 'Legs', 'Hands', 'Cape', 'Main hand', 'Off hand', 'Feet', 'Amulet', 'Left ring', 'Right ring', 'Quiver']);
+  assert.equal(slotButton('feet').getAttribute('aria-label'), 'Feet: Riding Boots');
+  assert.equal(slotButton('legs').getAttribute('aria-label'), 'Legs: empty');
+  slotButton('feet').click();
+  press('KeyU');
+  bagButton(indexOf('ridingBoots')).click();
+  press('KeyE');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'feet' });
 
-  assert.deepEqual(press('Digit3'), { prevented: true, reachedGame: false });
-  assert.equal(inventory.hotbar[2], 'rawIron');
-  assert.deepEqual(notes.at(-1), ['Raw Iron assigned to hotbar 3.', 'info']);
-  assert.equal(screen.feedback.dataset.kind, 'info');
-  assert.equal(screen.assignment.textContent, 'Quick slot 3');
-  press('Numpad4');
-  assert.equal(screen.assignment.textContent, 'Quick slot 3, 4');
+  bagButton(indexOf('arrow')).click();
+  assert.equal(bagButton(indexOf('arrow')).getAttribute('data-item-kind'), 'equipment');
+  press('Enter');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'quiver' });
+  assert.deepEqual(inventory.equipment.quiver, { id: 'arrow', count: 30 });
+  assert.equal(screen.equipmentNodes.get('quiver').count.textContent, 'x30');
+  assert.equal(screen.equipmentNodes.get('feet').count.textContent, '');
+  assert.deepEqual(notes.at(-1), ['Equipped Arrow.', 'success']);
 
-  press('Digit5', { repeat: true });
-  assert.equal(inventory.hotbar[4], 'longbow', 'a held digit does not reassign');
-  bagButton(20).click();
-  press('Digit6');
-  assert.equal(inventory.hotbar[5], 'spear', 'an empty slot assigns nothing');
-  slotButton('helm').click();
-  assert.equal(press('Digit7').prevented, true);
-  assert.equal(inventory.hotbar[6], 'javelin', 'equipped gear is assigned from the hotbar instead');
-  assert.equal(notes.length, 2);
+  inventory.add('arrow', 20);
+  assert.equal(inventory.equipment.quiver.count, 40, 'pickups top the quiver up');
+  bagButton(indexOf('arrow')).click();
+  press('KeyE');
+  assert.deepEqual(notes.at(-1), ['Your quiver is full.', 'error']);
+  bagButton(indexOf('woodenBuckler')).click();
+  inventory.add('outlawHood', 24);
+  slotButton('quiver').click();
+  press('KeyU');
+  assert.deepEqual(notes.at(-1), ['Your bag has no room for this gear.', 'error']);
 });
 
 test('dragging a bag stack onto another slot moves or swaps it', (t) => {
@@ -794,7 +822,7 @@ test('a new skin while the bag is open repaints the portrait', (t) => {
   assert.equal(draws, 2, 'an equal skin is no change');
 });
 
-test('details describe the selected item, its stats, weight, durability and quick slot', (t) => {
+test('details describe the selected item, its stats, weight and durability', (t) => {
   const { screen, inventory, press, bagButton, slotButton, indexOf } = mount(t);
   press('KeyI');
   const draught = ITEMS.healingDraught;
@@ -809,7 +837,7 @@ test('details describe the selected item, its stats, weight, durability and quic
   assert.equal(screen.itemWeight.textContent, '0.25 kg each / 0.75 kg carried / 3 items');
   assert.equal(screen.durability.hidden, true);
   assert.equal(screen.durability.textContent, '');
-  assert.equal(screen.assignment.textContent, 'Quick slot 2');
+  assert.equal(screen.details.textContent.includes('Quick slot'), false);
   assert.equal(screen.details.getAttribute('data-item-id'), 'healingDraught');
   assert.ok(visible(screen.useButton));
   assert.equal(screen.equipButton.hidden, true);
@@ -843,7 +871,6 @@ test('details describe the selected item, its stats, weight, durability and quic
   assert.equal(screen.durability.textContent, 'Durability: 100 / 100');
   assert.equal(screen.durability.hidden, false);
   assert.equal(screen.itemWeight.textContent, `${sword.weight} kg each / ${sword.weight} kg carried / 1 item`);
-  assert.equal(screen.assignment.textContent, 'Quick slot 1');
   assert.ok(visible(screen.unequipButton));
   assert.equal(screen.equipButton.hidden, true);
   assert.equal(screen.useButton.hidden, true);
@@ -866,7 +893,6 @@ test('details describe the selected item, its stats, weight, durability and quic
   assert.equal(screen.stats.children.length, 0);
   assert.equal(screen.itemPreview.hidden, true);
   assert.equal(screen.itemWeight.hidden, true);
-  assert.equal(screen.assignment.hidden, true);
   assert.equal(screen.unequipButton.hidden, true);
   bagButton(20).click();
   assert.equal(screen.itemName.textContent, 'Empty slot');
@@ -1079,14 +1105,14 @@ test('C turns to the next page, once per press; arrows, Home and End move along 
 test('on the Character page the bag keys do nothing, game keys stay out, and Esc, Tab and Shift+Tab work', (t) => {
   const { screen, node, tabs, press, document, inventory } = withCharacterPage(t);
   screen.setOpen(true, 'character');
-  const before = JSON.stringify([inventory.slots, inventory.equipment, inventory.hotbar, screen.selection]);
+  const before = JSON.stringify([inventory.slots, inventory.equipment, screen.selection]);
   for (const code of ['KeyG', 'KeyE', 'KeyU', 'KeyX', 'Digit1', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
     'NumpadEnter', 'KeyQ', 'KeyW', 'Space', 'KeyZ']) {
     tabs[1].focus();
     if (code === 'ArrowLeft' || code === 'ArrowRight') document.activeElement = document.body;
     assert.equal(press(code, { target: document.body }).reachedGame, false, code);
   }
-  assert.equal(JSON.stringify([inventory.slots, inventory.equipment, inventory.hotbar, screen.selection]), before);
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment, screen.selection]), before);
   assert.equal(screen.page, 'character');
   assert.equal(press('KeyW', { target: document.body }).prevented, true, 'movement keys are swallowed');
   // Shift+Tab cycles the visible buttons: the chosen tab, Close and the page's own.
