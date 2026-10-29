@@ -233,6 +233,20 @@ short version see the [README](../README.md).
   bag is full. Mined blocks stay gone for the session, grass growing back;
   unfinished blows are forgotten when you leave. As a weapon, the stone pickaxe
   hits like a stone war hammer.
+- **Smelting.** A furnace smelts Raw Iron into an Iron Ingot and Raw Copper
+  into a Copper Ingot, 10 seconds an item; both ingots stack to 64 and weigh
+  what their ore weighs. Coal burns 80 seconds (eight items) and a log 15. A
+  fuel item is lit only when the burn has run out and the input can smelt
+  into the output; a burn already started keeps ticking down even with
+  nothing left to smelt. Smelting stops while the output is full or holds the
+  other ingot, and its progress drops back to nothing; with no burn, progress
+  falls back twice as fast as it was made, and a different input item starts
+  from nothing. Raw Tin, Coal and Lapis Lazuli don't smelt: tin goes into
+  alloys raw. A whole bag stack goes in at once, to the input if it smelts or
+  else as fuel, as far as the slot has room, and a slot is taken back as far
+  as the bag has room. Furnaces keep working on game time with their screen
+  shut and you far away, and are kept on this device for each world (up to
+  32 busy ones a world); the page being closed pauses them.
 - **Campfires.** Flickering ASCII flames above charred logs and a stone ring,
   drifting smoke, rising embers, warm light on the surroundings and rippling
   lake reflections. Fires start small and grow brighter over about 20 seconds,

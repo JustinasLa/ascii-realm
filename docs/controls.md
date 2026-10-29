@@ -136,7 +136,9 @@ alone leaves nothing on your screen. Every stack on the ground, the hunt's
 included, has its name shown above it. Stacks within 4 m are always named;
 farther ones whose names would overlap share one label ("Bone x2, Arrow x1 +2
 more"). Walk close to draw them in, or use E / TAKE. A full bag leaves them
-lying with the name dimmed. They last five minutes.
+lying with the name dimmed. They last five minutes. A stack dropped from the
+bag keeps what makes it its own, such as a weapon's material, and comes back
+as it went down, never joining a bag stack that differs.
 
 ## Denars
 

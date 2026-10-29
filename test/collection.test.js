@@ -75,12 +75,12 @@ test('weight-limited partial pickup conserves the remaining count until more roo
 test('one free unit in an existing stack is collected while slot-limited excess stays in-world', () => {
   const { inventory, ground, collection, player } = setup({ capacity: 1000 });
   inventory.slots = Array.from({ length: 24 }, () => ({ id: 'longbow', count: 1 }));
-  inventory.slots[0] = { id: 'ironIngot', count: 19 };
+  inventory.slots[0] = { id: 'ironIngot', count: 63 };
   const item = ground.add('ironIngot', 5, player.x, player.y);
   collection.update(0, player);
-  assert.equal(inventory.slots[0].count, 20);
+  assert.equal(inventory.slots[0].count, 64);
   assert.equal(item.count, 4);
-  assert.equal(bagCount(inventory, 'ironIngot') + item.count, 24);
+  assert.equal(bagCount(inventory, 'ironIngot') + item.count, 68);
   assert.equal(collection.events[0].count, 1);
 });
 
@@ -328,4 +328,52 @@ test('nearby trees advertise the strike control rather than implying E chops the
     nearby: () => ({ kind: 'tree', name: 'Oak tree', action: 'Chop with your sword', x: player.x, y: player.y + 1 }),
   };
   assert.equal(collection.prompt(player), 'J / click Chop Oak tree');
+});
+
+test('a steel short sword dropped and picked up again keeps its material', () => {
+  const { inventory, ground, collection, player } = setup();
+  inventory.add('shortSword', 1, { material: 'steel' });
+  const dropped = collection.drop(player, 0);
+  assert.deepEqual(dropped.item.extras, { material: 'steel' });
+  assert.equal(inventory.slots[0], null);
+  const { x, y } = dropped.item;
+  player.y += 20;
+  collection.update(1, player);
+  player.x = x;
+  player.y = y;
+  collection.update(0, player);
+  assert.deepEqual(inventory.slots[0], { id: 'shortSword', count: 1, material: 'steel' });
+  assert.deepEqual(ground.of(0, 0), []);
+});
+
+test('ground stacks with other properties never merge into a bag stack', () => {
+  const { inventory, ground, collection, player } = setup();
+  inventory.add('ironIngot', 5);
+  ground.add('ironIngot', 3, player.x, player.y, { extras: { material: 'steel' } });
+  collection.update(0, player);
+  assert.deepEqual(inventory.slots.slice(0, 2), [
+    { id: 'ironIngot', count: 5 }, { id: 'ironIngot', count: 3, material: 'steel' },
+  ]);
+});
+
+test('a partial pickup leaves the rest on the ground with its properties', () => {
+  const { inventory, ground, collection, player } = setup({ capacity: 1.5 });
+  const item = ground.add('ironIngot', 5, player.x, player.y, { extras: { material: 'steel' } });
+  collection.update(0, player);
+  assert.deepEqual(inventory.slots[0], { id: 'ironIngot', count: 2, material: 'steel' });
+  assert.equal(item.count, 3);
+  assert.deepEqual(item.extras, { material: 'steel' });
+});
+
+test('room for a ground stack counts only bag stacks with the same properties', () => {
+  const { inventory, ground, collection, player } = setup({ capacity: 1000 });
+  inventory.slots = Array.from({ length: 24 }, () => ({ id: 'longbow', count: 1 }));
+  inventory.slots[0] = { id: 'ironIngot', count: 10 };
+  const item = ground.add('ironIngot', 2, player.x, player.y, { extras: { material: 'steel' } });
+  collection.update(0, player);
+  assert.equal(item.count, 2);
+  assert.equal(collection.interact(player).status, 'full');
+  assert.equal(collection.prompt(player), 'Inventory full · Iron Ingot x2');
+  inventory.slots[0] = { id: 'ironIngot', count: 10, material: 'steel' };
+  assert.equal(collection.prompt(player), 'E Pick up Iron Ingot x2');
 });

@@ -326,7 +326,7 @@ const definitions = [
     description: 'A bar of smelted iron.',
     stats: { material: 'Iron', type: 'Resource' },
     weight: 0.75,
-    stackLimit: 20,
+    stackLimit: 64,
   },
   {
     // A coin stack lying on the ground; its count is its value in cents.
@@ -633,6 +633,19 @@ const definitions = [
     toolTier: 'stone',
     material: 'stone',
     durability: 120,
+  },
+  {
+    id: 'copperIngot',
+    name: 'Copper Ingot',
+    shortName: 'Ingot',
+    glyph: '=',
+    groundGlyph: '=',
+    colour: [206, 124, 78],
+    tags: ['resource', 'metal', 'copper'],
+    description: 'A bar of smelted copper.',
+    stats: { material: 'Copper', type: 'Resource' },
+    weight: 0.5,
+    stackLimit: 64,
   },
   ...INSTRUMENT_ITEMS,
 ];

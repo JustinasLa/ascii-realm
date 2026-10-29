@@ -1,4 +1,5 @@
 import { ASPECT, WATER } from '../world/world.js';
+import { stackExtras } from './inventory.js';
 import { ITEMS } from './items.js';
 import { DENARS, denars } from './wallet.js';
 
@@ -85,7 +86,7 @@ export class Collection {
 
   // Whether this stack has somewhere to go: the pouch for coin, else the bag.
   takes(item) {
-    return coin(item) ? !!this.wallet : this.inventory.spaceFor(item.id, item.count) > 0;
+    return coin(item) ? !!this.wallet : this.inventory.spaceFor(item.id, item.count, item.extras ?? {}) > 0;
   }
 
   available(item, player, { manual = false } = {}) {
@@ -128,7 +129,7 @@ export class Collection {
 
   transfer(item) {
     if (coin(item)) return this.earn(item);
-    const accepted = this.inventory.add(item.id, item.count);
+    const accepted = this.inventory.add(item.id, item.count, item.extras ?? {});
     if (!accepted) return result('full', 'Inventory full — make room before collecting.', { id: item.id, count: 0 });
     item.count -= accepted;
     if (!item.count) {
@@ -193,7 +194,7 @@ export class Collection {
     if (item && coin(item)) return `E Pick up ${denars(item.count)}d`;
     if (item) {
       const name = `${ITEMS[item.id].name}${item.count > 1 ? ` x${item.count}` : ''}`;
-      return this.inventory.spaceFor(item.id, item.count) > 0 ? `E Pick up ${name}` : `Inventory full · ${name}`;
+      return this.takes(item) ? `E Pick up ${name}` : `Inventory full · ${name}`;
     }
     if (resource?.kind === 'tree') return `J / click Chop ${resource.name}`;
     return resource ? `E ${resource.action || resource.name}` : '';
@@ -230,6 +231,7 @@ export class Collection {
     const item = this.items.add(original.id, count, destination.x, destination.y, {
       pickupAfter: this.currentTime + DROP_COOLDOWN,
       dropOrigin: { x: player.x, y: player.y, radius: DROP_EXIT_RADIUS },
+      extras: stackExtras(original),
     });
     if (!item) return result('blocked', 'No safe place nearby to drop this item.');
     const removed = this.inventory.remove(index, count);
