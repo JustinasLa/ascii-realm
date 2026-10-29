@@ -43,7 +43,8 @@ water drops flat.
   where the water is: water is never raised.
 - **On the ground:** the player (figure, shadow and nameplate), props,
   campfires, torches, plants, glowcaps, hunt drops and river debris are drawn
-  as high as the ground under their base.
+  as high as the ground under their base, and so are a fire's or torch's
+  light and sparks and a glowcap's glow.
 - **Camera and aim.** The camera follows the player's lifted figure, and the
   cursor is read on the player's own height, so a click aims where it looks.
 

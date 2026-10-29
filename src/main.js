@@ -1645,6 +1645,11 @@ function frame(now) {
   // Whatever stands on raised ground is drawn through a view lifted with it.
   const lv = (x, y) => world.relief ? liftView(view, world.liftAt(x, y)) : view;
   const pv = pLift ? liftView(view, pLift) : view;
+  // Each light or glow shines from as high as its source stands.
+  const liftedPass = (sources, pass) => {
+    if (!world.relief) pass(view, sources);
+    else for (const s of sources) pass(s.carried ? pv : lv(s.x, s.y), [s]);
+  };
   // Sprites as far as the deepest lift below the view can rise into it.
   const below = world.relief ? world.maxLift : 0;
   weather.update(dt, time, world, view, sound.weather);
@@ -1898,15 +1903,15 @@ function frame(now) {
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
-  mushrooms.drawGlow(renderer, view, visibleMushrooms);
+  liftedPass(visibleMushrooms, (v, list) => mushrooms.drawGlow(renderer, v, list));
   splashes.drawContacts(renderer, view, time, contacts);
   // The moonbeams' columns of lit air, under the warm light.
   const shaftStart = performance.now();
   nightLight.drawShafts(renderer, view, time);
   debug.metrics.shaftMs = performance.now() - shaftStart;
   debug.metrics.nightMs += debug.metrics.shaftMs;
-  fires.light(renderer, view, time, visibleFires);
-  torches.light(renderer, view, time, visibleTorches);
+  liftedPass(visibleFires, (v, list) => fires.light(renderer, v, time, list));
+  liftedPass(visibleTorches, (v, list) => torches.light(renderer, v, time, list));
   weather.drawAtmosphere(renderer, view, time);
 
   for (const figure of birdCells) if (figure.air) AnimalFigures.draw(renderer, figure, putOutlinedCell);
@@ -1940,7 +1945,7 @@ function frame(now) {
   const bubblesMs = performance.now() - bubblesStarted;
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
-  fires.drawParticles(renderer, view);
+  fires.drawParticles(renderer, view, world.relief ? (x, y) => world.liftAt(x, y) : null);
   fireflies.update(dt, time, world, camera.x, camera.centreY(view), view.cols / 2, view.rows / 2);
   fireflies.draw(renderer, view, time);
   ambience.draw(renderer, view, time);

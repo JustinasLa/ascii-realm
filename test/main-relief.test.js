@@ -36,6 +36,9 @@ const stub = (methods = {}) => class {
 // `shape` keeps the 3D character from loading, so the shape-built figure shows.
 async function hillGame(query = 'scene=hill', { shape = false, real = {} } = {}) {
   const order = [];
+  // The views each glow and light pass draws a source through.
+  const glows = [];
+  const glow = (kind) => (_r, view) => glows.push([kind, view.y0]);
   const figures = [];
   const shadows = [];
   let pointerCell = null;
@@ -49,16 +52,17 @@ async function hillGame(query = 'scene=hill', { shape = false, real = {} } = {})
     drawFigure: (_r, view) => { figures.push(view); order.push(['player']); },
     drawShadow: (_r, view, x, y) => shadows.push({ view, x, y }),
     screenToWorld: () => pointerCell,
-    Torches: stub({ prepare: at, draw: sprite('torch') }),
+    Torches: stub({ prepare: at, draw: sprite('torch'), light: glow('torch') }),
+    Fires: stub({ prepare: at, light: glow('fire'), nearest: () => null }),
     Harvesting: stub({ resourcesIn: at }),
     drawResource: sprite('plant'),
-    Mushrooms: stub({ prepare: at, draw: sprite('mushroom'), nearby: () => null }),
+    Mushrooms: stub({ prepare: at, draw: sprite('mushroom'), drawGlow: glow('glowcap'), nearby: () => null }),
     ...(shape ? { ModelFigure: { load: () => new Promise(noop), library: () => new Promise(noop) }, dressFigure: () => [] } : {}),
     ...real,
   } });
   Object.assign(loaded.model, { top: 10, cells: [{ sx: 40, sy: 25 }], rasterise: (view) => figures.push(view),
     draw: () => order.push(['player']) });
-  return { ...loaded, order, figures, shadows, sprites, aimAt: (cell) => { pointerCell = cell; } };
+  return { ...loaded, order, figures, shadows, sprites, glows, aimAt: (cell) => { pointerCell = cell; } };
 }
 
 test('?scene=hill raises the hill on quiet land without rivers or ruins', async () => {
@@ -83,7 +87,7 @@ test('a lobby page and the plain world have no relief', async () => {
 });
 
 for (const shape of [false, true]) test(`on the knoll the camera, ${shape ? 'shape-built' : '3D'} figure and shadow rise with the ground`, async () => {
-  const { game, frame, figures, shadows, order, sprites } = await hillGame('scene=hill', { shape });
+  const { game, frame, figures, shadows, order, sprites, glows } = await hillGame('scene=hill', { shape });
   const { player, world, camera } = game;
   player.x = world.spawn.x + 75;
   player.y = world.spawn.y - 4;
@@ -95,12 +99,15 @@ for (const shape of [false, true]) test(`on the knoll the camera, ${shape ? 'sha
   shadows.length = 0;
   order.length = 0;
   sprites.length = 0;
+  glows.length = 0;
   frame();
   const view = camera.view(game.renderer);
   // Whatever stands on the ground there rises with it; reflections do not.
   for (const kind of ['torch', 'plant', 'mushroom']) {
     assert.ok(sprites.some(([k, y0]) => k === kind && y0 === view.y0 + lift), kind);
   }
+  // So does the light or glow it gives.
+  assert.deepEqual(glows.sort(), [['fire', view.y0 + lift], ['glowcap', view.y0 + lift], ['torch', view.y0 + lift]]);
   assert.equal(figures.at(-1).y0, view.y0 + lift, 'the figure is drawn its lift higher');
   assert.equal(shadows.length, 1, 'one shadow, cast on the raised ground');
   assert.equal(shadows[0].view.y0, view.y0 + lift);
@@ -134,6 +141,27 @@ test('the cursor is read on the raised player\'s own height', async () => {
   tap('mouse');
   for (let i = 0; i < 20; i++) frame();
   assert.ok(Math.abs(Math.atan2(Math.sin(player.heading), Math.cos(player.heading))) < 0.5, `heading ${player.heading}`);
+});
+
+test('on flat land every light and glow is drawn in one pass through the view', async () => {
+  const { game, frame, glows } = await hillGame('seed=1');
+  frame();
+  const view = game.camera.view(game.renderer);
+  assert.deepEqual(glows.sort(), [['fire', view.y0], ['glowcap', view.y0], ['torch', view.y0]]);
+});
+
+test('a carried torch shines from the raised player\'s hand', async () => {
+  const { game, frame, glows } = await hillGame('scene=hill', { real: {
+    Torches: stub({ prepare: () => [{ x: game.player.x, y: game.player.y + 30, carried: true }],
+      light: (_r, view) => glows.push(['torch', view.y0]) }),
+  } });
+  const { player, world, camera } = game;
+  player.x = world.spawn.x + 75;
+  player.y = world.spawn.y - 4;
+  for (let i = 0; i < 3; i++) frame();
+  glows.length = 0;
+  frame();
+  assert.ok(glows.some(([kind, y0]) => kind === 'torch' && y0 === camera.view(game.renderer).y0 + 11));
 });
 
 test('a hunt drop, bush, glowcap, fire or torch on the crest below the view rises into it', async () => {
