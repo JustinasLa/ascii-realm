@@ -295,9 +295,9 @@ short version see the [README](../README.md).
   needs all the metal but not the hits: it reports the Hits %, the quality,
   and below 100 the roll and its clue, and turns the metal into the weapon at
   once. With a full bag the weapon waits on the station to be taken, and the
-  station takes no new piece until it is. Cancelling gives the metal back,
-  last loaded first, and loses the hits; what a full bag can't take stays with
-  the piece. Each station's piece and waiting weapon are kept with the alloy
+  station takes no new piece until it is. Cancelling gives back each unit of
+  metal the bag has room for, last loaded first, and loses the hits; what a
+  full bag can't take stays with the piece. Each station's piece and waiting weapon are kept with the alloy
   book on this device for each world, hits within two seconds.
 - **Forged weapons.** A smithed weapon is named for the metal most of its
   units were ("Blackiron Dagger", "Iron Short Sword"; a tie goes to the one
