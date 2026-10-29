@@ -177,7 +177,12 @@ test('a hunt drop, bush, glowcap, fire or torch on the crest below the view rise
     Harvesting: stub({ resourcesIn: (...box) => inBox(plants, ...box) }),
     drawItem: (_r, view, item, _t, mirror) => mirror || drawn.push(['drop', view.y0]),
     drawResource: (_r, view, node, _t, mirror) => mirror || drawn.push(['plant', view.y0]),
-    Mushrooms: stub({ prepare: deep('glowcaps'), nearby: () => null }),
+    // Glowcaps reach only further south, not as far north again.
+    Mushrooms: stub({ prepare: (view, _wide, below) => {
+      queried.glowcaps = view.y0 + view.rows + below;
+      queried.glowcapRows = view.rows;
+      return [];
+    }, nearby: () => null }),
     Fires: stub({ prepare: deep('fires'), nearest: () => null }),
     Torches: stub({ prepare: deep('torches') }),
   } });
@@ -197,6 +202,7 @@ test('a hunt drop, bush, glowcap, fire or torch on the crest below the view rise
   frame();
   assert.deepEqual(drawn.sort(), [['drop', view.y0 + lift], ['plant', view.y0 + lift]]);
   for (const kind of ['glowcaps', 'fires', 'torches']) assert.equal(queried[kind], view.y0 + view.rows + MAX_LIFT, kind);
+  assert.equal(queried.glowcapRows, view.rows);
 });
 
 test('creating a lobby from the hill scene reloads onto flat land and creates it there', async () => {

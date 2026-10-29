@@ -1751,7 +1751,7 @@ function frame(now) {
   debug.metrics.nightMs = performance.now() - nightStart;
   const mirror = reflector(time, view);
   const deep = below ? { ...view, rows: view.rows + below } : view;
-  const visibleMushrooms = mushrooms.prepare(deep, wide);
+  const visibleMushrooms = mushrooms.prepare(view, wide, below);
   const visibleFires = fires.prepare(deep, time);
   const visibleTorches = torches.prepare(deep, time, player, model?.torchPose());
   ambience.update(dt, time, world, view, { lights: lightsOf(visibleFires, visibleTorches), wind: weather.wind });
