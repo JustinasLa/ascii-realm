@@ -46,7 +46,8 @@ import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
-import { nameError, normalName } from './character/rules.js';
+import { attributeTotals, nameError, normalName } from './character/rules.js';
+import { classOf } from './character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
 import { sampleDraft, wantsCreator } from './character/creation.js';
 import { metresBetween } from './multiplayer/chat.js';
@@ -259,12 +260,14 @@ player.skin = cleanSkin(characters.active?.skin);
 const nameOverride = params.has('name') && !nameError(params.get('name')) ? normalName(params.get('name')) : null;
 const shownName = () => nameOverride ?? characters.active?.sheet.name ?? 'Kael';
 let name = shownName();
+// The active character's class name, or null for the outlaw.
+const activeClass = () => classOf(characters.active?.sheet.class)?.name ?? null;
 // Shows the active character everywhere, after it changes here or in another
 // tab. The creator's preview keeps its own skin while it is open.
 function applyCharacter() {
   name = shownName();
   hud.setName(name);
-  inventoryScreen.setName(name);
+  inventoryScreen.setName(name, activeClass());
   if (!creator.isOpen) player.skin = cleanSkin(characters.active?.skin);
   characterPages.render();
   renderLobby?.(multiplayer);
@@ -571,7 +574,8 @@ const characterPages = new CharacterPages({ doc: document, roster: characters, n
   } });
 debug.characterPages = characterPages;
 const inventoryScreen = new InventoryScreen({
-  inventory, player, name,
+  inventory, player, name, className: activeClass(), wallet,
+  attributes: () => characters.active ? attributeTotals(characters.active.sheet) : null,
   pages: [{ id: 'character', label: 'Character', node: characterPages.sheet, onShow: () => characterPages.render() },
     { id: 'characters', label: 'Characters', node: characterPages.list, onShow: () => characterPages.render() }],
   onToggle: (open) => {
@@ -1067,6 +1071,7 @@ debug.monsters = monsters;
 const debrisBodies = () => [player, ...monsters.living.filter(m => m.state !== 'rise')];
 
 hud.attachMana(casting);
+inventoryScreen.attachMana(casting);
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
 window.addEventListener('pagehide', () => casting.clearPresentation());
 // Holding the middle mouse button, or CAST on touch screens, opens the rune
