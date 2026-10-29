@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Vitals } from '../src/entities/vitals.js';
-import { ITEMS, EQUIPMENT_SLOTS } from '../src/inventory/items.js';
+import { ITEMS, EQUIPMENT_SLOTS, STACK_SLOTS, fitsSlot, slotsFor } from '../src/inventory/items.js';
 import { Inventory, stackExtras } from '../src/inventory/inventory.js';
 
 const emptyInventory = (capacity = 1000) => new Inventory({ starter: false, capacity });
@@ -10,21 +10,21 @@ const carriedCount = (inventory, id) => [...inventory.slots, ...Object.values(in
 const inventoryState = (inventory) => structuredClone({
   slots: inventory.slots,
   equipment: inventory.equipment,
-  hotbar: inventory.hotbar,
-  selectedHotbar: inventory.selectedHotbar,
   weight: inventory.weight,
   events: inventory.events,
 });
 
-test('a new inventory exposes the required bag, equipment, and hotbar slots', () => {
+test('a new inventory exposes the bag and the twelve equipment slots, and no quick slots', () => {
   const inventory = new Inventory();
   assert.equal(inventory.slots.length, 24);
-  assert.equal(inventory.hotbar.length, 9);
-  assert.equal(inventory.selectedHotbar, 0);
   assert.equal(inventory.capacity, 60);
-  assert.deepEqual(Object.keys(inventory.equipment).sort(),
-    ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand'].sort());
-  assert.equal(EQUIPMENT_SLOTS.length, 7);
+  assert.deepEqual(Object.keys(inventory.equipment), [...EQUIPMENT_SLOTS]);
+  assert.deepEqual(EQUIPMENT_SLOTS, ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand',
+    'feet', 'amulet', 'ringLeft', 'ringRight', 'quiver']);
+  for (const name of ['hotbar', 'selectedHotbar', 'assignHotbar', 'selectHotbar', 'cycleHotbar', 'getHotbar',
+    'useSelected', 'findCarried']) assert.equal(inventory[name], undefined, name);
+  assert.deepEqual(inventory.equipment.feet, { id: 'ridingBoots', count: 1 }, 'the starter boots are on the feet');
+  assert.equal(inventory.equipment.legs, null);
   assert.ok(inventory.slots.some(Boolean), 'starter consumables are carried');
   assert.ok(Object.values(inventory.equipment).some(Boolean), 'starter gear is equipped');
   assert.ok(inventory.weight > 0 && inventory.weight <= inventory.capacity);
@@ -206,125 +206,39 @@ test('invalid item IDs, quantities, and bag indices do not mutate inventory', ()
   assert.deepEqual(inventoryState(inventory), before);
 });
 
-test('hotbar bindings follow item IDs through bag moves and stack merges', () => {
-  const inventory = emptyInventory();
-  const limit = ITEMS.healingDraught.stackLimit;
-  inventory.add('healingDraught', limit + 2);
-  inventory.assignHotbar(3, 'healingDraught');
-  inventory.selectHotbar(3);
-  assert.equal(inventory.hotbar[3], 'healingDraught');
-  assert.equal(inventory.getHotbar().item, ITEMS.healingDraught);
-  assert.equal(inventory.getHotbar().count, limit + 2);
-
-  inventory.move(0, 10);
-  inventory.move(10, 1);
-  const entry = inventory.getHotbar();
-  assert.equal(entry.item, ITEMS.healingDraught);
-  assert.equal(entry.count, limit + 2);
-  assert.equal(entry.source, 'inventory');
-  assert.equal(entry.stack, inventory.slots[entry.index]);
-  assert.equal(inventory.hotbar[3], 'healingDraught');
-});
-
-test('a gear hotbar binding resolves equipped gear and returns to the bag after unequipping', () => {
-  const inventory = emptyInventory();
-  inventory.add('longbow', 2);
-  inventory.assignHotbar(0, 'longbow');
-  inventory.equip(0);
-  let entry = inventory.getHotbar();
-  assert.equal(entry.item, ITEMS.longbow);
-  assert.equal(entry.count, 2, 'the count includes both equipped and carried copies');
-  assert.equal(entry.source, 'equipment');
-  assert.equal(entry.stack, inventory.equipment.mainHand);
-  assert.equal(entry.slot, 'mainHand');
-
-  inventory.unequip('mainHand');
-  entry = inventory.getHotbar();
-  assert.equal(entry.source, 'inventory');
-  assert.equal(entry.count, 2);
-  assert.equal(entry.stack, inventory.slots[entry.index]);
-  assert.equal(inventory.hotbar[0], 'longbow');
-});
-
-test('hotbar cycling wraps in both directions and invalid selections cannot corrupt it', () => {
-  const inventory = emptyInventory();
-  inventory.selectHotbar(8);
-  inventory.cycleHotbar(1);
-  assert.equal(inventory.selectedHotbar, 0);
-  inventory.cycleHotbar(-1);
-  assert.equal(inventory.selectedHotbar, 8);
-  inventory.selectHotbar(4);
-  assert.equal(inventory.selectedHotbar, 4);
-  for (const index of [-1, 9, 1.5, NaN, Infinity, '0', null]) {
-    inventory.selectHotbar(index);
-    inventory.assignHotbar(index, 'longbow');
-  }
-  assert.equal(inventory.selectedHotbar, 4);
-  assert.equal(inventory.hotbar.length, 9);
-  assert.ok(inventory.hotbar.every((binding) => binding === null));
-
-  inventory.add('longbow');
-  inventory.assignHotbar(4, 'longbow');
-  for (const id of ['missing-item', 'constructor', '__proto__']) inventory.assignHotbar(4, id);
-  assert.equal(inventory.hotbar[4], 'longbow');
-  inventory.assignHotbar(4, null);
-  assert.equal(inventory.getHotbar(), null);
-});
-
-test('a healing quick item consumes exactly once when needed and clamps actual restoration', () => {
+test('a healing item consumes exactly once when needed and clamps actual restoration', () => {
   const inventory = emptyInventory();
   const vitals = new Vitals();
   inventory.add('healingDraught', 2);
-  inventory.assignHotbar(0, 'healingDraught');
   vitals.spendStamina(10);
   const fullHealthState = inventoryState(inventory);
-  assert.equal(inventory.useSelected(vitals), false, 'missing stamina does not justify a healing item');
+  assert.equal(inventory.useItem(0, vitals), false, 'missing stamina does not justify a healing item');
   assert.deepEqual(inventoryState(inventory), fullHealthState);
 
   vitals.takeDamage(1);
-  assert.equal(inventory.useSelected(vitals), true);
+  assert.equal(inventory.useItem(0, vitals), true);
   assert.equal(vitals.health, vitals.maxHealth);
   assert.equal(vitals.stamina, vitals.maxStamina - 10);
   assert.equal(carriedCount(inventory, 'healingDraught'), 1);
-  assert.equal(inventory.getHotbar().count, 1);
+  assert.equal(inventory.countOf('healingDraught'), 1);
   assert.ok(Math.abs(inventory.weight - ITEMS.healingDraught.weight) < 1e-9);
 
-  assert.equal(inventory.useSelected(vitals), false);
+  assert.equal(inventory.useItem(0, vitals), false);
   assert.equal(carriedCount(inventory, 'healingDraught'), 1);
   vitals.takeDamage(1);
-  assert.equal(inventory.useSelected(vitals), true);
+  assert.equal(inventory.useItem(0, vitals), true);
   assert.equal(carriedCount(inventory, 'healingDraught'), 0);
   assert.equal(inventory.slots.filter(Boolean).length, 0);
-  assert.equal(inventory.getHotbar(), null, 'an exhausted item binding resolves as empty');
-  assert.equal(inventory.useSelected(vitals), false);
+  assert.equal(inventory.useItem(0, vitals), false, 'an exhausted stack is gone');
   assert.equal(inventory.weight, 0);
-});
-
-test('quick item use finds consumables after their original bag slot is moved', () => {
-  const inventory = emptyInventory();
-  const vitals = new Vitals();
-  inventory.add('staminaTonic', 2);
-  inventory.assignHotbar(2, 'staminaTonic');
-  inventory.selectHotbar(2);
-  inventory.move(0, 23);
-  vitals.spendStamina(1);
-  vitals.takeDamage(5);
-  assert.equal(inventory.useSelected(vitals), true);
-  assert.equal(vitals.stamina, vitals.maxStamina);
-  assert.equal(vitals.health, vitals.maxHealth - 5);
-  assert.deepEqual(inventory.slots[23], { id: 'staminaTonic', count: 1 });
-  assert.equal(inventory.slots[0], null);
-  assert.equal(inventory.useSelected(vitals), false);
-  assert.equal(carriedCount(inventory, 'staminaTonic'), 1);
 });
 
 test('a refused restoration never consumes an item', () => {
   const inventory = emptyInventory();
   inventory.add('healingDraught');
-  inventory.assignHotbar(0, 'healingDraught');
   const before = inventoryState(inventory);
   const vitals = { health: 50, maxHealth: 100, stamina: 100, maxStamina: 100, heal: () => 0 };
-  assert.equal(inventory.useSelected(vitals), false);
+  assert.equal(inventory.useItem(0, vitals), false);
   assert.equal(vitals.health, 50);
   assert.deepEqual(inventoryState(inventory), before);
 });
@@ -340,27 +254,24 @@ test('the starter sword and buckler are worn together, and the longbow stows bot
   assert.ok(!ITEMS.shortSword.twoHanded);
   assert.equal(inventory.equipment.mainHand.id, 'shortSword');
   assert.equal(inventory.equipment.offHand, null);
-  inventory.assignHotbar(4, 'woodenBuckler');
 
   const bucklerIndex = inventory.slots.findIndex((stack) => stack?.id === 'woodenBuckler');
   assert.equal(inventory.equip(bucklerIndex), true);
   assert.deepEqual(inventory.equipment.mainHand, { id: 'shortSword', count: 1 }, 'a one-handed sword stays drawn');
   assert.deepEqual(inventory.equipment.offHand, { id: 'woodenBuckler', count: 1 });
-  assert.equal(inventory.getHotbar(4).source, 'equipment');
 
   const bowIndex = inventory.slots.findIndex((stack) => stack?.id === 'longbow');
   assert.equal(inventory.equip(bowIndex), true);
   assert.deepEqual(inventory.equipment.mainHand, { id: 'longbow', count: 1 });
   assert.equal(inventory.equipment.offHand, null);
-  assert.equal(inventory.getHotbar(0).source, 'inventory', 'the stowed sword remains bound');
-  assert.equal(inventory.getHotbar(4).source, 'inventory', 'the stowed buckler remains bound');
+  assert.ok(inventory.slots.some((stack) => stack?.id === 'shortSword'), 'the sword is stowed');
+  assert.ok(inventory.slots.some((stack) => stack?.id === 'woodenBuckler'), 'the buckler is stowed');
   assert.deepEqual(totals(), beforeCounts);
   assert.equal(inventory.weight, beforeWeight);
 
   const swordIndex = inventory.slots.findIndex((stack) => stack?.id === 'shortSword');
   assert.equal(inventory.equip(swordIndex), true);
   assert.deepEqual(inventory.equipment.mainHand, { id: 'shortSword', count: 1 });
-  assert.equal(inventory.getHotbar(0).source, 'equipment');
   assert.deepEqual(totals(), beforeCounts);
   assert.equal(inventory.weight, beforeWeight);
   assert.deepEqual(inventory.events, [], 'equipment transfers are not new pickups');
@@ -399,8 +310,6 @@ test('stowing two pieces of an incompatible existing loadout is atomic when the 
   inventory.equipment.offHand = { id: 'woodenBuckler', count: 1 };
   inventory.add('longbow');
   inventory.add('outlawHood', 23);
-  inventory.assignHotbar(0, 'longbow');
-  inventory.assignHotbar(1, 'woodenBuckler');
   const before = inventoryState(inventory);
 
   assert.equal(inventory.equip(0), false, 'one vacated slot cannot hold two displaced pieces');
@@ -417,8 +326,6 @@ test('stowing two pieces of an incompatible existing loadout is atomic when the 
   assert.equal(carriedCount(inventory, 'woodenBuckler'), 1);
   assert.equal(carriedCount(inventory, 'outlawHood'), 23);
   assert.equal(inventory.weight, before.weight);
-  assert.equal(inventory.getHotbar(0).source, 'equipment');
-  assert.equal(inventory.getHotbar(1).source, 'inventory');
   assert.deepEqual(inventory.events, before.events);
 });
 
@@ -508,4 +415,135 @@ test('different alloys and scrap from different mixes never merge', () => {
   inventory.slots[0] = { id: 'alloyIngot', count: 1, alloy: 'a2' };
   assert.equal(inventory.spaceFor('alloyIngot', 1, { alloy: 'a1' }), 0);
   assert.equal(inventory.spaceFor('alloyIngot', 1, { alloy: 'a2' }), 1);
+});
+
+test('boots go on the feet and leave the legs empty', () => {
+  const inventory = emptyInventory();
+  inventory.add('ridingBoots');
+  assert.equal(inventory.targetSlotFor('ridingBoots'), 'feet');
+  assert.equal(inventory.equip(0), true);
+  assert.deepEqual(inventory.equipment.feet, { id: 'ridingBoots', count: 1 });
+  assert.equal(inventory.equipment.legs, null);
+  assert.equal(inventory.unequip('legs'), false);
+  assert.equal(inventory.unequip('feet'), true);
+});
+
+test('a ring kind fills the left ring, then the right, then replaces the left', () => {
+  const ring = { equipmentSlot: 'ring' };
+  assert.deepEqual(slotsFor(ring), ['ringLeft', 'ringRight']);
+  assert.ok(fitsSlot(ring, 'ringRight'));
+  assert.equal(fitsSlot(ring, 'helm'), false);
+  for (const slot of ['constructor', '__proto__', 'toString', 'nowhere', undefined, 7]) {
+    assert.deepEqual(slotsFor({ equipmentSlot: slot }), [], String(slot));
+  }
+  assert.deepEqual(slotsFor(null), []);
+  assert.deepEqual(slotsFor(ITEMS.arrow), ['quiver']);
+  assert.deepEqual(STACK_SLOTS, ['quiver']);
+
+  const inventory = emptyInventory();
+  assert.equal(inventory.targetSlot(ring), 'ringLeft');
+  inventory.equipment.ringLeft = { id: 'ring', count: 1 };
+  assert.equal(inventory.targetSlot(ring), 'ringRight');
+  inventory.equipment.ringRight = { id: 'ring', count: 1 };
+  assert.equal(inventory.targetSlot(ring), 'ringLeft');
+  assert.equal(inventory.targetSlot(ring, 'ringRight'), 'ringRight');
+  assert.equal(inventory.targetSlot(ring, 'helm'), null);
+  assert.equal(inventory.targetSlot({}), null);
+  assert.equal(inventory.targetSlotFor('missing-item'), null);
+  assert.equal(inventory.targetSlotFor('outlawHood', 'helm'), 'helm');
+  inventory.add('outlawHood');
+  assert.equal(inventory.equip(0, 'chest'), false, 'gear never goes into a slot it does not fit');
+  assert.equal(inventory.equip(0, 'helm'), true);
+});
+
+test('arrows fill the quiver as a whole stack, merge up to 40 and swap other stacks', () => {
+  const inventory = emptyInventory();
+  inventory.add('arrow', 30);
+  const weight = inventory.weight;
+  assert.equal(inventory.equip(0), true);
+  assert.deepEqual(inventory.equipment.quiver, { id: 'arrow', count: 30 });
+  assert.equal(inventory.slots[0], null);
+  assert.equal(inventory.weight, weight);
+
+  // Placed by hand, as a pickup would top the quiver up first.
+  inventory.slots[0] = { id: 'arrow', count: 25 };
+  assert.equal(inventory.equip(0), true);
+  assert.equal(inventory.equipment.quiver.count, 40);
+  assert.deepEqual(inventory.slots[0], { id: 'arrow', count: 15 });
+  const full = inventoryState(inventory);
+  assert.equal(inventory.equip(0), false, 'a full quiver of the same arrows refuses');
+  assert.deepEqual(inventoryState(inventory), full);
+
+  // Arrows of another make swap places with the quiver's.
+  inventory.slots[0].material = 'iron';
+  assert.equal(inventory.equip(0), true);
+  assert.deepEqual(inventory.equipment.quiver, { id: 'arrow', count: 15, material: 'iron' });
+  assert.deepEqual(inventory.slots[0], { id: 'arrow', count: 40 });
+
+  assert.equal(inventory.unequip('quiver'), true);
+  assert.equal(inventory.equipment.quiver, null);
+  assert.equal(inventory.countOf('arrow'), 55);
+  assert.equal(inventory.weight, weight + 25 * ITEMS.arrow.weight);
+});
+
+test('taking the quiver off refuses when the bag cannot take the whole stack', () => {
+  const inventory = emptyInventory();
+  inventory.add('arrow', 20);
+  inventory.equip(0);
+  inventory.add('outlawHood', 24);
+  const before = inventoryState(inventory);
+  assert.equal(inventory.unequip('quiver'), false);
+  assert.deepEqual(inventoryState(inventory), before);
+});
+
+test('shots take arrows from the quiver first, then from the first bag stack', () => {
+  const inventory = emptyInventory();
+  inventory.add('arrow', 2, { material: 'iron' });
+  inventory.equip(0);
+  inventory.add('longbow');
+  inventory.add('arrow', 1);
+  inventory.move(1, 5);
+  inventory.add('arrow', 1, { material: 'steel' });
+  assert.equal(inventory.countOf('arrow'), 4);
+  assert.equal(inventory.nextAmmo('arrow'), inventory.equipment.quiver);
+  assert.deepEqual(inventory.takeAmmo('arrow'), { id: 'arrow', count: 1, material: 'iron' });
+  assert.deepEqual(inventory.takeAmmo('arrow'), { id: 'arrow', count: 1, material: 'iron' });
+  assert.equal(inventory.equipment.quiver, null, 'an empty quiver is cleared');
+  assert.deepEqual(inventory.takeAmmo('arrow'), { id: 'arrow', count: 1, material: 'steel' }, 'the lowest bag slot goes first');
+  assert.deepEqual(inventory.takeAmmo('arrow'), { id: 'arrow', count: 1 });
+  assert.equal(inventory.takeAmmo('arrow'), null);
+  assert.equal(inventory.countOf('arrow'), 0);
+  assert.deepEqual(inventory.slots.filter(Boolean), [{ id: 'longbow', count: 1 }]);
+});
+
+test('pickups top up a quiver of the same arrows first, but never fill an empty one', () => {
+  const inventory = emptyInventory();
+  assert.equal(inventory.add('arrow', 10), 10);
+  assert.equal(inventory.equipment.quiver, null, 'an empty quiver stays empty');
+  inventory.add('arrow', 25);
+  inventory.equip(0);
+  assert.equal(inventory.equipment.quiver.count, 35);
+  assert.equal(inventory.add('arrow', 10), 10);
+  assert.equal(inventory.equipment.quiver.count, 40);
+  assert.deepEqual(inventory.slots[0], { id: 'arrow', count: 5 });
+  assert.deepEqual(inventory.events.at(-1), { type: 'pickup', id: 'arrow', count: 10 });
+  // Arrows of another make go to the bag.
+  assert.equal(inventory.add('arrow', 1, { material: 'iron' }), 1);
+  assert.equal(inventory.equipment.quiver.count, 40);
+
+  // The quiver's room counts with a full bag, and the carrying limit still applies.
+  const full = emptyInventory();
+  full.add('arrow', 30);
+  full.equip(0);
+  full.add('outlawHood', 24);
+  assert.equal(full.spaceFor('arrow', 20), 10);
+  assert.equal(full.add('arrow', 20), 10);
+  assert.equal(full.equipment.quiver.count, 40);
+  const heavy = emptyInventory(ITEMS.arrow.weight * 35);
+  heavy.add('arrow', 30);
+  heavy.equip(0);
+  assert.equal(heavy.spaceFor('arrow', 20), 5);
+  assert.equal(heavy.add('arrow', 20), 5);
+  assert.equal(heavy.equipment.quiver.count, 35);
+  assert.equal(heavy.slots.filter(Boolean).length, 0);
 });

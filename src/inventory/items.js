@@ -1,8 +1,21 @@
 import { INSTRUMENT_ITEMS } from './instrument-items.js';
 
+// The paper doll's twelve slots. The first seven keep their old ids, so
+// older lobby peers still read them; the rest complete the doll.
 export const EQUIPMENT_SLOTS = Object.freeze([
   'helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand',
+  'feet', 'amulet', 'ringLeft', 'ringRight', 'quiver',
 ]);
+// An item's equipmentSlot names one slot, or a kind several slots take.
+const SLOT_KINDS = Object.freeze({ ring: Object.freeze(['ringLeft', 'ringRight']) });
+// Slots that take a whole stack rather than a single item.
+export const STACK_SLOTS = Object.freeze(['quiver']);
+export function slotsFor(item) {
+  const slot = item?.equipmentSlot;
+  if (typeof slot !== 'string') return [];
+  return Object.hasOwn(SLOT_KINDS, slot) ? SLOT_KINDS[slot] : EQUIPMENT_SLOTS.includes(slot) ? [slot] : [];
+}
+export const fitsSlot = (item, slot) => slotsFor(item).includes(slot);
 
 // Stats describe the item itself. Combat damage and armour bonuses are not
 // invented here; the only numerical effects are the restorations we apply.
@@ -52,6 +65,7 @@ const definitions = [
     stats: { type: 'Ammunition' },
     weight: 0.03,
     stackLimit: 40,
+    equipmentSlot: 'quiver',
   },
   {
     id: 'greatsword',
@@ -212,7 +226,7 @@ const definitions = [
     stats: { material: 'Leather', type: 'Footwear' },
     weight: 1.2,
     stackLimit: 1,
-    equipmentSlot: 'legs',
+    equipmentSlot: 'feet',
     durability: 100,
   },
   {

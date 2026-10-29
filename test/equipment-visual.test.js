@@ -46,7 +46,7 @@ test('the outlaw keeps the clothes on even with their equipment slots empty', ()
   const inventory = new Inventory();
   player.equipment = inventory.equipment;
   const dressed = render(player);
-  for (const slot of ['helm', 'chest', 'legs', 'hands', 'cape']) {
+  for (const slot of ['helm', 'chest', 'feet', 'hands', 'cape']) {
     assert.equal(inventory.unequip(slot), true);
     assert.deepEqual(render(player), dressed, `taking off ${slot} leaves the outfit as it is`);
   }

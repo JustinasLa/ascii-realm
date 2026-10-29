@@ -72,6 +72,43 @@ test('releasing a charged bow normally still fires and consumes one arrow', asyn
   assert.equal(game.inventory.slots.find(stack => stack?.id === 'arrow').count, 3);
 });
 
+test('the bow shoots from the quiver first, and the arrow picked up again rejoins it', async () => {
+  const { game, frame, pointer } = await loadGame();
+  const shoot = () => {
+    pointer('pointerdown');
+    for (let i = 0; i < 15; i++) frame(0.05);
+    pointer('pointerup');
+    frame();
+  };
+  const notes = [];
+  game.hud.notify = (text) => notes.push(text);
+  game.inventory.add('longbow');
+  game.inventory.equip(game.inventory.slots.findIndex(stack => stack?.id === 'longbow'));
+  frame();
+  shoot();
+  assert.deepEqual(notes, ['Out of arrows.']);
+  assert.equal(game.projectiles.list.length, 0);
+
+  game.inventory.add('arrow', 3, { material: 'iron' });
+  game.inventory.equip(game.inventory.slots.findIndex(stack => stack?.id === 'arrow'));
+  game.inventory.add('arrow', 4);
+  shoot();
+  assert.equal(game.projectiles.list.length, 1);
+  const [shot] = game.projectiles.list;
+  assert.equal(shot.material, 'iron', 'the arrow flies as what it is, not as the bow');
+  assert.deepEqual({ ...game.inventory.equipment.quiver }, { id: 'arrow', count: 2, material: 'iron' });
+  assert.equal(game.inventory.slots.find(stack => stack?.id === 'arrow').count, 4, 'the bag waits');
+
+  // It lands at the outlaw's feet and is picked up again.
+  game.projectiles.list.length = 0;
+  Object.assign(shot, { x: game.player.x, y: game.player.y, depth: game.player.y });
+  game.projectiles.landed.push(shot);
+  frame();
+  assert.equal(game.projectiles.landed.length, 0);
+  assert.equal(game.inventory.equipment.quiver.count, 3);
+  assert.equal(game.inventory.countOf('arrow'), 7);
+});
+
 for (const interruption of ['inventory', 'builder', 'freeze', 'blur', 'pointercancel', 'stun']) {
   test(`${interruption} cancels the drawn bow without shooting or replaying its release`, async () => {
     const { game, frame, pointer, blur } = await chargedBow();

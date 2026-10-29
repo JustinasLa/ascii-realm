@@ -199,14 +199,15 @@ short version see the [README](../README.md).
   no character; `?name=...` shows another for testing). Its colour is your
   name colour (see Multiplayer).
 - **Atmosphere.** Fireflies, a vignette, and zoom.
-- **Status frames and quick slots.** A party-style frame in the top-left
+- **Status frames.** A party-style frame in the top-left
   corner shows the character's name, segmented HP and MP bars and the satchel's weight.
-  Nine quick slots sit along the bottom. Running and sword strikes have no stamina cost.
-- **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
-  equipment view drawn with the outlaw's own glyphs, item details, 24 bag slots
+  An Inventory button sits at the bottom. Running and sword strikes have no stamina cost.
+- **Inventory and equipment.** A keyboard-controlled satchel, twelve equipment
+  slots (weapon, shield, helmet, body, legs, gloves, boots, amulet, two rings,
+  cloak and quiver) drawn with the outlaw's own glyphs, item details, 24 bag slots
   and a 60 kg carrying limit. The bag starts with a short sword, equipped and
-  assigned to quick slot 1, and a stone pickaxe on quick slot 2. You can move the sword into the bag, equip it
-  again and assign it to other quick slots. Clothes are part of the character;
+  ready, and a stone pickaxe. Arrows can fill the quiver, which the bow shoots
+  from and pickups top up first. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn

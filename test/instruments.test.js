@@ -52,7 +52,7 @@ test('notes climb the C major scale and chords are root-position triads voiced u
   assert.deepEqual(noteMidi('shortSword', 0), []);
 });
 
-test('the hotbar layer: notes 1-8, then chords or notes 9-16 with Shift, never slot 9', () => {
+test('the note layer: notes 1-8, then chords or notes 9-16 with Shift, never slot 9', () => {
   for (const id of CHORDS) assert.equal(secondLayer(id), 'chords');
   for (const id of OCTAVES) assert.equal(secondLayer(id), 'notes');
   assert.equal(secondLayer('shortSword'), null);
@@ -166,7 +166,7 @@ test('pitch names are ASCII note names with their octave', () => {
   assert.deepEqual([48, 60, 61, 72, 84, 59, 0, -1].map(pitchName), ['C3', 'C4', 'C#4', 'C5', 'C6', 'B3', 'C-1', 'B-2']);
 });
 
-test('the hotbar note layout: notes, then chords or the octave above with Shift', () => {
+test('the note slot layout: notes, then chords or the octave above with Shift', () => {
   const pick = (id, shifted, key) => noteSlots(id, shifted).map(note => note[key]);
   assert.deepEqual(pick('lute', false, 'label'), ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C']);
   assert.deepEqual(pick('lute', false, 'pitches'), ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5']);

@@ -67,21 +67,14 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-party:empty { display: none; }
 .hud-party-tab { align-self: flex-start; padding: 1px 6px; background: var(--surface); border: 1px solid var(--frame); font-size: 11px; }
 
-/* Quick slots form one framed instrument with a shared caption. */
-.hud-hotbar-wrap { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-template-columns: auto 54px; gap: 6px 8px; padding: 6px 8px 8px; background: var(--surface); border: 1px solid var(--frame); }
-.hud-hotbar-heading { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
-.hud-selected-item { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; }
-.hud-quick-hint { color: var(--quiet); font-size: 10px; white-space: nowrap; }
-.hud-hotbar { display: grid; grid-template-columns: repeat(9, 48px); gap: 4px; }
+/* The inventory button in its frame; an instrument's note slots join it. */
+.hud-inventory-wrap { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; gap: 6px 8px; padding: 6px; background: var(--surface); border: 1px solid var(--frame); }
+.hud-inventory-wrap.playing { grid-template-columns: auto 54px; padding: 6px 8px 8px; }
+.hud-notes-hint { grid-column: 1 / -1; padding-bottom: 5px; border-bottom: 1px solid var(--line); color: var(--quiet); font-size: 10px; white-space: nowrap; }
+.hud-notes { display: grid; grid-template-columns: repeat(8, 48px); gap: 4px; }
 .hud-slot, .hud-inventory-button { position: relative; display: grid; place-items: center; width: 48px; height: 54px; padding: 0; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 0; pointer-events: auto; }
 .hud-slot:hover, .hud-inventory-button:hover { color: var(--ink); background: var(--hover); border-color: var(--frame); }
-.hud-slot.selected { color: var(--solid); background: var(--ink); border-color: var(--ink); }
-.hud-slot.empty { border-style: dotted; }
-.hud-slot.empty::after { content: "·"; color: var(--quiet); }
 .hud-slot-number { position: absolute; top: 3px; left: 4px; font-size: 9px; line-height: 1; }
-.hud-slot-glyph { width: 11ch; margin-top: 1px; font-size: 4.8px; line-height: 4.8px; text-align: left; white-space: pre; }
-.hud-slot-count { position: absolute; right: 3px; bottom: 3px; font-size: 9px; line-height: 1; }
-.hud-slot-state { position: absolute; left: 4px; bottom: 2px; font-size: 10px; line-height: 1; }
 .hud-inventory-button { width: 54px; align-content: center; gap: 3px; border-color: var(--frame); }
 .hud-inventory-glyph { font-size: 5px; line-height: 5px; }
 .hud-inventory-label { font-size: 9px; }
@@ -237,9 +230,15 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .equipment-slot[data-equipment-slot="offHand"] { grid-column: 3; grid-row: 3; }
 .equipment-slot[data-equipment-slot="mainHand"] { grid-column: 1; grid-row: 4; }
 .equipment-slot[data-equipment-slot="legs"] { grid-column: 2; grid-row: 5; }
+.equipment-slot[data-equipment-slot="quiver"] { grid-column: 1; grid-row: 1; }
+.equipment-slot[data-equipment-slot="amulet"] { grid-column: 3; grid-row: 1; }
+.equipment-slot[data-equipment-slot="feet"] { grid-column: 3; grid-row: 4; }
+.equipment-slot[data-equipment-slot="ringLeft"] { grid-column: 1; grid-row: 5; }
+.equipment-slot[data-equipment-slot="ringRight"] { grid-column: 3; grid-row: 5; }
 .equipment-slot-label { position: absolute; bottom: 4px; left: 0; right: 0; color: var(--quiet); text-align: center; font-size: 9px; line-height: 1; }
 .equipment-slot-icon { width: 11ch; font-size: 4.5px; line-height: 4.5px; white-space: pre; text-align: left; }
 .equipment-slot-name { display: none; }
+.equipment-slot-count { position: absolute; top: 3px; right: 3px; font-size: 9px; line-height: 1; }
 .equipment-slot.empty { border-style: dotted; }
 .equipment-slot.empty::after { content: "·"; color: var(--quiet); }
 .inventory-bag-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
@@ -265,7 +264,7 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .inventory-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 6px; font-size: 11px; }
 .inventory-stats dt { color: var(--quiet); }
 .inventory-stats dd { margin: 0; color: var(--ink); }
-.inventory-weight, .inventory-durability, .inventory-hotbar-assignment { margin: 3px 0; color: var(--quiet); font-size: 10px; }
+.inventory-weight, .inventory-durability { margin: 3px 0; color: var(--quiet); font-size: 10px; }
 .inventory-actions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
 .inventory-actions button { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; padding: 4px 7px; font-size: 11px; }
 .inventory-actions kbd { color: var(--quiet); font-size: 10px; }
@@ -431,7 +430,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .zoom-controls { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: flex; gap: 4px; }
   #touch-controls .zoom-controls button { font-size: 18px; }
   #panel-dock { top: calc(max(12px, env(safe-area-inset-top)) + 52px); max-height: calc(100dvh - 208px); }
-  .hud-hotbar-wrap { bottom: max(132px, calc(env(safe-area-inset-bottom) + 132px)); }
+  .hud-inventory-wrap { bottom: max(132px, calc(env(safe-area-inset-bottom) + 132px)); }
   .hud-prompt { bottom: max(236px, calc(env(safe-area-inset-bottom) + 236px)); }
   #fire-status { bottom: max(272px, calc(env(safe-area-inset-bottom) + 272px)); }
   #panel-dock :is(button, input:not([type="range"]), select) { min-height: 36px; }
@@ -444,13 +443,12 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #panel-dock { top: 144px; max-height: calc(100dvh - 374px); }
   #panel-dock > details[open] { width: min(292px, calc(100vw - 24px)); }
   #builder-banner { top: auto; bottom: 236px; left: 12px; }
-  .hud-hotbar-wrap { grid-template-columns: auto 44px; gap: 5px; padding: 5px 6px 6px; }
-  .hud-hotbar { grid-template-columns: repeat(9, 40px); gap: 3px; }
+  .hud-inventory-wrap.playing { grid-template-columns: auto 44px; gap: 5px; padding: 5px 6px 6px; }
+  .hud-notes { grid-template-columns: repeat(8, 40px); gap: 3px; }
   .hud-slot { width: 40px; height: 50px; }
-  .hud-slot-glyph { font-size: 4px; line-height: 4px; }
   .hud-inventory-button { width: 44px; height: 50px; }
   .hud-inventory-label { font-size: 8px; }
-  .hud-quick-hint { font-size: 9px; }
+  .hud-notes-hint { font-size: 9px; }
   .inventory-screen { width: calc(100% - 24px); max-height: calc(100dvh - 24px); padding: 8px; }
   .inventory-body { grid-template-columns: 204px minmax(0, 1fr); gap: 8px; }
   .equipment-slots { column-gap: 5px; }
@@ -463,12 +461,11 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .inventory-item-preview { display: none; }
 }
 @media (max-width: 520px) {
-  .hud-hotbar-wrap { width: 324px; grid-template-columns: 1fr; bottom: max(128px, calc(env(safe-area-inset-bottom) + 128px)); }
-  .hud-hotbar-heading { gap: 8px; }
-  .hud-hotbar { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .hud-inventory-wrap { bottom: max(128px, calc(env(safe-area-inset-bottom) + 128px)); }
+  .hud-inventory-wrap.playing { width: 324px; grid-template-columns: 1fr; }
+  .hud-notes { grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .hud-slot { width: auto; height: 48px; }
-  .hud-slot-glyph { font-size: 4.5px; line-height: 4.5px; }
-  .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
+  .playing .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
   .hud-prompt { bottom: max(282px, calc(env(safe-area-inset-bottom) + 282px)); font-size: 11px; }
   #fire-status { bottom: max(316px, calc(env(safe-area-inset-bottom) + 316px)); font-size: 11px; }
   .hud-frames { max-height: calc(100dvh - 380px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); }
@@ -477,7 +474,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .inventory-equipment, .inventory-bag { padding: 6px; }
   .inventory-character-stage { height: auto; margin-top: 6px; }
   .inventory-portrait { display: none; }
-  .equipment-slots { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, 52px); gap: 4px; }
+  .equipment-slots { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, 52px); gap: 4px; }
   .equipment-slot[data-equipment-slot] { grid-column: auto; grid-row: auto; }
   .equipment-slot-icon { font-size: 4px; line-height: 4px; }
   .equipment-slot-label { font-size: 9px; }
@@ -493,9 +490,9 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 @media (max-width: 360px) {
   .hud-frames { left: 8px; width: 232px; }
   .zoom-controls { flex-direction: column; }
-  .hud-hotbar-wrap { width: calc(100% - 24px); }
-  .hud-inventory-button { width: calc((100% - 28px) / 5); }
-  .hud-quick-hint { font-size: 8px; }
+  .hud-inventory-wrap.playing { width: calc(100% - 24px); }
+  .playing .hud-inventory-button { width: calc((100% - 28px) / 5); }
+  .hud-notes-hint { font-size: 8px; }
   .inventory-screen { width: calc(100% - 16px); padding: 6px; }
   .inventory-slot-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
   .inventory-slot-icon { font-size: 3.5px; line-height: 3.5px; }
@@ -503,7 +500,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .inventory-identity { gap: 8px; }
 }
 @media (max-height: 540px) and (min-width: 681px) {
-  .hud-hotbar-wrap { bottom: 10px; }
+  .hud-inventory-wrap { bottom: 10px; }
   #move-pad { width: 88px; height: 88px; }
   #panel-dock { max-height: calc(100dvh - 174px); }
   .hud-prompt { bottom: 112px; }
@@ -515,11 +512,11 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-party { width: 190px; }
   .hud-member .hud-vital { grid-template-columns: 18px 1fr; }
   .hud-member .hud-vital-value { display: none; }
-  .hud-hotbar-wrap { width: 324px; grid-template-columns: 1fr; bottom: max(12px, env(safe-area-inset-bottom)); gap: 5px; padding: 5px 6px 6px; }
-  .hud-hotbar { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .hud-inventory-wrap { bottom: max(12px, env(safe-area-inset-bottom)); gap: 5px; padding: 5px; }
+  .hud-inventory-wrap.playing { width: 324px; grid-template-columns: 1fr; padding: 5px 6px 6px; }
+  .hud-notes { grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .hud-slot { width: auto; height: 48px; }
-  .hud-slot-glyph { font-size: 4.5px; line-height: 4.5px; }
-  .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
+  .playing .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
   #panel-dock { top: 12px; max-height: calc(100dvh - 172px); }
   .zoom-controls { top: auto; bottom: 112px; }
   #move-pad { width: 88px; height: 88px; }
@@ -530,11 +527,11 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud, #fire-status, #inventory-root::before, .hud-purse-value { transition: none; }
   .forge-burst { animation: none; }
 }
-/* The bound rune sits above the hotbar; the rune wheel picks it. */
+/* The bound rune sits above the inventory button; the rune wheel picks it. */
 
 #spell-wheel { position: fixed; inset: 0; z-index: 35; pointer-events: none; background: radial-gradient(circle, transparent 30%, #05060a66 80%); }
 .spell-wheel-open #screen { cursor: default; }
-.spell-wheel-open :is(.hud-hotbar-wrap, .hud-prompt, #touch-controls, #panel-dock) { opacity: 0.3; transition: opacity 120ms; }
+.spell-wheel-open :is(.hud-inventory-wrap, .hud-prompt, #touch-controls, #panel-dock) { opacity: 0.3; transition: opacity 120ms; }
 .spell-wheel-ring { position: absolute; transform-origin: 50% 50%; animation: spell-wheel-in 110ms ease-out; }
 @keyframes spell-wheel-in { from { opacity: 0; } }
 .spell-wheel-art { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -574,7 +571,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .chat-system .chat-text { color: var(--quiet); }
 .chat-error .chat-text { color: var(--foe); }
 #chat-open { display: none; }
-/* Narrower windows raise the log above the quick slots, whose bar is 544px
+/* Narrower windows raise the log above the inventory button, with notes 544px
    wide and 98px tall: 12px + 420px + 12px clear of it needs a window 1432px
    wide. The log also narrows so the centred prompts above the bar stay
    clear of it. */
@@ -588,7 +585,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat { bottom: calc(max(128px, calc(env(safe-area-inset-bottom) + 128px)) + 148px); }
 }
 /* Touch screens that aren't phones keep the stick, so the log sits above
-   the raised quick slots. */
+   the raised inventory button. */
 @media (pointer: coarse) {
   #chat { bottom: calc(max(132px, calc(env(safe-area-inset-bottom) + 132px)) + 108px); }
 }
@@ -629,7 +626,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-loot-label { font-size: 9px; padding: 0 3px; }
   .bubble { font-size: 10px; line-height: 12px; }
   #panel-dock, .zoom-controls,
-  .hud-hotbar-wrap, .hud-party, .hud-party-tab, .hud-name, .hud-frame-note,
+  .hud-inventory-wrap, .hud-party, .hud-party-tab, .hud-name, .hud-frame-note,
   .hud-prompt, #fire-status, #builder-banner, #builder-cursor,
   kbd, .key-hint, .inventory-help,
   #scenery-builder, #weather-panel, #help-controls, #grass-preview { display: none !important; }
@@ -708,6 +705,10 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   /* The inventory is a full-screen sheet too. */
   .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
   .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
+  .inventory-character-stage { height: auto; margin-top: 6px; }
+  .inventory-portrait { display: none; }
+  .equipment-slots { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(3, 52px); gap: 4px; }
+  .equipment-slot[data-equipment-slot] { grid-column: auto; grid-row: auto; }
   .furnace-screen .furnace-slot { width: 72px; height: 72px; }
   .furnace-bag-list { grid-template-columns: minmax(0, 1fr); }
   :is(.furnace-screen, .forge-screen, .smith-screen) .furnace-bag-item { min-height: 48px; }
@@ -776,10 +777,9 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud:has(.hud-target:not([hidden])) .hud-toasts { margin-top: 30px; }
 }
 
-/* An off-hand instrument turns slots 1-8 into its notes: the letter or chord
-   name over the exact pitch, lit for a moment when played. */
+/* An off-hand instrument's note slots: the letter or chord name over the
+   exact pitch, lit for a moment when played. */
 .hud-slot.note { align-content: center; gap: 2px; color: var(--ink); }
-.hud-slot.note .hud-slot-glyph { display: none; }
 .hud-slot-note { font-size: 15px; font-weight: 600; line-height: 1; }
 .hud-slot-pitch { color: var(--muted); font-size: 8px; line-height: 1; white-space: nowrap; }
 .hud-slot.note-flash { color: var(--solid); background: var(--ink); border-color: var(--ink); }

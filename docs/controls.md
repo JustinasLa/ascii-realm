@@ -23,16 +23,13 @@
 | `L` / Weather & seasons panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
 | Mouse wheel / `+` `-` | Zoom |
-| `1`–`9` | Select a quick slot; gear in it is equipped (without an instrument in the off hand). The stone pickaxe starts on `2`: strike an ore block with it to mine it (the prompt shows what a block needs) |
-| `1`–`8`, instrument in the off hand | Play notes C D E F G A B C; the selection returns to quick slot 9 |
+| `1`–`8`, instrument in the off hand | Play notes C D E F G A B C |
 | `Shift`+`1`–`8`, instrument in the off hand | Play the chords (lute, vielle, celtic harp, dulcimer, kalimba, accordion) or notes 9–16 an octave up (flute, trumpet, bagpipe) |
-| `Q` | Activate the selected quick slot to re-equip the sword |
 | `I` / `Tab` | Open or close the inventory (`Escape` also closes it) |
 | `G`, with inventory open | Switch between the satchel and equipment |
 | Arrow keys, with inventory open | Move through items in the selected pane |
-| `Enter`, with inventory open | Use or equip a satchel item, or take off selected gear |
+| `Enter`, with inventory open | Use or equip a satchel item (arrows fill the quiver), or take off selected gear. Equip the stone pickaxe here, then strike an ore block with it to mine it (the prompt shows what a block needs) |
 | `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
-| `1`–`9`, with inventory open | Assign the selected item to a quick slot |
 | `C`, with inventory open | Turn to the next page (Inventory, Character, Characters) |
 | Arrow keys / `Tab`, with a furnace open | Move through its slots, your satchel's resources and Close |
 | `Enter` / `Space`, with a furnace open | Put the chosen resource in, or take a slot's contents back |
@@ -54,21 +51,17 @@ second layer. Holding a key down plays its note once. What the main hand holds
 doesn't matter, and walking, running (`Shift` still runs), striking, jumping
 and casting all work while you play.
 
-The quick slots show the layout while you carry one: slots 1–8 read
+Note slots beside the Inventory button show the layout while you carry one: slots 1–8 read
 `C D E F G A B C` with the exact pitch below, chord names (or the octave
 above) while `Shift` is held, and the played slot lights up. The hint reads,
 for example, `Lute | 1-8 notes | Shift chords`. Clicking a note slot plays it,
-and `Shift`-click plays the second layer. After each note the selection goes
-back to quick slot 9 without equipping anything there, so the same key plays
-again at once.
+and `Shift`-click plays the second layer.
 
-While you carry an instrument, `1`–`8` don't switch gear: press `9`, open
-the inventory, or take the instrument off. `9` still selects quick slot 9 as
-usual. Notes don't play in the Scenery builder, while typing, with the
+Notes don't play in the Scenery builder, while typing, with the
 inventory, chat or rune wheel open, or while down. A note glyph `d`, coloured
 by pitch, pops up 2 m above your head with each note.
 
-Phones can't play instruments yet: their quick slots stay as they are.
+Phones can't play instruments yet.
 
 ## Chat
 
@@ -165,7 +158,7 @@ run. The other thumb has a cluster in the bottom-right corner:
   strike, chains a combo when tapped again and charges a spin when held. The
   sword is put away by itself after a few quiet seconds standing still. With a
   bow or spear, hold STRIKE to draw and lift to shoot or throw. With the stone
-  pickaxe (tap quick slot 2), STRIKE mines the ore block you face.
+  pickaxe equipped from the inventory, STRIKE mines the ore block you face.
 - **JUMP** sits to its left.
 - **CAST** sits above it. Tap it to cast the bound rune; hold it to open the
   rune wheel on the same finger, slide to a school and lift, then tap a rune
@@ -222,7 +215,7 @@ tap. The menu's **Full screen** row enters or leaves full screen where the
 browser supports it. **Add to Home Screen** installs the game as an app that
 opens full screen with a dark status bar.
 
-Tablets get the same thumb cluster and keep the full layout: the panels, the quick slots and the upper
+Tablets get the same thumb cluster and keep the full layout: the panels, the Inventory button and the upper
 **− / +** zoom buttons, which work alongside pinch. Touch controls appear only
 when touch is the primary input, so touchscreen laptops and narrow desktop
 windows keep the keyboard and mouse layout. The scenery builder needs a desktop

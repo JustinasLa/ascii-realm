@@ -155,13 +155,15 @@ test('a skin changes the figure\'s colours but not its shape', () => {
 
 test('the skin can take off the hood, jerkin and cloak, and nothing else', () => {
   for (const equipment of [undefined, {}]) {
-    for (const slot of ['helm', 'chest', 'legs', 'hands', 'cape']) assert.equal(wears(equipment, slot), true, slot);
+    for (const slot of ['helm', 'chest', 'legs', 'feet', 'hands', 'cape']) assert.equal(wears(equipment, slot), true, slot);
     const bare = cleanSkin({ layers: { hood: false, jerkin: false, cloak: false } });
-    assert.deepEqual(['helm', 'chest', 'legs', 'hands', 'cape'].map((slot) => wears(equipment, slot, bare)),
-      [false, false, true, true, false]);
+    assert.deepEqual(['helm', 'chest', 'legs', 'feet', 'hands', 'cape'].map((slot) => wears(equipment, slot, bare)),
+      [false, false, true, true, true, false]);
     assert.equal(wears(equipment, 'chest', cleanSkin({ layers: { hood: false } })), true);
   }
   assert.equal(wears({}, 'offHand', DEFAULT_SKIN), false);
+  assert.equal(wears({ feet: null }, 'feet'), true, 'boots are part of the outfit');
+  assert.equal(wears({}, 'quiver'), false);
   assert.equal(wears({ offHand: { id: 'lute' } }, 'offHand', presetSkin('reaver')), true);
 });
 

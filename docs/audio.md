@@ -344,7 +344,7 @@ accordion, celtic harp, dulcimer, kalimba, lute and vielle, Shift plays the
 chord on each note: root, third and fifth of C major, voiced upwards (C, Dm,
 Em, F, G, Am, Bdim, and C an octave up). On the flute, trumpet and bagpipe,
 Shift plays notes 9-16, the same scale an octave up. Any instrument can sound
-a chord; Shift only decides what the hotbar's second layer plays.
+a chord; Shift only decides what the note slots' second layer plays.
 
 `playInstrumentNote(engine, { instrument, degree, octave, chord, x, y, level })`
 plays a one-shot on the records bus and returns one stoppable handle for the

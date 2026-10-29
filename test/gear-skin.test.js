@@ -95,6 +95,9 @@ test('apply repaints only when the equipment or the skin changes', () => {
   gear.apply(equipment, cleanSkin({ tone: 'fern' }));
   assert.equal(colours.version, version + 2);
   assert.equal(gear.palettes.size, 2);
+  const signature = gear.signature;
+  gear.apply({ ...equipment, quiver: { id: 'arrow', count: 30 } }, gear.skin);
+  assert.notEqual(gear.signature, signature, 'every slot counts, the quiver too');
 });
 
 test('the per-skin colour table stays small', () => {
@@ -111,4 +114,5 @@ test('region colours follow the skin\'s layers', () => {
   assert.deepEqual(regionColors({}, cleanSkin({ layers: { hood: false, jerkin: false } })),
     { head: 'skin', torso: 'linen', upperArm: 'linen', forearm: 'bracer', hand: 'glove', thigh: 'hose', shin: 'boot', foot: 'boot' });
   assert.deepEqual(regionColors({}, DEFAULT_SKIN), regionColors({}));
+  assert.deepEqual(regionColors({ feet: null }), regionColors({}), 'the boots are drawn from the feet, always worn');
 });

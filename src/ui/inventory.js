@@ -12,6 +12,11 @@ const SLOT_NAMES = {
   cape: 'Cape',
   mainHand: 'Main hand',
   offHand: 'Off hand',
+  feet: 'Feet',
+  amulet: 'Amulet',
+  ringLeft: 'Left ring',
+  ringRight: 'Right ring',
+  quiver: 'Quiver',
 };
 
 function element(tag, className, text) {
@@ -147,10 +152,12 @@ export class InventoryScreen {
       const icon = element('pre', 'equipment-slot-icon');
       icon.setAttribute('aria-hidden', 'true');
       const itemName = element('span', 'equipment-slot-name');
-      button.append(label, icon, itemName);
+      const count = element('span', 'equipment-slot-count');
+      count.setAttribute('aria-hidden', 'true');
+      button.append(label, icon, itemName, count);
       button.addEventListener('click', () => this._select({ source: 'equipment', slot }));
       button.addEventListener('dblclick', () => this._unequip());
-      this.equipmentNodes.set(slot, { button, icon, itemName });
+      this.equipmentNodes.set(slot, { button, icon, itemName, count });
       this.equipmentGrid.append(button);
     }
     stage.append(this.equipmentGrid);
@@ -230,7 +237,6 @@ export class InventoryScreen {
     this.stats = element('dl', 'inventory-stats');
     this.itemWeight = element('p', 'inventory-weight');
     this.durability = element('p', 'inventory-durability');
-    this.assignment = element('p', 'inventory-hotbar-assignment');
     const actions = element('div', 'inventory-actions');
     this.equipButton = element('button', 'inventory-equip', 'Equip');
     this.equipButton.append(element('kbd', '', 'E'));
@@ -251,7 +257,7 @@ export class InventoryScreen {
     this.feedback.setAttribute('aria-atomic', 'true');
     this.feedback.hidden = true;
     itemInfo.append(this.itemType, this.itemName, this.description, this.notes, this.stats, this.itemWeight,
-      this.durability, this.assignment, actions, this.feedback);
+      this.durability, actions, this.feedback);
     this.details.append(this.itemPreview, itemInfo);
     const carried = element('div', 'inventory-carried');
     carried.append(bag, this.details);
@@ -259,7 +265,7 @@ export class InventoryScreen {
 
     const help = element('div', 'inventory-help');
     for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'],
-      ...(this.onDrop ? [['X', 'Drop']] : []), ['1-9', 'Assign quick slot']]) {
+      ...(this.onDrop ? [['X', 'Drop']] : [])]) {
       const hint = element('span', 'inventory-key-hint');
       hint.append(element('kbd', '', keys), element('span', '', action));
       help.append(hint);
@@ -436,18 +442,6 @@ export class InventoryScreen {
       else this._activate();
       return;
     }
-    const digit = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
-    if (digit) {
-      this._consume(event);
-      if (!event.repeat && this.selection.source === 'bag') {
-        const stack = this.inventory.slots[this.selection.index];
-        if (stack && this.inventory.assignHotbar(Number(digit[1]) - 1, stack.id)) {
-          this.onNotify(`${ITEMS[stack.id].name} assigned to hotbar ${digit[1]}.`);
-          this.update();
-        }
-      }
-      return;
-    }
     // No held movement or queued attack may escape from an open inventory.
     event.stopImmediatePropagation();
     if (gameKeys.includes(event.code)) this._consume(event);
@@ -526,9 +520,11 @@ export class InventoryScreen {
     const selected = this._selectedItem();
     if (this.selection.source !== 'bag' || !selected?.item.equipmentSlot) return;
     const context = this.details.contains(document.activeElement);
+    const slot = this.inventory.targetSlot(selected.item);
     const equipped = this.inventory.equip(this.selection.index);
-    this.onNotify(equipped ? `Equipped ${selected.item.name}.` : 'No room to replace equipped gear.', equipped ? 'success' : 'error');
-    if (equipped) this._select({ source: 'equipment', slot: selected.item.equipmentSlot }, !context);
+    const refusal = slot === 'quiver' ? 'Your quiver is full.' : 'No room to replace equipped gear.';
+    this.onNotify(equipped ? `Equipped ${selected.item.name}.` : refusal, equipped ? 'success' : 'error');
+    if (equipped) this._select({ source: 'equipment', slot }, !context);
     else this.update();
     if (context) this._focusDetails(equipped ? this.unequipButton : this.equipButton);
   }
@@ -578,7 +574,7 @@ export class InventoryScreen {
     if (!this.feedback.hidden && performance.now() >= this._feedbackUntil) hidden(this.feedback, true);
     const vitals = this.player.vitals;
     const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
-      this.inventory.hotbar, this.inventory.capacity, this.selection,
+      this.inventory.capacity, this.selection,
       vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), skinKey(this.player.skin),
       this.describeVersion()]);
     if (signature === this._signature) return;
@@ -621,6 +617,7 @@ export class InventoryScreen {
       attribute(nodes.button, 'aria-describedby', selected ? this.details.id : null);
       setText(nodes.icon, item ? itemArt(item.id, item.glyph) : '');
       setText(nodes.itemName, item?.shortName || (item ? item.name : 'Empty'));
+      setText(nodes.count, stack?.count > 1 ? `x${stack.count}` : '');
     }
 
     const selected = this._selectedItem();
@@ -660,10 +657,6 @@ export class InventoryScreen {
     const most = own?.durability ?? item?.durability;
     hidden(this.durability, !most);
     setText(this.durability, most ? `Durability: ${stack.durability ?? most} / ${most}` : '');
-    hidden(this.assignment, !item);
-    const hotbarSlots = item ? this.inventory.hotbar
-      .flatMap((id, index) => id === item.id ? [String(index + 1)] : []) : [];
-    setText(this.assignment, item ? `Quick slot ${hotbarSlots.join(', ') || 'unassigned'}` : '');
     hidden(this.equipButton, !carried || !item?.equipmentSlot);
     hidden(this.useButton, !carried || !item?.use);
     const useDisabled = Boolean(item?.use)
