@@ -789,11 +789,14 @@ export class MonsterFigures {
   // Renders the monsters nearest `near` that show within the view, each in
   // its own slot fitted round its pose, reads the image back once and turns
   // each into cells. Returns [{ monster, cells, base, top, depth, contacts }].
-  rasterise(view, monsters, near) {
+  // `viewOf(x, y)`, if given, is the view one standing there is drawn
+  // through (raised ground, see relief.js); `top` stays in the plain view.
+  rasterise(view, monsters, near, viewOf = null) {
     const inView = [];
     for (const s of monsters) {
-      const slot = this.slotOf(s, view);
-      if (slot) inView.push({ s, slot });
+      const at = viewOf ? viewOf(s.x, s.y) : view;
+      const slot = this.slotOf(s, at);
+      if (slot) inView.push({ s, slot, at });
     }
     inView.sort((a, b) => Math.hypot(a.s.x - near.x, a.s.y - near.y) - Math.hypot(b.s.x - near.x, b.s.y - near.y));
     const drawn = inView.slice(0, MAX_DRAWN);
@@ -826,11 +829,12 @@ export class MonsterFigures {
     for (const rig of this.rigs.values()) rig.model.visible = true;
     const gl = r.getContext();
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
-    for (const { s, slot } of drawn) {
+    for (const { s, slot, at } of drawn) {
       const rig = this.rigs.get(s);
       // Waterlines round the legs, in world cells.
       const contacts = rig.waterContacts().map((c) => ({ x: s.x + c.x * SCALE / ASPECT, y: s.y + c.z * SCALE * TILT }));
-      const figure = this.cellsOf(slot, s, view, rig.flash);
+      const figure = this.cellsOf(slot, s, at, rig.flash);
+      if (figure.top !== null) figure.top -= at.y0 - view.y0;
       // Standing, a monster is in front of what is behind its feet. Fallen,
       // or clawing out of the ground, it lies over the ground it covers, as
       // far as the row nearest the camera, so that ground is not drawn over it.

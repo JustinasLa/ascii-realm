@@ -17,7 +17,7 @@ spawn point it raises:
 
 The scene is the same every time for a given seed. It has no rivers or
 ruins, its grass is the lush meadow, and no monsters, animals, birds or fish
-come by unless the address asks for them (`?scene=hill&deer=4`). A page in a
+come by unless the address asks for them (`?scene=hill&deer=4`, `&horse=1`). A page in a
 lobby ignores the scene and plays on flat land, and creating or joining a
 lobby from the scene first reloads the page onto flat land.
 
@@ -36,24 +36,36 @@ water drops flat.
   the feet of whoever stands behind it and the small letters of a prop there.
   Slope rows take a neighbouring column's letter, so no letter repeats
   straight down a slope, and a drop steeper than two rows a row shows earth.
+  A cell whose own flat row is on screen is copied from there, as it stood
+  before any sprite was drawn, so whatever was laid on that ground rises
+  with it and runs on down its slope: shadows, footprints, grass tracks,
+  the trees' night shade and moonbeams, and dew. A cell lifted in from
+  below the screen shows its bare ground.
 - **Light.** Higher ground catches more moonlight and a slope falling toward
   the viewer less, so the crest reads as a lit line over a darker slope.
 - **Grass** rooted on raised ground stands from its lifted root, so the
   crest's blades show against the lower land behind it. Reflections stay
   where the water is: water is never raised.
-- **On the ground:** the player (figure, shadow and nameplate), props,
-  campfires, torches, plants, glowcaps, hunt drops and river debris are drawn
-  as high as the ground under their base, and so are a fire's or torch's
-  light and sparks and a glowcap's glow.
-- **Camera and aim.** The camera follows the player's lifted figure, and the
-  cursor is read on the player's own height, so a click aims where it looks.
+- **On the ground:** the player (figure, shadow and nameplate), monsters
+  (and their health bars), animals, birds on the ground, horses and their
+  riders, props, campfires, torches, plants, glowcaps, hunt drops and river
+  debris are drawn as high as the ground under their base, and so are a
+  fire's or torch's light and sparks and a glowcap's glow. A ridge in front
+  hides their feet. A bird in the air flies over the ground under it.
+- **Camera and aim.** The camera follows the player's lifted figure. The
+  way a click turns the player is read on the player's own height, so a
+  click beside the figure cuts that way; a shot, throw or spell lands on
+  the ground drawn under the cursor, where a foe standing there is.
+- **Scenery builder.** The builder's brush and ghost prop sit on the ground
+  drawn under the pointer: the nearest raised top or slope there, else the
+  flat ground.
 
 ## Not raised yet
 
-Wildlife, monsters and horses (the scene leaves them out), footprints and
-grass tracks, tree shadows and moonbeams on raised ground, reflections next
-to it, and the scenery builder's cursor. A prop is lifted by its base cell,
-so on a slope its sides can sit a row off the ground.
+Reflections: the grass on raised ground and whatever stands there are
+mirrored in the water as if the ground were flat. A lobby plays on flat
+land, so friends are never raised. A prop is lifted by its base cell, so on
+a slope its sides can sit a row off the ground.
 
 ## Walking on slopes
 

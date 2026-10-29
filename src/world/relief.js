@@ -64,6 +64,17 @@ export function liftRows(relief, x, y) {
   return Math.min(MAX_LIFT, Math.round(relief.heightAt(x + 0.5, y + 0.5) * LIFT_PER_METRE));
 }
 
+// The ground row drawn at row `y` of the flat view in column `x`, given
+// `liftAt(x, y)` in rows: the nearest row whose raised top or slope covers
+// it, or `y` itself.
+export function groundUnder(liftAt, x, y) {
+  for (let wy = y + MAX_LIFT; wy > y; wy--) {
+    const lift = liftAt(x, wy);
+    if (lift && wy - lift <= y && y <= wy - Math.min(lift, liftAt(x, wy + 1))) return wy;
+  }
+  return y;
+}
+
 // A chunk's lift per cell (water and shore are never raised) and the most
 // any cell of each row is lifted, or null when the relief misses it.
 export function chunkLift(relief, cx, cy, size, type) {

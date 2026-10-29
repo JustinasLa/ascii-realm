@@ -107,15 +107,17 @@ const SLOPE = [0.8, 0.8, 0.8];
 const FACE = [0.62, 0.55, 0.48];
 const LIT = [1, 1, 1];
 
-function copyCell(r, cached, chunk, i, cell, tint) {
+// Copies ground cell `i` of `chunk` to screen `cell`, read from `src` at
+// `from`: the chunk's shading cache, or the screen itself.
+function copyCell(r, src, from, chunk, i, cell, tint) {
   const o = cell * 4;
-  const s = i * 4;
+  const s = from * 4;
   for (let k = 0; k < 4; k++) {
     const t = k < 3 ? tint[k] : 1;
-    r.fg[o + k] = cached.fg[s + k] * t;
-    r.ov[o + k] = cached.ov[s + k] * t;
-    r.bg[o + k] = cached.bg[s + k];
-    if (r.cellLit) r.cellLit[o + k] = cached.cellLit[s + k];
+    r.fg[o + k] = src.fg[s + k] * t;
+    r.ov[o + k] = src.ov[s + k] * t;
+    r.bg[o + k] = src.bg[s + k];
+    if (r.cellLit) r.cellLit[o + k] = src.cellLit[s + k];
   }
   r.mask[cell] = chunk.type[i];
   if (r.motionUsed) {
@@ -127,10 +129,15 @@ function copyCell(r, cached, chunk, i, cell, tint) {
   if (r.fineMark?.[cell]) r.overFine(cell, 0);
 }
 
-export function drawRaisedRow(r, world, view, wy) {
+// Draws raised ground row `wy`. `ground` is the flat pass as it stood before
+// any sprite was drawn (see raisedRows), or null to show bare ground.
+export function drawRaisedRow(r, world, view, wy, ground = null) {
   const cy = Math.floor(wy / CHUNK_SIZE);
   const ly = wy - cy * CHUNK_SIZE;
   const ny = (ly + 1) % CHUNK_SIZE;
+  // A cell whose own flat row is on screen is taken from there, with its
+  // dew and the shadows, tracks, footprints and tree shade laid on it.
+  const flat = ground && wy - view.y0 < view.rows ? (wy - view.y0) * r.cols : -1;
   for (let cx = Math.floor(view.x0 / CHUNK_SIZE); cx * CHUNK_SIZE < view.x0 + view.cols; cx++) {
     const chunk = world.loaded(cx, cy);
     if (!chunk?.liftRows?.[ly]) continue;
@@ -149,27 +156,56 @@ export function drawRaisedRow(r, world, view, wy) {
       LIT[0] = LIT[1] = LIT[2] = reliefLight(lift, ahead);
       for (let k = Math.max(0, -top); k <= drop && top + k < view.rows; k++) {
         // Slope rows take a neighbouring column's letter, so no letter
-        // repeats straight down the slope.
+        // repeats straight down the slope; what lies on that cell runs on
+        // down the slope with it.
         const side = lx + (k & 1 ? 1 : -1);
-        const j = k ? ly * CHUNK_SIZE + (side < 0 || side >= CHUNK_SIZE ? 2 * lx - side : side) : i;
-        copyCell(r, cached, chunk, j, (top + k) * r.cols + sx, !k ? LIT : k <= 2 ? SLOPE : FACE);
+        const jx = k ? (side < 0 || side >= CHUNK_SIZE ? 2 * lx - side : side) : lx;
+        const j = ly * CHUNK_SIZE + jx;
+        const at = sx + jx - lx;
+        const held = flat >= 0 && at >= 0 && at < view.cols;
+        copyCell(r, held ? ground : cached, held ? flat + at : j, chunk, j, (top + k) * r.cols + sx,
+          !k ? LIT : k <= 2 ? SLOPE : FACE);
       }
     }
   }
 }
 
+// Each renderer's flat ground as held for its raised rows, reused frame to
+// frame.
+const holds = new WeakMap();
+const LAYERS = ['fg', 'bg', 'ov', 'cellLit'];
+
+function holdOf(r) {
+  let ground = holds.get(r);
+  if (!ground || LAYERS.some((key) => ground[key]?.length !== r[key]?.length)) {
+    ground = Object.fromEntries(LAYERS.map((key) => [key, r[key] && new r[key].constructor(r[key].length)]));
+    holds.set(r, ground);
+  }
+  return ground;
+}
+
 // The painter's drawables for every raised ground row whose cells can show
-// in the view, which reaches up to MAX_LIFT rows below it.
+// in the view, which reaches up to MAX_LIFT rows below it. Before any of
+// them, and before any sprite, the screen rows they copy from are held, so
+// a sprite drawn over the flat ground is never lifted with it.
 export function raisedRows(r, world, view) {
-  const rows = [];
+  const ys = [];
   for (let wy = view.y0; wy < view.y0 + view.rows + world.maxLift; wy++) {
     const cy = Math.floor(wy / CHUNK_SIZE);
     const ly = wy - cy * CHUNK_SIZE;
     for (let cx = Math.floor(view.x0 / CHUNK_SIZE); cx * CHUNK_SIZE < view.x0 + view.cols; cx++) {
       if (!world.loaded(cx, cy)?.liftRows?.[ly]) continue;
-      rows.push({ y: wy, draw: () => drawRaisedRow(r, world, view, wy) });
+      ys.push(wy);
       break;
     }
   }
+  // Only rows lifted from a flat row on screen copy from the screen.
+  const ground = ys[0] < view.y0 + view.rows ? holdOf(r) : null;
+  const rows = ground ? [{ y: -Infinity, draw: () => {
+    const first = (ys[0] - view.y0) * r.cols * 4;
+    const last = Math.min(view.rows, ys.at(-1) - view.y0 + 1) * r.cols * 4;
+    for (const key of LAYERS) if (r[key]) ground[key].set(r[key].subarray(first, last), first);
+  } }] : [];
+  for (const wy of ys) rows.push({ y: wy, draw: () => drawRaisedRow(r, world, view, wy, ground) });
   return rows;
 }

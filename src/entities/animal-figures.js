@@ -539,19 +539,22 @@ export class AnimalFigures {
   // The animals in view drawn into slots of one image, read back at once
   // and turned into cells: the large ones along the bottom row, birds and
   // fish on a shelf of their own above them.
-  rasterise(view, animals, near, small = []) {
+  // `viewOf(x, y)`, if given, is the view one standing there is drawn
+  // through (raised ground, see relief.js).
+  rasterise(view, animals, near, small = [], viewOf = null) {
     this.view = view;
     const inView = [];
     for (const s of animals) {
-      const slot = this.slotOf(s, view);
-      if (slot) inView.push({ s, slot });
+      const at = viewOf ? viewOf(s.x, s.y) : view;
+      const slot = this.slotOf(s, at);
+      if (slot) inView.push({ s, slot, at });
     }
     const far = (s) => Math.hypot(((s.x - near.x) * ASPECT) / SCALE, (s.y - near.y) / (SCALE * TILT));
     const rank = (s) => (engaged(s) && far(s) <= PRIORITY ? 0 : s.state === 'flee' ? 1 : 2);
     inView.sort((a, b) => rank(a.s) - rank(b.s)
       || Math.hypot(a.s.x - near.x, a.s.y - near.y) - Math.hypot(b.s.x - near.x, b.s.y - near.y));
     const drawn = inView.slice(0, this.phone() ? MAX_DRAWN_PHONE : MAX_DRAWN);
-    const smalls = this.rankSmall(view, small, near);
+    const smalls = this.rankSmall(view, small, near, viewOf);
     this.drawn = [];
     if (!drawn.length && !smalls.length) return this.drawn;
     let width = 0;
@@ -594,18 +597,18 @@ export class AnimalFigures {
     for (const rig of this.rigs.values()) rig.model.visible = true;
     const gl = r.getContext();
     gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, this.pixels);
-    for (const { s, slot } of drawn) {
+    for (const { s, slot, at } of drawn) {
       const rig = this.rigs.get(s);
       const contacts = rig.waterContacts().map((c) => ({ x: s.x + c.x * SCALE / ASPECT, y: s.y + c.z * SCALE * TILT }));
-      this.drawn.push({ animal: s, contacts, depth: s.y, shadow: rig.look.shadow, ...this.cellsOf(slot, s, view, rig.flash) });
+      this.drawn.push({ animal: s, contacts, depth: s.y, shadow: rig.look.shadow, ...this.cellsOf(slot, s, at, rig.flash) });
     }
-    for (const { s, slot } of smalls) {
+    for (const { s, slot, at } of smalls) {
       const rig = this.rigs.get(s);
       const fish = rig.look.small === 'fish';
       const alt = s.alt ?? 0;
       this.drawn.push({ animal: s, small: true, air: !fish && alt >= 0.3, submerged: fish, contacts: [], depth: s.y,
         shadow: rig.look.shadow, shadowFade: fish ? 0 : Math.max(0, 1 - alt / 2),
-        ...this.cellsOf(slot, s, view, 0, fish ? { submerged: s.swim ?? 0 } : {}) });
+        ...this.cellsOf(slot, s, at, 0, fish ? { submerged: s.swim ?? 0 } : {}) });
     }
     return this.drawn;
   }
@@ -617,11 +620,12 @@ export class AnimalFigures {
   // instead, and the newcomer waits a frame. The ones that rank within the
   // cap, drawn or not, are those posed next frame, so a newcomer is never
   // kept out longer than that by those drawn before it.
-  rankSmall(view, small, near) {
+  rankSmall(view, small, near, viewOf = null) {
     const inView = [];
     for (const s of small) {
-      const slot = this.slotOf(s, view);
-      if (slot) inView.push({ s, slot });
+      const at = viewOf ? viewOf(s.x, s.y) : view;
+      const slot = this.slotOf(s, at);
+      if (slot) inView.push({ s, slot, at });
     }
     const far = (s) => Math.hypot(((s.x - near.x) * ASPECT) / SCALE, (s.y - near.y) / (SCALE * TILT));
     const rank = (s) => ((s.state === 'takeoff' || s.state === 'fly') && far(s) <= 20 ? 0 : s.state === 'dart' ? 1 : 2);
@@ -637,7 +641,7 @@ export class AnimalFigures {
         rig.update(0, d.s);
         rig.posed = this.frameNo;
         this.posedCount++;
-        Object.assign(d.slot, this.slotOf(d.s, view) ?? d.slot);
+        Object.assign(d.slot, this.slotOf(d.s, d.at) ?? d.slot);
       }
       drawn.push(d);
     }

@@ -391,3 +391,22 @@ test('an elf draws like an archer: bow upright in the outstretched left hand, st
     'the bow arm straight out at shoulder height');
   assert.ok(bone('DEF-handR').distanceTo(head) < 0.25, 'the drawing hand at the cheek');
 });
+
+test('on raised ground a monster is drawn through its own lifted view, its health bar over it', () => {
+  // A stand-in GPU whose read-back is solid bone over every slot.
+  const gpu = { setPixelRatio() {}, setSize() {}, setClearColor() {}, setScissorTest() {}, clear() {},
+    setViewport() {}, setScissor() {}, render() {},
+    getContext: () => ({ readPixels: (x, y, w, h, format, type, out) => out.fill(200) }) };
+  const f = new MonsterFigures(gltf, { renderer: gpu });
+  const s = new Monster(0.5, 0.5, { risen: true });
+  f.update(dt, [s]);
+  const view = { x0: -100, y0: -60, cols: 200, rows: 120 };
+  const rows = ([d]) => [d.base, d.top, d.cells.map((c) => c.sy)];
+  const [base, top, plain] = rows(f.rasterise(view, [s], s));
+  assert.ok(plain.length > 0);
+  const [liftedBase, liftedTop, lifted] = rows(f.rasterise(view, [s], s, () => ({ ...view, y0: view.y0 + 6 })));
+  assert.equal(liftedBase, base - 6);
+  assert.deepEqual(lifted, plain.map((sy) => sy - 6));
+  // The top is a row of the plain view, so the bar rides up with the figure.
+  assert.equal(liftedTop, top - 6);
+});

@@ -846,3 +846,21 @@ test('the pigeon and fish models are credited with their sources and licences', 
   assert.match(text, /fish\.glb/);
   assert.match(text, /XWl86YFtpF/);
 });
+
+test('on raised ground each animal and bird is drawn through its own lifted view', () => {
+  const f = new AnimalFigures(gltfs, { renderer: fakeGPU() });
+  const a = hind();
+  const b = pigeon('feed', { x: 30 });
+  f.update(dt, [a], [b]);
+  const view = { x0: -200, y0: -100, cols: 400, rows: 200 };
+  const rows = (drawn) => drawn.map((d) => [d.base, d.cells.map((c) => c.sy)]);
+  const plain = rows(f.rasterise(view, [a], a, [b]));
+  // The deer stands 7 rows up, the pigeon 3.
+  const lifted = rows(f.rasterise(view, [a], a, [b], (x) => ({ ...view, y0: view.y0 + (x < 10 ? 7 : 3) })));
+  assert.equal(plain.length, 2);
+  assert.ok(plain.every(([, cells]) => cells.length > 0));
+  assert.deepEqual(lifted, plain.map(([base, cells], i) => {
+    const up = i ? 3 : 7;
+    return [base - up, cells.map((sy) => sy - up)];
+  }));
+});
