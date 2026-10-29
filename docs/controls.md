@@ -26,10 +26,13 @@
 | `1`–`8`, instrument in the off hand | Play notes C D E F G A B C |
 | `Shift`+`1`–`8`, instrument in the off hand | Play the chords (lute, vielle, celtic harp, dulcimer, kalimba, accordion) or notes 9–16 an octave up (flute, trumpet, bagpipe) |
 | `I` / `Tab` | Open or close the inventory (`Escape` also closes it) |
-| `G`, with inventory open | Switch between the satchel and equipment |
-| Arrow keys, with inventory open | Move through items in the selected pane |
-| `Enter`, with inventory open | Use or equip a satchel item (arrows fill the quiver), or take off selected gear. Equip the stone pickaxe here, then strike an ore block with it to mine it (the prompt shows what a block needs) |
+| Left click, with inventory open | On a bag card: equip it (arrows fill the quiver) or use it; on a filled equipment box: take it off. On a filter tab: show only that kind |
+| Right click, with inventory open | Drop a bag card's whole stack on the ground |
+| `G`, with inventory open | Switch between the bag and equipment |
+| Arrow keys, with inventory open | Move through the shown cards, or around the equipment |
+| `Enter`, with inventory open | Use or equip the selected bag item, or take off selected gear. Equip the stone pickaxe here, then strike an ore block with it to mine it (the prompt shows what a block needs) |
 | `E` / `U`, with inventory open | Equip the selected item / unequip the selected gear |
+| `X`, with inventory open | Drop the selected bag stack |
 | `C`, with inventory open | Turn to the next page (Inventory, Character, Characters) |
 | Arrow keys / `Tab`, with a furnace open | Move through its slots, your satchel's resources and Close |
 | `Enter` / `Space`, with a furnace open | Put the chosen resource in, or take a slot's contents back |
@@ -173,6 +176,10 @@ run. The other thumb has a cluster in the bottom-right corner:
   ingredients, then **Fire**; name a new alloy and tap **Rename** or Done. A
   weapon station too: tap a piece, then its metal, then the hit buttons, and
   **Finish**.
+- The **inventory** (in the phone menu) is a full-screen sheet that scrolls as
+  a whole. Tap a filter tab to show one kind. Tap a bag card to select it and
+  see its details with **Drop**, and tap it again to equip or use it; tap a
+  filled equipment box to take its gear off.
 
 Strikes, shots and attack runes from these buttons turn to the nearest enemy
 within 30° either side of your facing, within the weapon's reach plus a stride,

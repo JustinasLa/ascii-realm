@@ -208,8 +208,19 @@ short version see the [README](../README.md).
   (weapon over gloves; quiver and a ring; helmet, body and legs; amulet, cloak
   and a ring; shield over boots), the small ones dashed while empty and filled
   ones showing the item's art; a stats strip (HP, MP, stamina, the six
-  attributes of the active character, weight and the pouch); then the bag of
-  24 slots with item details, and a 60 kg carrying limit. The bag starts with a short sword, equipped and
+  attributes of the active character, weight and the pouch); then the bag:
+  `Bag n/24` (stacks out of 24 slots), filter tabs with stack counts (All,
+  Weapons, Armor and Cloaks always; Ammo, Consumables, Instruments and
+  Materials while it holds some), a scrolling grid of tall item cards, each
+  showing its art and its stack count (`×30`) or its gear's material
+  (`iron`), and the selected item's details beside them. Clicking a card
+  equips it (swapping out what was worn) or uses it, clicking a filled box
+  takes the gear off, and right-clicking a card drops the whole stack on the
+  ground. On a touch screen the first tap on a card selects it, showing its
+  details and a Drop button, and a second tap equips or uses it; a tap on a
+  filled box takes the gear off. The window keeps one
+  height on desktops and tablets; on phones the full-screen sheet scrolls. A
+  60 kg carrying limit applies. The bag starts with a short sword, equipped and
   ready, and a stone pickaxe. Arrows can fill the quiver, which the bow shoots
   from and pickups top up first. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
