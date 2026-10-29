@@ -115,3 +115,42 @@ test('the click can be swallowed on a wider surface than the presses', (t) => {
   gestures.destroy();
   assert.equal(root.listeners.get('click').length, 0);
 });
+
+test('a pinned hold keeps the finger from scrolling, however far it moves, until it lifts or is cancelled', (t) => {
+  const { pad, gestures, down } = setup(t);
+  down();
+  t.mock.timers.tick(HOLD_MS);
+  pad.fire('pointermove', { pointerId: 1, clientX: 50, clientY: 50 + TOUCH_SLOP * 10 });
+  assert.equal(gestures.active, true);
+  assert.equal(pad.fire('touchmove').defaultPrevented, true, 'the sheet under the panel stays put');
+  pad.fire('pointerup', { timeStamp: 900 });
+  assert.equal(pad.fire('touchmove').defaultPrevented, false);
+  down();
+  t.mock.timers.tick(HOLD_MS);
+  pad.fire('pointermove', { pointerId: 1, clientX: 300, clientY: 300 });
+  pad.fire('pointercancel');
+  assert.equal(pad.fire('touchmove').defaultPrevented, false);
+});
+
+test('a cancelled hold, or any later press on the wider surface, leaves the next click alone', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pad = surface();
+  const root = surface();
+  const gestures = new BagGestures({ surface: pad, swallowOn: root, onHold() {},
+    sourceOf: () => ({ selection: 1, node: { getBoundingClientRect: () => ({}) } }) });
+  const hold = () => {
+    pad.fire('pointerdown', { pointerType: 'touch', pointerId: 1, timeStamp: 0 });
+    t.mock.timers.tick(HOLD_MS);
+  };
+  assert.equal(root.listeners.get('pointerdown')[0].options, true, 'in the capture phase');
+  hold();
+  pad.fire('pointercancel');
+  assert.equal(root.fire('click').stopped, false, 'a cancelled touch sends no click to swallow');
+  // A press on a pinned panel's button never reaches the presses' surface.
+  hold();
+  pad.fire('pointerup', { timeStamp: HOLD_MS });
+  root.fire('pointerdown');
+  assert.equal(root.fire('click').stopped, false, 'the panel button acts');
+  gestures.destroy();
+  assert.equal(root.listeners.get('pointerdown').length, 0);
+});

@@ -17,17 +17,22 @@ export class BagGestures {
       pointerdown: (event) => this._down(event),
       pointermove: ({ pointerId, clientX, clientY }) => {
         const press = this._press;
-        if (press && press.id === pointerId && Math.hypot(clientX - press.x, clientY - press.y) > TOUCH_SLOP) this.cancel();
+        // A pinned hold keeps the finger from scrolling until it lifts, however far it goes.
+        if (press && !this._held && press.id === pointerId && Math.hypot(clientX - press.x, clientY - press.y) > TOUCH_SLOP) this.cancel();
       },
       // A busy page may run the lift before the timer: a long press is a hold all the same.
       pointerup: ({ timeStamp }) => {
         if (this._press && !this._held && timeStamp - this._press.t >= HOLD_MS) this._hold();
         this.cancel();
       },
-      pointercancel: () => this.cancel(),
+      // A cancelled touch sends no click to swallow.
+      pointercancel: () => { this._swallow = false; this.cancel(); },
       // While held, the finger must not scroll the sheet under the panel.
       touchmove: (event) => { if (this._held) event.preventDefault(); },
     };
+    // A click that never came after the last hold must not eat the next
+    // press anywhere on `swallowOn`, a pinned panel's buttons too.
+    this._unswallow = () => { this._swallow = false; };
     this._click = (event) => {
       if (!this._swallow) return;
       this._swallow = false;
@@ -36,13 +41,13 @@ export class BagGestures {
     };
     for (const [type, listener] of Object.entries(this._listeners)) surface.addEventListener(type, listener, { passive: false });
     swallowOn.addEventListener('click', this._click, true);
+    swallowOn.addEventListener('pointerdown', this._unswallow, true);
   }
 
   // Held: touchmove is cancelled and the next click swallowed.
   get active() { return this._held; }
 
   _down(event) {
-    // A click that never came after the last hold must not eat this tap.
     this._swallow = false;
     this.cancel();
     const { pointerType, isPrimary, button } = event;
@@ -69,5 +74,6 @@ export class BagGestures {
     this.cancel();
     for (const [type, listener] of Object.entries(this._listeners)) this.surface.removeEventListener(type, listener);
     this.swallowOn.removeEventListener('click', this._click, true);
+    this.swallowOn.removeEventListener('pointerdown', this._unswallow, true);
   }
 }
