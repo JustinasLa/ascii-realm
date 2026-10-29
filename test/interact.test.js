@@ -140,3 +140,18 @@ test('a furnace is reached from its footprint on any side, the nearest first', a
   assert.equal(nearbyFurnace({ propsIn: () => [wide, near] }, player({ x: 15 })), near);
   assert.equal(nearbyFurnace({ propsIn: () => [near, wide] }, player({ x: 3 })), near, 'inside both footprints, the first');
 });
+
+test('a scaled builder furnace in the next chunk is reached from its footprint', async () => {
+  const { FURNACE_REACH, nearbyFurnace } = await import('../src/crafting/furnace.js');
+  const { createProp } = await import('../src/world/props.js');
+  const { ASPECT, World } = await import('../src/world/world.js');
+  const world = new World(3, { rivers: false });
+  const furnace = { ...createProp('furnace', 64.5, 10, { scale: 3 }), id: 's:1' };
+  world.addProp(furnace);
+  // Its base is a chunk away, past the old fixed search, but its side is near.
+  const edge = furnace.x - furnace.footW - FURNACE_REACH / ASPECT;
+  assert.ok(furnace.x - edge > 24);
+  assert.equal(nearbyFurnace(world, player({ x: edge + 0.1, y: 10 })), furnace);
+  assert.equal(nearbyFurnace(world, player({ x: edge - 0.1, y: 10 })), null);
+  assert.equal(nearbyFurnace(world, player({ x: furnace.x, y: 10 + furnace.footH + FURNACE_REACH - 0.1 })), furnace);
+});

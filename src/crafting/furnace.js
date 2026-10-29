@@ -247,7 +247,11 @@ export const FURNACE_REACH = 3.5;
 export function nearbyFurnace(world, player) {
   if (player.air > 0.3 || player.vitals?.health <= 0) return null;
   let best = null, bestGap = Infinity;
-  for (const prop of world.propsIn(player.x - 12, player.y - 6, player.x + 12, player.y + 6)) {
+  // Search as far as the widest footprint in the world reaches, so a scaled
+  // builder furnace in the next chunk is still found.
+  const reachX = Math.max(world.propFootW ?? 0, 10) + FURNACE_REACH / ASPECT;
+  const reachY = Math.max(world.propFootH ?? 0, 2) + FURNACE_REACH;
+  for (const prop of world.propsIn(player.x - reachX, player.y - reachY, player.x + reachX, player.y + reachY)) {
     if (prop.kind !== 'furnace') continue;
     const gap = Math.hypot(Math.max(0, Math.abs(player.x - prop.x) - prop.footW) * ASPECT,
       Math.max(0, Math.abs(player.y - prop.y) - prop.footH));
