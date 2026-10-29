@@ -46,7 +46,8 @@ import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
-import { nameError, normalName } from './character/rules.js';
+import { attributeTotals, nameError, normalName } from './character/rules.js';
+import { classOf } from './character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
 import { sampleDraft, wantsCreator } from './character/creation.js';
 import { metresBetween } from './multiplayer/chat.js';
@@ -244,9 +245,7 @@ const player = new Player(spawn.x, spawn.y);
 const inventory = new Inventory({ starter: false });
 inventory.add('shortSword');
 inventory.equip(0);
-inventory.assignHotbar(0, 'shortSword');
 inventory.add('stonePickaxe');
-inventory.assignHotbar(1, 'stonePickaxe');
 // Until instruments can be crafted, ?instruments puts one of each in the bag.
 if (params.has('instruments')) for (const id of INSTRUMENT_IDS) inventory.add(id);
 inventory.events.length = 0;
@@ -264,12 +263,14 @@ player.skin = cleanSkin(characters.active?.skin);
 const nameOverride = params.has('name') && !nameError(params.get('name')) ? normalName(params.get('name')) : null;
 const shownName = () => nameOverride ?? characters.active?.sheet.name ?? 'Kael';
 let name = shownName();
+// The active character's class name, or null for the outlaw.
+const activeClass = () => classOf(characters.active?.sheet.class)?.name ?? null;
 // Shows the active character everywhere, after it changes here or in another
 // tab. The creator's preview keeps its own skin while it is open.
 function applyCharacter() {
   name = shownName();
   hud.setName(name);
-  inventoryScreen.setName(name);
+  inventoryScreen.setName(name, activeClass());
   if (!creator.isOpen) player.skin = cleanSkin(characters.active?.skin);
   characterPages.render();
   renderLobby?.(multiplayer);
@@ -526,17 +527,15 @@ for (const type of ['fullscreenchange', 'webkitfullscreenchange']) document.addE
 updateFullscreenRow();
 debug.native = { gate, wakeLock, pacer, get clock() { return clock; }, get fullscreen() { return fullscreenApi(document)?.active ?? false; } };
 
-// The status frames, quick slots and the inventory screen.
+// The status frames, the inventory button and the inventory screen.
 const hud = new Hud({
   player, inventory, name, wallet,
   // The page's own top-corner panels, which a note glyph keeps clear of.
   covers: [document.getElementById('panel-dock'), document.getElementById('phone-menu'), document.getElementById('zoom-controls')],
   // With an instrument in the off hand, clicking a note slot plays it
-  // (Shift-click the second layer) and never equips the slot's gear.
-  onSelect: (index, event) => {
-    if (index < 8 && heldInstrument()) {
-      if (canPlay()) playSlot(index + 1, Boolean(event?.shiftKey));
-    } else selectHotbar(index);
+  // (Shift-click the second layer).
+  onNote: (index, event) => {
+    if (canPlay()) playSlot(index + 1, Boolean(event?.shiftKey));
     canvas.focus({ preventScroll: true });
   },
   onInventory: () => inventoryScreen.toggle(),
@@ -578,7 +577,8 @@ const characterPages = new CharacterPages({ doc: document, roster: characters, n
   } });
 debug.characterPages = characterPages;
 const inventoryScreen = new InventoryScreen({
-  inventory, player, name,
+  inventory, player, name, className: activeClass(), wallet,
+  attributes: () => characters.active ? attributeTotals(characters.active.sheet) : null,
   pages: [{ id: 'character', label: 'Character', node: characterPages.sheet, onShow: () => characterPages.render() },
     { id: 'characters', label: 'Characters', node: characterPages.list, onShow: () => characterPages.render() }],
   onToggle: (open) => {
@@ -588,6 +588,8 @@ const inventoryScreen = new InventoryScreen({
     if (!open) canvas.focus({ preventScroll: true });
   },
   onNotify: (message, kind = 'info') => hud.notify(message, kind),
+  // A dropped card goes down as a whole stack.
+  onDrop: (index) => huntCollection.drop(player, index, inventory.slots[index]?.count ?? 1),
   phone: () => device.phone,
   isCovered: () => furnaceScreen.isOpen || forgeScreen.isOpen || smithyScreen.isOpen,
   describe: (stack) => describeWeapon(stack, alloyBook) ?? describeStack(stack, alloyBook),
@@ -750,9 +752,6 @@ canvas.addEventListener('pointermove', (e) => {
 });
 canvas.addEventListener('pointerleave', () => { pointer = null; });
 
-const carriedCount = (id) => inventory.slots.reduce((n, s) => n + (s?.id === id ? s.count : 0), 0)
-  + (inventory.equipment.mainHand?.id === id ? 1 : 0);
-
 // How many rows the ground under the player is raised.
 const playerLift = () => world.relief ? world.liftAt(player.x, player.y) : 0;
 // How much taller than usual the camera pitch draws height (see camera.js
@@ -802,18 +801,19 @@ function aimPoint(weapon, draw, foe = null) {
 // Lets fly an arrow, or throws the spear or javelin in hand.
 function fireRanged(release, weapon, foe = null) {
   const kind = isBow(weapon) ? 'arrow' : weapon.type;
-  const arrows = inventory.slots.findIndex((stack) => stack?.id === 'arrow');
-  if (kind === 'arrow' && arrows < 0) {
+  const arrow = kind === 'arrow' ? inventory.nextAmmo('arrow') : null;
+  if (kind === 'arrow' && !arrow) {
     hud.notify('Out of arrows.', 'info');
     return;
   }
   const shot = projectiles.launch({
     x: player.x, y: player.y, h: SCALE * 1.1, aimTarget: aimPoint(weapon, release.draw, foe),
-    projectile: { kind }, weapon: weapon.id, material: weapon.material,
+    projectile: { kind }, weapon: weapon.id, material: arrow ? arrow.material : weapon.material,
     strength: release.draw, damage: weapon.damage,
   });
   if (!shot) return;
-  if (kind === 'arrow') inventory.remove(arrows, 1);
+  // An arrow keeps its properties, so it rejoins its stack when picked up.
+  if (arrow) shot.ammo = inventory.takeAmmo('arrow');
   else {
     // The thrown weapon leaves the hand; another of the same is taken up.
     const thrown = inventory.equipment.mainHand;
@@ -824,26 +824,6 @@ function fireRanged(release, weapon, foe = null) {
   sound.play({ type: 'swing', move: 'thrust', speed: 1.2, x: player.x, y: player.y });
 }
 
-// Choosing a quick slot that holds gear puts it on.
-function selectHotbar(index) {
-  if (!inventory.selectHotbar(index)) return;
-  const selected = inventory.getHotbar();
-  if (selected?.item.equipmentSlot && selected.source === 'inventory') {
-    if (inventory.equip(selected.index)) hud.notify(`Equipped ${selected.item.name}`, 'equipment');
-    else hud.notify('Make room in your bag to equip this item.', 'info');
-  }
-}
-
-function useHotbar() {
-  const selected = inventory.getHotbar();
-  if (!selected) return;
-  if (selected.item.use) {
-    if (inventory.useSelected(player.vitals)) hud.notify(`Used ${selected.item.name}`, 'use');
-    else hud.notify('That item is not needed yet.', 'info');
-  } else if (selected.item.equipmentSlot) {
-    selectHotbar(inventory.selectedHotbar);
-  }
-}
 const fireMessages = {
   lit: 'Campfire lit. Press C nearby to put it out.',
   out: 'Fire extinguished.',
@@ -1103,6 +1083,7 @@ debug.monsters = monsters;
 const debrisBodies = () => [player, ...monsters.living.filter(m => m.state !== 'rise')];
 
 hud.attachMana(casting);
+inventoryScreen.attachMana(casting);
 document.addEventListener('visibilitychange', () => casting.setPresentationPaused(document.hidden || debug.freeze || builder.enabled));
 window.addEventListener('pagehide', () => casting.clearPresentation());
 // Holding the middle mouse button, or CAST on touch screens, opens the rune
@@ -1117,7 +1098,7 @@ const spellControls = new SpellControls(casting, { surface: canvas,
 debug.spellControls = spellControls;
 
 // An instrument in the off hand plays on keys 1-8, Shift+1-8 for its second
-// layer, and on clicks on its note slots. Phones keep their quick slots and
+// layer, and on clicks on its note slots. Phones
 // play nothing until they get an on-screen keyboard.
 const musicNotes = new MusicNotes();
 debug.musicNotes = musicNotes;
@@ -1139,8 +1120,8 @@ function canPlay() {
 // The figure's top row in the last frame, where the note glyph starts from.
 let lastOwnTop = NaN;
 let preparedInstrument = null;
-// Where every local note is born: the sound, the glyph over the head, the
-// selection back on slot 9 (shown only, equipping nothing) and the flash.
+// Where every local note is born: the sound, the glyph over the head and the
+// flash.
 function playSlot(slot, shifted) {
   const id = heldInstrument();
   const note = layerNote(id, slot, shifted);
@@ -1153,7 +1134,6 @@ function playSlot(slot, shifted) {
   musicNotes.add({ x: player.x, y: player.y, top: lastOwnTop, midi: noteMidi(id, note.degree, note.octave, note.chord)[0] });
   // Friends in a lobby hear it too; solo, nothing is sent.
   multiplayer.sendNote({ instrument: id, ...note });
-  inventory.selectHotbar(8);
   hud.flashSlot(slot - 1);
 }
 // A friend's note: heard from where their figure stands, fading to silence at
@@ -1487,12 +1467,7 @@ function frame(now) {
   if (debug.freeze || isGameplayBlocked() || player.magicStunned || gate.waiting) cancelActions();
   updateWakeLock();
 
-  // Keys 1-8 are notes while an instrument is carried; a tap that slipped
-  // past the note keys is dropped rather than equipping slot gear.
   const instrument = heldInstrument();
-  for (let index = 0; index < 9; index++) {
-    if (wasTapped(`Digit${index + 1}`, `Numpad${index + 1}`) && !(index < 8 && instrument)) selectHotbar(index);
-  }
   hud.setInstrument(instrument ? { id: instrument, shifted: isDown('ShiftLeft', 'ShiftRight') } : null);
   // Render the instrument's string buffers once per audio context, ahead of its first note.
   const audioContext = sound.engine.context;
@@ -1501,7 +1476,6 @@ function frame(now) {
     preparedInstrument = { id: instrument, context: audioContext };
     void prepareInstrument(sound.engine, instrument);
   }
-  if (wasTapped('KeyQ')) useHotbar();
   // Changing or taking off the weapon puts the last one away at once.
   const weapon = player.weapon;
   const hand = inventory.equipment.mainHand;
@@ -1514,7 +1488,7 @@ function frame(now) {
   const armed = Boolean(weapon);
   const ranged = isBow(weapon) || isThrown(weapon);
   canvas.classList.toggle('projectile-aiming', !builder.enabled);
-  const ammo = isBow(weapon) ? `Arrows ${carriedCount('arrow')}` : isThrown(weapon) ? `${ITEMS[hand.id].name} ×${carriedCount(hand.id)}` : '';
+  const ammo = isBow(weapon) ? `Arrows ${inventory.countOf('arrow')}` : isThrown(weapon) ? `${ITEMS[hand.id].name} ×${inventory.countOf(hand.id)}` : '';
   if (ammoNote.textContent !== ammo) ammoNote.textContent = ammo;
   ammoNote.hidden = !ammo;
   const move = isControlTarget(document.activeElement) ? { x: 0, y: 0 } : moveAxis();
@@ -1703,7 +1677,7 @@ function frame(now) {
     if (player.air === 0 && !respawned) {
       for (const shaft of projectiles.collectNear(player.x, player.y, 0.75, { x: fromX, y: fromY })) {
         const id = shaft.kind === 'arrow' ? 'arrow' : shaft.kind;
-        if (!inventory.add(id, 1, { material: shaft.material })) {
+        if (!inventory.add(id, 1, shaft.ammo ?? { material: shaft.material })) {
           projectiles.landed.push(shaft);
           continue;
         }

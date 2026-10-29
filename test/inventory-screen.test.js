@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { cleanSkin, presetSkin } from '../src/character/skin.js';
+import { presetSkin } from '../src/character/skin.js';
 import { Inventory } from '../src/inventory/inventory.js';
-import { ITEMS } from '../src/inventory/items.js';
+import { EQUIPMENT_SLOTS, ITEMS } from '../src/inventory/items.js';
 import { itemArt } from '../src/ui/item-art.js';
 import { InventoryScreen } from '../src/ui/inventory.js';
+import { DOLL_BOXES, dollArea } from '../src/ui/paper-doll.js';
 
 // A fake DOM with just enough of the browser for the inventory panel:
 // reflected attributes, focus, simple selectors and element events.
@@ -244,7 +245,10 @@ function mount(t, { inventory = new Inventory(), browser = {}, beforeMount, ...o
   const bagButton = (index) => screen.bagNodes[index].button;
   const slotButton = (slot) => screen.equipmentNodes.get(slot).button;
   const indexOf = (id) => inventory.slots.findIndex((stack) => stack?.id === id);
-  return { ...env, screen, inventory, player, toggles, notes, gameKeys, press, bagButton, slotButton, indexOf };
+  // Selects without acting, as the arrow keys do; a click acts at once.
+  const pick = (selection) => screen._select(typeof selection === 'string' ? { source: 'equipment', slot: selection }
+    : { source: 'bag', index: selection }, true);
+  return { ...env, screen, inventory, player, toggles, notes, gameKeys, press, bagButton, slotButton, indexOf, pick };
 }
 
 const visible = (node) => !node.hidden;
@@ -269,7 +273,8 @@ test('opening the inventory blocks the scene and closing returns focus to the ca
   assert.equal(canvas.inert, true);
   assert.deepEqual(toggles, [true]);
   assert.equal(document.activeElement, bagButton(0), 'the selected slot takes focus');
-  assert.equal(screen.slotCounter.textContent, '15 / 24 slots');
+  assert.deepEqual(bagButton(0).focusOptions.at(-1), { preventScroll: true }, 'the sheet opens at its top');
+  assert.equal(screen.slotCounter.textContent, 'Bag 15/24');
 
   // Key releases never leak into the game while the panel is open.
   assert.equal(press('KeyI', { type: 'keyup' }).reachedGame, false);
@@ -306,6 +311,16 @@ test('opening the inventory blocks the scene and closing returns focus to the ca
   screen.screen.querySelectorAll('.inventory-close')[0].click();
   assert.equal(screen.isOpen, false, 'the Close button closes the panel');
   assert.deepEqual(toggles, [true, false, true, false, true, false]);
+});
+
+test('scrolled down to the bag and closed, the sheet reopens at its top', (t) => {
+  const { screen } = mount(t);
+  screen.setOpen(true);
+  screen.screen.scrollTop = 240;
+  screen.setOpen(false);
+  assert.equal(screen.screen.scrollTop, 240, 'closing leaves the scroll alone');
+  screen.setOpen(true);
+  assert.equal(screen.screen.scrollTop, 0);
 });
 
 test('a blurred window forgets swallowed key releases', (t) => {
@@ -398,6 +413,12 @@ test('Shift+Tab cycles focus backwards through the visible panel buttons', (t) =
 
   assert.equal(press('Tab', { shiftKey: true }).prevented, true);
   assert.equal(screen.isOpen, true, 'reverse Tab does not close the panel');
+  const filters = ['materials', 'consumables', 'ammo', 'cloaks', 'armor', 'weapons', 'all'];
+  for (const [step, id] of filters.entries()) {
+    if (step) press('Tab', { shiftKey: true });
+    assert.equal(document.activeElement, screen.filterNodes.get(id).button, 'the shown filter tabs, backwards');
+  }
+  press('Tab', { shiftKey: true });
   assert.equal(document.activeElement, close);
   press('Tab', { shiftKey: true });
   assert.equal(document.activeElement, screen.dropButton, 'focus wraps to the last button');
@@ -425,25 +446,24 @@ test('arrow keys move through the bag grid and around the equipment figure', (t)
   grid.columns = 'none';
   assert.deepEqual(step('ArrowDown'), { source: 'bag', index: 6 }, 'six columns without a grid template');
 
-  // Lay the gear out around the figure.
-  const places = {
-    helm: [50, 0], hands: [0, 50], chest: [50, 50], cape: [100, 50],
-    mainHand: [0, 100], legs: [50, 100], offHand: [100, 100],
-  };
-  for (const [slot, [left, top]] of Object.entries(places)) {
-    slotButton(slot).rect = { left, top, width: 20, height: 20 };
+  // Lay the boxes out on the paper doll's grid: cells 50 wide, 40 tall.
+  for (const [slot, { column, row, width, height }] of Object.entries(DOLL_BOXES)) {
+    slotButton(slot).rect = { left: (column - 1) * 50, top: (row - 1) * 40, width: width * 50, height: height * 40 };
   }
   assert.equal(press('KeyG').prevented, true);
   assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
   assert.equal(document.activeElement, slotButton('helm'));
-  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'helm' }, 'nothing lies above the helm');
-  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'chest' });
+  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'helm' }, 'nothing lies above the helmet');
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'amulet' });
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'offHand' });
+  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'feet' });
+  assert.equal(document.activeElement, slotButton('feet'));
+  slotButton('chest').click();
+  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'legs' });
   assert.deepEqual(step('ArrowLeft'), { source: 'equipment', slot: 'hands' });
-  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'chest' });
-  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'cape' });
-  assert.deepEqual(step('ArrowDown'), { source: 'equipment', slot: 'offHand' });
-  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'cape' });
-  assert.equal(document.activeElement, slotButton('cape'));
+  assert.deepEqual(step('ArrowUp'), { source: 'equipment', slot: 'mainHand' });
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'quiver' }, 'the quiver sits beside the weapon');
+  assert.deepEqual(step('ArrowRight'), { source: 'equipment', slot: 'helm' });
 
   press('KeyG');
   assert.deepEqual(screen.selection, { source: 'bag', index: 0 });
@@ -451,11 +471,10 @@ test('arrow keys move through the bag grid and around the equipment figure', (t)
 });
 
 test('E equips, U unequips and Enter uses or swaps the selected item', (t) => {
-  const { document, screen, inventory, player, notes, press, bagButton, slotButton, indexOf } = mount(t);
+  const { document, screen, inventory, player, notes, press, bagButton, slotButton, indexOf, pick } = mount(t);
   press('KeyI');
   const buckler = indexOf('woodenBuckler');
-  bagButton(buckler).focus();
-  bagButton(buckler).click();
+  pick(buckler);
 
   assert.equal(press('KeyE', { repeat: true }).prevented, true);
   assert.equal(inventory.equipment.offHand, null, 'a held key does not repeat the action');
@@ -487,7 +506,7 @@ test('E equips, U unequips and Enter uses or swaps the selected item', (t) => {
   assert.equal(inventory.equipment.offHand, null);
 
   // Enter drinks a consumable.
-  bagButton(0).click();
+  pick(0);
   press('KeyE');
   assert.equal(notes.length, 4, 'a draught cannot be equipped');
   press('Enter');
@@ -496,15 +515,15 @@ test('E equips, U unequips and Enter uses or swaps the selected item', (t) => {
   assert.deepEqual(notes.at(-1), ['Used Healing Draught.', 'success']);
   assert.equal(document.activeElement, bagButton(0));
 
-  // Materials and empty slots have no action.
-  bagButton(indexOf('rawIron')).click();
+  // Materials and an empty tab have no action.
+  pick(indexOf('rawIron'));
   press('Enter');
-  bagButton(20).click();
+  screen._filterBy('cloaks');
   press('Enter');
   press('KeyE');
   // Hidden action buttons do nothing even when clicked.
   screen.useButton.click();
-  slotButton('helm').click();
+  pick('helm');
   screen.useButton.click();
   screen.equipButton.click();
   assert.equal(inventory.equipment.helm.id, 'outlawHood');
@@ -512,9 +531,9 @@ test('E equips, U unequips and Enter uses or swaps the selected item', (t) => {
 });
 
 test('panel buttons respond to clicks, Space and Enter, and keep the details in view', (t) => {
-  const { document, screen, inventory, player, notes, press, bagButton, slotButton, indexOf } = mount(t);
+  const { document, screen, inventory, player, notes, press, slotButton, indexOf, pick } = mount(t);
   press('KeyI');
-  bagButton(indexOf('woodenBuckler')).click();
+  pick(indexOf('woodenBuckler'));
 
   screen.equipButton.focus();
   assert.equal(press('Enter').prevented, true);
@@ -528,49 +547,96 @@ test('panel buttons respond to clicks, Space and Enter, and keep the details in 
   assert.equal(inventory.equipment.offHand, null);
   assert.equal(document.activeElement, screen.equipButton);
 
-  // Space on a slot presses it; Enter on a slot activates the selection instead.
+  // Space on a slot presses it, as a click does: the hood comes off at once.
   slotButton('helm').focus();
   press('Space');
-  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  assert.equal(inventory.equipment.helm, null);
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' }, 'the selection stays on the box');
 
-  // Clicking Use on the last draught hides the button, so focus stays on the details.
-  bagButton(0).click();
+  // Using the last draught moves the selection on to the next card, the tonic.
+  pick(0);
   inventory.slots[0].count = 1;
   screen.useButton.focus();
   press('Enter');
   assert.equal(player.vitals.health, 85);
   assert.equal(inventory.slots[0], null);
-  assert.equal(screen.useButton.hidden, true);
-  assert.equal(document.activeElement, screen.details);
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('staminaTonic') });
+  assert.equal(screen.useButton.disabled, true, 'stamina is full');
+  assert.equal(document.activeElement, screen.details, 'so focus stays on the details');
 
   // Mouse clicks on the action buttons.
-  bagButton(indexOf('dagger')).click();
+  pick(indexOf('dagger'));
   screen.equipButton.click();
   assert.equal(inventory.equipment.mainHand.id, 'dagger');
   screen.unequipButton.click();
   assert.equal(inventory.equipment.mainHand, null);
-  bagButton(indexOf('staminaTonic')).click();
+  pick(indexOf('staminaTonic'));
   player.vitals.stamina = 10;
   screen.useButton.click();
   assert.equal(player.vitals.stamina, 55);
   assert.deepEqual(notes.at(-1), ['Used Stamina Tonic.', 'success']);
 });
 
-test('double-clicking a slot equips or unequips its gear', (t) => {
-  const { screen, inventory, press, bagButton, slotButton, indexOf } = mount(t);
+test('a click acts at once and keeps the selection, focus and sheet where they were', (t) => {
+  const { document, screen, inventory, player, notes, press, bagButton, slotButton, indexOf } = mount(t);
   press('KeyI');
+  const all = [...screen.bagNodes.map((nodes) => nodes.button), ...[...screen.equipmentNodes.values()].map((n) => n.button)];
+  assert.ok(all.every((button) => !button.listeners.has('dblclick')), 'a double-click would equip, then take off');
+  const focused = document.activeElement;
+  const focusCalls = () => all.reduce((sum, button) => sum + button.focusOptions.length, 0);
+  const before = focusCalls();
+
+  // Gear equips, swapping: the sword comes back to the bow's card.
   const bow = indexOf('longbow');
   bagButton(bow).click();
-  assert.deepEqual(screen.selection, { source: 'bag', index: bow });
-  bagButton(bow).dispatch('dblclick');
   assert.equal(inventory.equipment.mainHand.id, 'longbow');
-  assert.ok(inventory.slots.some((stack) => stack?.id === 'shortSword'), 'the sword returns to the bag');
+  assert.equal(inventory.slots[bow].id, 'shortSword');
+  assert.deepEqual(notes.at(-1), ['Equipped Yew Longbow.', 'success']);
+  assert.deepEqual(screen.selection, { source: 'bag', index: bow }, 'the selection stays in the bag');
+  assert.equal(document.activeElement, focused);
+  assert.equal(focusCalls(), before, 'focus never moves');
 
+  // A consumable is used; at full vitality it says so.
+  bagButton(indexOf('healingDraught')).click();
+  assert.equal(player.vitals.health, 85);
+  assert.deepEqual(notes.at(-1), ['Used Healing Draught.', 'success']);
+  player.vitals.health = 100;
+  bagButton(indexOf('healingDraught')).click();
+  assert.deepEqual(notes.at(-1), ['Your vitality is already full.', 'info']);
+  // A material only selects.
+  const ore = indexOf('rawIron');
+  const count = notes.length;
+  bagButton(ore).click();
+  assert.deepEqual(screen.selection, { source: 'bag', index: ore });
+  assert.equal(notes.length, count);
+  assert.equal(focusCalls(), before);
+
+  // A filled doll box takes its gear off, and the selection stays on the box.
   slotButton('helm').click();
-  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
-  slotButton('helm').dispatch('dblclick');
   assert.equal(inventory.equipment.helm, null);
-  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('outlawHood') });
+  assert.deepEqual(notes.at(-1), ["Unequipped Outlaw's Hood.", 'success']);
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  slotButton('helm').click();
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' }, 'an empty box only selects');
+  assert.equal(focusCalls(), before);
+
+  // Equipping the focused, last card of its tab hides it: focus moves on
+  // without scrolling the sheet, and the selection to the next card.
+  screen._filterBy('armor');
+  const hood = indexOf('outlawHood');
+  const buckler = indexOf('woodenBuckler');
+  bagButton(hood).focus();
+  bagButton(hood).click();
+  assert.equal(inventory.equipment.helm.id, 'outlawHood');
+  assert.deepEqual(screen.selection, { source: 'bag', index: buckler });
+  assert.equal(document.activeElement, bagButton(buckler));
+  assert.deepEqual(document.activeElement.focusOptions.at(-1), { preventScroll: true });
+
+  // With a full bag, a box says so and keeps its gear.
+  for (let index = 0; index < 24; index++) inventory.slots[index] ??= { id: 'flint', count: 1 };
+  slotButton('feet').click();
+  assert.deepEqual(notes.at(-1), ['Your bag has no room for this gear.', 'error']);
+  assert.equal(inventory.equipment.feet.id, 'ridingBoots');
 });
 
 test('failed actions say why', (t) => {
@@ -640,8 +706,8 @@ test('X drops the selected bag stack through onDrop', (t) => {
   assert.equal(notes.length, 2, 'a silent drop sends no message');
   assert.deepEqual(drops, [ore, ore, ore]);
 
-  bagButton(20).click();
-  assert.equal(screen.dropButton.hidden, true, 'an empty slot cannot drop');
+  screen._filterBy('cloaks');
+  assert.equal(screen.dropButton.hidden, true, 'an empty tab cannot drop');
   press('KeyX');
   slotButton('helm').click();
   press('KeyX');
@@ -663,29 +729,54 @@ test('without onDrop there is no drop key or button', (t) => {
   assert.ok(indexOf('rawIron') >= 0);
 });
 
-test('number keys assign the selected bag item to a quick slot', (t) => {
-  const { screen, inventory, notes, press, bagButton, slotButton, indexOf } = mount(t);
+test('number keys do nothing in the window and never reach the game', (t) => {
+  const { document, screen, inventory, notes, press, bagButton, indexOf } = mount(t);
   press('KeyI');
+  assert.doesNotMatch(document.body.textContent, /1-9|quick slot/i);
   bagButton(indexOf('rawIron')).click();
-  assert.equal(screen.assignment.textContent, 'Quick slot unassigned');
+  const before = JSON.stringify([inventory.slots, inventory.equipment, screen.selection]);
+  for (const code of ['Digit3', 'Numpad4', 'Digit9']) {
+    assert.deepEqual(press(code), { prevented: false, reachedGame: false }, code);
+  }
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment, screen.selection]), before);
+  assert.equal(notes.length, 0);
+});
 
-  assert.deepEqual(press('Digit3'), { prevented: true, reachedGame: false });
-  assert.equal(inventory.hotbar[2], 'rawIron');
-  assert.deepEqual(notes.at(-1), ['Raw Iron assigned to hotbar 3.', 'info']);
-  assert.equal(screen.feedback.dataset.kind, 'info');
-  assert.equal(screen.assignment.textContent, 'Quick slot 3');
-  press('Numpad4');
-  assert.equal(screen.assignment.textContent, 'Quick slot 3, 4');
+test('the twelve equipment slots take boots on the feet and arrows in the quiver', (t) => {
+  const { screen, inventory, notes, press, bagButton, slotButton, indexOf, pick } = mount(t);
+  press('KeyI');
+  assert.deepEqual([...screen.equipmentNodes.keys()], ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand',
+    'feet', 'amulet', 'ringLeft', 'ringRight', 'quiver']);
+  assert.deepEqual([...screen.equipmentNodes.values()].map(({ button }) => button.children[0].textContent),
+    ['helmet', 'body', 'legs', 'gloves', 'cloak', 'weapon', 'shield', 'boots', 'amulet', 'ring', 'ring', 'quiver']);
+  assert.equal(slotButton('feet').getAttribute('aria-label'), 'Feet: Riding Boots');
+  assert.equal(slotButton('legs').getAttribute('aria-label'), 'Legs: empty');
+  pick('feet');
+  press('KeyU');
+  pick(indexOf('ridingBoots'));
+  press('KeyE');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'feet' });
 
-  press('Digit5', { repeat: true });
-  assert.equal(inventory.hotbar[4], 'longbow', 'a held digit does not reassign');
-  bagButton(20).click();
-  press('Digit6');
-  assert.equal(inventory.hotbar[5], 'spear', 'an empty slot assigns nothing');
-  slotButton('helm').click();
-  assert.equal(press('Digit7').prevented, true);
-  assert.equal(inventory.hotbar[6], 'javelin', 'equipped gear is assigned from the hotbar instead');
-  assert.equal(notes.length, 2);
+  pick(indexOf('arrow'));
+  assert.equal(bagButton(indexOf('arrow')).getAttribute('data-item-kind'), 'ammo');
+  press('Enter');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'quiver' });
+  assert.deepEqual(inventory.equipment.quiver, { id: 'arrow', count: 30 });
+  assert.equal(screen.equipmentNodes.get('quiver').count.textContent, '30');
+  assert.equal(slotButton('quiver').getAttribute('aria-label'), 'Quiver: Arrow');
+  assert.equal(screen.equipmentNodes.get('feet').count.textContent, '');
+  assert.deepEqual(notes.at(-1), ['Equipped Arrow.', 'success']);
+
+  inventory.add('arrow', 20);
+  assert.equal(inventory.equipment.quiver.count, 40, 'pickups top the quiver up');
+  pick(indexOf('arrow'));
+  press('KeyE');
+  assert.deepEqual(notes.at(-1), ['Your quiver is full.', 'error']);
+  pick(indexOf('woodenBuckler'));
+  inventory.add('outlawHood', 24);
+  pick('quiver');
+  press('KeyU');
+  assert.deepEqual(notes.at(-1), ['Your bag has no room for this gear.', 'error']);
 });
 
 test('dragging a bag stack onto another slot moves or swaps it', (t) => {
@@ -733,6 +824,291 @@ test('dragging a bag stack onto another slot moves or swaps it', (t) => {
   assert.equal(bagButton(1).dispatch('dragover', { dataTransfer: {} }).defaultPrevented, false);
 });
 
+test('the bag reads its count and hint, then filter tabs with stack counts over a card per slot', (t) => {
+  let phone = false;
+  const { screen, inventory, press, bagButton, indexOf } = mount(t, { onDrop: () => null, phone: () => phone });
+  press('KeyI');
+  assert.equal(screen.slotCounter.textContent, 'Bag 15/24');
+  assert.equal(screen.bagHint.textContent, 'LMB \u2014 equip / take off \u00b7 RMB \u2014 drop');
+  phone = true;
+  screen.update();
+  assert.equal(screen.bagHint.textContent, 'tap \u2014 select \u00b7 tap again \u2014 equip / take off');
+
+  const filters = [...screen.filterNodes.values()].map(({ button }) => button);
+  assert.equal(filters.length, 8);
+  assert.ok(filters.every((button) => button.getAttribute('role') === null), 'not page tabs');
+  assert.deepEqual(filters.filter(visible).map((button) => button.textContent),
+    ['All15', 'Weapons8', 'Armor1', 'Cloaks0', 'Ammo1', 'Consumables3', 'Materials2']);
+  assert.equal(screen.filterNodes.get('instruments').button.hidden, true, 'no instruments yet');
+  assert.equal(screen.filterNodes.get('all').button.getAttribute('aria-pressed'), 'true');
+  assert.ok(screen.filterNodes.get('all').button.classList.contains('selected'));
+  assert.equal(screen.cardGrid.getAttribute('aria-label'), 'Carried items');
+
+  assert.equal(screen.bagNodes.length, 24);
+  assert.deepEqual(screen.bagNodes.map(({ button }) => !button.hidden), inventory.slots.map(Boolean));
+  assert.equal(screen.bagEmpty.hidden, true);
+  const arrows = bagButton(indexOf('arrow'));
+  assert.equal(screen.bagNodes[indexOf('arrow')].count.textContent, '\u00d730');
+  assert.equal(screen.bagNodes[indexOf('longbow')].count.textContent, 'yew');
+  assert.equal(screen.bagNodes[indexOf('rawIron')].icon.textContent, itemArt('rawIron', ITEMS.rawIron.glyph));
+  assert.equal(arrows.getAttribute('aria-label'), `Slot ${indexOf('arrow') + 1}: Arrow, count 30`);
+  assert.equal(arrows.getAttribute('data-item-kind'), 'ammo');
+  assert.equal(arrows.getAttribute('data-item-id'), 'arrow');
+  inventory.unequip('mainHand');
+  screen.update();
+  assert.equal(screen.bagNodes[indexOf('shortSword')].count.textContent, 'iron');
+  inventory.add('lute');
+  screen.update();
+  assert.equal(screen.filterNodes.get('instruments').button.textContent, 'Instruments1');
+  assert.equal(screen.slotCounter.textContent, 'Bag 17/24');
+});
+
+test('a filter tab shows only its kind, moves the selection to its first card and falls back to all', (t) => {
+  const { screen, inventory, press, bagButton, slotButton, indexOf, pick } = mount(t, { onDrop: (index) => {
+    inventory.remove(index, inventory.slots[index].count);
+    return { ok: true, message: 'Dropped.' };
+  } });
+  press('KeyI');
+  let draws = 0;
+  const render = screen._render.bind(screen);
+  screen._render = () => { draws++; return render(); };
+  screen.filterNodes.get('weapons').button.click();
+  assert.equal(draws, 1, 'one redraw per filter change');
+  assert.equal(screen.filter, 'weapons');
+  assert.equal(screen.filterNodes.get('weapons').button.getAttribute('aria-pressed'), 'true');
+  assert.equal(screen.filterNodes.get('all').button.getAttribute('aria-pressed'), 'false');
+  const weapons = ['longbow', 'spear', 'javelin', 'battleAxe', 'dagger', 'greatsword', 'warHammer', 'quarterstaff'];
+  assert.deepEqual(screen.bagNodes.filter(({ button }) => visible(button)).map(({ button }) => button.getAttribute('data-item-id')),
+    weapons);
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('longbow') });
+  screen.filterNodes.get('weapons').button.click();
+  assert.equal(draws, 1, 'the same tab again changes nothing');
+  pick(indexOf('dagger'));
+  screen.filterNodes.get('all').button.click();
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('dagger') }, 'a shown card stays selected');
+  pick('helm');
+  screen.filterNodes.get('consumables').button.click();
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' }, 'the doll keeps its selection');
+
+  // Dropping the last arrows while on Ammo empties the tab, so all shows.
+  screen.filterNodes.get('ammo').button.click();
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  pick(indexOf('arrow'));
+  press('KeyX');
+  assert.equal(indexOf('arrow'), -1);
+  assert.equal(screen.filter, 'all');
+  assert.equal(screen.filterNodes.get('ammo').button.hidden, true);
+  assert.equal(screen.filterNodes.get('all').button.getAttribute('aria-pressed'), 'true');
+  assert.ok(screen.selection.index > 0 && inventory.slots[screen.selection.index], 'on the next card');
+  assert.equal(visible(bagButton(screen.selection.index)), true);
+  assert.ok(slotButton('helm'));
+});
+
+test('an empty tab shows Nothing here, selects nothing and ignores the bag keys', (t) => {
+  const drops = [];
+  const { document, screen, inventory, notes, press, bagButton, slotButton, indexOf } = mount(t,
+    { onDrop: (index) => drops.push(index) });
+  press('KeyI');
+  screen.filterNodes.get('cloaks').button.focus();
+  screen.filterNodes.get('cloaks').button.click();
+  assert.equal(screen.selection, null);
+  assert.equal(screen.bagEmpty.hidden, false);
+  assert.equal(screen.bagEmpty.textContent, 'Nothing here.');
+  assert.equal(screen.filterNodes.get('cloaks').button.textContent, 'Cloaks0');
+  assert.ok(screen.bagNodes.every(({ button }) => button.hidden));
+  const before = JSON.stringify([inventory.slots, inventory.equipment]);
+  for (const code of ['ArrowRight', 'ArrowDown', 'Enter', 'KeyX', 'KeyE', 'KeyU']) {
+    assert.equal(press(code, { target: bagButton(0) }).prevented, true, code);
+  }
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment]), before);
+  assert.equal(screen.selection, null);
+  assert.deepEqual([drops, notes], [[], []]);
+  screen.filterNodes.get('all').button.click();
+  assert.deepEqual(screen.selection, { source: 'bag', index: 0 }, 'back on All, the first card');
+  screen.filterNodes.get('cloaks').button.click();
+  assert.equal(screen.selection, null);
+
+  // G goes to the doll, and back finds no card, so it stays there.
+  for (const [slot, { column, row, width, height }] of Object.entries(DOLL_BOXES)) {
+    slotButton(slot).rect = { left: (column - 1) * 50, top: (row - 1) * 40, width: width * 50, height: height * 40 };
+  }
+  press('KeyG');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  press('KeyG');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+
+  // Taking the cloak off fills the tab, and G and Enter work again.
+  inventory.unequip('cape');
+  screen.update();
+  press('KeyG');
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('travelCloak') }, 'G goes to the first shown card');
+  press('Enter');
+  assert.equal(inventory.equipment.cape.id, 'travelCloak', 'Enter acts like a click');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'cape' }, 'a key follows the item');
+  assert.equal(document.activeElement, slotButton('cape'));
+});
+
+test('a touch selects a bag card first, so phones can read and drop it, and acts on a second tap', (t) => {
+  const drops = [];
+  const { screen, inventory, bagButton, slotButton, indexOf } = mount(t, { onDrop: (index) => drops.push(index) });
+  screen.setOpen(true);
+  const tap = (button) => {
+    screen.screen.dispatch('pointerdown', { pointerType: 'touch', target: button });
+    button.click();
+  };
+  const bow = indexOf('longbow');
+  tap(bagButton(bow));
+  assert.deepEqual(screen.selection, { source: 'bag', index: bow });
+  assert.equal(inventory.equipment.mainHand.id, 'shortSword', 'the first tap only selects');
+  assert.equal(screen.itemName.textContent, 'Yew Longbow');
+  assert.equal(screen.dropButton.hidden, false);
+  tap(bagButton(bow));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'the second tap equips');
+  // A box acts on the first tap; so does a mouse click.
+  tap(slotButton('helm'));
+  assert.equal(inventory.equipment.helm, null);
+  tap(bagButton(indexOf('outlawHood')));
+  assert.equal(inventory.equipment.helm, null);
+  screen.screen.dispatch('pointerdown', { pointerType: 'mouse', target: bagButton(indexOf('outlawHood')) });
+  bagButton(indexOf('outlawHood')).click();
+  assert.equal(inventory.equipment.helm.id, 'outlawHood');
+  assert.deepEqual(drops, []);
+});
+
+test('a stack that hides under the filter is never left selected, so no key acts on it', (t) => {
+  const drops = [];
+  const { document, screen, inventory, notes, press, bagButton, slotButton, indexOf } = mount(t, {
+    onDrop: (index) => {
+      drops.push(inventory.slots[index].id);
+      inventory.remove(index, inventory.slots[index].count);
+      return { ok: true, message: 'Dropped.' };
+    },
+  });
+  for (const [slot, { column, row, width, height }] of Object.entries(DOLL_BOXES)) {
+    slotButton(slot).rect = { left: (column - 1) * 50, top: (row - 1) * 40, width: width * 50, height: height * 40 };
+  }
+  press('KeyI');
+  screen.filterNodes.get('weapons').button.click();
+  press('KeyG');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  press('KeyU');
+  const hood = indexOf('outlawHood');
+  assert.ok(hood >= 0, 'the helm is in the bag');
+  assert.equal(bagButton(hood).hidden, true, 'under Weapons');
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('longbow') }, 'on the first shown card');
+  assert.equal(document.activeElement, bagButton(indexOf('longbow')));
+  press('KeyX');
+  assert.deepEqual(drops, ['longbow'], 'X drops what shows, never the hidden helm');
+  assert.equal(inventory.slots[hood].id, 'outlawHood');
+
+  // A change from outside before the next frame (a pickup, a world drop)
+  // is caught by the key itself.
+  const spear = screen.selection.index;
+  assert.equal(inventory.slots[spear].id, 'spear');
+  inventory.remove(spear, 1);
+  press('KeyX');
+  assert.deepEqual(drops, ['longbow', 'javelin']);
+
+  // On an empty tab the gear taken off hides too, and nothing is selected.
+  screen.filterNodes.get('cloaks').button.click();
+  press('KeyG');
+  assert.deepEqual(screen.selection, { source: 'equipment', slot: 'helm' });
+  press('ArrowDown');
+  const slot = screen.selection.slot;
+  const gear = inventory.equipment[slot].id;
+  assert.notEqual(ITEMS[gear].equipmentSlot, 'cape');
+  press('KeyU');
+  assert.equal(inventory.equipment[slot], null);
+  assert.equal(screen.selection, null);
+  assert.equal(document.activeElement, slotButton(slot), 'focus stays on the box');
+  const before = JSON.stringify([inventory.slots, inventory.equipment]);
+  for (const code of ['KeyX', 'Enter', 'KeyE']) press(code);
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment]), before);
+  assert.deepEqual(drops, ['longbow', 'javelin']);
+  assert.equal(notes.filter(([message]) => message.startsWith('Equipped')).length, 0);
+
+  // Using the last of a stack, or a pickup into an empty tab, lands on a shown card.
+  screen.filterNodes.get('all').button.click();
+  inventory.slots[0].count = 1;
+  screen._select({ source: 'bag', index: 0 }, true);
+  press('Enter');
+  assert.equal(inventory.slots[0], null);
+  assert.equal(bagButton(0).hidden, true);
+  assert.equal(screen.selection.index, 1);
+  screen.filterNodes.get('cloaks').button.click();
+  assert.equal(screen.selection, null);
+  inventory.unequip('cape');
+  screen.update();
+  assert.deepEqual(screen.selection, { source: 'bag', index: indexOf('travelCloak') });
+});
+
+test('a touch acts only on a second tap of a card the first tap selected', (t) => {
+  const { screen, inventory, press, bagButton, indexOf } = mount(t);
+  screen.setOpen(true);
+  const tap = (button) => {
+    screen.screen.dispatch('pointerdown', { pointerType: 'touch', target: button });
+    button.click();
+  };
+  // Choosing Weapons selects its first card, but a tap still only selects it.
+  tap(screen.filterNodes.get('weapons').button);
+  const bow = indexOf('longbow');
+  assert.deepEqual(screen.selection, { source: 'bag', index: bow });
+  tap(bagButton(bow));
+  assert.equal(inventory.equipment.mainHand.id, 'shortSword', 'the first tap only selects');
+  tap(bagButton(bow));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'the second tap equips');
+
+  // An arrow key, a filter change or a bag change in between disarms it.
+  const dagger = indexOf('dagger');
+  tap(bagButton(dagger));
+  press('ArrowRight');
+  press('ArrowLeft');
+  assert.deepEqual(screen.selection, { source: 'bag', index: dagger });
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'moved away and back: still a first tap');
+  tap(screen.filterNodes.get('all').button);
+  assert.deepEqual(screen.selection, { source: 'bag', index: dagger });
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'after a filter change: a first tap');
+  inventory.add('rawIron', 1);
+  screen.update();
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'longbow', 'after the bag changed: a first tap');
+  tap(bagButton(dagger));
+  assert.equal(inventory.equipment.mainHand.id, 'dagger');
+});
+
+test('a right-click drops a card, and the browser menu never opens in the window', (t) => {
+  const drops = [];
+  const { screen, inventory, notes, bagButton, slotButton, indexOf } = mount(t, {
+    onDrop: (index) => {
+      drops.push([index, inventory.slots[index].count]);
+      inventory.remove(index, inventory.slots[index].count);
+      return { ok: true, message: 'Dropped Iron Ore x6.' };
+    },
+  });
+  screen.setOpen(true);
+  const ore = indexOf('rawIron');
+  const art = screen.bagNodes[ore].icon;
+  screen.screen.dispatch('pointerdown', { pointerType: 'mouse', button: 2, target: art });
+  const menu = screen.screen.dispatch('contextmenu', { target: art });
+  assert.equal(menu.defaultPrevented, true);
+  assert.deepEqual(drops, [[ore, 6]]);
+  assert.deepEqual(notes.at(-1), ['Dropped Iron Ore x6.', 'success']);
+  assert.equal(bagButton(ore).hidden, true);
+  assert.equal(inventory.slots[screen.selection.index]?.id, 'oakLog', 'the selection moves to the next card');
+
+  for (const target of [slotButton('helm'), screen.cardGrid, screen.screen]) {
+    assert.equal(screen.screen.dispatch('contextmenu', { target }).defaultPrevented, true);
+  }
+  // A long touch sends a contextmenu on Android: it drops nothing.
+  const log = indexOf('oakLog');
+  screen.screen.dispatch('pointerdown', { pointerType: 'touch', target: bagButton(log) });
+  assert.equal(screen.screen.dispatch('contextmenu', { target: bagButton(log) }).defaultPrevented, true);
+  assert.equal(drops.length, 1);
+  assert.equal(inventory.equipment.helm.id, 'outlawHood');
+});
+
 test('feedback shows only while open and fades after three and a half seconds', (t) => {
   const { screen, clock, notes, press } = mount(t);
   screen.onNotify('Picked up Flint.');
@@ -759,8 +1135,8 @@ test('feedback shows only while open and fades after three and a half seconds', 
 test('update redraws only when the inventory, selection or vitality changes', (t) => {
   const { screen, inventory, player, press } = mount(t);
   let draws = 0;
-  const draw = screen.portrait.update.bind(screen.portrait);
-  screen.portrait.update = (subject) => { draws++; return draw(subject); };
+  const render = screen._render.bind(screen);
+  screen._render = () => { draws++; return render(); };
 
   screen.update();
   assert.equal(draws, 0, 'a closed panel does no work');
@@ -772,30 +1148,28 @@ test('update redraws only when the inventory, selection or vitality changes', (t
   inventory.add('flint', 2);
   screen.update();
   assert.equal(draws, 2);
-  assert.equal(screen.slotCounter.textContent, '16 / 24 slots');
+  assert.equal(screen.slotCounter.textContent, 'Bag 16/24');
   player.vitals.health = 100;
   screen.update();
   assert.equal(draws, 3);
   assert.equal(screen.useButton.disabled, true);
 });
 
-test('a new skin while the bag is open repaints the portrait', (t) => {
+test('a new skin does not redraw the window, which has no portrait', (t) => {
   const { screen, player, press } = mount(t);
   let draws = 0;
-  const draw = screen.portrait.update.bind(screen.portrait);
-  screen.portrait.update = (subject) => { draws++; return draw(subject); };
+  const render = screen._render.bind(screen);
+  screen._render = () => { draws++; return render(); };
   press('KeyI');
   assert.equal(draws, 1);
   player.skin = presetSkin('drover');
   screen.update();
-  assert.equal(draws, 2);
-  player.skin = cleanSkin(player.skin);
-  screen.update();
-  assert.equal(draws, 2, 'an equal skin is no change');
+  assert.equal(draws, 1);
+  assert.equal(screen.screen.querySelectorAll('canvas').length, 0);
 });
 
-test('details describe the selected item, its stats, weight, durability and quick slot', (t) => {
-  const { screen, inventory, press, bagButton, slotButton, indexOf } = mount(t);
+test('details describe the selected item, its stats, weight and durability', (t) => {
+  const { screen, inventory, press, bagButton, indexOf, pick } = mount(t);
   press('KeyI');
   const draught = ITEMS.healingDraught;
   assert.equal(screen.itemType.textContent, 'Consumable');
@@ -809,31 +1183,30 @@ test('details describe the selected item, its stats, weight, durability and quic
   assert.equal(screen.itemWeight.textContent, '0.25 kg each / 0.75 kg carried / 3 items');
   assert.equal(screen.durability.hidden, true);
   assert.equal(screen.durability.textContent, '');
-  assert.equal(screen.assignment.textContent, 'Quick slot 2');
+  assert.equal(screen.details.textContent.includes('Quick slot'), false);
   assert.equal(screen.details.getAttribute('data-item-id'), 'healingDraught');
   assert.ok(visible(screen.useButton));
   assert.equal(screen.equipButton.hidden, true);
   assert.equal(screen.unequipButton.hidden, true);
 
-  assert.equal(screen.capacity.textContent, '39.75 / 60 kg');
-  assert.equal(screen.loadBar.textContent, '|'.repeat(11) + '.'.repeat(5));
+  assert.equal(stat(screen, 'weight'), '39.8/60 kg');
   const slot = bagButton(0);
   assert.equal(slot.getAttribute('aria-label'), `Slot 1: ${draught.name}, count 3`);
-  assert.equal(slot.getAttribute('data-item-kind'), 'consumable');
+  assert.equal(slot.getAttribute('data-item-kind'), 'consumables');
   assert.equal(slot.getAttribute('draggable'), 'true');
   assert.equal(slot.getAttribute('tabindex'), '0');
   assert.equal(slot.getAttribute('aria-describedby'), 'inventory-item-details');
   assert.ok(slot.classList.contains('selected'));
-  assert.equal(screen.bagNodes[0].count.textContent, 'x3');
-  assert.equal(bagButton(indexOf('woodenBuckler')).getAttribute('data-item-kind'), 'equipment');
-  assert.equal(bagButton(indexOf('rawIron')).getAttribute('data-item-kind'), 'material');
+  assert.equal(screen.bagNodes[0].count.textContent, '\u00d73');
+  assert.equal(bagButton(indexOf('woodenBuckler')).getAttribute('data-item-kind'), 'armor');
+  assert.equal(bagButton(indexOf('rawIron')).getAttribute('data-item-kind'), 'materials');
   assert.equal(bagButton(20).getAttribute('aria-label'), 'Slot 21: empty');
   assert.equal(bagButton(20).getAttribute('draggable'), 'false');
-  assert.ok(bagButton(20).classList.contains('empty'));
+  assert.equal(bagButton(20).hidden, true, 'an empty card hides');
   assert.equal(bagButton(20).hasAttribute('aria-describedby'), false);
 
   // Equipped gear.
-  slotButton('mainHand').click();
+  pick('mainHand');
   const sword = ITEMS.shortSword;
   assert.equal(bagButton(0).hasAttribute('aria-describedby'), false, 'only the selection is described');
   assert.equal(screen.itemType.textContent, 'Equipment');
@@ -843,32 +1216,30 @@ test('details describe the selected item, its stats, weight, durability and quic
   assert.equal(screen.durability.textContent, 'Durability: 100 / 100');
   assert.equal(screen.durability.hidden, false);
   assert.equal(screen.itemWeight.textContent, `${sword.weight} kg each / ${sword.weight} kg carried / 1 item`);
-  assert.equal(screen.assignment.textContent, 'Quick slot 1');
   assert.ok(visible(screen.unequipButton));
   assert.equal(screen.equipButton.hidden, true);
   assert.equal(screen.useButton.hidden, true);
-  assert.equal(slotButton('mainHand').getAttribute('aria-label'), `Main hand: ${sword.name}`);
-  assert.equal(slotButton('mainHand').getAttribute('tabindex'), '0');
-  assert.equal(screen.equipmentNodes.get('mainHand').itemName.textContent, 'Sword');
+  assert.equal(screen.equipmentNodes.get('mainHand').button.getAttribute('aria-label'), `Main hand: ${sword.name}`);
+  assert.equal(screen.equipmentNodes.get('mainHand').button.getAttribute('tabindex'), '0');
   assert.equal(screen.equipmentNodes.get('mainHand').icon.textContent, itemArt('shortSword', sword.glyph));
   inventory.equipment.mainHand.durability = 40;
   screen.update();
   assert.equal(screen.durability.textContent, 'Durability: 40 / 100');
 
   // Empty slots.
-  slotButton('offHand').click();
-  assert.equal(slotButton('offHand').getAttribute('aria-label'), 'Off hand: empty');
-  assert.equal(screen.equipmentNodes.get('offHand').itemName.textContent, 'Empty');
+  pick('offHand');
+  assert.equal(screen.equipmentNodes.get('offHand').button.getAttribute('aria-label'), 'Off hand: empty');
   assert.equal(screen.itemName.textContent, 'Off hand slot');
   assert.equal(screen.itemType.textContent, '');
-  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
+  assert.equal(screen.description.textContent, 'Click gear in the bag to equip it.');
   assert.equal(screen.stats.hidden, true);
   assert.equal(screen.stats.children.length, 0);
   assert.equal(screen.itemPreview.hidden, true);
   assert.equal(screen.itemWeight.hidden, true);
-  assert.equal(screen.assignment.hidden, true);
   assert.equal(screen.unequipButton.hidden, true);
-  bagButton(20).click();
+  pick(0);
+  screen._filterBy('cloaks');
+  assert.equal(screen.selection, null);
   assert.equal(screen.itemName.textContent, 'Empty slot');
   assert.equal(screen.description.textContent, 'Drag another item into this slot to move or swap it.');
   assert.equal(screen.details.getAttribute('data-item-id'), '');
@@ -876,39 +1247,141 @@ test('details describe the selected item, its stats, weight, durability and quic
 
 test('on phones an empty equipment slot names the Equip button instead of a key', (t) => {
   let phone = true;
-  const { screen, press, slotButton } = mount(t, { phone: () => phone });
+  const { screen, press, pick } = mount(t, { phone: () => phone });
   press('KeyI');
-  slotButton('offHand').click();
-  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then tap Equip.');
+  pick('offHand');
+  assert.equal(screen.description.textContent, 'Tap gear in the bag twice to equip it.');
 
   phone = false;
-  slotButton('helm').click();
-  slotButton('offHand').click();
-  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
+  pick('helm');
+  pick('offHand');
+  assert.equal(screen.description.textContent, 'Click gear in the bag to equip it.');
 });
 
 test('flipping phone mode rewrites the empty-slot hint with the same slot selected', (t) => {
   let phone = false;
-  const { screen, press, slotButton } = mount(t, { phone: () => phone });
+  const { screen, press, pick } = mount(t, { phone: () => phone });
   press('KeyI');
-  slotButton('offHand').click();
-  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
+  pick('offHand');
+  assert.equal(screen.description.textContent, 'Click gear in the bag to equip it.');
 
   phone = true;
   screen.update();
-  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then tap Equip.');
+  assert.equal(screen.description.textContent, 'Tap gear in the bag twice to equip it.');
   phone = false;
   screen.update();
-  assert.equal(screen.description.textContent, 'Select compatible gear in your bag, then press E to equip it.');
+  assert.equal(screen.description.textContent, 'Click gear in the bag to equip it.');
 });
 
-test('the character name can change', (t) => {
+test('the header names the character and its class, an outlaw without one', (t) => {
   const { screen } = mount(t, { name: 'Mira' });
   assert.equal(screen.nameNode.textContent, 'Mira');
+  assert.equal(screen.classNode.textContent, 'Outlaw');
+  assert.equal(screen.nameNode.getAttribute('dir'), 'auto');
+  const identity = screen.nameNode.parentNode;
+  assert.equal(identity.tagName, 'H2');
+  assert.equal(identity.textContent, 'Mira · Outlaw');
+  assert.equal(identity.children[1].getAttribute('aria-hidden'), 'true');
+  screen.setName('Mira', 'Archer');
+  assert.equal(screen.classNode.textContent, 'Archer');
   screen.setName('Tamsin');
   assert.equal(screen.nameNode.textContent, 'Tamsin');
-  screen.setName(7);
+  assert.equal(screen.classNode.textContent, 'Archer', 'a name alone keeps the class');
+  screen.setName(7, null);
   assert.equal(screen.nameNode.textContent, '7');
+  assert.equal(screen.classNode.textContent, 'Outlaw');
+  assert.equal(mount(t, { className: 'Warrior' }).screen.classNode.textContent, 'Warrior');
+});
+
+test('the close button reads close (I), keeps its name and closes the window', (t) => {
+  const { screen, press } = mount(t);
+  press('KeyI');
+  const close = screen.screen.querySelectorAll('.inventory-close')[0];
+  assert.equal(close.textContent, 'closeI');
+  assert.equal(close.children[0].tagName, 'KBD');
+  assert.equal(close.getAttribute('aria-label'), 'Close inventory');
+  assert.equal(screen.screen.getAttribute('role'), 'dialog');
+  assert.equal(screen.screen.getAttribute('aria-modal'), 'true');
+  assert.equal(screen.screen.getAttribute('aria-label'), 'Inventory');
+  close.click();
+  assert.equal(screen.isOpen, false);
+});
+
+test('the paper doll has a box per slot, on its grid area, in slot order', (t) => {
+  const { screen, press, slotButton } = mount(t, { describe: (stack) => stack.id === 'shortSword' ? { name: 'Short Sword' } : null });
+  press('KeyI');
+  const boxes = screen.screen.querySelectorAll('.equipment-slot');
+  assert.deepEqual(boxes.map((button) => button.dataset.equipmentSlot), [...EQUIPMENT_SLOTS]);
+  for (const button of boxes) {
+    const slot = button.dataset.equipmentSlot;
+    assert.equal(button.style.gridArea, dollArea(slot));
+    assert.equal(button.dataset.box, DOLL_BOXES[slot].small ? 'small' : 'large');
+  }
+  assert.equal(boxes.filter((button) => button.dataset.box === 'small').length, 5);
+  const amulet = slotButton('amulet');
+  assert.ok(amulet.classList.contains('empty'));
+  assert.equal(amulet.classList.contains('filled'), false);
+  assert.equal(amulet.children[0].textContent, 'amulet');
+  assert.equal(amulet.hasAttribute('title'), false);
+  assert.equal(slotButton('cape').getAttribute('aria-label'), 'Cloak: Travelling Cloak');
+  assert.equal(slotButton('legs').getAttribute('aria-label'), 'Legs: empty');
+  const weapon = slotButton('mainHand');
+  assert.ok(weapon.classList.contains('filled'));
+  assert.equal(weapon.classList.contains('empty'), false);
+  assert.equal(weapon.getAttribute('title'), 'Short Sword');
+  assert.equal(screen.equipmentNodes.get('mainHand').icon.textContent, itemArt('shortSword', ITEMS.shortSword.glyph));
+  assert.equal(slotButton('feet').getAttribute('title'), 'Riding Boots', "an item's own name without a description");
+  assert.equal(screen.equipmentNodes.get('feet').count.textContent, '', 'only the quiver counts');
+  assert.equal(screen.screen.querySelectorAll('.equipment-slot-name').length, 0);
+  assert.equal(screen.screen.querySelectorAll('canvas').length, 0);
+});
+
+// The value of one pair in the stats strip, by its label.
+function stat(screen, label) {
+  const pair = screen.statsStrip.children.find((node) => node.children[0].textContent === label);
+  return pair?.children[1].textContent;
+}
+
+test('the stats strip shows live HP, stamina and weight, then MP, attributes and the pouch once they exist', (t) => {
+  let attributes = null;
+  const { screen, player, press } = mount(t, { wallet: { cents: 1240 }, attributes: () => attributes });
+  assert.equal(screen.statsStrip.tagName, 'DL');
+  assert.equal(screen.statsStrip.getAttribute('aria-label'), 'Character stats');
+  screen.update();
+  assert.equal(screen.statsStrip.children.length, 0, 'a closed window writes nothing');
+  press('KeyI');
+  assert.deepEqual(screen.statsStrip.children.map((pair) => pair.textContent),
+    ['HP50/100', 'stamina100/100', 'weight39.8/60 kg', 'pouch12.40d']);
+  screen.attachMana({ mana: 40, maxMana: 100 });
+  attributes = { strength: 7, dexterity: 4, constitution: 6, intelligence: 5, wisdom: 3, charisma: 3 };
+  screen.update();
+  assert.deepEqual(screen.statsStrip.children.map((pair) => pair.children[0].textContent),
+    ['HP', 'MP', 'stamina', 'STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA', 'weight', 'pouch']);
+  assert.equal(stat(screen, 'MP'), '40/100');
+  assert.equal(stat(screen, 'STR'), '7');
+
+  // Only the HP value is written when the HP changes, and nothing after.
+  const writes = new Map();
+  for (const pair of screen.statsStrip.children) {
+    const value = pair.children[1];
+    const label = pair.children[0].textContent;
+    const set = Object.getOwnPropertyDescriptor(FakeElement.prototype, 'textContent').set;
+    Object.defineProperty(value, 'textContent', { configurable: true,
+      get: Object.getOwnPropertyDescriptor(FakeElement.prototype, 'textContent').get,
+      set(text) { writes.set(label, (writes.get(label) ?? 0) + 1); set.call(this, text); } });
+  }
+  const pairs = screen.statsStrip.children;
+  player.vitals.health = 37;
+  screen.update();
+  assert.deepEqual([...writes], [['HP', 1]]);
+  assert.equal(stat(screen, 'HP'), '37/100');
+  assert.equal(screen.statsStrip.children, pairs, 'the same pairs');
+  screen.update();
+  assert.deepEqual([...writes], [['HP', 1]]);
+
+  screen.attachMana(null);
+  screen.update();
+  assert.equal(stat(screen, 'MP'), undefined);
 });
 
 test('the panel works without optional callbacks and starts on an empty bag', (t) => {
@@ -917,13 +1390,17 @@ test('the panel works without optional callbacks and starts on an empty bag', (t
   const screen = new InventoryScreen({
     inventory, player: { equipment: inventory.equipment, vitals: { health: 1, maxHealth: 1, stamina: 1, maxStamina: 1 } },
   });
-  assert.deepEqual(screen.selection, { source: 'bag', index: 0 });
+  assert.equal(screen.selection, null, 'an empty bag selects nothing');
   assert.equal(screen.nameNode.textContent, 'Kael');
   screen.setOpen(true);
+  assert.equal(env.document.activeElement, screen.filterNodes.get('all').button, 'so the All tab takes focus');
+  assert.equal(screen.bagEmpty.textContent, 'Your bag is empty.');
+  assert.equal(screen.bagEmpty.hidden, false);
   screen.onNotify('Hello.');
   assert.equal(screen.feedback.textContent, 'Hello.');
-  assert.equal(screen.capacity.textContent, '0 / 10 kg');
-  assert.equal(screen.loadBar.textContent, '.'.repeat(16));
+  assert.equal(stat(screen, 'weight'), '0/10 kg');
+  assert.equal(stat(screen, 'pouch'), undefined);
+  assert.equal(stat(screen, 'MP'), undefined);
   assert.equal(screen.description.textContent, 'Drag another item into this slot to move or swap it.');
   screen.destroy();
   assert.equal(env.document.body.classList.contains('inventory-open'), false);
@@ -933,13 +1410,11 @@ test('destroy closes the panel and removes its listeners', (t) => {
   const { screen, toggles, press } = mount(t);
   press('KeyI');
   const root = screen.root;
-  const portrait = screen.portrait;
   screen.destroy();
   assert.equal(screen.isOpen, false);
   assert.deepEqual(toggles, [true, false]);
   assert.equal(root.children.includes(screen.screen), false);
   assert.equal(screen.screen.parentNode, null);
-  assert.equal(portrait.context, null);
   assert.deepEqual(press('KeyI'), { prevented: false, reachedGame: true });
   assert.equal(screen.isOpen, false);
   assert.equal(press('KeyI', { type: 'keyup' }).reachedGame, true);
@@ -963,13 +1438,13 @@ test('an instrument lists its keys under the description, and phones say why the
   let phone = false;
   const inventory = new Inventory({ starter: false });
   for (const id of ['shortSword', 'lute', 'flute']) inventory.add(id);
-  const { screen, press, bagButton } = mount(t, { inventory, phone: () => phone });
+  const { screen, press, pick } = mount(t, { inventory, phone: () => phone });
   press('KeyI');
   const lines = () => screen.noteLines.filter((line) => !line.hidden).map((line) => line.textContent);
-  bagButton(0).click();
+  pick(0);
   assert.equal(screen.notes.hidden, true, 'the sword plays nothing');
   assert.deepEqual(lines(), []);
-  bagButton(1).click();
+  pick(1);
   assert.equal(screen.notes.hidden, false);
   assert.deepEqual(lines(), [
     'Use keys 1-8 to play notes: 1-[C] 2-[D] 3-[E] 4-[F] 5-[G] 6-[A] 7-[B] 8-[C]',
@@ -977,14 +1452,14 @@ test('an instrument lists its keys under the description, and phones say why the
   ]);
   assert.deepEqual(screen.stats.children.map((node) => node.textContent),
     ['Material', 'Wood and gut', 'Voice', 'Plucked strings', 'Notes', 'C4-C5', 'Shift', 'Chords']);
-  bagButton(2).click();
+  pick(2);
   assert.equal(lines()[1], 'Hold Shift to play additional notes: 9-[C] 10-[D] 11-[E] 12-[F] 13-[G] 14-[A] 15-[B] 16-[C]');
   phone = true;
   screen.update();
   assert.equal(lines().length, 3);
   assert.equal(lines()[2], 'Played with a keyboard for now.');
   assert.equal(screen.itemPreview.textContent, itemArt('flute', ITEMS.flute.glyph));
-  bagButton(3).click();
+  pick(3);
   assert.equal(screen.notes.hidden, true, 'an empty slot plays nothing');
 });
 
@@ -1079,14 +1554,14 @@ test('C turns to the next page, once per press; arrows, Home and End move along 
 test('on the Character page the bag keys do nothing, game keys stay out, and Esc, Tab and Shift+Tab work', (t) => {
   const { screen, node, tabs, press, document, inventory } = withCharacterPage(t);
   screen.setOpen(true, 'character');
-  const before = JSON.stringify([inventory.slots, inventory.equipment, inventory.hotbar, screen.selection]);
+  const before = JSON.stringify([inventory.slots, inventory.equipment, screen.selection]);
   for (const code of ['KeyG', 'KeyE', 'KeyU', 'KeyX', 'Digit1', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
     'NumpadEnter', 'KeyQ', 'KeyW', 'Space', 'KeyZ']) {
     tabs[1].focus();
     if (code === 'ArrowLeft' || code === 'ArrowRight') document.activeElement = document.body;
     assert.equal(press(code, { target: document.body }).reachedGame, false, code);
   }
-  assert.equal(JSON.stringify([inventory.slots, inventory.equipment, inventory.hotbar, screen.selection]), before);
+  assert.equal(JSON.stringify([inventory.slots, inventory.equipment, screen.selection]), before);
   assert.equal(screen.page, 'character');
   assert.equal(press('KeyW', { target: document.body }).prevented, true, 'movement keys are swallowed');
   // Shift+Tab cycles the visible buttons: the chosen tab, Close and the page's own.

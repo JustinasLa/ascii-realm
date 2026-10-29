@@ -48,6 +48,27 @@ test('the page never zooms, scrolls, bounces or selects text during play, but fi
   assert.match(phone, /body \{ touch-action: none; \}/);
 });
 
+test('the paper doll keeps one layout at every size, with the icon sized only by its box', () => {
+  assert.doesNotMatch(css, /equipment-slots \{[^}]*repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.doesNotMatch(css, /inventory-portrait|equipment-slot-name|inventory-load/);
+  assert.equal(css.match(/\.equipment-slot-icon \{/g).length, 1);
+  assert.match(css, /\.equipment-slot-icon \{[^}]*font-size: min\(calc\(100cqw \/ 7\.2\), calc\(100cqh \/ 10\)\)/);
+  const phone = css.slice(css.indexOf('@media (pointer: coarse) and (hover: none) and (max-width: 600px)'));
+  assert.match(phone, /\.equipment-slots \{ grid-template-rows: repeat\(7, max\(44px,/);
+  assert.match(phone, /\.equipment-slot::after \{ content: ""; position: absolute; inset: calc\(var\(--gap\) \/ -2\); \}/);
+});
+
+test('the bag is filter tabs over tall cards, with 44 px tabs on phones and no old slot rules', () => {
+  assert.doesNotMatch(css, /\.inventory-slot/);
+  assert.match(css, /\.inventory-screen \.bag-card \{[^}]*aspect-ratio: 1 \/ 2;[^}]*-webkit-touch-callout: none;/);
+  assert.match(css, /\.bag-card-art \{[^}]*font-size: min\(calc\(100cqw \/ 7\.2\), calc\(100cqh \/ 10\)\)/);
+  const phone = css.slice(css.indexOf('@media (pointer: coarse) and (hover: none) and (max-width: 600px)'));
+  // The same selector as the desktop rule, declared later, so it wins.
+  assert.match(css, /\.inventory-screen \.bag-filter \{ min-height: 22px;/);
+  assert.match(phone, /\.inventory-screen \.bag-filter \{ min-height: 44px;/);
+  assert.match(phone, /\.bag-cards \{ overflow-y: visible; min-height: 0; \}/);
+});
+
 test('the play card and the Full screen row are in the page, hidden until needed', () => {
   assert.match(html, /<button type="button" id="play-gate" hidden aria-label="Tap to play">/);
   assert.match(html, /class="play-gate-action">TAP TO PLAY</);

@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import { Player } from '../src/entities/player.js';
 import { INSTRUMENT_IDS } from '../src/audio/instruments.js';
 import { cleanCode, cleanName, cleanSeed, cleanTag, displayName, lobbyServerUrl, NOTE_SLACK, NOTE_WINDOW_MS,
-  NOTES_PER_SECOND, playerState, PROTOCOL_VERSION, RateBudget, readMembers, readName, readNote, readPlayerState, RollingLimit,
-  validCode } from '../src/multiplayer/protocol.js';
+  NOTES_PER_SECOND, playerState, PROTOCOL_VERSION, RateBudget, readEquipment, readMembers, readName, readNote, readPlayerState,
+  RollingLimit, validCode } from '../src/multiplayer/protocol.js';
+import { EQUIPMENT_SLOTS, fitsSlot } from '../src/inventory/items.js';
 import { blendState, RemotePlayers } from '../src/multiplayer/remote-players.js';
 
 test('player snapshots preserve poses without sharing mutable arrays or private fields', () => {
@@ -259,4 +260,26 @@ test('a steady 20 a second passes RateBudget with 400 ms of jitter, and so does 
     const server = new RateBudget();
     assert.deepEqual(arrivals.sort((a, b) => a - b).filter((at) => !server.allow(at)), [], `run ${run}`);
   }
+});
+
+test('equipment crosses with the twelve slots: boots on the feet, a quiver as one arrow', () => {
+  const read = readEquipment({ feet: { id: 'ridingBoots' }, quiver: { id: 'arrow', count: 30, material: 'iron' },
+    mainHand: { id: 'shortSword' } });
+  assert.deepEqual(Object.keys(read), [...EQUIPMENT_SLOTS]);
+  assert.deepEqual(read.feet, { id: 'ridingBoots', count: 1 });
+  assert.deepEqual(read.quiver, { id: 'arrow', count: 1, material: 'iron' });
+  // An older peer sends boots in legs and only seven slots; the new slots read empty.
+  const old = readEquipment({ helm: { id: 'outlawHood' }, chest: null, legs: { id: 'ridingBoots' }, hands: null, cape: null,
+    mainHand: { id: 'shortSword' }, offHand: null });
+  assert.equal(old.legs, null, 'boots never sit in legs');
+  for (const slot of ['feet', 'amulet', 'ringLeft', 'ringRight', 'quiver']) assert.equal(old[slot], null, slot);
+  assert.deepEqual(old.helm, { id: 'outlawHood', count: 1 });
+  // Unknown keys are ignored.
+  const odd = readEquipment(JSON.parse('{"ring":{"id":"arrow"},"foo":{"id":"arrow"},"__proto__":{"id":"arrow"},'
+    + '"ringLeft":{"id":"arrow"}}'));
+  assert.deepEqual(Object.values(odd).filter(Boolean), []);
+  assert.equal(Object.hasOwn(odd, 'foo'), false);
+  // A ring could only sit in a ring slot.
+  assert.ok(fitsSlot({ equipmentSlot: 'ring' }, 'ringLeft') && fitsSlot({ equipmentSlot: 'ring' }, 'ringRight'));
+  assert.equal(fitsSlot({ equipmentSlot: 'ring' }, 'amulet'), false);
 });

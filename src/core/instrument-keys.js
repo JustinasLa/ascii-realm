@@ -1,7 +1,7 @@
 // The number keys of an instrument in the off hand. While one is held, keys
 // 1-8 (and the numpad's 1-8) play notes the moment they go down instead of
-// selecting quick slots; Shift at the press plays the second layer. The
-// listener runs in the capture phase and claims the key, so the quick-slot
+// doing anything else; Shift at the press plays the second layer. The
+// listener runs in the capture phase and claims the key, so the game's
 // input never sees it and no other shortcut fires on it. Keys 9 and 0, and
 // every key while no instrument is held, are left alone.
 
@@ -14,7 +14,7 @@ export function noteSlot(event) {
 export class InstrumentKeys {
   /**
    * `instrument()` is the held instrument's id or null, and null whenever the
-   * keys must stay quick-slot keys (a phone, gameplay blocked by a panel or
+   * keys must stay plain keys (a phone, gameplay blocked by a panel or
    * chat). `canPlay()` is the shared check for every way of playing; a
    * claimed key that fails it is swallowed. `isControl(target)` marks form
    * fields and panels, whose keys are their own.

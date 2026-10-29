@@ -1,17 +1,23 @@
 import { noteReference } from '../audio/instruments.js';
-import { skinKey } from '../character/skin.js';
-import { EQUIPMENT_SLOTS, ITEMS } from '../inventory/items.js';
+import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS } from '../inventory/items.js';
+import { BAG_TABS, bagView, cardLabel, itemKind } from './bag-view.js';
 import { itemArt } from './item-art.js';
-import { CharacterPortrait } from './portrait.js';
+import { DOLL_BOXES, dollArea } from './paper-doll.js';
+import { sheetStats } from './sheet-stats.js';
 
 const SLOT_NAMES = {
   helm: 'Helm',
   chest: 'Chest',
   legs: 'Legs',
   hands: 'Hands',
-  cape: 'Cape',
+  cape: 'Cloak',
   mainHand: 'Main hand',
   offHand: 'Off hand',
+  feet: 'Feet',
+  amulet: 'Amulet',
+  ringLeft: 'Left ring',
+  ringRight: 'Right ring',
+  quiver: 'Quiver',
 };
 
 function element(tag, className, text) {
@@ -43,11 +49,10 @@ function statName(key) {
   return key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (char) => char.toUpperCase());
 }
 
-// What an empty slot says. Phones have no keyboard, so they name the button.
+// What an empty slot says. Phones have no pointer to click with, so they name taps.
 export function emptySlotHint(carried, phone = false) {
   if (carried) return 'Drag another item into this slot to move or swap it.';
-  return phone ? 'Select compatible gear in your bag, then tap Equip.'
-    : 'Select compatible gear in your bag, then press E to equip it.';
+  return phone ? 'Tap gear in the bag twice to equip it.' : 'Click gear in the bag to equip it.';
 }
 
 /** A live inventory panel. Opening it blocks controls, while the world keeps moving. */
@@ -57,9 +62,13 @@ export class InventoryScreen {
   // `isCovered` is true while another panel (a furnace) holds the keys.
   // `describe(stack)` gives a stack's own { name, colour, description, stats }
   // (an alloy ingot's), or null for its item's; `describeVersion()` changes with them.
-  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', phone = () => false, pages = [],
-    isCovered = () => false, describe = () => null, describeVersion = () => 0 }) {
-    Object.assign(this, { isCovered, describe, describeVersion });
+  // The stats strip reads `wallet.cents` and `attributes()`, the six totals
+  // or null; `className` heads the sheet beside the name.
+  constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', className = null, phone = () => false,
+    pages = [], isCovered = () => false, describe = () => null, describeVersion = () => 0, wallet = null,
+    attributes = () => null }) {
+    Object.assign(this, { isCovered, describe, describeVersion, wallet, attributes });
+    this.manaSource = null;
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
     // Drops a bag stack into the world; returns { ok, message }.
@@ -81,7 +90,7 @@ export class InventoryScreen {
     this._dragFrom = null;
     this._consumedKeys = new Set();
     const firstItem = inventory.slots.findIndex((stack) => stack);
-    this.selection = { source: 'bag', index: Math.max(0, firstItem) };
+    this.selection = firstItem >= 0 ? { source: 'bag', index: firstItem } : null;
 
     this.root = document.getElementById('inventory-root');
     if (!this.root) {
@@ -90,21 +99,25 @@ export class InventoryScreen {
       document.body.append(this.root);
     }
 
-    this.screen = element('section', 'inventory-screen');
+    this.screen = element('section', 'inventory-screen inventory-sheet');
     this.screen.hidden = true;
     this.screen.setAttribute('role', 'dialog');
     this.screen.setAttribute('aria-label', 'Inventory');
     this.screen.setAttribute('aria-modal', 'true');
     this.screen.setAttribute('aria-describedby', 'inventory-help');
 
+    // The header: NAME · CLASS, the pages and a boxed close (I).
     const header = element('header', 'inventory-header');
-    const title = element('h2', 'inventory-title', 'Inventory');
-    const identity = element('div', 'inventory-identity');
-    this.nameNode = element('span', 'inventory-character-name', String(name));
+    const identity = element('h2', 'inventory-identity');
+    this.nameNode = element('span', 'inventory-character-name');
     this.nameNode.setAttribute('dir', 'auto');
-    identity.append(title, this.nameNode);
-    const close = element('button', 'inventory-close', 'Close');
-    close.append(element('kbd', '', 'Esc'));
+    const separator = element('span', 'inventory-identity-separator', ' · ');
+    separator.setAttribute('aria-hidden', 'true');
+    this.classNode = element('span', 'inventory-character-class');
+    identity.append(this.nameNode, separator, this.classNode);
+    this.setName(name, className);
+    const close = element('button', 'inventory-close', 'close');
+    close.append(element('kbd', '', 'I'));
     close.type = 'button';
     close.setAttribute('aria-label', 'Close inventory');
     close.addEventListener('click', () => this.setOpen(false));
@@ -127,13 +140,9 @@ export class InventoryScreen {
     header.append(identity, tabs, close);
 
     const body = element('div', 'inventory-body');
-    const equipment = element('section', 'inventory-equipment');
-    equipment.append(element('h3', 'inventory-heading', 'Equipment'));
-    const stage = element('div', 'inventory-character-stage');
-    const portrait = element('canvas', 'inventory-portrait');
-    portrait.setAttribute('aria-hidden', 'true');
-    this.portrait = new CharacterPortrait(portrait, { columns: 36, rows: 39 });
-    stage.append(portrait);
+    // The paper doll: a box per slot on one grid (paper-doll.js).
+    const doll = element('section', 'inventory-doll');
+    const frame = element('div', 'doll-frame');
     this.equipmentGrid = element('div', 'equipment-slots');
     this.equipmentGrid.setAttribute('role', 'group');
     this.equipmentGrid.setAttribute('aria-label', 'Equipped items');
@@ -143,47 +152,62 @@ export class InventoryScreen {
       button.type = 'button';
       button.tabIndex = -1;
       button.dataset.equipmentSlot = slot;
-      const label = element('span', 'equipment-slot-label', SLOT_NAMES[slot]);
+      button.dataset.box = DOLL_BOXES[slot].small ? 'small' : 'large';
+      button.style.gridArea = dollArea(slot);
+      const label = element('span', 'equipment-slot-label', DOLL_BOXES[slot].label);
       const icon = element('pre', 'equipment-slot-icon');
       icon.setAttribute('aria-hidden', 'true');
-      const itemName = element('span', 'equipment-slot-name');
-      button.append(label, icon, itemName);
-      button.addEventListener('click', () => this._select({ source: 'equipment', slot }));
-      button.addEventListener('dblclick', () => this._unequip());
-      this.equipmentNodes.set(slot, { button, icon, itemName });
+      const count = element('span', 'equipment-slot-count');
+      count.setAttribute('aria-hidden', 'true');
+      button.append(label, icon, count);
+      button.addEventListener('click', () => this._press({ source: 'equipment', slot }));
+      this.equipmentNodes.set(slot, { button, icon, count });
       this.equipmentGrid.append(button);
     }
-    stage.append(this.equipmentGrid);
-    equipment.append(stage);
+    frame.append(this.equipmentGrid);
+    doll.append(frame);
+    // The stats strip: `label value` pairs, built for each set of keys.
+    this.statsStrip = element('dl', 'sheet-stats');
+    this.statsStrip.setAttribute('aria-label', 'Character stats');
+    this._statKeys = null;
+    this._statsLine = null;
 
+    // The bag: its count and a hint, filter tabs with stack counts, and a
+    // card per slot, hidden while empty or filtered out.
     const bag = element('section', 'inventory-bag');
     const bagHeading = element('div', 'inventory-bag-heading');
-    bagHeading.append(element('h3', 'inventory-heading', 'Satchel'));
-    this.slotCounter = element('span', 'inventory-slot-total');
-    bagHeading.append(this.slotCounter);
-    bag.append(bagHeading);
-    this.capacity = element('p', 'inventory-capacity');
-    const load = element('div', 'inventory-load');
-    this.loadBar = element('pre', 'inventory-load-bar');
-    this.loadBar.setAttribute('aria-hidden', 'true');
-    load.append(this.capacity, this.loadBar);
-    this.bagGrid = element('div', 'inventory-slot-grid');
-    this.bagGrid.setAttribute('role', 'group');
-    this.bagGrid.setAttribute('aria-label', 'Carried items, 24 slots');
+    this.slotCounter = element('h3', 'inventory-heading');
+    this.bagHint = element('span', 'inventory-bag-hint');
+    bagHeading.append(this.slotCounter, this.bagHint);
+    // Not role="tab": the page keys turn pages on those.
+    this.filter = 'all';
+    const filters = element('div', 'bag-filters');
+    filters.setAttribute('role', 'group');
+    filters.setAttribute('aria-label', 'Filter the bag');
+    this.filterNodes = new Map(BAG_TABS.map(({ id, label }) => {
+      const button = element('button', 'bag-filter', label);
+      button.type = 'button';
+      button.dataset.filter = id;
+      const count = element('span', 'bag-filter-count');
+      button.append(count);
+      button.addEventListener('click', () => this._filterBy(id));
+      filters.append(button);
+      return [id, { button, count }];
+    }));
+    this.cardGrid = element('div', 'bag-cards');
+    this.cardGrid.setAttribute('role', 'group');
+    this.cardGrid.setAttribute('aria-label', 'Carried items');
     this.bagNodes = inventory.slots.map((_, index) => {
-      const button = element('button', 'inventory-slot');
+      const button = element('button', 'bag-card');
       button.type = 'button';
       button.tabIndex = -1;
       button.dataset.slotIndex = String(index);
-      const number = element('span', 'inventory-slot-number', String(index + 1).padStart(2, '0'));
-      number.setAttribute('aria-hidden', 'true');
-      const icon = element('pre', 'inventory-slot-icon');
+      const icon = element('pre', 'bag-card-art');
       icon.setAttribute('aria-hidden', 'true');
-      const count = element('span', 'inventory-slot-count');
+      const count = element('span', 'bag-card-label');
       count.setAttribute('aria-hidden', 'true');
-      button.append(number, icon, count);
-      button.addEventListener('click', () => this._select({ source: 'bag', index }));
-      button.addEventListener('dblclick', () => this._activate());
+      button.append(icon, count);
+      button.addEventListener('click', () => this._press({ source: 'bag', index }));
       button.addEventListener('dragstart', (event) => {
         if (!this.inventory.slots[index]) {
           event.preventDefault();
@@ -208,10 +232,11 @@ export class InventoryScreen {
         this.update();
       });
       button.addEventListener('dragend', () => { this._dragFrom = null; });
-      this.bagGrid.append(button);
+      this.cardGrid.append(button);
       return { button, icon, count };
     });
-    bag.append(this.bagGrid, load);
+    this.bagEmpty = element('p', 'bag-empty');
+    bag.append(bagHeading, filters, this.cardGrid, this.bagEmpty);
 
     this.details = element('section', 'inventory-details inventory-tooltip');
     this.details.id = 'inventory-item-details';
@@ -230,7 +255,6 @@ export class InventoryScreen {
     this.stats = element('dl', 'inventory-stats');
     this.itemWeight = element('p', 'inventory-weight');
     this.durability = element('p', 'inventory-durability');
-    this.assignment = element('p', 'inventory-hotbar-assignment');
     const actions = element('div', 'inventory-actions');
     this.equipButton = element('button', 'inventory-equip', 'Equip');
     this.equipButton.append(element('kbd', '', 'E'));
@@ -251,15 +275,15 @@ export class InventoryScreen {
     this.feedback.setAttribute('aria-atomic', 'true');
     this.feedback.hidden = true;
     itemInfo.append(this.itemType, this.itemName, this.description, this.notes, this.stats, this.itemWeight,
-      this.durability, this.assignment, actions, this.feedback);
+      this.durability, actions, this.feedback);
     this.details.append(this.itemPreview, itemInfo);
     const carried = element('div', 'inventory-carried');
     carried.append(bag, this.details);
-    body.append(equipment, carried);
+    body.append(doll, this.statsStrip, carried);
 
     const help = element('div', 'inventory-help');
-    for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'],
-      ...(this.onDrop ? [['X', 'Drop']] : []), ['1-9', 'Assign quick slot']]) {
+    for (const [keys, action] of [['Arrows', 'Navigate'], ['G', 'Switch pane'], ['Enter', 'Equip / take off'],
+      ...(this.onDrop ? [['X', 'Drop']] : [])]) {
       const hint = element('span', 'inventory-key-hint');
       hint.append(element('kbd', '', keys), element('span', '', action));
       help.append(hint);
@@ -276,7 +300,19 @@ export class InventoryScreen {
     this._show('inventory');
     // Keep scene zoom and pointer handlers out of panel interactions.
     this.screen.addEventListener('wheel', (event) => event.stopPropagation(), { passive: true });
-    this.screen.addEventListener('pointerdown', (event) => event.stopPropagation());
+    this.screen.addEventListener('pointerdown', (event) => {
+      this._pointerType = event.pointerType;
+      event.stopPropagation();
+    });
+    // No browser menu in the window; a right-click drops a card's stack. A
+    // long touch sends one too on Android, and drops nothing.
+    this.screen.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      const card = event.target?.closest?.('.bag-card');
+      if (!card || this._pointerType === 'touch') return;
+      this._select({ source: 'bag', index: Number(card.dataset.slotIndex) });
+      this._drop();
+    });
     this.screen.addEventListener('pointerup', (event) => event.stopPropagation());
     this.screen.addEventListener('mousedown', (event) => event.stopPropagation());
     this.screen.addEventListener('mouseup', (event) => event.stopPropagation());
@@ -314,7 +350,10 @@ export class InventoryScreen {
     this.onToggle(open);
     if (open) {
       this.update();
-      if (this.page === 'inventory') this._selectedButton()?.focus();
+      // The sheet opens at its top, on the doll, wherever the selection is
+      // and however far down it was scrolled when it closed.
+      this.screen.scrollTop = 0;
+      if (this.page === 'inventory') this._focusTarget().focus({ preventScroll: true });
       else this._tab().focus();
     } else {
       this._dragFrom = null;
@@ -326,7 +365,15 @@ export class InventoryScreen {
     }
   }
 
-  setName(name) { setText(this.nameNode, String(name)); }
+  // Without a class the character is an outlaw; `setName(name)` keeps the class.
+  setName(name, className = this._className) {
+    this._className = className || 'Outlaw';
+    setText(this.nameNode, String(name));
+    setText(this.classNode, this._className);
+  }
+
+  // Any object with mana and maxMana, such as the spellcasting system.
+  attachMana(source) { this.manaSource = source || null; }
 
   _tab(id = this.page) { return this.pages.find((page) => page.id === id).tab; }
 
@@ -405,7 +452,7 @@ export class InventoryScreen {
     const focusedButton = event.target?.closest?.('button');
     if (focusedButton && this.screen.contains(focusedButton)
       && (event.code === 'Space' || ['Enter', 'NumpadEnter'].includes(event.code)
-        && !focusedButton.matches('.inventory-slot, .equipment-slot'))) {
+        && !focusedButton.matches('.bag-card, .equipment-slot'))) {
       this._consume(event);
       if (!event.repeat) focusedButton.click();
       return;
@@ -426,26 +473,16 @@ export class InventoryScreen {
     if (['KeyG', 'KeyE', 'KeyU', 'KeyX', 'Enter', 'NumpadEnter'].includes(event.code)) {
       this._consume(event);
       if (event.repeat) return;
+      // The bag may have changed since the last frame; act on what shows.
+      this.update();
+      const first = this._view.visible[0];
       if (event.code === 'KeyG') {
-        this._select(this.selection.source === 'bag'
-          ? { source: 'equipment', slot: EQUIPMENT_SLOTS[0] }
-          : { source: 'bag', index: 0 }, true);
+        if (this.selection?.source !== 'equipment') this._select({ source: 'equipment', slot: EQUIPMENT_SLOTS[0] }, true);
+        else if (first !== undefined) this._select({ source: 'bag', index: first }, true);
       } else if (event.code === 'KeyE') this._equip();
       else if (event.code === 'KeyU') this._unequip();
       else if (event.code === 'KeyX') this._drop();
       else this._activate();
-      return;
-    }
-    const digit = /^(?:Digit|Numpad)([1-9])$/.exec(event.code);
-    if (digit) {
-      this._consume(event);
-      if (!event.repeat && this.selection.source === 'bag') {
-        const stack = this.inventory.slots[this.selection.index];
-        if (stack && this.inventory.assignHotbar(Number(digit[1]) - 1, stack.id)) {
-          this.onNotify(`${ITEMS[stack.id].name} assigned to hotbar ${digit[1]}.`);
-          this.update();
-        }
-      }
       return;
     }
     // No held movement or queued attack may escape from an open inventory.
@@ -453,21 +490,64 @@ export class InventoryScreen {
     if (gameKeys.includes(event.code)) this._consume(event);
   }
 
+  // The selection is null while the bag shows no cards.
   _selectedButton() {
-    return this.selection.source === 'bag'
+    return this.selection?.source === 'bag'
       ? this.bagNodes[this.selection.index]?.button
-      : this.equipmentNodes.get(this.selection.slot)?.button;
+      : this.equipmentNodes.get(this.selection?.slot)?.button;
+  }
+
+  _focusTarget() { return this._selectedButton() ?? this.filterNodes.get(this.filter).button; }
+
+  // A click acts at once, without moving focus. A touch selects a bag card
+  // first, so its details show with a Drop button, and acts on a second tap
+  // of the same card, only if nothing else moved the selection or changed
+  // the bag in between.
+  _press(selection) {
+    if (this._pointerType === 'touch' && selection.source === 'bag') {
+      const armed = this._touchArmed;
+      const confirmed = armed?.index === selection.index && armed.key === this._bagKey()
+        && this.selection?.source === 'bag' && this.selection.index === selection.index;
+      if (!confirmed) {
+        this._select(selection);
+        this._touchArmed = { source: 'bag', index: selection.index, key: this._bagKey() };
+        return;
+      }
+    }
+    this._select(selection);
+    this._activate({ pointer: true });
+  }
+
+  _bagKey() { return JSON.stringify(this.inventory.slots); }
+
+  _filterBy(id) {
+    this.filter = id;
+    this._touchArmed = null;
+    this.update();
+  }
+
+  // After an action on bag slot `index`, the selection stays in the bag: on
+  // that card if it still shows, else the next, else the previous, else none.
+  // Focus moves only off a card that hid, without scrolling the sheet.
+  _settle(index) {
+    const { visible } = bagView(this.inventory.slots, this.filter);
+    const next = visible.find((shown) => shown >= index) ?? visible.at(-1);
+    this.selection = next === undefined ? null : { source: 'bag', index: next };
+    this.update();
+    if (document.activeElement?.hidden && this.screen.contains(document.activeElement)) {
+      this._focusTarget().focus({ preventScroll: true });
+    }
   }
 
   _select(selection, focus = false) {
     this.selection = selection;
+    this._touchArmed = null;
     this.update();
     if (focus) this._selectedButton()?.focus();
   }
 
   _navigate(code) {
-    const bag = this.selection.source === 'bag';
-    if (!bag) {
+    if (this.selection?.source === 'equipment') {
       // Gear is placed around the outlaw. Navigate its visible positions,
       // so arrows follow the same layout at every viewport size.
       const origin = this._selectedButton().getBoundingClientRect();
@@ -490,10 +570,13 @@ export class InventoryScreen {
       if (best) this._select({ source: 'equipment', slot: best }, true);
       return;
     }
-    const columns = getComputedStyle(this.bagGrid).gridTemplateColumns.split(/\s+/).length;
+    // The bag walks its shown cards.
+    const { visible } = this._view;
+    if (!visible.length) return;
+    const columns = getComputedStyle(this.cardGrid).gridTemplateColumns.split(/\s+/).length;
     const width = columns > 1 ? columns : 6;
-    const length = this.bagNodes.length;
-    const index = this.selection.index;
+    const length = visible.length;
+    const index = Math.max(0, visible.indexOf(this.selection?.index));
     let next;
     if (code === 'ArrowUp' || code === 'ArrowDown') {
       const column = index % width;
@@ -504,63 +587,67 @@ export class InventoryScreen {
     } else {
       next = (index + (code === 'ArrowLeft' ? -1 : 1) + length) % length;
     }
-    this._select({ source: 'bag', index: next }, true);
+    this._select({ source: 'bag', index: visible[next] }, true);
   }
 
   _selectedItem() {
-    const stack = this.selection.source === 'bag'
+    const stack = this.selection?.source === 'bag'
       ? this.inventory.slots[this.selection.index]
-      : this.inventory.equipment[this.selection.slot];
+      : this.inventory.equipment[this.selection?.slot];
     return stack && ITEMS[stack.id] ? { stack, item: ITEMS[stack.id] } : null;
   }
 
-  _activate() {
+  // `pointer` actions keep the selection where it was, so the sheet stays still.
+  _activate(options) {
     const selected = this._selectedItem();
     if (!selected) return;
-    if (this.selection.source === 'equipment') this._unequip();
-    else if (selected.item.equipmentSlot) this._equip();
-    else if (selected.item.use) this._use();
+    if (this.selection.source === 'equipment') this._unequip(options);
+    else if (selected.item.equipmentSlot) this._equip(options);
+    else if (selected.item.use) this._use(options);
   }
 
-  _equip() {
+  _equip({ pointer = false } = {}) {
     const selected = this._selectedItem();
-    if (this.selection.source !== 'bag' || !selected?.item.equipmentSlot) return;
+    if (this.selection?.source !== 'bag' || !selected?.item.equipmentSlot) return;
     const context = this.details.contains(document.activeElement);
+    const slot = this.inventory.targetSlot(selected.item);
     const equipped = this.inventory.equip(this.selection.index);
-    this.onNotify(equipped ? `Equipped ${selected.item.name}.` : 'No room to replace equipped gear.', equipped ? 'success' : 'error');
-    if (equipped) this._select({ source: 'equipment', slot: selected.item.equipmentSlot }, !context);
+    const refusal = slot === 'quiver' ? 'Your quiver is full.' : 'No room to replace equipped gear.';
+    this.onNotify(equipped ? `Equipped ${selected.item.name}.` : refusal, equipped ? 'success' : 'error');
+    if (equipped && pointer) this._settle(this.selection.index);
+    else if (equipped) this._select({ source: 'equipment', slot }, !context);
     else this.update();
     if (context) this._focusDetails(equipped ? this.unequipButton : this.equipButton);
   }
 
-  _use() {
+  _use({ pointer = false } = {}) {
     const selected = this._selectedItem();
-    if (this.selection.source !== 'bag' || !selected?.item.use) return;
+    if (this.selection?.source !== 'bag' || !selected?.item.use) return;
     const context = this.details.contains(document.activeElement);
     const used = this.inventory.useItem(this.selection.index, this.player.vitals);
     this.onNotify(used ? `Used ${selected.item.name}.` : 'Your vitality is already full.', used ? 'success' : 'info');
-    this.update();
+    this._settle(this.selection.index);
     if (context) this._focusDetails(this.useButton);
-    else this._selectedButton()?.focus();
+    else if (!pointer) this._focusTarget().focus();
   }
 
-  // Sets one of the selected bag stack down at the outlaw's feet.
+  // Sets the selected bag stack down at the outlaw's feet.
   _drop() {
     const selected = this._selectedItem();
-    if (this.selection.source !== 'bag' || !selected || !this.onDrop) return;
+    if (this.selection?.source !== 'bag' || !selected || !this.onDrop) return;
     const result = this.onDrop(this.selection.index);
     if (result?.message) this.onNotify(result.message, result.ok ? 'success' : 'info');
-    this.update();
+    this._settle(this.selection.index);
   }
 
-  _unequip() {
+  _unequip({ pointer = false } = {}) {
     const selected = this._selectedItem();
-    if (this.selection.source !== 'equipment' || !selected) return;
+    if (this.selection?.source !== 'equipment' || !selected) return;
     const context = this.details.contains(document.activeElement);
     const unequipped = this.inventory.unequip(this.selection.slot);
     this.onNotify(unequipped ? `Unequipped ${selected.item.name}.` : 'Your bag has no room for this gear.', unequipped ? 'success' : 'error');
     const index = this.inventory.slots.findIndex((stack) => stack?.id === selected.item.id);
-    if (unequipped && index >= 0) this._select({ source: 'bag', index }, !context);
+    if (unequipped && index >= 0 && !pointer) this._select({ source: 'bag', index }, !context);
     else this.update();
     if (context) this._focusDetails(unequipped ? this.equipButton : this.unequipButton);
   }
@@ -576,57 +663,117 @@ export class InventoryScreen {
   update() {
     if (!this._isOpen) return;
     if (!this.feedback.hidden && performance.now() >= this._feedbackUntil) hidden(this.feedback, true);
-    const vitals = this.player.vitals;
-    const signature = JSON.stringify([this.inventory.slots, this.inventory.equipment,
-      this.inventory.hotbar, this.inventory.capacity, this.selection,
-      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), skinKey(this.player.skin),
-      this.describeVersion()]);
-    if (signature === this._signature) return;
-    this._signature = signature;
-    this.portrait.update(this.player);
-    const occupied = this.inventory.slots.filter(Boolean).length;
-    setText(this.slotCounter, `${occupied} / ${this.bagNodes.length} slots`);
-    setText(this.capacity, `${kg(this.inventory.weight)} / ${kg(this.inventory.capacity)} kg`);
-    const load = Math.min(16, Math.max(0, Math.ceil(this.inventory.weight / Math.max(1, this.inventory.capacity) * 16)));
-    setText(this.loadBar, '|'.repeat(load) + '.'.repeat(16 - load));
+    // The strip is live every frame; the rest redraws when its state changes.
+    this._updateStats();
+    if (this._state() === this._signature) return;
+    // A bag selection is always a shown card: the first when the selected
+    // one hid (taken off, swapped, used, dropped or filtered out), none
+    // when the tab is empty.
+    const view = bagView(this.inventory.slots, this.filter);
+    this._view = view;
+    this.filter = view.filter;
+    if (this.selection?.source !== 'equipment' && !view.visible.includes(this.selection?.index)) {
+      this.selection = view.visible.length ? { source: 'bag', index: view.visible[0] } : null;
+      this._touchArmed = null;
+    }
+    this._signature = this._state();
+    this._render();
+  }
 
+  _state() {
+    const vitals = this.player.vitals;
+    return JSON.stringify([this.inventory.slots, this.inventory.equipment,
+      this.inventory.capacity, this.selection, this.filter,
+      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), this.describeVersion()]);
+  }
+
+  // Writes only the values that changed, and rebuilds the pairs when the
+  // set of stats does (mana attached, attributes or the pouch appearing).
+  _updateStats() {
+    const pairs = sheetStats({ vitals: this.player.vitals, mana: this.manaSource, attributes: this.attributes(),
+      weight: this.inventory.weight, capacity: this.inventory.capacity, cents: this.wallet?.cents ?? null });
+    const line = pairs.map(({ key, value }) => `${key} ${value}`).join('|');
+    if (line === this._statsLine) return;
+    this._statsLine = line;
+    const keys = pairs.map(({ key }) => key).join(' ');
+    if (keys !== this._statKeys) {
+      this._statKeys = keys;
+      this._statValues = new Map();
+      this.statsStrip.replaceChildren(...pairs.map(({ key, label }) => {
+        const pair = element('div', 'sheet-stat');
+        const value = element('dd');
+        pair.append(element('dt', '', label), value);
+        this._statValues.set(key, value);
+        return pair;
+      }));
+    }
+    for (const { key, value } of pairs) setText(this._statValues.get(key), value);
+  }
+
+  // The only place the doll gets its art, for the box `slot` names.
+  _art(item, slot) { return itemArt(item.id, item.glyph); }
+
+  // The only place the bag gets its art.
+  _cardArt(item) { return itemArt(item.id, item.glyph); }
+
+  _render() {
+    const vitals = this.player.vitals;
+    const view = this._view;
+    setText(this.slotCounter, `Bag ${view.used}/${view.total}`);
+    setText(this.bagHint, this.phone() ? 'tap \u2014 select \u00b7 tap again \u2014 equip / take off'
+      : `LMB \u2014 equip / take off${this.onDrop ? ' \u00b7 RMB \u2014 drop' : ''}`);
+    const counts = new Map(view.tabs.map((tab) => [tab.id, tab.count]));
+    for (const [id, { button, count }] of this.filterNodes) {
+      const selected = id === view.filter;
+      hidden(button, !counts.has(id));
+      setText(count, String(counts.get(id) ?? 0));
+      attribute(button, 'aria-pressed', String(selected));
+      button.classList.toggle('selected', selected);
+    }
+    setText(this.bagEmpty, view.used ? 'Nothing here.' : 'Your bag is empty.');
+    hidden(this.bagEmpty, view.visible.length > 0);
+
+    const shown = new Set(view.visible);
     for (const [index, nodes] of this.bagNodes.entries()) {
       const stack = this.inventory.slots[index];
       const item = stack ? ITEMS[stack.id] : null;
-      const selected = this.selection.source === 'bag' && this.selection.index === index;
+      const own = item ? this.describe(stack) : null;
+      const selected = this.selection?.source === 'bag' && this.selection.index === index;
+      hidden(nodes.button, !shown.has(index));
       nodes.button.classList.toggle('selected', selected);
-      nodes.button.classList.toggle('empty', !item);
       attribute(nodes.button, 'aria-pressed', String(selected));
       attribute(nodes.button, 'aria-label', item
-        ? `Slot ${index + 1}: ${this.describe(stack)?.name ?? item.name}, count ${stack.count}` : `Slot ${index + 1}: empty`);
+        ? `Slot ${index + 1}: ${own?.name ?? item.name}, count ${stack.count}` : `Slot ${index + 1}: empty`);
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'draggable', Boolean(item));
-      attribute(nodes.button, 'data-item-kind', !item ? 'empty'
-        : item.equipmentSlot ? 'equipment' : item.use ? 'consumable' : 'material');
+      attribute(nodes.button, 'data-item-kind', item ? itemKind(item) : 'empty');
       attribute(nodes.button, 'data-item-id', item?.id || '');
       attribute(nodes.button, 'aria-describedby', selected ? this.details.id : null);
-      setText(nodes.icon, item ? itemArt(item.id, item.glyph) : '');
-      setText(nodes.count, item ? `x${stack.count}` : '');
+      setText(nodes.icon, item ? this._cardArt(item) : '');
+      setText(nodes.count, item ? cardLabel(stack, item, own) : '');
     }
     for (const [slot, nodes] of this.equipmentNodes.entries()) {
       const stack = this.inventory.equipment[slot];
       const item = stack ? ITEMS[stack.id] : null;
-      const selected = this.selection.source === 'equipment' && this.selection.slot === slot;
+      const selected = this.selection?.source === 'equipment' && this.selection.slot === slot;
       nodes.button.classList.toggle('selected', selected);
       nodes.button.classList.toggle('empty', !item);
+      nodes.button.classList.toggle('filled', Boolean(item));
       attribute(nodes.button, 'aria-pressed', String(selected));
       attribute(nodes.button, 'aria-label', `${SLOT_NAMES[slot]}: ${item?.name || 'empty'}`);
+      // A stopgap tooltip: filled boxes show no text.
+      attribute(nodes.button, 'title', item ? this.describe(stack)?.name ?? item.name : null);
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'data-item-id', item?.id || '');
       attribute(nodes.button, 'aria-describedby', selected ? this.details.id : null);
-      setText(nodes.icon, item ? itemArt(item.id, item.glyph) : '');
-      setText(nodes.itemName, item?.shortName || (item ? item.name : 'Empty'));
+      setText(nodes.icon, item ? this._art(item, slot) : '');
+      setText(nodes.count, item && STACK_SLOTS.includes(slot) ? String(stack.count) : '');
     }
 
     const selected = this._selectedItem();
     const item = selected?.item;
     const stack = selected?.stack;
-    const carried = this.selection.source === 'bag';
+    const carried = this.selection?.source !== 'equipment';
     const own = stack ? this.describe(stack) : null;
     attribute(this.details, 'data-item-id', item?.id || '');
     setText(this.itemPreview, item ? itemArt(item.id, item.glyph) : '');
@@ -660,10 +807,6 @@ export class InventoryScreen {
     const most = own?.durability ?? item?.durability;
     hidden(this.durability, !most);
     setText(this.durability, most ? `Durability: ${stack.durability ?? most} / ${most}` : '');
-    hidden(this.assignment, !item);
-    const hotbarSlots = item ? this.inventory.hotbar
-      .flatMap((id, index) => id === item.id ? [String(index + 1)] : []) : [];
-    setText(this.assignment, item ? `Quick slot ${hotbarSlots.join(', ') || 'unassigned'}` : '');
     hidden(this.equipButton, !carried || !item?.equipmentSlot);
     hidden(this.useButton, !carried || !item?.use);
     const useDisabled = Boolean(item?.use)
@@ -680,7 +823,6 @@ export class InventoryScreen {
     window.removeEventListener('keydown', this._keydown, true);
     window.removeEventListener('keyup', this._keyup, true);
     window.removeEventListener('blur', this._blur);
-    this.portrait.destroy();
     this.screen.remove();
   }
 }

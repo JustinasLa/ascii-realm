@@ -6,7 +6,8 @@ to three characters, one of them active. The rules, the skins and the saved
 roster live in `src/character/`. A first visit opens the
 [creator](#the-creator). The active character is played everywhere: its name
 in the HUD, over the outlaw, in the inventory and in lobbies, and its skin on
-the outlaw and the inventory portrait. The inventory's
+the outlaw and the Characters page portraits. The inventory's header shows
+its name and class, and its stats strip its attributes. The inventory's
 [character menu](#the-character-menu) shows its sheet, edits it, switches
 characters and makes more.
 
@@ -189,7 +190,7 @@ way the Character page comes back.
 The **Characters** page lists the roster, most recently played first: each
 character's portrait in its own skin, its name, "race · class · age", and
 **Playing now** on the active one. **Play as** switches at once, without a
-reload: the HUD, the inventory, the nameplate, the portrait and the
+reload: the HUD, the inventory, the nameplate, the portraits and the
 outlaw's skin change on the next frame. During the switch cooldown it is
 dimmed, and the row says why and when switching opens ("Opens in 3d 4h
 12m, on" the date and time). **Create character** shows the slots used ("2
@@ -254,7 +255,7 @@ the cooldown.
 A skin is how the character's outlaw looks. Like a skin on a fixed player
 model it repaints the outlaw's existing regions and never changes the model,
 its proportions, its animations, its stride or how its feet plant. Both the
-rigged outlaw and the shape-built figure (the inventory portrait, friends,
+rigged outlaw and the shape-built figure (the Characters page portraits, friends,
 and the stand-in shown before the model loads) are painted from the same
 skin (`src/character/skin.js`).
 

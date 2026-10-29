@@ -67,21 +67,14 @@ kbd::after { content: "]"; color: var(--quiet); }
 .hud-party:empty { display: none; }
 .hud-party-tab { align-self: flex-start; padding: 1px 6px; background: var(--surface); border: 1px solid var(--frame); font-size: 11px; }
 
-/* Quick slots form one framed instrument with a shared caption. */
-.hud-hotbar-wrap { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; grid-template-columns: auto 54px; gap: 6px 8px; padding: 6px 8px 8px; background: var(--surface); border: 1px solid var(--frame); }
-.hud-hotbar-heading { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
-.hud-selected-item { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; }
-.hud-quick-hint { color: var(--quiet); font-size: 10px; white-space: nowrap; }
-.hud-hotbar { display: grid; grid-template-columns: repeat(9, 48px); gap: 4px; }
+/* The inventory button in its frame; an instrument's note slots join it. */
+.hud-inventory-wrap { position: absolute; left: 50%; bottom: max(12px, env(safe-area-inset-bottom)); transform: translateX(-50%); display: grid; gap: 6px 8px; padding: 6px; background: var(--surface); border: 1px solid var(--frame); }
+.hud-inventory-wrap.playing { grid-template-columns: auto 54px; padding: 6px 8px 8px; }
+.hud-notes-hint { grid-column: 1 / -1; padding-bottom: 5px; border-bottom: 1px solid var(--line); color: var(--quiet); font-size: 10px; white-space: nowrap; }
+.hud-notes { display: grid; grid-template-columns: repeat(8, 48px); gap: 4px; }
 .hud-slot, .hud-inventory-button { position: relative; display: grid; place-items: center; width: 48px; height: 54px; padding: 0; color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 0; pointer-events: auto; }
 .hud-slot:hover, .hud-inventory-button:hover { color: var(--ink); background: var(--hover); border-color: var(--frame); }
-.hud-slot.selected { color: var(--solid); background: var(--ink); border-color: var(--ink); }
-.hud-slot.empty { border-style: dotted; }
-.hud-slot.empty::after { content: "·"; color: var(--quiet); }
 .hud-slot-number { position: absolute; top: 3px; left: 4px; font-size: 9px; line-height: 1; }
-.hud-slot-glyph { width: 11ch; margin-top: 1px; font-size: 4.8px; line-height: 4.8px; text-align: left; white-space: pre; }
-.hud-slot-count { position: absolute; right: 3px; bottom: 3px; font-size: 9px; line-height: 1; }
-.hud-slot-state { position: absolute; left: 4px; bottom: 2px; font-size: 10px; line-height: 1; }
 .hud-inventory-button { width: 54px; align-content: center; gap: 3px; border-color: var(--frame); }
 .hud-inventory-glyph { font-size: 5px; line-height: 5px; }
 .hud-inventory-label { font-size: 9px; }
@@ -208,55 +201,69 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 /* The inventory is a larger member of the same framed panel family. */
 #inventory-root::before { content: ""; position: absolute; inset: 0; background: #0205059c; opacity: 0; transition: opacity 120ms; }
 #inventory-root.is-open::before { opacity: 1; }
+/* The world stays undimmed behind the inventory; stations keep their dim. */
+body.inventory-open #inventory-root::before { opacity: 0; }
 :is(.inventory-open, .station-open) .hud { opacity: 0.2; }
 :is(.inventory-open, .station-open) .hud button { pointer-events: none; }
 :is(.inventory-open, .station-open) :is(#panel-dock, #touch-controls) { visibility: hidden; }
 :is(.inventory-open, .station-open) #fire-status { opacity: 0; }
 .inventory-screen { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(740px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 10px; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); color: var(--ink); background: rgba(6, 9, 10, 0.97); border: 1px solid var(--frame); font-size: 11px; pointer-events: auto; }
+/* The inventory is a black character sheet; full-width rules part its
+   header, paper doll, stats strip and bag. */
+.inventory-screen.inventory-sheet { width: min(700px, calc(100% - 32px)); padding: 0; background: #000; }
 .inventory-header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; padding-bottom: 8px; background: var(--solid); border-bottom: 1px solid var(--line); }
-.inventory-identity { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
 .inventory-title { margin: 0; font-size: 13px; font-weight: 600; }
-.inventory-character-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quiet); }
+.inventory-sheet > .inventory-header { margin: 0; padding: 8px 12px; gap: 8px; background: #000; border-bottom: 1px solid var(--frame); }
+.inventory-identity { flex: 1 1 0; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 600; letter-spacing: 0.25em; text-transform: uppercase; }
+.inventory-identity-separator { color: var(--quiet); }
 .inventory-screen button { color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 0; }
 .inventory-screen button:hover:not(:disabled) { color: var(--ink); background: var(--hover); border-color: var(--frame); }
 .inventory-screen .inventory-close { display: flex; align-items: center; gap: 7px; min-height: 24px; padding: 2px 6px; font-size: 11px; }
-.inventory-body { display: grid; grid-template-columns: 244px minmax(0, 1fr); gap: 10px; }
-.inventory-equipment, .inventory-carried, .inventory-bag, .inventory-details, .inventory-item-info { min-width: 0; }
-.inventory-equipment, .inventory-bag { padding: 8px; border: 1px solid var(--line); }
-.inventory-equipment { align-self: start; }
+.inventory-body { display: block; }
+.inventory-carried, .inventory-bag, .inventory-details, .inventory-item-info { min-width: 0; }
 .inventory-heading { margin: 0; font-size: 11px; font-weight: 600; }
-.inventory-equipment > .inventory-heading { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-.inventory-character-stage { position: relative; height: 353px; margin-top: 8px; }
-.inventory-portrait { position: absolute; top: 42px; left: 50%; transform: translateX(-50%); width: auto; height: 260px; filter: grayscale(1) brightness(1.5); pointer-events: none; }
-.equipment-slots { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(5, 61px); gap: 12px 8px; }
-.equipment-slot { position: relative; display: flex; align-items: center; justify-content: center; min-width: 0; padding: 0 0 12px; scroll-margin: 12px; }
-.equipment-slot[data-equipment-slot="helm"] { grid-column: 2; grid-row: 1; }
-.equipment-slot[data-equipment-slot="chest"] { grid-column: 1; grid-row: 2; }
-.equipment-slot[data-equipment-slot="cape"] { grid-column: 3; grid-row: 2; }
-.equipment-slot[data-equipment-slot="hands"] { grid-column: 1; grid-row: 3; }
-.equipment-slot[data-equipment-slot="offHand"] { grid-column: 3; grid-row: 3; }
-.equipment-slot[data-equipment-slot="mainHand"] { grid-column: 1; grid-row: 4; }
-.equipment-slot[data-equipment-slot="legs"] { grid-column: 2; grid-row: 5; }
-.equipment-slot-label { position: absolute; bottom: 4px; left: 0; right: 0; color: var(--quiet); text-align: center; font-size: 9px; line-height: 1; }
-.equipment-slot-icon { width: 11ch; font-size: 4.5px; line-height: 4.5px; white-space: pre; text-align: left; }
-.equipment-slot-name { display: none; }
-.equipment-slot.empty { border-style: dotted; }
-.equipment-slot.empty::after { content: "·"; color: var(--quiet); }
-.inventory-bag-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-.inventory-slot-total { color: var(--quiet); font-size: 10px; font-variant-numeric: tabular-nums; }
-.inventory-slot-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; }
-.inventory-slot { position: relative; display: grid; place-items: center; min-width: 0; height: 56px; padding: 0; scroll-margin: 12px; }
-.inventory-slot.empty { border-style: dotted; }
-.inventory-slot.empty::after { content: "·"; color: var(--quiet); }
-.inventory-slot-number { position: absolute; top: 3px; left: 3px; color: var(--quiet); font-size: 8px; line-height: 1; }
-.inventory-slot-icon { width: 11ch; font-size: 5px; line-height: 5px; white-space: pre; text-align: left; }
-.inventory-slot-count { position: absolute; right: 3px; bottom: 3px; font-size: 9px; line-height: 1; }
-.inventory-screen :is(.inventory-slot, .equipment-slot).selected { color: var(--accent); background: var(--hover); border-color: var(--frame); }
-.inventory-slot.selected::before, .equipment-slot.selected::before { content: ""; position: absolute; left: -1px; top: 6px; bottom: 6px; width: 2px; background: var(--accent); }
-.inventory-load { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
-.inventory-capacity { margin: 0; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.inventory-load-bar { color: var(--quiet); font-size: 9px; line-height: 1; letter-spacing: 1px; }
-.inventory-details { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; margin-top: 10px; padding: 8px; border: 1px solid var(--line); }
+/* The paper doll: an 8 × 7 grid of cells 0.81 as tall as wide, sized from
+   the frame's width (paper-doll.js places the boxes). */
+.inventory-doll, .sheet-stats { padding: 8px 12px; border-bottom: 1px solid var(--frame); }
+.doll-frame { --gap: 8px; container-type: inline-size; width: min(100%, 500px); margin: 8px auto; }
+.equipment-slots { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); grid-template-rows: repeat(7, 44px); grid-template-rows: repeat(7, calc((100cqw - 7 * var(--gap)) / 8 * 0.81)); gap: var(--gap); }
+.equipment-slot { container-type: size; position: relative; display: grid; place-items: center; min-width: 0; padding: 0; scroll-margin: 12px; }
+.inventory-screen .equipment-slot.filled { border-color: var(--frame); }
+.equipment-slot.empty[data-box="small"] { border-style: dashed; }
+.equipment-slot-label { position: absolute; top: 3px; left: 5px; color: var(--quiet); font-size: 10px; line-height: 1; text-transform: lowercase; }
+.filled .equipment-slot-label { display: none; }
+.equipment-slot-icon { font-size: 4.5px; line-height: 1; font-size: min(calc(100cqw / 7.2), calc(100cqh / 10)); white-space: pre; text-align: left; }
+.equipment-slot-count { position: absolute; right: 4px; bottom: 3px; color: var(--quiet); font-size: 9px; line-height: 1; }
+/* The stats strip: wrapping `label value` pairs. */
+.sheet-stats { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; font-size: 12px; font-variant-numeric: tabular-nums; }
+.sheet-stat { display: flex; gap: 0.6ch; }
+.sheet-stat dt { color: var(--muted); }
+.sheet-stat dd { margin: 0; color: var(--ink); }
+.inventory-carried { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 10px; padding: 8px 12px; }
+.inventory-bag-heading { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 8px; margin-bottom: 8px; }
+.inventory-bag-hint { color: var(--muted); font-size: 11px; }
+/* On desktops and tablets the sheet keeps one height on every page and
+   however full the bag is; only the bag's cards scroll. */
+.inventory-screen.inventory-sheet { display: flex; flex-direction: column; height: min(880px, calc(100dvh - 32px)); }
+.inventory-sheet > [role="tabpanel"] { flex: 1; min-height: 0; overflow-y: auto; }
+.inventory-sheet > .inventory-body { display: flex; flex-direction: column; }
+.inventory-sheet .inventory-carried { flex: 1; min-height: 0; }
+.inventory-sheet .inventory-bag { display: flex; flex-direction: column; min-height: 0; }
+.inventory-sheet .inventory-details { min-height: 0; overflow-y: auto; }
+/* Filter tabs: the chosen one boxed bright and bold, the rest dim. */
+.bag-filters { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 6px; }
+.inventory-screen .bag-filter { min-height: 22px; padding: 1px 8px; color: var(--quiet); border-color: var(--line); }
+.inventory-screen .bag-filter.selected { color: var(--ink); border-color: var(--frame); font-weight: 600; }
+.bag-filter-count { margin-left: 0.6ch; color: var(--quiet); font-weight: 400; }
+/* Tall cards, art filling them, a count or material bottom-left. */
+.bag-cards { flex: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 4px; align-content: start; min-height: 124px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line) #000; }
+.inventory-screen .bag-card { container-type: size; position: relative; display: grid; place-items: center; aspect-ratio: 1 / 2; min-width: 0; padding: 0; border-color: var(--line); scroll-margin: 12px; -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
+.inventory-screen .bag-card:hover { border-color: var(--frame); }
+.bag-card-art { margin: 0; font-size: 5px; font-size: min(calc(100cqw / 7.2), calc(100cqh / 10)); line-height: 1; white-space: pre; text-align: left; }
+.bag-card-label { position: absolute; left: 4px; right: 3px; bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--quiet); font-size: 9px; line-height: 1; text-align: left; }
+.bag-empty { margin: 4px 0 0; color: var(--quiet); }
+.inventory-screen :is(.bag-card, .equipment-slot).selected { color: var(--accent); background: var(--hover); border-color: var(--frame); outline: 1px solid var(--accent); outline-offset: -4px; }
+.inventory-details { display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 12px; padding-left: 10px; border-left: 1px solid var(--line); }
 .inventory-item-preview { align-self: start; width: 11ch; margin-top: 22px; font-size: 7px; line-height: 7px; white-space: pre; text-align: left; }
 .inventory-item-preview[hidden] + .inventory-item-info { grid-column: 1 / -1; }
 .inventory-item-type { margin: 0 0 3px; color: var(--quiet); font-size: 10px; }
@@ -265,7 +272,7 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .inventory-stats { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0 0 6px; font-size: 11px; }
 .inventory-stats dt { color: var(--quiet); }
 .inventory-stats dd { margin: 0; color: var(--ink); }
-.inventory-weight, .inventory-durability, .inventory-hotbar-assignment { margin: 3px 0; color: var(--quiet); font-size: 10px; }
+.inventory-weight, .inventory-durability { margin: 3px 0; color: var(--quiet); font-size: 10px; }
 .inventory-actions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; }
 .inventory-actions button { display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; padding: 4px 7px; font-size: 11px; }
 .inventory-actions kbd { color: var(--quiet); font-size: 10px; }
@@ -274,10 +281,19 @@ input[type="range"]::-moz-range-thumb { width: 6px; height: 12px; border: 0; bor
 .inventory-help { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--quiet); font-size: 10px; }
 .inventory-key-hint { display: inline-flex; align-items: center; gap: 5px; }
 .inventory-key-hint kbd { font-size: 10px; }
+.inventory-sheet > .inventory-help { margin: 0; padding: 8px 12px; border-top-color: var(--frame); }
+.inventory-sheet > .character-sheet { padding: 10px 12px; }
 /* The inventory's pages: tabs on their own row under the title, the chosen
    one marked [ ]. */
 .inventory-header { flex-wrap: wrap; }
 .inventory-tabs { order: 3; display: flex; flex-basis: 100%; gap: 4px; }
+/* On the sheet: name, the tabs, then close (I), all boxed alike. */
+.inventory-sheet .inventory-tabs { order: 0; flex-basis: auto; margin-left: auto; }
+.inventory-sheet .inventory-close { order: 1; gap: 1ch; }
+.inventory-sheet :is(.inventory-close, .inventory-tab) { min-height: 22px; padding: 1px 8px; color: var(--ink); border-color: var(--frame); text-transform: lowercase; }
+.inventory-close kbd { text-transform: none; }
+.inventory-close kbd::before { content: "("; color: inherit; }
+.inventory-close kbd::after { content: ")"; color: inherit; }
 /* The furnace: input over fuel with the flame between, the arrow, the
    output; the satchel's resources below. */
 .furnace-screen { width: min(560px, calc(100% - 32px)); }
@@ -431,7 +447,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .zoom-controls { position: absolute; top: max(12px, env(safe-area-inset-top)); right: max(12px, env(safe-area-inset-right)); display: flex; gap: 4px; }
   #touch-controls .zoom-controls button { font-size: 18px; }
   #panel-dock { top: calc(max(12px, env(safe-area-inset-top)) + 52px); max-height: calc(100dvh - 208px); }
-  .hud-hotbar-wrap { bottom: max(132px, calc(env(safe-area-inset-bottom) + 132px)); }
+  .hud-inventory-wrap { bottom: max(132px, calc(env(safe-area-inset-bottom) + 132px)); }
   .hud-prompt { bottom: max(236px, calc(env(safe-area-inset-bottom) + 236px)); }
   #fire-status { bottom: max(272px, calc(env(safe-area-inset-bottom) + 272px)); }
   #panel-dock :is(button, input:not([type="range"]), select) { min-height: 36px; }
@@ -444,46 +460,34 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #panel-dock { top: 144px; max-height: calc(100dvh - 374px); }
   #panel-dock > details[open] { width: min(292px, calc(100vw - 24px)); }
   #builder-banner { top: auto; bottom: 236px; left: 12px; }
-  .hud-hotbar-wrap { grid-template-columns: auto 44px; gap: 5px; padding: 5px 6px 6px; }
-  .hud-hotbar { grid-template-columns: repeat(9, 40px); gap: 3px; }
+  .hud-inventory-wrap.playing { grid-template-columns: auto 44px; gap: 5px; padding: 5px 6px 6px; }
+  .hud-notes { grid-template-columns: repeat(8, 40px); gap: 3px; }
   .hud-slot { width: 40px; height: 50px; }
-  .hud-slot-glyph { font-size: 4px; line-height: 4px; }
   .hud-inventory-button { width: 44px; height: 50px; }
   .hud-inventory-label { font-size: 8px; }
-  .hud-quick-hint { font-size: 9px; }
+  .hud-notes-hint { font-size: 9px; }
   .inventory-screen { width: calc(100% - 24px); max-height: calc(100dvh - 24px); padding: 8px; }
-  .inventory-body { grid-template-columns: 204px minmax(0, 1fr); gap: 8px; }
-  .equipment-slots { column-gap: 5px; }
-  .equipment-slot-icon { font-size: 4px; line-height: 4px; }
-  .equipment-slot-label { font-size: 8px; }
-  .inventory-slot { height: 48px; }
-  .inventory-slot-icon { font-size: 3.6px; line-height: 3.6px; }
-  .inventory-load-bar { display: none; }
-  .inventory-details { grid-template-columns: 1fr; gap: 0; }
+  .inventory-carried { grid-template-columns: 1fr; }
+  .inventory-details { grid-template-columns: 1fr; gap: 0; padding: 8px 0 0; border-left: 0; border-top: 1px solid var(--line); }
   .inventory-item-preview { display: none; }
 }
 @media (max-width: 520px) {
-  .hud-hotbar-wrap { width: 324px; grid-template-columns: 1fr; bottom: max(128px, calc(env(safe-area-inset-bottom) + 128px)); }
-  .hud-hotbar-heading { gap: 8px; }
-  .hud-hotbar { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .hud-inventory-wrap { bottom: max(128px, calc(env(safe-area-inset-bottom) + 128px)); }
+  .hud-inventory-wrap.playing { width: 324px; grid-template-columns: 1fr; }
+  .hud-notes { grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .hud-slot { width: auto; height: 48px; }
-  .hud-slot-glyph { font-size: 4.5px; line-height: 4.5px; }
-  .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
+  .playing .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
   .hud-prompt { bottom: max(282px, calc(env(safe-area-inset-bottom) + 282px)); font-size: 11px; }
   #fire-status { bottom: max(316px, calc(env(safe-area-inset-bottom) + 316px)); font-size: 11px; }
   .hud-frames { max-height: calc(100dvh - 380px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) var(--solid); }
   #panel-dock { max-height: calc(100dvh - 420px); }
-  .inventory-body { grid-template-columns: 1fr; gap: 8px; }
-  .inventory-equipment, .inventory-bag { padding: 6px; }
-  .inventory-character-stage { height: auto; margin-top: 6px; }
-  .inventory-portrait { display: none; }
-  .equipment-slots { position: static; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-template-rows: repeat(2, 52px); gap: 4px; }
-  .equipment-slot[data-equipment-slot] { grid-column: auto; grid-row: auto; }
-  .equipment-slot-icon { font-size: 4px; line-height: 4px; }
-  .equipment-slot-label { font-size: 9px; }
-  .inventory-slot { height: 48px; }
-  .inventory-slot-icon { font-size: 4px; line-height: 4px; }
-  .inventory-details { grid-template-columns: 44px minmax(0, 1fr); gap: 8px; margin-top: 8px; padding: 6px; }
+  .doll-frame { --gap: 4px; }
+  .equipment-slot-label { top: 2px; left: 3px; font-size: 9px; }
+  /* The tabs take their own row under the name and close. */
+  .inventory-sheet .inventory-tabs { order: 3; flex-basis: 100%; min-width: 0; margin-left: 0; }
+  .inventory-sheet .inventory-close { margin-left: auto; }
+  .inventory-sheet .inventory-tab { flex: 1 1 0; min-width: 0; }
+  .inventory-details { grid-template-columns: 44px minmax(0, 1fr); gap: 8px; }
   .inventory-item-preview { display: block; font-size: 6px; line-height: 6px; }
   .inventory-actions button { min-height: 44px; }
   .inventory-header { margin-bottom: 8px; padding-bottom: 6px; }
@@ -493,17 +497,13 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 @media (max-width: 360px) {
   .hud-frames { left: 8px; width: 232px; }
   .zoom-controls { flex-direction: column; }
-  .hud-hotbar-wrap { width: calc(100% - 24px); }
-  .hud-inventory-button { width: calc((100% - 28px) / 5); }
-  .hud-quick-hint { font-size: 8px; }
+  .hud-inventory-wrap.playing { width: calc(100% - 24px); }
+  .playing .hud-inventory-button { width: calc((100% - 28px) / 5); }
+  .hud-notes-hint { font-size: 8px; }
   .inventory-screen { width: calc(100% - 16px); padding: 6px; }
-  .inventory-slot-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; }
-  .inventory-slot-icon { font-size: 3.5px; line-height: 3.5px; }
-  .inventory-slot-number { display: none; }
-  .inventory-identity { gap: 8px; }
 }
 @media (max-height: 540px) and (min-width: 681px) {
-  .hud-hotbar-wrap { bottom: 10px; }
+  .hud-inventory-wrap { bottom: 10px; }
   #move-pad { width: 88px; height: 88px; }
   #panel-dock { max-height: calc(100dvh - 174px); }
   .hud-prompt { bottom: 112px; }
@@ -515,11 +515,11 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-party { width: 190px; }
   .hud-member .hud-vital { grid-template-columns: 18px 1fr; }
   .hud-member .hud-vital-value { display: none; }
-  .hud-hotbar-wrap { width: 324px; grid-template-columns: 1fr; bottom: max(12px, env(safe-area-inset-bottom)); gap: 5px; padding: 5px 6px 6px; }
-  .hud-hotbar { grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .hud-inventory-wrap { bottom: max(12px, env(safe-area-inset-bottom)); gap: 5px; padding: 5px; }
+  .hud-inventory-wrap.playing { width: 324px; grid-template-columns: 1fr; padding: 5px 6px 6px; }
+  .hud-notes { grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .hud-slot { width: auto; height: 48px; }
-  .hud-slot-glyph { font-size: 4.5px; line-height: 4.5px; }
-  .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
+  .playing .hud-inventory-button { position: absolute; bottom: 6px; right: 6px; width: 59px; height: 48px; }
   #panel-dock { top: 12px; max-height: calc(100dvh - 172px); }
   .zoom-controls { top: auto; bottom: 112px; }
   #move-pad { width: 88px; height: 88px; }
@@ -530,11 +530,11 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud, #fire-status, #inventory-root::before, .hud-purse-value { transition: none; }
   .forge-burst { animation: none; }
 }
-/* The bound rune sits above the hotbar; the rune wheel picks it. */
+/* The bound rune sits above the inventory button; the rune wheel picks it. */
 
 #spell-wheel { position: fixed; inset: 0; z-index: 35; pointer-events: none; background: radial-gradient(circle, transparent 30%, #05060a66 80%); }
 .spell-wheel-open #screen { cursor: default; }
-.spell-wheel-open :is(.hud-hotbar-wrap, .hud-prompt, #touch-controls, #panel-dock) { opacity: 0.3; transition: opacity 120ms; }
+.spell-wheel-open :is(.hud-inventory-wrap, .hud-prompt, #touch-controls, #panel-dock) { opacity: 0.3; transition: opacity 120ms; }
 .spell-wheel-ring { position: absolute; transform-origin: 50% 50%; animation: spell-wheel-in 110ms ease-out; }
 @keyframes spell-wheel-in { from { opacity: 0; } }
 .spell-wheel-art { position: absolute; inset: 0; width: 100%; height: 100%; }
@@ -574,7 +574,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
 .chat-system .chat-text { color: var(--quiet); }
 .chat-error .chat-text { color: var(--foe); }
 #chat-open { display: none; }
-/* Narrower windows raise the log above the quick slots, whose bar is 544px
+/* Narrower windows raise the log above the inventory button, with notes 544px
    wide and 98px tall: 12px + 420px + 12px clear of it needs a window 1432px
    wide. The log also narrows so the centred prompts above the bar stay
    clear of it. */
@@ -588,7 +588,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat { bottom: calc(max(128px, calc(env(safe-area-inset-bottom) + 128px)) + 148px); }
 }
 /* Touch screens that aren't phones keep the stick, so the log sits above
-   the raised quick slots. */
+   the raised inventory button. */
 @media (pointer: coarse) {
   #chat { bottom: calc(max(132px, calc(env(safe-area-inset-bottom) + 132px)) + 108px); }
 }
@@ -629,7 +629,7 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud-loot-label { font-size: 9px; padding: 0 3px; }
   .bubble { font-size: 10px; line-height: 12px; }
   #panel-dock, .zoom-controls,
-  .hud-hotbar-wrap, .hud-party, .hud-party-tab, .hud-name, .hud-frame-note,
+  .hud-inventory-wrap, .hud-party, .hud-party-tab, .hud-name, .hud-frame-note,
   .hud-prompt, #fire-status, #builder-banner, #builder-cursor,
   kbd, .key-hint, .inventory-help,
   #scenery-builder, #weather-panel, #help-controls, #grass-preview { display: none !important; }
@@ -708,6 +708,25 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   /* The inventory is a full-screen sheet too. */
   .inventory-screen { inset: 0; top: 0; left: 0; width: 100%; max-height: 100dvh; height: 100dvh; transform: none; padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); border: 0; }
   .inventory-screen .inventory-close { min-width: 64px; min-height: 44px; justify-content: center; font-size: 12px; }
+  /* The sheet's rules span the screen; the doll keeps its layout, scaled,
+     with 44 px rows and hit areas reaching half the gap round each box. */
+  .inventory-screen.inventory-sheet { width: 100%; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .inventory-doll { padding: 8px; }
+  .doll-frame { --gap: 4px; width: 100%; margin: 0; }
+  .equipment-slots { grid-template-rows: repeat(7, max(44px, calc((100cqw - 7 * var(--gap)) / 8 * 0.81))); }
+  .equipment-slot::after { content: ""; position: absolute; inset: calc(var(--gap) / -2); }
+  /* A small box narrower than 44 px reaches over its wide neighbours' edges,
+     for a 48 px wide hit area. */
+  .equipment-slot[data-box="small"] { z-index: 1; }
+  .inventory-sheet .inventory-tab { padding: 2px 8px; }
+  .equipment-slot[data-box="small"]::after { inset: calc(var(--gap) / -2) min(calc(var(--gap) / -2), calc((100% - 48px) / 2)); }
+  /* The full-screen sheet scrolls as a whole, with no scroller of its own
+     under a thumb; filter tabs are 44 px tall. */
+  .inventory-screen.inventory-sheet, .inventory-sheet > .inventory-body, .inventory-sheet .inventory-bag { display: block; }
+  .inventory-screen.inventory-sheet { height: 100dvh; }
+  .inventory-sheet > [role="tabpanel"] { overflow-y: visible; }
+  .bag-cards { overflow-y: visible; min-height: 0; }
+  .inventory-screen .bag-filter { min-height: 44px; padding: 2px 10px; }
   .furnace-screen .furnace-slot { width: 72px; height: 72px; }
   .furnace-bag-list { grid-template-columns: minmax(0, 1fr); }
   :is(.furnace-screen, .forge-screen, .smith-screen) .furnace-bag-item { min-height: 48px; }
@@ -750,6 +769,8 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   #chat:not(.open) .chat-line:nth-last-child(n+3) { display: none; }
   #chat.open { transform: none; }
   #chat.open #chat-log { max-height: calc(5 * 13px + 8px); }
+  /* The doll narrower, so the sheet scrolls on to the strip and the bag. */
+  .doll-frame { width: min(100%, 440px); margin: 0 auto; }
   /* The furnace beside the satchel, each scrolling on its own. */
   .furnace-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   .furnace-satchel { max-height: calc(100dvh - 72px); overflow: auto; }
@@ -776,10 +797,9 @@ body.play-gated :is(#touch-controls, .hud, #phone-menu) { visibility: hidden; }
   .hud:has(.hud-target:not([hidden])) .hud-toasts { margin-top: 30px; }
 }
 
-/* An off-hand instrument turns slots 1-8 into its notes: the letter or chord
-   name over the exact pitch, lit for a moment when played. */
+/* An off-hand instrument's note slots: the letter or chord name over the
+   exact pitch, lit for a moment when played. */
 .hud-slot.note { align-content: center; gap: 2px; color: var(--ink); }
-.hud-slot.note .hud-slot-glyph { display: none; }
 .hud-slot-note { font-size: 15px; font-weight: 600; line-height: 1; }
 .hud-slot-pitch { color: var(--muted); font-size: 8px; line-height: 1; white-space: nowrap; }
 .hud-slot.note-flash { color: var(--solid); background: var(--ink); border-color: var(--ink); }

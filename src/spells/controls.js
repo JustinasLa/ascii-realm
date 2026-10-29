@@ -113,7 +113,7 @@ export class SpellControls {
   // Sizes the wheel to the screen and centres it near (x, y), pointing there.
   place(x, y) {
     const vw = innerWidth, vh = innerHeight;
-    // Keep clear of the rune bar and hotbar when the screen is tall enough.
+    // Keep clear of the rune bar and inventory button when the screen is tall enough.
     this.scale = Math.min(1, (vw - 16) / (BOX * 2), (vh - 16) / (BOX * 2));
     const half = BOX * this.scale, below = vh - half * 2 > 300 ? 150 : 8;
     const clamp = (v, lo, hi) => lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v));

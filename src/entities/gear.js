@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DEFAULT_PAINT, DEFAULT_SKIN, skinPaint } from '../character/skin.js';
+import { EQUIPMENT_SLOTS } from '../inventory/items.js';
 import { buildInstrumentShape, HOLD } from './instrument-shapes.js';
 import { wears } from './loadout.js';
 
@@ -40,8 +41,8 @@ export function regionColors(equipment, skin = DEFAULT_SKIN) {
     forearm: wearing('hands') ? 'bracer' : sleeve,
     hand: wearing('hands') ? 'glove' : 'skin',
     thigh: 'hose',
-    shin: wearing('legs') ? 'boot' : 'hose',
-    foot: wearing('legs') ? 'boot' : 'cuff',
+    shin: wearing('feet') ? 'boot' : 'hose',
+    foot: wearing('feet') ? 'boot' : 'cuff',
   };
 }
 
@@ -142,7 +143,7 @@ export class Gear {
   // layers of `skin`; cheap when neither changed.
   apply(equipment, skin = DEFAULT_SKIN) {
     const signature = equipment === undefined ? 'all'
-      : ['helm', 'chest', 'legs', 'hands', 'cape', 'mainHand', 'offHand'].map((s) => equipment?.[s]?.id ?? '').join();
+      : EQUIPMENT_SLOTS.map((s) => equipment?.[s]?.id ?? '').join();
     if (signature === this.signature && skin === this.skin) return;
     this.signature = signature;
     if (skin !== this.skin) this.paint(skin);

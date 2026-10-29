@@ -40,7 +40,7 @@ export const isThrown = (weapon) => weapon?.type === 'spear' || weapon?.type ===
 // For now the outlaw's clothes are part of the character rather than items,
 // so they are always worn; only the hands' gear follows the equipment. The
 // skin can take off the hood, jerkin and cloak, showing what is beneath.
-const OUTFIT = new Set(['helm', 'chest', 'legs', 'hands', 'cape']);
+const OUTFIT = new Set(['helm', 'chest', 'legs', 'feet', 'hands', 'cape']);
 const LAYER_OF = { helm: 'hood', chest: 'jerkin', cape: 'cloak' };
 export const wears = (equipment, slot, skin = DEFAULT_SKIN) =>
   (equipment === undefined || OUTFIT.has(slot) || Boolean(equipment?.[slot]))

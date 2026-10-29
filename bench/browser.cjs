@@ -125,7 +125,7 @@ const SOFTWARE_GL = /SwiftShader|llvmpipe|softpipe|Software|Microsoft Basic Rend
         const controls = [...document.querySelectorAll('#touch-controls button, #move-pad, #phone-menu')].filter(shown);
         const display = s => getComputedStyle(document.querySelector(s)).display;
         return { width: innerWidth, height: innerHeight,
-          hidden: ['#panel-dock', '.hud-hotbar-wrap', '.hud-party', '.zoom-controls', '.hud-prompt', '#fire-status'].map(display),
+          hidden: ['#panel-dock', '.hud-inventory-wrap', '.hud-party', '.zoom-controls', '.hud-prompt', '#fire-status'].map(display),
           menu: shown(document.getElementById('phone-menu')),
           strip: document.querySelector('.hud-status').getBoundingClientRect().toJSON(),
           overflow: document.documentElement.scrollWidth > innerWidth,

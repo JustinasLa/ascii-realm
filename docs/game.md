@@ -199,14 +199,30 @@ short version see the [README](../README.md).
   no character; `?name=...` shows another for testing). Its colour is your
   name colour (see Multiplayer).
 - **Atmosphere.** Fireflies, a vignette, and zoom.
-- **Status frames and quick slots.** A party-style frame in the top-left
+- **Status frames.** A party-style frame in the top-left
   corner shows the character's name, segmented HP and MP bars and the satchel's weight.
-  Nine quick slots sit along the bottom. Running and sword strikes have no stamina cost.
-- **Inventory and equipment.** A keyboard-controlled satchel, a seven-slot
-  equipment view drawn with the outlaw's own glyphs, item details, 24 bag slots
-  and a 60 kg carrying limit. The bag starts with a short sword, equipped and
-  assigned to quick slot 1, and a stone pickaxe on quick slot 2. You can move the sword into the bag, equip it
-  again and assign it to other quick slots. Clothes are part of the character;
+  An Inventory button sits at the bottom. Running and sword strikes have no stamina cost.
+- **Inventory and equipment.** A character sheet over the moving, undimmed
+  world: a header with the character's name and class (`OUTLAW` without one)
+  and `close (I)`; a paper doll of twelve equipment boxes in five columns
+  (weapon over gloves; quiver and a ring; helmet, body and legs; amulet, cloak
+  and a ring; shield over boots), the small ones dashed while empty and filled
+  ones showing the item's art; a stats strip (HP, MP, stamina, the six
+  attributes of the active character, weight and the pouch); then the bag:
+  `Bag n/24` (stacks out of 24 slots), filter tabs with stack counts (All,
+  Weapons, Armor and Cloaks always; Ammo, Consumables, Instruments and
+  Materials while it holds some), a scrolling grid of tall item cards, each
+  showing its art and its stack count (`×30`) or its gear's material
+  (`iron`), and the selected item's details beside them. Clicking a card
+  equips it (swapping out what was worn) or uses it, clicking a filled box
+  takes the gear off, and right-clicking a card drops the whole stack on the
+  ground. On a touch screen the first tap on a card selects it, showing its
+  details and a Drop button, and a second tap equips or uses it; a tap on a
+  filled box takes the gear off. The window keeps one
+  height on desktops and tablets; on phones the full-screen sheet scrolls. A
+  60 kg carrying limit applies. The bag starts with a short sword, equipped and
+  ready, and a stone pickaxe. Arrows can fill the quiver, which the bow shoots
+  from and pickups top up first. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn

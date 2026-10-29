@@ -10,7 +10,8 @@ import { HuntDrops } from '../../src/entities/hunt-drops.js';
 import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/loot.js';
 import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
-import { nameError, normalName } from '../../src/character/rules.js';
+import { attributeTotals, nameError, normalName } from '../../src/character/rules.js';
+import { classOf } from '../../src/character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
 import { sampleDraft, wantsCreator } from '../../src/character/creation.js';
 import { hidesPreview } from '../../src/ui/creator.js';
@@ -262,8 +263,9 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       setName(name) { this.name = name; }
     },
     InventoryScreen: class extends inert() {
-      constructor(options) { super(); Object.assign(this, options); this.opened = []; }
-      setName(name) { this.name = name; }
+      constructor(options) { super(); Object.assign(this, options); this.opened = []; this.manaSources = []; }
+      setName(name, className) { this.name = name; this.className = className; }
+      attachMana(source) { this.manaSources.push(source); }
       setOpen(open, page) {
         this.opened.push([open, page]);
         if (open === (this.isOpen === true)) return;
@@ -307,7 +309,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       }
       render() { this.renders++; }
     },
-    nameError, normalName,
+    nameError, normalName, attributeTotals, classOf,
     GroundItems: inert(), Harvesting: inert(), Mining, toolOf, Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
