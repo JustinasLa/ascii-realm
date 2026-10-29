@@ -10,7 +10,7 @@ const count = (inventory, id) => inventory.slots.reduce((sum, stack) => sum + (s
 // Every text and attribute under a node, for the "no needed count" check.
 const everything = (node) => [node._text, ...[...node.attributes.values()], ...node.children.flatMap(everything)].join('\n');
 
-function mount(t, { items = [['ironIngot', 3], ['rawTin', 1], ['stonePickaxe', 1]], alloy = 2 } = {}) {
+function mount(t, { items = [['ironIngot', 3], ['rawTin', 1], ['stonePickaxe', 1]], alloy = 2, ...options } = {}) {
   const env = installBrowser(t);
   const root = env.document.createElement('div');
   root.id = 'inventory-root';
@@ -29,7 +29,7 @@ function mount(t, { items = [['ironIngot', 3], ['rawTin', 1], ['stonePickaxe', 1
   const finishes = [];
   const screen = new WeaponStationScreen({ book, inventory, random: () => 0.6, onToggle: () => {},
     onNotify: (message, kind) => notes.push([message, kind]), onHit: (id, kind) => hits.push([id, kind]),
-    onFinish: (id, done) => finishes.push([id, done.name]) });
+    onFinish: (id, done) => finishes.push([id, done.name]), ...options });
   const gameKeys = [];
   env.window.addEventListener('keydown', (event) => gameKeys.push(event.code));
   const press = (code, fields = {}) => {
@@ -170,6 +170,25 @@ test('keys 1–6 strike once a press, never on a repeat or a held modifier, and 
   assert.equal(screen.total.textContent, 'Total 6');
   // The piece needs Hit 13 (3 × 4 + 1), and that number is nowhere in the dialog.
   assert.doesNotMatch(everything(screen.screen), /\b13\b/);
+});
+
+test('under reduced motion a hit only colours the anvil, with no spark letters', (t) => {
+  let reduced = true;
+  const { screen, load, press, clock, bench } = mount(t, { reducedMotion: () => reduced });
+  screen.open(ID);
+  load();
+  const still = screen.anvil.textContent;
+  press('Digit1');
+  assert.equal(bench().done.hit, 1);
+  assert.ok(screen.anvil.classList.contains('struck'));
+  assert.equal(screen.anvil.textContent, still);
+  clock.now += 200;
+  screen.update();
+  assert.ok(!screen.anvil.classList.contains('struck'));
+  // The setting is read on every hit, so turning it off brings the sparks back.
+  reduced = false;
+  press('Digit1');
+  assert.match(screen.anvil.textContent, /\*/);
 });
 
 test('a hit kind the piece does not need is refused with its reason', (t) => {

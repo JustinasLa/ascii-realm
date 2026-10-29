@@ -58,6 +58,7 @@ test('beside the weapon station E opens it; a sword is smithed, sparks fly and t
   assert.ok(roll >= 0 && roll < 1);
   game.smithRandom = () => 0.6;
   assert.equal(game.smithyScreen.random(), 0.6);
+  assert.equal(game.smithyScreen.reducedMotion(), false, 'the anvil sparks follow the reduced-motion setting');
   const done = book.savedBench(ID, (s) => finishSmithy(s, game.inventory, book, game.smithyScreen.random));
   assert.deepEqual(done.lines.slice(0, 2), ['Hit Percentage: 100%', 'Quality: Masterwork']);
   game.smithyScreen.onFinish(ID, done);

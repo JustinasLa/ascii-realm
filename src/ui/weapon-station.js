@@ -8,7 +8,8 @@ const STATION = { name: 'smith', title: 'Weapon station',
 // Hits closer together than this count once, so a held key or a quick
 // double tap doesn't strike twice.
 export const HIT_GAP_MS = 100;
-// How long a hit's sparks stay over the anvil.
+// How long a hit's sparks stay over the anvil; under reduced motion the
+// anvil only changes colour for that time.
 const STRUCK_MS = 150;
 const ANVIL = "        \n<=====[]=]\n   )##(\n  /____\\";
 const SPARKS = " * .' , \n<=====[]=]\n   )##(\n  /____\\";
@@ -23,7 +24,7 @@ const KEYS = Object.fromEntries(HIT_ORDER.flatMap((kind, i) => [[`Digit${i + 1}`
  */
 export class WeaponStationScreen extends FurnaceScreen {
   constructor(options) {
-    super({ onHit: () => {}, onFinish: () => {}, random: Math.random, ...options }, STATION);
+    super({ onHit: () => {}, onFinish: () => {}, random: Math.random, reducedMotion: () => false, ...options }, STATION);
     Object.assign(this, { _lastHit: -Infinity, _struckUntil: 0 });
   }
 
@@ -97,7 +98,7 @@ export class WeaponStationScreen extends FurnaceScreen {
     if (!done.ok) return;
     this._struckUntil = now + STRUCK_MS;
     this.anvil.classList.add('struck');
-    setText(this.anvil, SPARKS);
+    setText(this.anvil, this.reducedMotion() ? ANVIL : SPARKS);
     this.onHit(this.id, kind);
   }
 

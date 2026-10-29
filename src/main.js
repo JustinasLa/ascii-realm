@@ -605,7 +605,8 @@ const forgeScreen = new AlloyForgeScreen({ book: alloyBook, inventory, onToggle:
 let lastSmithy = null;
 const smithyScreen = new WeaponStationScreen({ book: alloyBook, inventory, onToggle: furnaceScreen.onToggle,
   onNotify: furnaceScreen.onNotify, onHit: () => dust.sparks(lastSmithy.x, lastSmithy.y - 3, 4),
-  onFinish: () => dust.sparks(lastSmithy.x, lastSmithy.y - 3, 12), random: () => (debug.smithRandom ?? Math.random)() });
+  onFinish: () => dust.sparks(lastSmithy.x, lastSmithy.y - 3, 12), random: () => (debug.smithRandom ?? Math.random)(),
+  reducedMotion: () => reducedMotion });
 Object.assign(debug, { furnaces, furnaceScreen, alloyBook, forgeScreen, smithyScreen });
 const saveStations = () => { furnaces.save(); alloyBook.save(); };
 window.addEventListener('pagehide', saveStations);
