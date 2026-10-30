@@ -44,3 +44,27 @@ test('a lobby shares the wall clock, and leaving it carries on solo', async () =
   assert.equal(game.dayClock.shared, false);
   assert.ok(Math.abs(game.dayClock.tick - shared) < 5, 'no jump on leaving');
 });
+
+test('the frame hands its sky to the moonlight, the grass, the glowcaps, the fireflies and the monsters', async () => {
+  const { game, frame } = await load('&time=noon');
+  const calls = {};
+  const spy = (label, object, name) => {
+    const real = object[name];
+    object[name] = function (...args) { (calls[label] ??= []).push(args); return real.apply(this, args); };
+  };
+  spy('night', game.nightLight, 'prepare');
+  spy('monsters', game.monsters, 'update');
+  spy('fireflies', game.fireflies, 'update');
+  spy('glow', game.mushrooms, 'drawGlow');
+  frame();
+  const sky = game.dayClock.state;
+  assert.equal(calls.night.at(-1)[2].sky, sky);
+  assert.equal(game.grass.light, sky.direct);
+  assert.equal(calls.monsters.at(-1)[3], sky);
+  assert.equal(calls.fireflies.at(-1)[7], sky.fireflies);
+  assert.equal(calls.glow.at(-1)[3], sky.glow);
+  game.fires.list.push({ x: 4, y: 5, kind: 'campfire' });
+  game.torches.list.push({ x: 6, y: 7 });
+  assert.deepEqual(game.monsters.env.lights(), [{ x: 4, y: 5, level: 15 }, { x: 6, y: 7, level: 14 }]);
+  assert.equal(game.monsters.env.weather, game.weather);
+});

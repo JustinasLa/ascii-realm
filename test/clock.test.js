@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { DAY_SECONDS, MOON_BRIGHTNESS, NIGHT_SHARE, NIGHT_SKY, START_TICK, WorldClock, celestial, clockOptions,
+import { DAY_SECONDS, MOON_BRIGHTNESS, MOON_FLOOR, NIGHT_SHARE, NIGHT_SKY, START_TICK, WorldClock, celestial, clockOptions,
   daylightAt, fractionAt, parseTime, skyAt, starlightAt, tickAt } from '../src/world/clock.js';
 import { GRADE_NIGHT } from '../src/render/palette.js';
 
@@ -178,4 +178,30 @@ test('the sky state: night is the identity grade, the moon and sun never meet, n
   assert.equal(clock.sky(), first);
   assert.equal(first.grade, clock.state.grade);
   assert.ok(near(first.tick, clock.tick));
+});
+
+test('the clock\'s light levels: all 1 at a full-moon midnight, none of the moon\'s by day, smooth through dusk', () => {
+  for (const sky of [NIGHT_SKY, skyAt(18000, 3, 0)]) {
+    assert.deepEqual([sky.moonlight, sky.direct, sky.fireflies, sky.glow], [1, 1, 1, 1]);
+  }
+  const noon = skyAt(6000, 0, 0);
+  assert.deepEqual([noon.moonlight, noon.direct, noon.fireflies], [0, 1, 0]);
+  assert.ok(near(noon.glow, 0.3));
+  assert.ok(near(skyAt(18000, 4, 4).moonlight, MOON_FLOOR));
+  assert.ok(near(skyAt(18000, 2, 2).moonlight, 0.575));
+  for (const centre of [12600, 23400]) {
+    const k = [centre - 150, centre + 150].map((t) => skyAt(t, 0, 0).fireflies);
+    assert.ok(Math.min(...k) < 0.5 && Math.max(...k) > 0.5, `half awake near ${centre}`);
+  }
+  const out = skyAt(11000, 0, 0);
+  let fireflies = out.fireflies, direct = out.direct;
+  for (let t = 11010; t <= 14000; t += 10) {
+    skyAt(t, 0, 0, out);
+    if (t <= 13000) assert.ok(out.fireflies >= fireflies, `waking at ${t}`);
+    assert.ok(Math.abs(out.direct - direct) <= 0.025, `direct is smooth at ${t}`);
+    fireflies = out.fireflies;
+    direct = out.direct;
+  }
+  const clock = new WorldClock();
+  assert.equal(clock.sky(), clock.sky(), 'one state, reused');
 });

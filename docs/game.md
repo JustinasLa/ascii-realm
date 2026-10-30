@@ -80,15 +80,20 @@ short version see the [README](../README.md).
   shadows stay put as you walk and zoom and do not sway with the crowns.
   Bare winter crowns cast only a thin shadow, burning trees less as they
   burn, and felled or burnt ones none; cloud thins them and lightning lifts
-  them for its flash. Water, torchlight, firelight and spell light are not
+  them for its flash. By day the sun casts them as the moon does by night;
+  in the short dusk and dawn between the two they soften to half. Water,
+  torchlight, firelight and spell light are not
   dimmed by them. Here and there a pale moonbeam reaches the meadow: the
   ground and grass where it lands are brighter and paler, toward the
   moonlight's blue-white, in a soft lobed patch, and above it a faint column
   of lit air leans up toward the moon with a few motes of dust sinking
   down it. Beams stay put as you walk and zoom, are the same on every
   device, never land on water, fade under cloud, wash out in a lightning
-  flash and are dimmed under trees. Flowers in a beam brighten but keep
-  their colours. Desktops show up to six at once, phones up to four, and a
+  flash and are dimmed under trees. They come with the moon and fade as it
+  sets, so there are none by day; they are fainter as the moon wanes, and
+  faint at new moon. The blades' pale moonlit tips and the dew's glints
+  follow the moon (or the sun) the same way. Flowers in a beam brighten
+  but keep their colours. Desktops show up to six at once, phones up to four, and a
   phone running at its reduced cell budget up to two, with the patches but
   not the columns. Leaves and blossoms
   drift down, and foliage thins around the warrior when it would hide them.
@@ -103,8 +108,10 @@ short version see the [README](../README.md).
   the moon there wanes and waxes through eight phases, one a night (a new
   moon is a faint ashen disc), and it sets before the sun shows, when the
   sun's glare and a warm glitter take its place on the water. A warm
-  afterglow fills the water around them at dawn and dusk. The music and the
-  night sounds follow the same clock. The clock's URL settings:
+  afterglow fills the water around them at dawn and dusk. Fireflies wake
+  one by one at dusk and go out the same way before dawn; glowcaps glow
+  faintly by day. Skeletons and trolls come only at night (see Monsters).
+  The music and the night sounds follow the same clock. The clock's URL settings:
   - `?time=` starts at a tick of the 24000-tick day (0 is sunrise, 6000
     noon, 12000 sunset, 18000 midnight), at a clock time such as `07:30`,
     or at a named time: `day`, `noon`, `sunset`, `dusk`, `night`,
@@ -219,7 +226,7 @@ short version see the [README](../README.md).
 - **Nameplate.** The active character's name floats above the hood (Kael with
   no character; `?name=...` shows another for testing). Its colour is your
   name colour (see Multiplayer).
-- **Atmosphere.** Fireflies, a vignette, and zoom.
+- **Atmosphere.** Fireflies at dusk and night, a vignette, and zoom.
 - **Status frames.** A party-style frame in the top-left
   corner shows the character's name, segmented HP and MP bars and the satchel's weight.
   An Inventory button sits at the bottom. Running and sword strikes have no stamina cost.
@@ -450,7 +457,10 @@ short version see the [README](../README.md).
   with ember eyes. Three sword cuts break one apart: each cut staggers it and
   knocks it back, and the last sends it crashing to the ground, where it lies
   before sinking away. Up to three are about at once, and another rises a few
-  seconds after one falls. Wounds heal after a short breather; struck down, the
+  seconds after one falls. They rise only at night, more readily under a
+  full moon and less as the dusk lingers, and never where a fire or a
+  thrown torch lights the ground; those already up stay when the sun
+  rises. Goblins and elves come at any hour. Wounds heal after a short breather; struck down, the
   player wakes where they began. `?skeletons=N` sets how many roam (0 for none).
 - **Goblins.** Small, green and quick, with long ears and yellow eyes, goblins
   come running from further off, cackling once they spot the player. One darts
@@ -466,7 +476,8 @@ short version see the [README](../README.md).
   hard as a skeleton and shakes the earth where it lands; watch the long
   wind-up, get clear of the spot, then cut back. It shrugs off most cuts, reeling only from every third, flies
   into a rage (and a quicker pace) when badly hurt, and takes seven cuts to
-  bring down, falling with a thud. One at a time; `?trolls=N` sets how many.
+  bring down, falling with a thud. Like skeletons, trolls come only at night
+  and keep away from firelight. One at a time; `?trolls=N` sets how many.
 - **Elves.** A tall, pale archer in a green hooded tunic with long ears and a
   longbow. It never comes to blows: it keeps a few metres off, sidesteps
   between shots, then stands, draws and looses an arrow that leads a moving

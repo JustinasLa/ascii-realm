@@ -1,3 +1,4 @@
+import { NIGHT_SKY } from './clock.js';
 import { WEATHER_EFFECTS } from './weather.js';
 import { canopyStamp, GAIN, hasStamp, LAYER_UNIT, stampStrength } from './canopy.js';
 import { MAX_GRASS_HEIGHT, SIDE_PAD } from './grass.js';
@@ -45,6 +46,10 @@ export const PAD_BOTTOM = MAX_GRASS_HEIGHT + 2;
 // view from below or from the right is found too.
 export const SHAFT_MARGIN_X = 24;
 export const SHAFT_MARGIN_Y = 8;
+// The moon's light on the beams moves in steps this fine (1/64 of full is
+// too little to see), so through dusk and dawn the beams' map is laid
+// again once a step rather than every frame.
+export const BEAM_STEPS = 64;
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 
@@ -57,11 +62,13 @@ export function moonlightOf(weather) {
   return clamp01(1 - 4 * cloud);
 }
 
-// How much of a shadow the weather leaves: cloud covers the moon, so only
-// the sky's share stays, and lightning lights everything for its flash.
-export function skyFactor(weather) {
-  if (!weather) return 1;
-  return (SKY_SHARE + (1 - SKY_SHARE) * moonlightOf(weather)) * (1 - clamp01(weather.flash ?? 0));
+// How much of a shadow the weather and the hour leave: cloud covers the
+// moon, so only the sky's share stays, as it does when neither the sun nor
+// the moon lights the land (`direct`, from the clock), and lightning lights
+// everything for its flash.
+export function skyFactor(weather, direct = 1) {
+  if (!weather) return SKY_SHARE + (1 - SKY_SHARE) * direct;
+  return (SKY_SHARE + (1 - SKY_SHARE) * moonlightOf(weather) * direct) * (1 - clamp01(weather.flash ?? 0));
 }
 
 // How strong a beam is: the moon's share, all washed out by a flash.
@@ -131,6 +138,9 @@ export class NightLight {
     this.world = null;
     this.seed = null;
     this.tierName = null;
+    // The moon's light on the land this frame, in BEAM_STEPS steps: the
+    // beams come and go with it.
+    this.moonlight = 1;
     // Footprints baked this frame, their work and the time it took (ms).
     this.bakes = 0;
     this.work = 0;
@@ -141,8 +151,9 @@ export class NightLight {
   }
 
   // Builds the map for this frame's view from the trees in `props` and the
-  // world's beams. env: { weather, seed, world, tier }; with no world there
-  // are no beams.
+  // world's beams. env: { weather, seed, world, tier, sky }; with no world
+  // there are no beams, and the sky (the clock's, full night by default)
+  // says how much light casts the shadows and how much the moon gives.
   prepare(view, props, env = {}) {
     const d = this.dirty, l = this.lit;
     for (let y = d.y0; y < d.y1; y++) this.layers.fill(0, y * this.w + d.x0, y * this.w + d.x1);
@@ -165,9 +176,11 @@ export class NightLight {
       this.clearLift();
     }
     const seed = env.seed ?? 1;
-    const sky = skyFactor(env.weather);
+    const light = env.sky ?? NIGHT_SKY;
+    const sky = skyFactor(env.weather, light.direct);
+    this.moonlight = Math.round(light.moonlight * BEAM_STEPS) / BEAM_STEPS;
     if (sky > 0) this.shadeTrees(props, sky, seed);
-    if (this.shafts && env.world) this.lightBeams(view, env, seed);
+    if (this.shafts && env.world && this.moonlight > 0) this.lightBeams(view, env, seed);
     else {
       this.beams.clear();
       this.clearLift();
@@ -302,7 +315,7 @@ export class NightLight {
       leaving.sort((a, b) => b.frames - a.frames);
       for (let k = tier.max; k < leaving.length; k++) beams.delete(leaving[k].shaft.key);
     }
-    const light = tier.intensity * beamFactor(env.weather);
+    const light = tier.intensity * beamFactor(env.weather) * this.moonlight;
     const mixStep = 1 / FADE_FRAMES, target = tier.column ? 1 : 0;
     for (const beam of beams.values()) {
       beam.mix = target > beam.mix ? Math.min(target, beam.mix + mixStep) : Math.max(target, beam.mix - mixStep);

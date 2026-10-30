@@ -12,8 +12,9 @@ import { Grass } from '../src/world/grass.js';
 import { DEW, FERN } from '../src/world/grass-roots.js';
 import {
   BAKE_WORK, FADE_FRAMES, MAX_BAKES_PER_FRAME, MAX_BEAM_BAKES, NightLight, PAD_BOTTOM, PAD_TOP, PAD_X, SKY_SHARE, beamFactor,
-  moonlightOf, skyFactor,
+  moonlightOf, skyFactor, BEAM_STEPS,
 } from '../src/world/night-light.js';
+import { NIGHT_SKY } from '../src/world/clock.js';
 import { SHAFT_TIERS, patchStamp, shaftAt } from '../src/world/moon-shafts.js';
 import { PEAK_LIFT, TINT, moonTint } from '../src/world/moon-tint.js';
 import { DEW_CAP, FLOWER_CAP } from '../src/world/grass.js';
@@ -1028,4 +1029,92 @@ test('the CPU scene benchmark runs every scenario and builds the buffers an olde
   } finally {
     AsciiRenderer.prototype.allocate = allocate;
   }
+});
+
+test('the clock\'s light: full night is as before, the beams follow the moon in steps, shadows the direct light', () => {
+  const weathers = [undefined, { preset: 'clear', intensity: 0, flash: 0 }, { preset: 'drizzle', intensity: 0.5, flash: 0.2 },
+    { preset: 'thunderstorm', intensity: 1, flash: 0 }];
+  for (const w of weathers) assert.equal(skyFactor(w), skyFactor(w, 1));
+  assert.equal(skyFactor(undefined, 0), SKY_SHARE);
+  assert.equal(skyFactor({ preset: 'clear', intensity: 0, flash: 0 }, 0), SKY_SHARE);
+  const { world, shaft } = oneBeam(3);
+  const view = around(shaft);
+  const props = [plainTree(shaft.cx + 20, shaft.cy)];
+  const read = (night) => [night.active, [...night.lift], [...night.layers], night.visible.map((b) => b.s)];
+  const run = (sky) => {
+    const night = new NightLight();
+    settle(night, view, props, { seed: 3, world, ...(sky ? { sky } : {}) });
+    return night;
+  };
+  const plain = run(null);
+  assert.deepEqual(read(run(NIGHT_SKY)), read(plain), 'full night is the default');
+  assert.ok(plain.visible.length > 0);
+  const half = run({ ...NIGHT_SKY, moonlight: 0.5 });
+  assert.ok(Math.abs(half.visible[0].s - plain.visible[0].s / 2) < 1 / BEAM_STEPS);
+  const none = run({ ...NIGHT_SKY, moonlight: 0 });
+  assert.equal(none.visible.length, 0);
+  assert.ok(none.lift.every((v) => v === 0));
+  const bare = new NightLight();
+  settle(bare, view, [], { seed: 3, world, sky: { ...NIGHT_SKY, moonlight: 0 } });
+  assert.equal(bare.active, false, 'no beam and no tree: nothing to shade');
+  const gap = run({ ...NIGHT_SKY, direct: 0 });
+  const at = (night) => night.layers.reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(at(gap) - at(plain) * SKY_SHARE) < 1e-3 * at(plain), 'in the dusk gap only the sky\'s share shades');
+});
+
+test('through twilight the beams\' map is laid once a moonlight step, and fades out with no jump', () => {
+  const { world, shaft } = oneBeam(3);
+  const view = around(shaft);
+  const night = new NightLight();
+  let lays = 0;
+  const lay = night.layBeams;
+  night.layBeams = function () { lays++; return lay.call(this); };
+  const sky = (moonlight) => ({ ...NIGHT_SKY, moonlight });
+  settle(night, view, [], { seed: 3, world, sky: sky(0.7) });
+  lays = 0;
+  night.prepare(view, [], { seed: 3, world, sky: sky(0.705) });
+  assert.equal(lays, 0, 'the same step');
+  night.prepare(view, [], { seed: 3, world, sky: sky(0.75) });
+  assert.equal(lays, 1, 'a new step');
+  settle(night, view, [], { seed: 3, world, sky: sky(1) });
+  let last = night.visible[0].s, worst = 0, final = last;
+  for (let k = 1; k <= 200; k++) {
+    night.prepare(view, [], { seed: 3, world, sky: sky(1 - k / 200) });
+    const s = night.visible[0]?.s ?? 0;
+    worst = Math.max(worst, Math.abs(s - last));
+    if (s > 0) final = s;
+    last = s;
+  }
+  assert.ok(worst <= 1 / BEAM_STEPS + 1 / FADE_FRAMES, `${worst}`);
+  assert.ok(final <= 1 / BEAM_STEPS, `the last lit frame ${final}`);
+  assert.ok(night.lift.every((v) => v === 0));
+});
+
+test('the bench scene lights its night by a given sky', async () => {
+  const scene = await createScene(undefined, { width: 390, height: 844, seed: SEED, x: PLAYER.x, y: PLAYER.y,
+    sky: { ...NIGHT_SKY, moonlight: 0, direct: 0.25 } });
+  scene.frame();
+  assert.equal(scene.grass.light, 0.25);
+  assert.equal(scene.night.moonlight, 0);
+});
+
+test('the grass\'s tips pale and its dew glints by the direct light: as before at 1, not at all at 0', () => {
+  const world = new World(19, { flora: true });
+  const view = { x0: 3 * CHUNK_SIZE, y0: CHUNK_SIZE, cols: CHUNK_SIZE, rows: CHUNK_SIZE };
+  const draw = (light, night = null) => {
+    const r = { cols: view.cols, rows: view.rows, night };
+    const cells = [];
+    const grass = new Grass();
+    if (light !== undefined) grass.light = light;
+    for (let y = view.y0; y < view.y0 + view.rows; y++) grass.drawRow(r, world, view, 3.7, y, (_r, ...cell) => cells.push(cell));
+    return cells;
+  };
+  const plain = draw();
+  assert.deepEqual(draw(1), plain);
+  const dark = draw(0), half = draw(0.5);
+  assert.ok(dark.length < plain.length, 'no dew glints');
+  assert.equal(half.length, plain.length);
+  assert.deepEqual(draw(0, { rowShaded: () => true, lightAt: () => 1, tint: 0 }), dark, 'shaded rows follow it too');
+  const pale = (cells) => cells.filter((c) => !(c[2] & LAYER)).reduce((a, c) => a + c[3] + c[4] + c[5], 0);
+  assert.ok(pale(plain) > pale(half) && pale(half) > pale(dark), `${pale(plain)} ${pale(half)} ${pale(dark)}`);
 });

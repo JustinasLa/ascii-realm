@@ -159,6 +159,8 @@ export class Ambience {
       let brightness = 0;
       for (const firefly of darkness > 0.4 ? (fireflies ?? []) : []) {
         if (firefly.retryAt !== undefined || !Number.isFinite(firefly.phase)) continue;
+        // An asleep firefly makes no sound.
+        if (firefly.lit === 0) continue;
         if (!Number.isFinite(firefly.x) || !Number.isFinite(firefly.y)) continue;
         const pulse = Math.max(0, Math.sin(clock * 1.4 + firefly.phase));
         if (pulse < 0.8) continue;
