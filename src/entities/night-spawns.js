@@ -72,12 +72,13 @@ export function lightSources(fires = [], thrown = []) {
 }
 
 // How much light those sources give at world cell (x, y): the brightest,
-// less a level for every metre to it.
+// less a level for every metre to it. A part-metre counts as none, so a
+// fire's light reaches all the way to 15 m.
 export function lightLevel(x, y, sources) {
   let best = 0;
   for (const s of sources) {
     const metres = Math.abs(x - s.x) * ASPECT / SCALE + Math.abs(y - s.y) / (SCALE * TILT);
-    best = Math.max(best, Math.floor(s.level - metres + 1e-9));
+    best = Math.max(best, Math.ceil(s.level - metres - 1e-9));
   }
   return best;
 }

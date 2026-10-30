@@ -63,6 +63,12 @@ test('fires and thrown torches light the ground around them, a level less a metr
   assert.equal(lightLevel(0, 0, lightSources([], [east(13)])), 1);
   assert.equal(lightLevel(0, 0, []), 0);
   assert.equal(lightLevel(0, 0, lightSources()), 0);
+  // Light holds through every part-metre up to its reach.
+  for (const [m, north, fireLevel, torchLevel] of [[14.5, 0, 1, 0], [14.999, 0, 1, 0], [7.25, 7.25, 1, 0],
+    [15, 0, 0, 0], [15.01, 0, 0, 0], [13.5, 0, 2, 1], [9.5, 0, 6, 5], [0, 0, 15, 14]]) {
+    assert.equal(lightLevel(0, 0, fire(m, north)), fireLevel, `a fire ${m} m east, ${north} m north`);
+    assert.equal(lightLevel(0, 0, lightSources([], [east(m, north)])), torchLevel, `a torch ${m} m east`);
+  }
   assert.deepEqual(lightSources([{ x: 1, y: 2, kind: 'ground' }], [{ x: 3, y: 4 }]),
     [{ x: 1, y: 2, level: FIRE_LIGHT }, { x: 3, y: 4, level: TORCH_LIGHT }]);
 });
@@ -144,6 +150,10 @@ test('no night creature rises where a fire lights the ground; one at dawn stays 
   const ground = { isWalkable: () => true, typeAt: () => GRASS };
   const close = { near: 2, far: 5 };
   assert.equal(monsters.spawnNear(ground, player, 'skeleton', close), null, 'none by the fire');
+  // 10.5 m away in any direction is 10.5 to 14.85 m along the ground's axes.
+  const edge = { near: 10.5, far: 10.5 };
+  for (let k = 0; k < 20; k++) assert.equal(monsters.spawnNear(ground, player, 'skeleton', edge), null, 'none in its last metre');
+  assert.ok(monsters.spawnNear(ground, player, 'skeleton', { near: 15, far: 15 }), 'one just past its reach');
   assert.ok(monsters.spawnNear(ground, player, 'goblin', close), 'a goblin heeds no fire');
   const left = monsters.list.length;
   monsters.update(0.05, { isWalkable: () => true, typeAt: () => GRASS }, player, NOON);
