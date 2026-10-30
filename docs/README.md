@@ -39,6 +39,8 @@ Technical and player documentation for [ASCII Realm](../README.md).
   connected vegetation.
 - [Raised terrain](terrain.md) — the hill scene and how raised ground,
   grass and whatever stands on it are drawn.
+- [Provinces](provinces.md) — how the world is split into land, water and
+  bog provinces, their ids and their neighbours.
 
 ## Pages
 
