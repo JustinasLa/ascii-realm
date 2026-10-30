@@ -51,6 +51,12 @@ function setArt(node, src, text) {
   }
 }
 
+// A drag ghost shows what its card or box shows: the picture, else the outline.
+function copyArt(copy, node) {
+  const art = node.querySelector('.bag-card-art, .equipment-slot-icon');
+  setArt(copy, art.querySelector('img')?.getAttribute('src'), art.textContent);
+}
+
 function attribute(node, name, value) {
   if (node.getAttribute(name) !== String(value)) node.setAttribute(name, String(value));
 }
@@ -81,6 +87,18 @@ export class InventoryScreen {
     pages = [], isCovered = () => false, describe = () => null, describeVersion = () => 0, wallet = null,
     attributes = () => null, art = itemStudio }) {
     Object.assign(this, { isCovered, describe, describeVersion, wallet, attributes, art });
+    // A picture the studio lets go comes off the screen at once; its box
+    // shows the outline until the picture is made again (a drag's ghost at
+    // once, the boxes on the redraw).
+    this._unwatch = art?.watch?.((src) => {
+      for (const img of this.root.querySelectorAll('.item-art')) {
+        if (img.getAttribute('src') !== src) continue;
+        const box = img.parentNode;
+        img.remove();
+        if (box === this._drag?.ghost.firstElementChild) setText(box, this._drag.outline);
+      }
+      this._signature = null;
+    });
     this.manaSource = null;
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
@@ -311,7 +329,11 @@ export class InventoryScreen {
     window.addEventListener('keyup', this._keyup, true);
     window.addEventListener('blur', this._blur);
     // A turned phone re-places a pinned panel, its buttons on screen.
-    this._resize = () => { if (this.tooltip.pinned) this._pin(this._tip); };
+    // A turned phone reshapes the boxes, and so their pictures.
+    this._resize = () => {
+      this._signature = null;
+      if (this.tooltip.pinned) this._pin(this._tip);
+    };
     window.addEventListener('resize', this._resize);
   }
 
@@ -367,7 +389,11 @@ export class InventoryScreen {
   // Tab and arrow keys reach.
   _show(id, focus = false) {
     if (!this.pages.some((page) => page.id === id)) return;
-    if (id !== this.page) this._hideTip();
+    if (id !== this.page) {
+      this._hideTip();
+      // The doll's boxes are measured afresh when it shows again.
+      this._signature = null;
+    }
     this.page = id;
     for (const page of this.pages) {
       const selected = page.id === id;
@@ -602,9 +628,8 @@ export class InventoryScreen {
     const node = this._selectedButton();
     const ghost = element('div', 'drag-ghost');
     ghost.setAttribute('aria-hidden', 'true');
-    const art = node.querySelector('.bag-card-art, .equipment-slot-icon');
     const copy = element('div', 'bag-card-art');
-    setArt(copy, art.querySelector('img')?.getAttribute('src'), art.textContent);
+    copyArt(copy, node);
     ghost.append(copy);
     this.root.append(ghost);
     const lit = [...this.equipmentNodes.values()].map(({ button }) => button).concat(this.bag)
@@ -613,7 +638,8 @@ export class InventoryScreen {
     node.classList.add('dragging');
     document.body.classList.add('inventory-dragging');
     const { width, height } = ghost.getBoundingClientRect();
-    this._drag = { selection, node, ghost, lit, width, height, hover: null, speed: 0,
+    const { item } = this._selectedItem();
+    this._drag = { selection, node, ghost, lit, width, height, hover: null, speed: 0, outline: itemArt(item.id, item.glyph),
       scroller: this.phone() ? this.screen : this.cardGrid };
     // The cards slide under a still pointer: what it is over now lights.
     const scroll = () => {
@@ -858,18 +884,27 @@ export class InventoryScreen {
 
   // The only place the doll gets its art, for the box `slot` names: the
   // picture's `src` (null while it's made) and the outline shown until then.
-  _art(item, slot, stack) { return this._picture(item, stack, shapeOf(DOLL_BOXES[slot])); }
+  _art(item, slot, stack) { return this._picture(item, stack, shapeOf(DOLL_BOXES[slot]), this._sizes?.get(slot)); }
 
   // The only place the bag gets its art.
-  _cardArt(item, stack) { return this._picture(item, stack, 'card'); }
+  _cardArt(item, stack) { return this._picture(item, stack, 'card', this._cardSize); }
 
-  _picture(item, stack, shape) {
-    const art = this.art?.art(stack, item, this.describe(stack), shape);
+  _picture(item, stack, shape, size) {
+    const art = this.art?.art(stack, item, this.describe(stack), shape, size);
     return { src: art?.src ?? null, text: itemArt(item.id, item.glyph) };
   }
 
   _render() {
     const view = this._view;
+    // Each doll box's picture size inside its 3 px padding, and the cards'
+    // inside theirs (a shown card's; null while none shows), read once the
+    // cards this filter shows are shown, before anything else is written, so
+    // pictures are drawn at the size they show at. Hidden cards ask for none.
+    const shown = new Set(view.visible);
+    for (const [index, { button }] of this.bagNodes.entries()) hidden(button, !shown.has(index));
+    const inner = ({ clientWidth: w, clientHeight: h }, bottom) => (h > bottom ? [w - 6, h - bottom] : null);
+    this._sizes = new Map([...this.equipmentNodes].map(([slot, { button }]) => [slot, inner(button, 6)]));
+    this._cardSize = this.bagNodes.map(({ button }) => inner(button, 15)).find(Boolean) ?? null;
     setText(this.slotCounter, `Bag ${view.used}/${view.total}`);
     const drop = this.onDrop ? ` \u00b7 ${this.phone() ? 'hold' : 'RMB'} \u2014 drop` : '';
     setText(this.bagHint, `${this.phone() ? 'tap' : 'LMB'} \u2014 equip / take off${drop} \u00b7 drag to equip`);
@@ -884,13 +919,11 @@ export class InventoryScreen {
     setText(this.bagEmpty, view.used ? 'Nothing here.' : 'Your bag is empty.');
     hidden(this.bagEmpty, view.visible.length > 0);
 
-    const shown = new Set(view.visible);
     for (const [index, nodes] of this.bagNodes.entries()) {
       const stack = this.inventory.slots[index];
       const item = stack ? ITEMS[stack.id] : null;
       const own = item ? this.describe(stack) : null;
       const selected = this.selection?.source === 'bag' && this.selection.index === index;
-      hidden(nodes.button, !shown.has(index));
       nodes.button.classList.toggle('selected', selected);
       attribute(nodes.button, 'aria-pressed', String(selected));
       attribute(nodes.button, 'aria-label', item
@@ -898,8 +931,10 @@ export class InventoryScreen {
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'data-item-kind', item ? itemKind(item) : 'empty');
       attribute(nodes.button, 'data-item-id', item?.id || '');
-      const art = item ? this._cardArt(item, stack) : { src: null, text: '' };
-      setArt(nodes.icon, art.src, art.text);
+      if (shown.has(index)) {
+        const art = item ? this._cardArt(item, stack) : { src: null, text: '' };
+        setArt(nodes.icon, art.src, art.text);
+      }
       setText(nodes.count, item ? cardLabel(stack, item, own) : '');
     }
     for (const [slot, nodes] of this.equipmentNodes.entries()) {
@@ -917,10 +952,13 @@ export class InventoryScreen {
       setArt(nodes.icon, art.src, art.text);
       setText(nodes.count, item && STACK_SLOTS.includes(slot) ? String(stack.count) : '');
     }
+    // A drag's ghost picks up its piece's redrawn picture.
+    if (this._drag) copyArt(this._drag.ghost.firstElementChild, this._drag.node);
   }
 
   destroy() {
     if (this._isOpen) this.setOpen(false);
+    this._unwatch?.();
     window.removeEventListener('keydown', this._keydown, true);
     window.removeEventListener('keyup', this._keyup, true);
     window.removeEventListener('blur', this._blur);
