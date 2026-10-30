@@ -464,6 +464,10 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
     showHeld();
   } });
 debug.creator = creator;
+// The save's choice, and the screens that say why this page can't save, in
+// the creator's root (`ui/start-choice.js`); built next, so it gets keys first too.
+const choice = new StartChoice({ root: document.getElementById('creator-root'), outside: creator.outside,
+  onChoose: (action) => void choose(action) });
 let firstVisit = wantsCreator(params, characters);
 function welcome() {
   if (!firstVisit) return;
@@ -650,10 +654,6 @@ const wakeBody = () => {
   camera.x = player.x;
   camera.y = player.y - focusRows() - playerLift();
 };
-// The choice, and the screens that say why this page can't save, in the
-// creator's root (`ui/start-choice.js`).
-const choice = new StartChoice({ root: document.getElementById('creator-root'), outside: creator.outside,
-  onChoose: (action) => void choose(action) });
 // Save notices wait while the page starts and while the choice, the creator
 // or the play card hides the HUD, so none runs out unseen. The other-tab or
 // stale screen waits the same way, and is dropped if the store recovers.
@@ -714,7 +714,7 @@ function offer() {
 // The other-tab and stale screens, unless the player plays without saving
 // or a newer save stops saving anyway.
 function warn(state) {
-  if (saveSession.declined || choice.mode === 'newer') return;
+  if (saveSession.declined || [choice.mode, heldScreen].includes('newer')) return;
   heldScreen = state;
   showHeld();
 }
@@ -740,6 +740,11 @@ async function choose(action) {
 // After Continue, New game or a quiet start: play, or say why not.
 async function settle(started) {
   const done = await started;
+  // Land changes from a newer version make the save read-only too.
+  if (done.reason === 'read-only') {
+    heldScreen = 'newer';
+    return showHeld();
+  }
   if (!choice.isOpen) return;
   if (done.ok) play();
   else if (choice.mode !== 'other-tab') choice.fail(saveSession.explain(done.reason));

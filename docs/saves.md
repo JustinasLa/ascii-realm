@@ -32,8 +32,8 @@ session and `game.save.choice` is the Continue / New game panel
     creator opens after the choice.
 - **Screens that stop saving.** The same panel says when this page can't
   save, and offers **Play without saving**:
-  - **A newer save**: the save comes from a newer version of the game.
-    **Reload** gets it.
+  - **A newer save**: the save, or its changes to the land, come from a
+    newer version of the game. **Reload** gets it.
   - **Open in another tab**: another tab is playing this world. **Try
     again** checks once more without taking the save, and shows the choice
     once the other tab has gone.

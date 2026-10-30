@@ -4,6 +4,9 @@ import { loadGame } from './helpers/main-game.js';
 import { emptyRealm, SAVE_FEATURES } from '../src/save/format.js';
 import { SaveStore } from '../src/save/store.js';
 import { NOTICES } from '../src/save/session.js';
+import { InventoryScreen } from '../src/ui/inventory.js';
+import { StartChoice } from '../src/ui/start-choice.js';
+import { installBrowser } from './helpers/station-dom.js';
 
 const KEY = 'ascii-realm-save-1';
 const WORLD = { seed: 1, woodland: 'sparse' };
@@ -186,6 +189,39 @@ test('nothing moves or saves while the choice is open or a save is being put bac
   assert.notEqual(game.dayClock.tick, tick);
 });
 
+test('while the choice is open, Tab, I, Enter and Esc open no inventory and touch no bag', async (t) => {
+  const storage = memory();
+  (await start(storage)).save.tick();
+  const { document } = installBrowser(t);
+  const [bagRoot, choiceRoot] = ['inventory-root', 'creator-root'].map((id) => {
+    const node = document.createElement('div');
+    node.id = id;
+    document.body.append(node);
+    return node;
+  });
+  // The real inventory and choice, on the page's window, in the order main.js makes them.
+  const onWindow = (window) => Object.defineProperty(globalThis, 'window', { configurable: true, writable: true, value: window });
+  const page = await open(storage, '', { InventoryScreen,
+    CharacterPages: class { constructor() { [this.sheet, this.list] = [document.createElement('div'), document.createElement('div')]; } render() {} },
+    StartChoice: class extends StartChoice { constructor(options) { super({ ...options, root: choiceRoot }); } } }, { onWindow });
+  const { game } = page;
+  const bag = JSON.stringify(game.inventory.slots);
+  assert.equal(game.save.saveSession.choosing, true);
+  const panel = choiceRoot.children[0];
+  const press = (code, key) => page.window.dispatchEvent(Object.assign(new Event('keydown', { cancelable: true }),
+    { code, key, shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, repeat: false }));
+  for (const [code, key] of [['Tab', 'Tab'], ['KeyI', 'i'], ['Enter', 'Enter'], ['Escape', 'Escape'], ['KeyI', 'i']]) {
+    press(code, key);
+  }
+  assert.deepEqual([game.inventoryScreen.isOpen, choiceRoot.children[0], page.blocked()], [false, panel, true]);
+  assert.equal(JSON.stringify(game.inventory.slots), bag);
+  game.save.choice.pick('continue');
+  await settle();
+  press('KeyI', 'i');
+  assert.deepEqual([game.save.choice.isOpen, game.inventoryScreen.isOpen, bagRoot.children.length > 0], [false, true, true],
+    'once the choice is made, I opens the bag');
+});
+
 test('New game asks first, then writes a fresh save with ?instruments in the bag and clears the land', async () => {
   const storage = memory();
   const first = await start(storage);
@@ -238,6 +274,29 @@ test('a save from a newer version offers Reload or playing without saving', asyn
   page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
   await settle();
   assert.equal(page.game.save.choice.isOpen, false, 'nothing is offered again');
+});
+
+test('land changes from a newer version turn Continue, or a quiet start, into the newer-save screen', async () => {
+  const storage = memory();
+  (await start(storage)).save.tick();
+  const newerEdits = JSON.stringify({ ...JSON.parse(storage.map.get(KEY)), kind: 'edits', chunks: {}, v: 99 });
+  storage.setItem('ascii-realm-edits-1', newerEdits);
+  const before = storage.map.get(KEY);
+  const page = await open(storage);
+  page.game.inventoryScreen.isOpen = false;
+  const { choice } = page.game.save;
+  assert.equal(choice.mode, 'continue');
+  await choose(page.game, 'continue');
+  assert.deepEqual([choice.shown, choice.failed], [['continue', 'newer'], null]);
+  choice.choose('reload');
+  assert.equal(page.navigatedTo(), 'reload');
+  await choose(page.game, 'decline');
+  assert.deepEqual([choice.isOpen, page.blocked()], [false, false]);
+  assert.deepEqual(plain(page.game.save.now()), { ok: false, reason: 'declined' });
+  assert.deepEqual([storage.map.get(KEY), storage.map.get('ascii-realm-edits-1')], [before, newerEdits]);
+  storage.map.delete(KEY);
+  const quiet = (await open(storage)).game.save.choice;
+  assert.deepEqual(quiet.shown, ['newer']);
 });
 
 test('a save open in another tab shows that screen; Try again checks, then offers the choice', async () => {

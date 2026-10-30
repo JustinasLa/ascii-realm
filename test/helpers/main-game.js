@@ -69,7 +69,7 @@ const inert = () => class {
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
   width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false, real = {},
-  session = new Map(), creator = new URL(href).searchParams.has('creator') } = {}) {
+  session = new Map(), creator = new URL(href).searchParams.has('creator'), onWindow = noop } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -457,6 +457,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   };
   // `real` swaps stand-ins for real systems (or for test worlds).
   Object.assign(context, real);
+  // Real panels made in the test's own realm listen on this window too.
+  onWindow(window);
   runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), context);
   await Promise.resolve();
   await Promise.resolve();
