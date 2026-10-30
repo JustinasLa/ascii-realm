@@ -102,9 +102,10 @@ find it, and dust over it throws blade bits rather than grit.
   largest of 2, 4, … 12 m, tried from the smallest up, whose ring of 8 probes
   (`ringInside`) stays inside its bog. Rings within the lookup's safe radius
   pass without probing, so a bog's interior costs one lookup per point.
-- Each cell takes the least depth of its lattice block's four corners. A
-  border runs straight across a block, so no cell lies deeper than its own
-  rings allow; a test checks every cell along three bogs' edges.
+- A lattice block whose four corners all reach 12 m keeps 12 m, and one with
+  no corner past 2 m stays dry. Every other cell takes the depth of its own
+  rings, so no cell lies deeper than its own rings allow, however a border
+  bends between the corners; a test checks every cell along three bogs' edges.
 - A cell's **wetness** is `smooth(3, 9, e − 3n)`, with `n` slow noise, stored
   in `chunk.bog` (0–255). No cell within 3 m of the border is wet.
 - Meadow still meadow after the rivers, with wetness above one half, becomes
@@ -116,9 +117,10 @@ find it, and dust over it throws blade bits rather than grit.
 Bogs are a drawing layer only. Each bog chunk keeps `landType`, its land
 before rivers and bogs, and `preRiverTypeAt` reads it, so trees, rocks, veins
 and groves are exactly where they are without bogs, with the same ids. Measured
-warm (provinces already looked up), a chunk at a bog's edge takes about 1.4–1.5×
-a meadow chunk's build time and one inside a bog about 1.1–1.2×; meadow chunks
-cost the same as without bogs. Cold-cache builds and the render loop on desktop
+warm (provinces already looked up), a chunk at a bog's edge takes about 3.5–6×
+a meadow chunk's build time (about 5–10 ms, as its cells are measured one by
+one) and one inside a bog about 1.1–1.2×; meadow chunks cost the same as
+without bogs. Cold-cache builds and the render loop on desktop
 and phone were not measured.
 
 The builder has a **Bog** brush, and `?bog` starts the game at the edge of

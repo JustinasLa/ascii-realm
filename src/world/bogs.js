@@ -63,20 +63,30 @@ export function paintBog(world, cx, cy, size, type, land) {
     const id = provinces.idAt(x, y);
     corner[q] = provinces.terrain(id) === 'bog' ? bogDepth(provinces, id, x, y) : 0;
   }
-  // A block takes the least depth of its four corners: a border runs straight
-  // across 0.4 m, so no cell in it lies deeper than its own rings allow.
-  const depth = new Uint8Array((cols - 1) * (size / LATTICE_Y));
+  // A block whose four corners all lie at the deepest ring keeps it; any
+  // other block with a corner past the first ring measures each cell by its
+  // own rings, as a border may bend in between its corners. The rest stay dry.
+  const deepest = STEPS[STEPS.length - 1];
+  const depth = new Int8Array((cols - 1) * (size / LATTICE_Y));
   for (let q = 0; q < depth.length; q++) {
     const a = Math.floor(q / (cols - 1)) * cols + (q % (cols - 1));
-    depth[q] = Math.min(corner[a], corner[a + 1], corner[a + cols], corner[a + cols + 1]);
+    const lo = Math.min(corner[a], corner[a + 1], corner[a + cols], corner[a + cols + 1]);
+    const hi = Math.max(corner[a], corner[a + 1], corner[a + cols], corner[a + cols + 1]);
+    depth[q] = lo === deepest ? deepest : hi > STEPS[0] ? -1 : 0;
   }
   for (let i = 0; i < wet.length; i++) {
     const lx = i % size;
     const ly = Math.floor(i / size);
+    const x = cx * size + lx;
+    const y = cy * size + ly;
     const q = Math.floor(ly / LATTICE_Y) * (cols - 1) + Math.floor(lx / LATTICE_X);
-    const e = depth[q];
+    let e = depth[q];
+    if (e < 0) {
+      const id = provinces.idAt(x, y);
+      e = provinces.terrain(id) === 'bog' ? bogDepth(provinces, id, x, y) : 0;
+    }
     if (!e) continue;
-    const w = wetness(e, cx * size + lx, cy * size + ly, world.seed);
+    const w = wetness(e, x, y, world.seed);
     wet[i] = Math.round(w * 255);
     if (type[i] === GRASS && w > 0.5) type[i] = BOG;
   }
