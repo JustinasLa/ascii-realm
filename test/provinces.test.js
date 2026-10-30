@@ -128,6 +128,27 @@ test('neighbours are exactly the provinces 4-adjacent on the cell grid', () => {
   }
 });
 
+test('neighbours stay exact for a province straddling the bounds, looked up first', () => {
+  const id = provinceId(-2884, 0);
+  const fresh = new Provinces(1);
+  const list = fresh.neighbours(id);
+  const s = fresh.seedOf(-2884, 0);
+  // Its bounding box starts past the bounds.
+  assert.ok(toCellPoint(-2885 * S - 24, 0).x < -MAX_COORD);
+  const lo = toCellPoint(s.x - 140, s.y - 140), hi = toCellPoint(s.x + 140, s.y + 140);
+  const brute = bruteBorders(new Provinces(1), -MAX_COORD, Math.floor(lo.y), Math.ceil(hi.x), Math.ceil(hi.y));
+  assert.ok(list.length >= 3);
+  assert.deepEqual(list, [...brute.get(id)].sort((a, b) => a - b));
+  const warm = new Provinces(1);
+  warm.idAt(0, 0);
+  assert.deepEqual(warm.neighbours(id), list);
+  // Past the top bound too: no province 0, and each neighbour lists it back.
+  const top = provinceId(0, 9615);
+  const near = fresh.neighbours(top);
+  assert.ok(near.length >= 2 && !near.includes(0));
+  for (const other of near) assert.ok(fresh.neighbours(other).includes(top));
+});
+
 test('neighbours are symmetric', () => {
   for (const seed of [1, 2, 3]) {
     const p = new Provinces(seed);
@@ -166,10 +187,33 @@ test('about a tenth of the land is bog, leaning towards lakes', () => {
 test('no province holding spawn or reaching within 64 m of it is bog', () => {
   for (let seed = 1; seed <= 5; seed++) {
     const spawn = spawnOf(seed);
+    const sx = Math.floor(spawn.x), sy = Math.floor(spawn.y);
     const p = new Provinces(seed, { spawn });
-    assert.notEqual(p.terrain(p.idAt(spawn.x, spawn.y)), 'bog');
-    for (let k = 0; k < 8; k++) assert.notEqual(p.terrain(p.probe(spawn.x, spawn.y, SPAWN_CLEAR, k)), 'bog');
+    // Low lakeside everywhere: over half the provinces would be bog.
+    const wet = new Provinces(seed, { spawn, landTypeAt: () => SHORE, elevAt: () => 0.3 });
+    // Every cell of the disk.
+    const m = toMetres(sx, sy);
+    const disk = new Set();
+    const rx = Math.ceil(SPAWN_CLEAR * toCellPoint(1, 1).x), ry = Math.ceil(SPAWN_CLEAR * toCellPoint(1, 1).y);
+    for (let y = sy - ry; y <= sy + ry; y++) {
+      for (let x = sx - rx; x <= sx + rx; x++) {
+        const c = toMetres(x, y);
+        if (Math.hypot(c.x - m.x, c.y - m.y) <= SPAWN_CLEAR) disk.add(p.idAt(x, y));
+      }
+    }
+    for (const id of disk) {
+      assert.notEqual(p.terrain(id), 'bog', `seed ${seed}: ${id}`);
+      assert.notEqual(wet.terrain(id), 'bog', `seed ${seed}: ${id}`);
+    }
+    assert.deepEqual([...p.clear].sort(), [...disk].sort());
   }
+  // On seed 5 a province reaches into the disk between the 8 directions.
+  const spawn = spawnOf(5);
+  const p = new Provinces(5, { spawn });
+  p.nearSpawn(0);
+  const probed = new Set([0, 1, 2, 3, 4, 5, 6, 7].map(k => p.probe(spawn.x, spawn.y, SPAWN_CLEAR, k)));
+  probed.add(p.idAt(spawn.x, spawn.y));
+  assert.ok([...p.clear].some(id => !probed.has(id)));
   // A bog stays a bog until spawn sits in it, or just across its border.
   const free = new Provinces(1);
   const bog = free.nearest('bog', 0, 0);
@@ -220,6 +264,16 @@ test('nearest finds the closest bog, or null when none is in reach', () => {
     return Math.hypot(h.x - m.x, h.y - m.y);
   };
   for (const id of ids(p, -10, -10, 20)) if (p.terrain(id) === 'bog') assert.ok(dist(id) >= dist(bog));
+});
+
+test('nearest skips provinces past the bounds, which have no heart', () => {
+  const p = new Provinces(1);
+  const id = p.nearest('land', MAX_COORD, 0);
+  const h = p.heart(id);
+  assert.equal(p.terrain(id), 'land');
+  assert.equal(p.idAt(h.x, h.y), id);
+  assert.equal(p.heart(provinceId(2885, 0)), null);
+  assert.equal(p.terrain(provinceId(2885, 0)), 'land');
 });
 
 test('edgePoint stands just inside a province, facing a point', () => {

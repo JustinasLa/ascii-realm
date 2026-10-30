@@ -34,6 +34,8 @@ square:
 
 Beyond 10 000 000 cells from the origin on either axis, `idAt` returns the
 reserved id `0`: no province, terrain `land`, no heart and no neighbours.
+Scans stop at that bound, so a province cut off by it has no neighbour `0`,
+and one wholly past it is land with no heart, which `nearest` skips.
 
 ## Terrain
 
@@ -48,8 +50,9 @@ reads the seeded land as it is before rivers, without building chunks.
   so the share comes out near 10% on seeds 1–5. No chance is above 60%.
 - **land:** everything else.
 
-A province is never bog when it holds spawn, or when any of 8 points 64 m
-round spawn falls inside it. That keeps the starter ruins on meadow. The
+A province is never bog when any of its cells lies within 64 m of spawn.
+That disk is read exactly, row by row like `neighbours` (below), once per
+world. That keeps the starter ruins on meadow. The
 world's `bogs: false` option makes no province bog.
 
 ## Finding things

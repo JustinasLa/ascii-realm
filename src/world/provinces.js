@@ -171,9 +171,9 @@ export class Provinces {
         d.samples.push(p);
       }
     }
-    // The seed itself always lies in its province (no warp moves a point half
-    // way to another seed), so there is at least one sample.
+    // Only a province past the bounds can have no sample: land with no heart.
     const kept = d.samples.length;
+    if (!kept) return d;
     if (water > kept / 2) d.terrain = 'water';
     else if (this.bogs && !this.nearSpawn(id)) {
       const low = Math.max(0, Math.min(1, (0.56 - elev / kept) / 0.12));
@@ -184,12 +184,21 @@ export class Provinces {
     return d;
   }
 
-  // Whether a province holds spawn or reaches within SPAWN_CLEAR of it.
+  // Whether a province has a cell within SPAWN_CLEAR of spawn, read exactly
+  // row by row across that ground disk, once.
   nearSpawn(id) {
-    const { x, y } = this.spawn;
-    if (this.idAt(x, y) === id) return true;
-    for (let k = 0; k < PROBES; k++) if (this.probe(x, y, SPAWN_CLEAR, k) === id) return true;
-    return false;
+    if (!this.clear) {
+      this.clear = new Set();
+      const { x, y } = this.spawn;
+      const perRow = SCALE * TILT;
+      const rows = Math.floor(SPAWN_CLEAR * perRow);
+      for (let dy = -rows; dy <= rows; dy++) {
+        const half = Math.floor(Math.sqrt(Math.max(0, SPAWN_CLEAR ** 2 - (dy / perRow) ** 2)) * SCALE / ASPECT);
+        const row = this.runs(y + dy, x - half, x + half, 0, null);
+        for (let k = 1; k < row.length; k += 2) this.clear.add(row[k]);
+      }
+    }
+    return this.clear.has(id);
   }
 
   terrain(id) {
@@ -259,17 +268,20 @@ export class Provinces {
   // within its safe radius; away from `id`, it also vouches that no cell of
   // `id` lies within half the gap to `id`'s seed (brought back through the
   // warp), and the cells whose neighbours are all that far in become an
-  // OTHER run, whatever province they are in.
+  // OTHER run, whatever province they are in (never with no `seed`). Cells
+  // past the bounds are left out.
   runs(y, x0, x1, id, seed) {
     const perCol = ASPECT / SCALE;
     const perRow = 1 / (SCALE * TILT);
     const f = this.found;
     const out = [];
-    for (let x = x0, last = OTHER; x <= x1;) {
+    if (Math.abs(y) > MAX_COORD) return out;
+    x1 = Math.min(x1, MAX_COORD);
+    for (let x = Math.max(x0, -MAX_COORD), last = OTHER; x <= x1;) {
       const here = this.idAt(x, y);
       if (here !== last) out.push(x, last = here);
       let step = Math.max(1, Math.ceil(this.safeRadius() / perCol) - 1);
-      if (here !== id) {
+      if (seed && here !== id) {
         const away = (Math.hypot(f.wx - seed.x, f.wy - seed.y) - f.d1) / (2 * LIPSCHITZ) - perRow;
         const skip = Math.ceil(away / perCol) - 1;
         if (skip > step) {
@@ -299,6 +311,7 @@ export class Provinces {
           const id = provinceId(i, j);
           if (this.terrain(id) !== terrain) continue;
           const heart = this.heart(id);
+          if (!heart) continue;
           const h = toMetres(heart.x, heart.y);
           const dist = Math.hypot(h.x - m.x, h.y - m.y);
           if (dist < bestDist) {
