@@ -46,6 +46,12 @@ export function cleanStack(raw) {
   const stack = { id: raw.id, count: Math.min(raw.count, item.stackLimit), ...stackExtras(raw) };
   return validStack(raw) ? stack : { ...stack, clamped: true };
 }
+// A stored stack as the bag holds it, without the clamp mark, or null.
+function unmarked(raw) {
+  const stack = raw ? cleanStack(raw) : null;
+  if (stack) delete stack.clamped;
+  return stack;
+}
 const sameExtras = (stack, extras) => JSON.stringify(stackExtras(stack)) === JSON.stringify(stackExtras(extras));
 
 // Fills existing stacks before empty slots. Callers can use a copy of the bag
@@ -275,6 +281,50 @@ export class Inventory {
     stack.count -= amount;
     if (!stack.count) this.slots[index] = null;
     return amount > 0;
+  }
+
+  // Plain copies of the bag and worn gear, for a save: later play can't
+  // change them.
+  serialize() {
+    const worn = EQUIPMENT_SLOTS.map((slot) => [slot, unmarked(this.equipment[slot])]);
+    return { bag: this.slots.map(unmarked), worn: Object.fromEntries(worn) };
+  }
+
+  // Puts a saved bag and worn gear back, changing `slots` and `equipment` in
+  // place so whatever holds them sees the change: `{ dropped }`, the items
+  // that found no room. Bag stacks keep their places and stacks past the bag
+  // find room as pickups do. Gear that no longer fits its slot is worn in
+  // another free one or goes in the bag, and a two-handed weapon sends the
+  // off hand there. The load may be over capacity; it makes no pickup sounds.
+  restore({ bag, worn } = {}) {
+    this.slots.fill(null);
+    for (const slot of EQUIPMENT_SLOTS) this.equipment[slot] = null;
+    const loose = [];
+    (Array.isArray(bag) ? bag : []).forEach((raw, index) => {
+      const stack = unmarked(raw);
+      if (stack && index < SLOT_COUNT) this.slots[index] = stack;
+      else if (stack) loose.push(stack);
+    });
+    for (const [wanted, raw] of Object.entries(worn ?? {})) {
+      const stack = unmarked(raw);
+      const item = stack && ITEMS[stack.id];
+      const slot = item && (fitsSlot(item, wanted) && !this.equipment[wanted] ? wanted : this.targetSlot(item));
+      if (!slot || this.equipment[slot]) {
+        if (stack) loose.push(stack);
+      } else if (STACK_SLOTS.includes(slot) || stack.count === 1) this.equipment[slot] = stack;
+      else {
+        this.equipment[slot] = { ...stack, count: 1 };
+        loose.push({ ...stack, count: stack.count - 1 });
+      }
+    }
+    if (itemFor(this.equipment.mainHand?.id)?.twoHanded && this.equipment.offHand) {
+      loose.push(this.equipment.offHand);
+      this.equipment.offHand = null;
+    }
+    let dropped = 0;
+    for (const { id, count, ...extras } of loose) dropped += count - putInSlots(this.slots, id, count, extras);
+    this.events.length = 0;
+    return { dropped };
   }
 
   // Everything of an item carried, in the bag and worn.

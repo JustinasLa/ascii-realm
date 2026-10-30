@@ -46,6 +46,9 @@ import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
+import { emptyRealm } from './save/format.js';
+import { SaveStore } from './save/store.js';
+import { applyBody, bodyIdOf, fileBody, putBody, starterKit } from './save/body.js';
 import { attributeTotals, nameError, normalName } from './character/rules.js';
 import { classOf } from './character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
@@ -244,9 +247,7 @@ const player = new Player(spawn.x, spawn.y);
 // The outlaw sets out with the sword at the hip and a stone pickaxe for ore
 // veins (and the torch, which is not an item). Only ore can be gathered.
 const inventory = new Inventory({ starter: false });
-inventory.add('shortSword');
-inventory.equip(0);
-inventory.add('stonePickaxe');
+inventory.restore(starterKit());
 // Until instruments can be crafted, ?instruments puts one of each in the bag.
 if (params.has('instruments')) for (const id of INSTRUMENT_IDS) inventory.add(id);
 inventory.events.length = 0;
@@ -624,6 +625,57 @@ Object.assign(debug, { furnaces, furnaceScreen, alloyBook, forgeScreen, smithySc
 const saveStations = () => { furnaces.save(); alloyBook.save(); };
 window.addEventListener('pagehide', saveStations);
 document.addEventListener('visibilitychange', () => document.hidden && saveStations());
+// Saves of play on this world, kept on this device (see docs/saves.md): solo
+// pages in a real world only. Nothing saves on its own yet; with ?debug,
+// `game.save` saves and restores by hand.
+const saveTarget = inLobby || ruinPreview || hillScene ? null : { seed, woodland: world.woodland };
+const saveOff = inLobby ? 'lobby' : 'scene';
+const saves = saveTarget && new SaveStore({ storage: walletStorage, world: saveTarget, events: window,
+  locks: navigator.locks ?? null });
+// The live body and whose it is (`save/body.js`).
+const live = { player, inventory, world, appliedId: bodyIdOf(characters) };
+// Bodies a character switch filed that no save has written yet, by id. They
+// go into whichever realm the next save writes, even one claimed meanwhile.
+const unsaved = new Map();
+// After a body is put back, the camera and pose wake with it, as after a defeat.
+const wakeBody = () => {
+  casting.reset();
+  model?.resetPose(player);
+  camera.x = player.x;
+  camera.y = player.y - focusRows() - playerLift();
+};
+if (params.has('debug')) debug.save = { store: saves, live,
+  // Files the unsaved bodies and the live body into the claimed save (a new
+  // one when none is stored) and writes it.
+  now() {
+    if (!saves) return { ok: false, reason: saveOff };
+    const realm = saves.realm ?? emptyRealm(saveTarget);
+    const liveIds = characters.characters.map((character) => character.id);
+    for (const [id, body] of unsaved) putBody(realm, id, body, liveIds);
+    const outgoing = live.appliedId;
+    if (fileBody(realm, live, characters)) {
+      wakeBody();
+      if (realm.bodies[outgoing]) unsaved.set(outgoing, realm.bodies[outgoing]);
+    }
+    const written = saves.write('realm', realm);
+    if (written.ok) {
+      saves.realm = realm;
+      unsaved.clear();
+    }
+    return written;
+  },
+  read: () => saves ? saves.read() : { status: saveOff },
+  claim: async () => saves ? saves.claim() : { ok: false, reason: saveOff },
+  // Claims the save and puts the active character's body back.
+  async restore() {
+    const claimed = await debug.save.claim();
+    const status = claimed.ok ? claimed.status : claimed.reason;
+    const body = claimed.record?.bodies[bodyIdOf(characters)];
+    if (!claimed.ok || !body) return { status, repaired: claimed.repaired ?? 0, applied: false };
+    const { repaired } = applyBody(body, live, bodyIdOf(characters));
+    wakeBody();
+    return { status, repaired: claimed.repaired + repaired, applied: true };
+  } };
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
   setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen
@@ -646,6 +698,8 @@ const remotePlayers = new RemotePlayers();
 const multiplayer = new MultiplayerClient({
   getState: () => playerState(player),
   onJoin: (lobby) => {
+    // A lobby moves this same player, so its play is never saved over the solo save.
+    saves?.pause('lobby');
     if (needsWorldReload(lobby, seed, world.woodland) || reloadsForLobby) {
       const url = lobbyWorldUrl(location.href, lobby, multiplayer.options?.server);
       try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}

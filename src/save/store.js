@@ -44,7 +44,7 @@ export class SaveStore {
     this.foreign = false;
     this.onForeign = null;
     this.onHide = null;
-    // The realm record `claim()` read, or null.
+    // The realm record `claim()` read or this page last wrote, or null.
     this.realm = null;
     this.quarantined = {};
     this.unlock = null;

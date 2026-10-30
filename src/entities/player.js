@@ -294,6 +294,17 @@ export class Player {
     this.settleCape();
   }
 
+  // Waking where a save left off: a fresh pose there as after a defeat, but
+  // facing `heading` and with the saved health (at least 1) and stamina.
+  restoreAt(x, y, { heading, health, stamina } = {}) {
+    this.respawn(x, y);
+    const { vitals } = this;
+    if (Number.isFinite(heading)) this.heading = angleTo(0, heading);
+    if (Number.isFinite(health)) vitals.health = Math.min(Math.max(health, 1), vitals.maxHealth);
+    if (Number.isFinite(stamina)) vitals.stamina = Math.min(Math.max(stamina, 0), vitals.maxStamina);
+    vitals.clamp();
+  }
+
   // Unequipping the weapon puts it away at once, mid-swing or not.
   cancelWeapon() {
     this.combat.cancel();
