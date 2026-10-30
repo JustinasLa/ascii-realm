@@ -1,6 +1,6 @@
 import { readForged } from '../crafting/forged.js';
 import { isMaterialId } from '../entities/weapons.js';
-import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS, slotsFor } from './items.js';
+import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS, fitsSlot, slotsFor } from './items.js';
 
 const SLOT_COUNT = 24;
 const WEIGHT_EPSILON = 1e-9;
@@ -73,6 +73,17 @@ function restore(vitals, stat, amount) {
   const restored = Math.min(amount, maximum - current);
   vitals[stat] = current + restored;
   return restored;
+}
+
+// Two worn slots trade what they hold when each piece fits the other's slot
+// (ring ↔ ring). `def` looks an item up, so tests can pass ring definitions.
+export function canSwap(equipment, a, b, def = itemFor) {
+  if (a === b || !EQUIPMENT_SLOTS.includes(a) || !EQUIPMENT_SLOTS.includes(b) || !(equipment[a] || equipment[b])) return false;
+  const fits = (stack, slot) => {
+    const item = stack && def(stack.id);
+    return !stack || !!item && validCount(stack.count) && stack.count <= item.stackLimit && fitsSlot(item, slot);
+  };
+  return fits(equipment[a], b) && fits(equipment[b], a);
 }
 
 export class Inventory {
@@ -229,6 +240,14 @@ export class Inventory {
     if (putInSlots(planned, stack.id, stack.count, stackExtras(stack)) !== stack.count) return false;
     this.slots.splice(0, SLOT_COUNT, ...planned);
     this.equipment[slot] = null;
+    return true;
+  }
+
+  canSwapEquipped(a, b, def) { return canSwap(this.equipment, a, b, def); }
+
+  swapEquipped(a, b, def) {
+    if (!this.canSwapEquipped(a, b, def)) return false;
+    [this.equipment[a], this.equipment[b]] = [this.equipment[b], this.equipment[a]];
     return true;
   }
 

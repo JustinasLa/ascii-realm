@@ -78,6 +78,12 @@ test('the item tooltip keeps inside the screen, its lines scrolling over 44 px b
   assert.match(css, /\.inventory-screen :is\(\.bag-card, \.equipment-slot\) \{ touch-action: pan-y; -webkit-touch-callout: none;/);
 });
 
+test('a drag ghost sizes its art to itself, and the details pane is gone', () => {
+  assert.match(css, /\.drag-ghost \{ container-type: size;[^}]*width: 56px; aspect-ratio: 1 \/ 2;[^}]*pointer-events: none; \}/);
+  assert.match(css, /\.inventory-screen :is\(\.equipment-slot, \.inventory-bag\)\.drop-ok \{ border-color: var\(--accent\); outline: 1px dashed var\(--accent\);/);
+  assert.doesNotMatch(css, /\.inventory-(details|actions|item-|stats|weight|durability|description)/);
+});
+
 test('the play card and the Full screen row are in the page, hidden until needed', () => {
   assert.match(html, /<button type="button" id="play-gate" hidden aria-label="Tap to play">/);
   assert.match(html, /class="play-gate-action">TAP TO PLAY</);
