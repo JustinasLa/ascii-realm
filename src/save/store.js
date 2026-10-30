@@ -44,7 +44,8 @@ export class SaveStore {
     this.foreign = false;
     this.onForeign = null;
     this.onHide = null;
-    // The realm record `claim()` read, or null.
+    // The realm record in play: the one `claim()` read, or one the page began
+    // for its first save, kept even when that save is refused; null before.
     this.realm = null;
     this.quarantined = {};
     this.unlock = null;

@@ -111,3 +111,28 @@ test('a save after the active character changed files the live body under its ow
   assert.equal(active, 'c0123456789abcdef');
   assert.equal(game.camera.x, 0, 'the camera wakes with the new body');
 });
+
+test('a refused first save after a character switch keeps the outgoing body for the next save', async () => {
+  const storage = memory();
+  const game = await start(storage);
+  game.player.x = 12;
+  game.inventory.add('oakLog', 3);
+  const bag = plain(game.inventory.serialize());
+  Object.defineProperty(game.characters, 'active', { get: () => ({ id: 'c0123456789abcdef' }) });
+  Object.defineProperty(game.characters, 'characters', { get: () => [{ id: 'c0123456789abcdef' }] });
+  const { setItem } = storage;
+  storage.setItem = (key, value) => {
+    if (key === KEY) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' });
+    setItem(key, value);
+  };
+  assert.deepEqual(plain(game.save.now()), { ok: false, reason: 'quota' });
+  assert.equal(storage.map.has(KEY), false);
+  assert.equal(game.player.x, 0, 'the new character is played');
+  storage.setItem = setItem;
+  game.player.x = 3;
+  assert.equal(game.save.now().ok, true);
+  const { bodies } = JSON.parse(storage.map.get(KEY));
+  assert.equal(bodies.outlaw.x, 12, 'the outgoing body was kept through the refusal');
+  assert.deepEqual({ bag: bodies.outlaw.bag, worn: bodies.outlaw.worn }, bag);
+  assert.equal(bodies.c0123456789abcdef.x, 3);
+});

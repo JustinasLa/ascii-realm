@@ -643,14 +643,13 @@ const wakeBody = () => {
 };
 if (params.has('debug')) debug.save = { store: saves, live,
   // Files the live body into the claimed save (a new one when none is
-  // stored) and writes it.
+  // stored) and writes it. The realm stays in memory whether or not the write
+  // lands, so a refused save loses no body filed by a character switch.
   now() {
     if (!saves) return { ok: false, reason: saveOff };
-    const realm = saves.realm ?? emptyRealm(saveTarget);
+    const realm = saves.realm ??= emptyRealm(saveTarget);
     if (fileBody(realm, live, characters)) wakeBody();
-    const written = saves.write('realm', realm);
-    if (written.ok) saves.realm = realm;
-    return written;
+    return saves.write('realm', realm);
   },
   read: () => saves ? saves.read() : { status: saveOff },
   claim: async () => saves ? saves.claim() : { ok: false, reason: saveOff },
