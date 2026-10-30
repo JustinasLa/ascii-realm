@@ -29,6 +29,7 @@ export class Seasons {
     this.solo = { length, pinned };
     this.shared = false;
     this.day = 0;
+    this.tick = 0;
     // Trees being made again: prop → { want, source, handle, retried }.
     this.jobs = new Map();
     // Trees no worker could make, which keep their look.
@@ -43,20 +44,28 @@ export class Seasons {
   get dayOfSeason() { return dayOfSeason(this.day, this.length); }
   get pending() { return this.jobs.size; }
 
-  // Once a frame, with the frame's props. `instant` while nothing is watched
-  // (the play card is up, or the frame is pinned); `hold` while a lobby is
-  // being joined, whose season is not yet known; `visible(prop, bounds)`
-  // whether a tree is seen, directly or in the water.
-  update(props, day, tick, time, { instant = false, hold = false, shared = false, visible = () => false } = {}) {
-    if (hold) return;
+  // The world's season for the day, before the frame makes any land, so
+  // land first made at sunrise grows in the new season. `hold` while a lobby
+  // is being joined, whose season is not yet known. False while held.
+  roll(day, { hold = false, shared = false } = {}) {
+    if (hold) return false;
     this.shared = shared;
     this.day = day;
-    const plan = this.plan;
-    const name = seasonAt(day, plan);
+    const name = seasonAt(day, this.plan);
     if (this.world.season !== name) {
       this.world.season = name;
       if (this.debris) this.debris.season = name;
     }
+    return true;
+  }
+
+  // Once a frame, with the frame's props. `instant` while nothing is watched
+  // (the play card is up); `hold` as for roll; `visible(prop, bounds)`
+  // whether a tree is seen, directly or in the water.
+  update(props, day, tick, time, { instant = false, hold = false, shared = false, visible = () => false } = {}) {
+    if (!this.roll(day, { hold, shared })) return;
+    this.tick = tick;
+    const plan = this.plan;
     for (const prop of props) {
       if (!seasonal(prop)) continue;
       const want = treeSeasonAt(prop, day, tick, plan);
@@ -74,7 +83,7 @@ export class Seasons {
   finish() {
     for (const [prop, job] of this.jobs) {
       this.#drop(prop, job);
-      if (seasonal(prop)) this.#commit(prop, job.source, job.handle.result ?? bakeWhole(job.source));
+      if (this.#wanted(prop, job)) this.#commit(prop, job.source, job.handle.result ?? bakeWhole(job.source));
     }
   }
 
@@ -83,6 +92,12 @@ export class Seasons {
     const source = fineSource(prop);
     const next = { ...source, options: { ...source.options, season: want } };
     this.jobs.set(prop, { want, source: next, handle: rebake(next), retried: false });
+  }
+
+  // Whether a job still makes the season its tree wants now, in view of
+  // this frame or not: a clock jump or a lobby may have moved it on.
+  #wanted(prop, job) {
+    return seasonal(prop) && job.want === treeSeasonAt(prop, this.day, this.tick, this.plan);
   }
 
   #drop(prop, job) {
@@ -98,13 +113,13 @@ export class Seasons {
       const { handle } = job;
       if (handle.failed) {
         this.jobs.delete(prop);
-        this.#failed(prop, job);
+        if (this.#wanted(prop, job)) this.#failed(prop, job);
         continue;
       }
       // A tree that came into view keeps its old look until it leaves.
       if (!handle.result || (!instant && (visible(prop) || visible(prop, handle.result.bounds)))) continue;
       this.jobs.delete(prop);
-      if (!seasonal(prop)) continue;
+      if (!this.#wanted(prop, job)) continue;
       this.#commit(prop, job.source, handle.result);
       landed++;
     }

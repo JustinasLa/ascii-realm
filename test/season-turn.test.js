@@ -191,6 +191,42 @@ test('a tree wanted back in its own season before it lands is left as it is', ()
   }
 });
 
+test('a tree is landed only in the season the clock wants when it lands, in this frame\'s props or not', () => {
+  rebakeHere(bakeWhole);
+  try {
+    const { world, trees } = scene();
+    const [jumped, joined, shot, failed] = trees;
+    const cells = trees.map((p) => p.cells);
+    const seasons = new Seasons(world);
+    const byNewCrown = { visible: (p, b) => b !== undefined };
+    // A clock jump back to summer, with the tree out of the frame's props.
+    seasons.update([jumped], 27, 23999, 0, byNewCrown);
+    seasons.update([], 0, 0, 0);
+    assert.equal(seasons.pending, 0);
+    // A lobby's realm, in winter.
+    seasons.update([joined], 27, 23999, 0, byNewCrown);
+    seasons.update([], 60, 0, 0, { shared: true });
+    assert.equal(seasons.pending, 0);
+    // A scripted shot after a jump back.
+    seasons.update([shot], 27, 23999, 0, byNewCrown);
+    seasons.update([], 0, 0, 0, { visible: () => true });
+    assert.equal(seasons.pending, 1);
+    seasons.finish();
+    // A job no worker made, no longer wanted: dropped, not kept back.
+    seasons.update([failed], 27, 23999, 0, byNewCrown);
+    seasons.jobs.get(failed).handle.failed = true;
+    seasons.update([], 0, 0, 0);
+    assert.equal(seasons.pending, 0);
+    assert.equal(seasons.failed, 0);
+    assert.deepEqual([jumped, joined, shot, failed].map((p) => p.season), ['summer', 'summer', 'summer', 'summer']);
+    assert.deepEqual(trees.slice(0, 4).map((p) => p.cells), cells.slice(0, 4));
+    seasons.update([failed], 27, 23999, 0);
+    assert.equal(failed.season, 'autumn', 'and asked for again when wanted');
+  } finally {
+    rebakeHere(null);
+  }
+});
+
 test('landings stop for the frame once a millisecond has gone', () => {
   rebakeHere(bakeWhole);
   const now = performance.now;

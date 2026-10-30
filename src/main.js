@@ -1534,6 +1534,9 @@ function frame(now) {
   }
   dayClock.hold(debug.freeze);
   dayClock.advance(dt, Date.now());
+  // The day's season, before this frame makes any land (see world/season-turn.js).
+  const seasonHold = !dayClock.shared && ['connecting', 'reconnecting'].includes(multiplayer.status);
+  seasons.roll(dayClock.day, { hold: seasonHold, shared: dayClock.shared });
   const sky = dayClock.sky();
   updateZoom(debug.pinTime === null ? dt : step);
   glideFraming(step);
@@ -1891,8 +1894,8 @@ function frame(now) {
     view.x0 + view.cols + marginX, view.y0 + view.rows + tall + below, wide);
   // Trees turn while a season's last night passes (see world/season-turn.js).
   const seasonStart = performance.now();
-  seasons.update(props, dayClock.day, dayClock.tick, time, { instant: gate.waiting || debug.pinTime !== null,
-    hold: !dayClock.shared && ['connecting', 'reconnecting'].includes(multiplayer.status), shared: dayClock.shared,
+  seasons.update(props, dayClock.day, dayClock.tick, time, { instant: gate.waiting,
+    hold: seasonHold, shared: dayClock.shared,
     visible: (p, bounds = p.bounds) => propInView(lv(p.x, p.y), { x: p.x, y: p.y, bounds }, false, MAX_LEAF_DRIFT)
       || propInView(view, { x: p.x, y: p.y, bounds }, true) });
   debug.metrics.seasonMs = performance.now() - seasonStart;

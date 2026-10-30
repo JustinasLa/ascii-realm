@@ -106,3 +106,65 @@ test('the world\'s season rolls with the clock\'s days, and the URL can pin it',
   const lobby = await load('&season=winter&room=AB7K2D');
   assert.equal(lobby.game.world.options.season, seasonAt(realmDay(Date.now())), 'a lobby starts in the realm\'s season');
 });
+
+test('land first made on the sunrise frame grows in the new season', async () => {
+  const { game, frame } = await load('&daylen=20');
+  const seen = [];
+  const propsIn = game.world.propsIn.bind(game.world);
+  game.world.propsIn = (...args) => { seen.push(game.world.season); return propsIn(...args); };
+  game.dayClock.days = 27;
+  game.dayClock.set(23999.9);
+  frame(1 / 60);
+  assert.equal(game.dayClock.day, 28, 'this frame crossed sunrise');
+  assert.ok(seen.length && seen.every((season) => season === 'autumn'), `${seen}`);
+});
+
+test('a pinned frame turns no tree in view, only those out of it', async () => {
+  const { makeTree } = await import('../src/world/trees.js');
+  const { rebakeHere } = await import('../src/world/fine-bakes.js');
+  const { bakeWhole } = await import('../src/world/props.js');
+  rebakeHere(bakeWhole);
+  try {
+    const { game, frame } = await load('&pintime=5', { real: { propDepthSlices: () => null,
+      propInView: (view, p) => p.x < 5 } });
+    const seen = makeTree(2.5, 3.5, () => 0.5, { species: 'oak' });
+    const away = makeTree(9.5, 3.5, () => 0.5, { species: 'oak' });
+    game.world.propsIn = () => [seen, away];
+    game.world.measureProp = () => {};
+    game.dayClock.days = 27;
+    game.dayClock.set(23999);
+    frame();
+    assert.equal(seen.season, 'summer', 'in view, so it keeps its season');
+    assert.equal(game.seasons.pending, 0);
+    assert.equal(away.season, 'autumn');
+  } finally {
+    rebakeHere(null);
+  }
+});
+
+test('a page started in a lobby follows the realm while shared, and leaving it brings back its own seasons', async () => {
+  const { seasonAt } = await import('../src/world/seasons.js');
+  const { realmDay } = await import('../src/world/clock.js');
+  for (const [query, after] of [['&season=winter&seasondays=3', 'winter'], ['&seasondays=3', 'autumn']]) {
+    const { game, frame } = await load(`${query}&room=AB7K2D`);
+    const realm = game.world.season;
+    // Joining: the season holds until the clock is shared.
+    game.multiplayer.status = 'connecting';
+    game.dayClock.days = 3;
+    frame();
+    assert.equal(game.world.season, realm, query);
+    game.multiplayer.room = { code: 'AB7K2D' };
+    game.multiplayer.status = 'connected';
+    frame();
+    assert.equal(game.world.season, seasonAt(realmDay(Date.now())), query);
+    assert.equal(game.seasons.pinned, null);
+    assert.equal(game.seasons.length, 28);
+    game.multiplayer.room = null;
+    game.multiplayer.status = 'idle';
+    game.dayClock.days = 3;
+    frame();
+    assert.equal(game.seasons.pinned, after === 'winter' ? 'winter' : null, query);
+    assert.equal(game.seasons.length, 3);
+    assert.equal(game.world.season, after, query);
+  }
+});

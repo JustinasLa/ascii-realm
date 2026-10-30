@@ -159,18 +159,19 @@ The season is worked out from the clock's day, never stored
 day, a lobby's shared day and a debug jump all give theirs, and changing
 those constants moves every saved world to another season. On a season's
 last night each tree wants the next season from its own `turnPoint`, seeded
-by its sprite seed. Each frame, `Seasons.update` (`world/season-turn.js`)
-sets `world.season` (which new land grows in) and the river debris's, and
-walks the frame's props for trees whose season isn't the one they want. A
+by its sprite seed. Each frame, before any land is made, `Seasons.roll`
+(`world/season-turn.js`) sets `world.season` (which new land grows in) and
+the river debris's; then `Seasons.update` walks the frame's props for trees whose season isn't the one they want. A
 tree out of view, directly and in the water, is made again by the fine-bake
 workers (`rebake` in `world/fine-bakes.js`, at most 24 at once): the worker
 rebuilds it from its source in the new season and sends back its ordinary
 cells packed in one array (`packCells`) with its fine bake. Landings are
 applied at once, a millisecond's worth a frame; one that has come into view
-waits until it leaves. A tree in view keeps its season. Nothing is made
-again on the main thread: a tree no worker can make keeps its look
-(`game.seasons.failed`). Behind the play card or in a pinned frame,
-trees in view turn too. A page joining a lobby holds its season until its
+waits until it leaves, and one no longer wanted by the clock's day and
+time when it lands, in view or not, is dropped. A tree in view keeps its
+season. Nothing is made again on the main thread: a tree no worker can make
+keeps its look (`game.seasons.failed`). Behind the play card trees in view
+turn too; a scripted shot lands the rest with `finish()`. A page joining a lobby holds its season until its
 clock is shared; shared, it follows the realm's day with no pin. `game.seasons`
 (`name`, `dayOfSeason`, `length`, `pinned`, `pending`, `failed`, `finish()`)
 and `game.metrics.seasonMs` are on `?debug`.
