@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { hash2 } from '../src/core/rng.js';
 import { drawSkyReflection, starAt } from '../src/world/sky.js';
@@ -192,14 +194,16 @@ function face(r) {
   return { left, right, total: left + right };
 }
 
+// What the sky drew before it had a clock, recorded from the older code.
+const BEFORE_CLOCK = JSON.parse(readFileSync(new URL('./fixtures/night-sky-before-clock.json', import.meta.url), 'utf8'));
+
 test('the full-night sky draws exactly what the sky drew before it had a clock', () => {
-  const plain = lunarRenderer(), full = lunarRenderer(), start = lunarRenderer();
-  drawSkyReflection(plain, moonView, 3);
-  drawSkyReflection(full, moonView, 3, NIGHT_SKY);
-  drawSkyReflection(start, moonView, 3, skyOf(14000));
-  for (const key of ['fg', 'bg', 'ov', 'fine', 'fineBg']) {
-    assert.deepEqual(full[key], plain[key], key);
-    assert.deepEqual(start[key], plain[key], key);
+  for (const sky of [undefined, NIGHT_SKY, skyOf(14000)]) {
+    const r = lunarRenderer();
+    drawSkyReflection(r, moonView, 3, sky);
+    for (const key of ['fg', 'bg', 'ov', 'fine', 'fineBg']) {
+      assert.equal(createHash('sha256').update(r[key]).digest('hex'), BEFORE_CLOCK[key], `${key} at tick ${sky?.tick}`);
+    }
   }
 });
 
