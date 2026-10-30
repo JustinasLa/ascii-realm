@@ -178,7 +178,12 @@ test('a cancelled drag ends without a drop', (t) => {
     drags.length = 0;
   };
   drag();
-  pad.fire('pointercancel');
+  pad.fire('pointercancel', { pointerId: 2 });
+  assert.deepEqual(drags, [], "another finger's cancel never ends the drag");
+  pad.fire('pointerup', { pointerId: 1, clientX: 60, clientY: 50, timeStamp: 100 });
+  assert.equal(pad.fire('click').stopped, true, 'and the lift still clicks nothing');
+  drag();
+  pad.fire('pointercancel', { pointerId: 1 });
   assert.deepEqual(drags, [['end']]);
   assert.equal(pad.fire('click').stopped, false, 'a cancelled pointer sends no click');
   drag();

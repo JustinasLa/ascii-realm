@@ -25,8 +25,7 @@ export class BagGestures {
       pointerdown: (event) => this._down(event),
       pointermove: (event) => this._move(event),
       pointerup: (event) => this._up(event),
-      // A cancelled touch sends no click to swallow.
-      pointercancel: () => { this._swallow = false; this.cancel(); },
+      pointercancel: (event) => this._cancelled(event),
       // While held or dragging, the finger must not scroll the sheet.
       touchmove: (event) => { if (this.active) event.preventDefault(); },
     };
@@ -89,6 +88,14 @@ export class BagGestures {
     if (this._dragging) this.onDrop(press.source.selection, this.hitTest(clientX, clientY));
     // A busy page may run the lift before the timer: a long press is a hold all the same.
     else if (press && !press.mouse && !this._held && timeStamp - press.t >= HOLD_MS) this._hold();
+    this.cancel();
+  }
+
+  // A cancelled touch sends no click to swallow; another finger's cancel
+  // never ends a drag.
+  _cancelled({ pointerId }) {
+    if (this._dragging && this._press.id !== pointerId) return;
+    this._swallow = false;
     this.cancel();
   }
 
