@@ -554,3 +554,40 @@ test('rapid climate changes retain at most two fading pairs and teardown remains
   assert.ok(fake.routes.every(route => route.disposals === 1));
   assert.equal(music.setSeason('spring'), false);
 });
+
+test('automatic seasons follow the world\'s season when it is given, and a chosen season still wins', () => {
+  const fake = fakeEngine();
+  fake.context.state = 'suspended';
+  const music = new Music(fake.engine, { storage: null });
+  music.update({ time: 0, night: 1, weather: 'clear', season: 'winter' });
+  assert.equal(music.season, 'winter', 'not the spring its own year starts in');
+  assert.equal(SONG_PAIRS[music.pairIndex].season, 'winter');
+  const key = music.environmentKey;
+  music.update({ time: 1, night: 1, weather: 'clear', season: 'winter' });
+  assert.equal(music.environmentKey, key, 'the playlist is keyed once');
+  music.update({ time: 2, night: 1, weather: 'clear', season: 'summer' });
+  assert.equal(music.season, 'summer');
+  music.update({ time: 3, night: 1, weather: 'clear', season: 'monsoon' });
+  assert.equal(music.season, 'summer', 'a season the game does not have is ignored');
+  music.setSeason('autumn');
+  assert.equal(music.season, 'autumn');
+
+  const standalone = new Music(fake.engine, { storage: null });
+  standalone.update({ time: SEASON_LENGTH * 2, night: 1, weather: 'clear' });
+  assert.equal(standalone.season, SEASONS[2], 'without a world, its own year');
+});
+
+test('the climate label names the season and the weather, and fades work without hold-at-time', () => {
+  const fake = fakeEngine();
+  fake.context.state = 'suspended';
+  const music = new Music(fake.engine, { storage: null });
+  music.update({ time: 0, night: 1, weather: 'clear', season: 'autumn' });
+  assert.equal(music.climateLabel, 'Autumn · Clear skies');
+  music.update({ time: 0, night: 1, weather: 'rain', weatherIntensity: 0.8, season: 'autumn' });
+  assert.equal(music.climateLabel, 'Autumn · Rain');
+  const calls = [];
+  const param = { value: 0.4, cancelScheduledValues: (t) => calls.push(['cancel', t]),
+    setValueAtTime: (v, t) => calls.push(['set', v, t]), linearRampToValueAtTime: (v, t) => calls.push(['ramp', v, t]) };
+  music._fade(param, 1, 5, 2);
+  assert.deepEqual(calls, [['cancel', 5], ['set', 0.4, 5], ['ramp', 1, 7]]);
+});

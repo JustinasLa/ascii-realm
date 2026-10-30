@@ -1,5 +1,7 @@
-// Audio seasons follow simulation time, with four day/night cycles per season.
-// Pausing the game also pauses the year. A manual season is stored by Music.
+// Automatic audio seasons follow the world's season (see world/seasons.js).
+// Without a world they follow simulation time, with four day/night cycles
+// per season, and pausing the game also pauses the year. A manual season is
+// stored by Music.
 export const SEASON_LENGTH = 240 * 4;
 export const SEASONS = Object.freeze(['spring', 'summer', 'autumn', 'winter']);
 export const SEASON_OPTIONS = Object.freeze([

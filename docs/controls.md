@@ -18,7 +18,7 @@
 | Hold middle mouse | Open the rune wheel: point at a school (Oseni, Seithr, Cerrith, Mitlan), then at a rune, and let go to bind it to `R`. Pushing out through a school opens it in one motion; letting go on a school keeps its runes open for a click. Right click or the centre goes back, `Escape` closes |
 | `M` | Mute or unmute all sound |
 | `N` / Audio panel's Skip song button | Switch to the next pair in the current season and weather playlist |
-| Weather & seasons panel's Season | Follow automatic seasons or choose Spring, Summer, Autumn or Winter for music and ambience |
+| Weather & seasons panel's Season | Follow the world's season or choose Spring, Summer, Autumn or Winter for music and ambience |
 | Weather & seasons panel's Weather / Intensity | Choose Clear or one of 17 weather presets and adjust sound and visual intensity |
 | `L` / Weather & seasons panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |

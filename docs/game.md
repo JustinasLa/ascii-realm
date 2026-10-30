@@ -97,9 +97,20 @@ short version see the [README](../README.md).
   phone running at its reduced cell budget up to two, with the patches but
   not the columns. Leaves and blossoms
   drift down, and foliage thins around the warrior when it would hide them.
-  Add `?season=spring`, `?season=autumn` or `?season=winter` for seasonal
-  palettes and snow-tipped evergreens. Summer is the default; the season
-  stays fixed until reload and can be combined with `?seed=42&season=autumn`.
+- **Seasons.** The seasons follow one another every 28 days: a new world
+  starts in summer, autumn comes on day 28, winter on day 56 and spring on
+  day 84. Each brings its own tree palettes and falling leaves; winter bares
+  the crowns and tips the evergreens with snow. A season begins at sunrise.
+  Through the night before, each tree near you turns to the new season at
+  its own moment, but only while you can't see it, directly or in the
+  water: a tree in view keeps its season until it leaves the view. Land
+  first seen after sunrise grows in the new season, and the river's
+  flotsam and the music follow it. The URL settings:
+  - `?season=spring`, `summer`, `autumn` or `winter` pins a season: it never
+    rolls, and can be combined with `?seed=42&season=autumn`;
+  - `?seasondays=3` sets how many days a season lasts (1 to 112).
+
+  A lobby shares one season, from its shared clock, and ignores both.
 - **Day and night.** Days pass. A day lasts 30 minutes, most of it night: a
   new world starts at nightfall with about 12 minutes of full dark ahead,
   then about 3 minutes of dawn, 11 of full day and 3 of dusk. The scene
@@ -437,8 +448,8 @@ short version see the [README](../README.md).
   choir, bowed tones, low drones, distant bells and a synthesized room reverb.
   Every sound has 25 shuffled variations; grass also shuffles its six recordings.
   Music rotates automatically through a season and weather playlist. Choose
-  automatic seasons or Spring, Summer, Autumn or Winter in the Weather & seasons
-  panel; winter quiets insects and frogs, while autumn brings out leaf rustle.
+  automatic seasons, which follow the world's, or Spring, Summer, Autumn or
+  Winter in the Weather & seasons panel; winter quiets insects and frogs, while autumn brings out leaf rustle.
   Sword effects layer weathered steel, dry leather, low air rush and weighted
   impacts. Sound starts on your first key press or click;
   the Audio panel shows the current song, lets you skip, and saves mute and

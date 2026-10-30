@@ -31,7 +31,9 @@ import { MusicNotes } from '../../src/world/music-notes.js';
 import { heldKey, isBow, isThrown } from '../../src/entities/loadout.js';
 import { Projectiles } from '../../src/world/projectiles.js';
 import { NightLight } from '../../src/world/night-light.js';
-import { WorldClock, clockOptions } from '../../src/world/clock.js';
+import { WorldClock, clockOptions, realmDay } from '../../src/world/clock.js';
+import { Seasons } from '../../src/world/season-turn.js';
+import { seasonAt, seasonOptions } from '../../src/world/seasons.js';
 import { shaftTier } from '../../src/world/moon-shafts.js';
 import { FrameClock, FramePacer, FrameQuality, renderSize } from '../../src/render/budget.js';
 import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from '../../src/core/native.js';
@@ -378,7 +380,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Fires: class extends inert() { nearest() { return null; } },
     Torches: inert(),
     WeatherEffects: class extends inert() { constructor() { super(); this.wind = 0; } },
-    Fog: inert(), NightLight, WorldClock, clockOptions, shaftTier, MAX_WALKERS: 20, figureScale: () => 1,
+    Fog: inert(), NightLight, WorldClock, clockOptions, realmDay, Seasons, seasonAt, seasonOptions, shaftTier, MAX_WALKERS: 20, figureScale: () => 1,
     SpellFogStirs: class { collect() { return { walkers: [], bursts: [], whirls: [] }; } },
     fireWeatherWind: () => 0,
     Splashes: class {

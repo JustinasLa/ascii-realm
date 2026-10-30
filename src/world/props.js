@@ -8,7 +8,7 @@ import { makeCampProp } from './camp-props.js';
 import { deadwoodBlocks } from './deadwood.js';
 import { makeNaturalProp } from './natural-props.js';
 import { paleCaps } from './pale-caps.js';
-import { fineOf } from './fine-bakes.js';
+import { fineOf, packCells, packFine } from './fine-bakes.js';
 import { shade } from './glow.js';
 import { bakeSurface, canopyOf, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withCanopy, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
@@ -800,6 +800,23 @@ export function rebuildProp(source, fineOnly = false) {
   if (source.make === 'ore') return makeOreBlock(source);
   if (source.make === 'prop') return createProp(source.kind, source.x, source.y, source.options);
   return null;
+}
+
+// Runs a fine recipe (see withFine) to its end.
+export function finishRecipe(recipe) {
+  const steps = recipe();
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+
+// A tree made again from its source in full, packed to send between threads:
+// what a season's re-bake hands back (see fine-bakes.js rebake).
+export function bakeWhole(source) {
+  const tree = rebuildProp(source);
+  const { bounds, top, height, leafColor, season } = tree;
+  return { fine: packFine(finishRecipe(fineRecipe(tree))), cells: packCells(tree.cells), bounds, top, height,
+    leafColor, season };
 }
 
 // Terrain-only queries are safe while a chunk's props are being generated.

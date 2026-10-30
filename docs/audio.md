@@ -15,8 +15,8 @@ song and offers a Skip song button with the `N` shortcut. Mute and
 levels are stored in `localStorage` under `ascii-realm.audio`; the weather
 selection and intensity use `ascii-realm.weather`. Blocked storage does not
 prevent controls from working. Saved mute is applied before playback.
-The Season selector offers automatic seasons or a fixed season for music and
-ambience; this choice is stored under `ascii-realm.music`.
+The Season selector offers automatic seasons, which follow the world's season,
+or a fixed season for music and ambience; this choice is stored under `ascii-realm.music`.
 
 Preview grass footsteps briefly quiets the music and ambience to play six
 recorded footfalls at a walking cadence and the effects volume. It restores
@@ -131,8 +131,10 @@ takeoffs, landings and water strikes each have their own water variation bank.
 The audio day/night signal cycles every 240 simulation seconds, beginning at
 night. Music crossfades between day and night arrangements as this signal
 changes. The existing visual scene remains moonlit.
-Automatic audio seasons progress Spring, Summer, Autumn, Winter every 960
-simulation seconds (four day/night cycles); pausing also pauses this year.
+Automatic audio seasons follow the world's season, which `GameAudio.update`
+is given each frame (see `world/seasons.js`). Without one (tests and
+standalone players) they progress Spring, Summer, Autumn, Winter every 960
+simulation seconds (four day/night cycles), and pausing also pauses this year.
 Spring emphasizes birds and frogs, summer insects, autumn dry leaves, and
 winter sheltered wind with fewer birds and no insect or frog calls. Stormy
 and snowy weather reduces wildlife levels. Wind, leaves and water beds smooth

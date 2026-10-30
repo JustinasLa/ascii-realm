@@ -10,6 +10,10 @@ import { normalByte } from './surface-light.js';
 // it there. Without workers (in tests, or where they cannot start) the
 // bakes run here a few rows at a time instead (bakeFine). Until its bake
 // is done, a prop is drawn from its ordinary cells.
+//
+// A tree turning to another season is made again whole, ordinary cells and
+// fine bake, by the same workers (rebake). That is never done here: without
+// a worker it waits (see season-turn.js).
 
 const baked = new WeakMap();
 // Queued bakes, oldest first: waiting, sent to a worker, or left to be
@@ -79,6 +83,35 @@ export function packFine(cells) {
 export const fineBuffers = (p) => [p.dx, p.dy, p.g, p.rustle, p.color, p.back, p.solid, p.foliage,
   p.flex, p.phaseSin, p.phaseCos, p.rows, p.normal, p.bump].map((a) => a.buffer);
 
+// A tree's ordinary cells in one array to send between threads: CELL_FIELDS
+// numbers a cell, NaN for a field it lacks. foliage and litter are flags.
+const CELL_FIELDS = ['dx', 'dy', 'g', 'r', 'gg', 'b', 'br', 'bgG', 'bb', 'foliage', 'flex', 'phaseSin', 'phaseCos',
+  'rustle', 'litter'];
+const FLAG = new Set(['foliage', 'litter']);
+
+export function packCells(cells) {
+  const n = CELL_FIELDS.length;
+  const out = new Float64Array(cells.length * n);
+  cells.forEach((c, i) => CELL_FIELDS.forEach((key, k) => {
+    const v = c[key];
+    out[i * n + k] = v === undefined ? NaN : +v;
+  }));
+  return out;
+}
+
+const field = (v, flag) => (v !== v ? undefined : flag ? v === 1 : v);
+export function unpackCells(packed) {
+  const n = CELL_FIELDS.length;
+  const cells = new Array(packed.length / n);
+  for (let i = 0, o = 0; i < cells.length; i++, o += n) {
+    const v = (k) => field(packed[o + k], FLAG.has(CELL_FIELDS[k]));
+    // In the field order every cell of a tree has (see trees.js).
+    cells[i] = { dx: v(0), dy: v(1), g: v(2), r: v(3), gg: v(4), b: v(5), br: v(6), bgG: v(7), bb: v(8), foliage: v(9),
+      flex: v(10), phaseSin: v(11), phaseCos: v(12), rustle: v(13), litter: v(14) };
+  }
+  return cells;
+}
+
 // The cells of a prop's ordinary bake that lie on the ground beside it (a
 // shadow, pebbles, leaf litter: glyphs layered where the prop itself has no
 // cell). They are still drawn on the ordinary grid, with the ground.
@@ -111,6 +144,58 @@ export function fineOf(prop, seen = false) {
     steps: null, seen });
   dispatch();
   return null;
+}
+
+// The finished fine bake of a prop, if it has one, without asking for it.
+export const fineBaked = (prop) => (baked.get(prop)?.from === prop.cells ? baked.get(prop) : null);
+
+// Gives a prop a fine bake made elsewhere (a season's re-bake). A bake of it
+// still queued or sent was for its old cells, so it is dropped.
+export function adoptFine(prop, cells) {
+  baked.set(prop, { from: prop.cells, cells, ground: groundOf(prop.cells) });
+  queue.delete(prop);
+}
+
+// Asks a worker to make a tree again from `source`, ordinary cells and fine
+// bake both. The handle's `result` is set when it lands ({ fine, cells (see
+// packCells), bounds, top, height, leafColor, season }); `failed` if no
+// worker could make it. Trees in view go after the fine bakes in view and
+// before the rest.
+let bakeHere = null;
+export function rebake(source, seen = false) {
+  const handle = { result: null, failed: false };
+  if (!workers.length) {
+    // Only tests bake whole here (see rebakeHere).
+    if (bakeHere) handle.result = bakeHere(source);
+    else handle.failed = true;
+    return handle;
+  }
+  queue.set(handle, { whole: true, source, state: 'waiting', seen });
+  dispatch();
+  return handle;
+}
+
+export const dropRebake = (handle) => queue.delete(handle);
+// Tests make whole trees in one step without workers.
+export const rebakeHere = (bake) => { bakeHere = bake; };
+export const fineWorkers = () => workers.length;
+
+function landed(key, job, data) {
+  if (!job.whole) {
+    if (data.cells) finish(key, job, data.cells);
+    else job.state = 'here';
+    return;
+  }
+  queue.delete(key);
+  if (data.whole) key.result = { ...data.whole, fine: data.cells };
+  else key.failed = true;
+}
+
+// A bake no worker can take: a fine bake is left to the main thread, a
+// whole one fails.
+function strand(key, job) {
+  if (!job.whole) job.state = 'here';
+  else landed(key, job, {});
 }
 
 // Whether any bake is left to the main thread.
@@ -156,10 +241,7 @@ export function startFineWorkers(count = spareCores(), url = new URL('./fine-wor
       sent.delete(data.id);
       slot.prop = null;
       const job = prop && queue.get(prop);
-      if (job?.id === data.id) {
-        if (data.cells) finish(prop, job, data.cells);
-        else job.state = 'here';
-      }
+      if (job?.id === data.id) landed(prop, job, data);
       dispatch();
     };
     worker.onerror = (event) => {
@@ -167,11 +249,11 @@ export function startFineWorkers(count = spareCores(), url = new URL('./fine-wor
       // A worker that cannot run leaves its bakes to the main thread.
       workers.splice(workers.indexOf(slot), 1);
       worker.terminate();
-      for (const job of queue.values()) {
-        if (job.state === 'waiting' && !workers.length) job.state = 'here';
+      for (const [key, job] of queue) {
+        if (job.state === 'waiting' && !workers.length) strand(key, job);
       }
       const job = slot.prop && queue.get(slot.prop);
-      if (job) job.state = 'here';
+      if (job) strand(slot.prop, job);
       dispatch();
     };
     workers.push(slot);
@@ -185,13 +267,13 @@ function dispatch() {
   for (const slot of workers) {
     if (slot.prop) continue;
     let next = null;
+    let best = -1;
     for (const entry of queue) {
       if (entry[1].state !== 'waiting') continue;
-      if (entry[1].seen) {
-        next = entry;
-        break;
-      }
-      next ??= entry;
+      const { seen, whole } = entry[1];
+      const rank = whole ? (seen ? 2 : 1) : seen ? 3 : 0;
+      if (rank > best) [next, best] = [entry, rank];
+      if (rank === 3) break;
     }
     if (!next) return;
     const [prop, job] = next;
@@ -199,6 +281,6 @@ function dispatch() {
     job.id = nextJob++;
     sent.set(job.id, prop);
     slot.prop = prop;
-    slot.worker.postMessage({ id: job.id, source: job.source });
+    slot.worker.postMessage({ id: job.id, source: job.source, whole: job.whole });
   }
 }
