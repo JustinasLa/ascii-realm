@@ -27,6 +27,7 @@ Technical and player documentation for [ASCII Realm](../README.md).
 
 - [Source layout](architecture.md) — what lives where, and how lobbies
   share state.
+- [Saves](saves.md) — the versioned save format, damaged records and tabs.
 - [Rune casting](spellcasting.md) — the casting simulation, rune definitions
   and how casts travel through lobbies.
 - [Spell presentations](spell-presentations.md) — authoring a rune's

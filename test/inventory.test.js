@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Vitals } from '../src/entities/vitals.js';
 import { ITEMS, EQUIPMENT_SLOTS, STACK_SLOTS, fitsSlot, slotsFor } from '../src/inventory/items.js';
-import { Inventory, canSwap, stackExtras } from '../src/inventory/inventory.js';
+import { BAG_SLOTS, Inventory, canSwap, cleanStack, stackExtras } from '../src/inventory/inventory.js';
 
 const emptyInventory = (capacity = 1000) => new Inventory({ starter: false, capacity });
 const carriedCount = (inventory, id) => [...inventory.slots, ...Object.values(inventory.equipment)]
@@ -577,4 +577,20 @@ test('two worn slots swap only when each piece fits the other, as rings do', () 
   assert.equal(inventory.equipment.ringLeft, null);
   assert.equal(inventory.equipment.ringRight, gold);
   assert.equal(inventory.weight, weight);
+});
+
+test('a stored stack is cleaned to the bag\'s own shape, keeping each property', () => {
+  assert.equal(BAG_SLOTS, new Inventory().slots.length);
+  const forged = { metal: 'Iron', quality: 'tempered', hits: 60, stats: { attackDamage: 3.5, durability: 500 },
+    inputs: { ironIngot: 4 } };
+  assert.deepEqual(cleanStack({ id: 'shortSword', count: 1, material: 'steel', junk: 1 }),
+    { id: 'shortSword', count: 1, material: 'steel' });
+  assert.deepEqual(cleanStack({ id: 'oakLog', count: 2, alloy: 'a1', inputs: { oakLog: 2 } }),
+    { id: 'oakLog', count: 2, alloy: 'a1', inputs: { oakLog: 2 } });
+  assert.deepEqual(cleanStack({ id: 'shortSword', count: 1, forged }).forged, stackExtras({ forged }).forged);
+  assert.equal(cleanStack({ id: 'shortSword', count: 1, forged }).forged.quality, 'tempered');
+  assert.deepEqual(cleanStack({ id: 'oakLog', count: ITEMS.oakLog.stackLimit + 5, material: 'iron' }),
+    { id: 'oakLog', count: ITEMS.oakLog.stackLimit, material: 'iron', clamped: true });
+  for (const raw of [null, 'oakLog', { id: 'gone', count: 1 }, { id: 'oakLog', count: 0 }, { id: 'oakLog', count: 1.5 },
+    { id: 'toString', count: 1 }]) assert.equal(cleanStack(raw), null, JSON.stringify(raw));
 });
