@@ -2043,6 +2043,53 @@ test('a picture the studio lets go comes off the screen until it is made again',
   assert.equal(art.watchers.size, 0, 'a closed screen stops watching');
 });
 
+test('cards hidden by an empty tab while the window turns are measured once they show again', (t) => {
+  const art = fakeArt();
+  const { window, screen } = mount(t, { art });
+  // A hidden card has no layout, as in a browser.
+  let size = [124, 156];
+  for (const { button } of screen.bagNodes) {
+    Object.defineProperties(button, {
+      clientWidth: { get: () => (button.hidden ? 0 : size[0]), configurable: true },
+      clientHeight: { get: () => (button.hidden ? 0 : size[1]), configurable: true },
+    });
+  }
+  screen.setOpen(true);
+  screen.update();
+  screen._filterBy('cloaks');
+  size = [64, 116];
+  art.asked.length = 0;
+  window.dispatchEvent(new Event('resize'));
+  screen.update();
+  screen.update();
+  assert.equal(art.asked.filter((a) => a.shape === 'card').length, 0, 'hidden cards ask for no pictures');
+  screen._filterBy('all');
+  const cards = art.asked.filter((a) => a.shape === 'card');
+  assert.ok(cards.length > 0);
+  for (const { size: asked } of cards) assert.deepEqual(asked, [58, 101], 'the shown cards are measured afresh');
+});
+
+test('a drag ghost shows the outline while its picture is let go, then the redrawn picture', (t) => {
+  const art = fakeArt();
+  const env = mount(t, { art });
+  const { screen, indexOf } = env;
+  const { pointer, ghost } = dragging(t, env);
+  screen.setOpen(true);
+  screen.update();
+  const bow = screen.bagNodes[indexOf('longbow')];
+  const src = bow.icon.querySelector('img').getAttribute('src');
+  pointer('pointerdown', bow.button);
+  pointer('pointermove', bow.button, 110, 100);
+  const copy = ghost().children[0];
+  art.evict('longbow|card|');
+  assert.equal(copy.textContent, itemArt('longbow', ITEMS.longbow.glyph), 'the outline at once');
+  screen.update();
+  assert.equal(copy.textContent, itemArt('longbow', ITEMS.longbow.glyph));
+  screen.update();
+  assert.equal(copy.querySelector('img').getAttribute('src'), src, 'the picture again, mid-drag');
+  pointer('pointerup', bow.button, 110, 100);
+});
+
 test('turning to another page and back measures the doll again', (t) => {
   const art = fakeArt();
   const { screen } = mount(t, { art, pages: ({ document }) => [{ id: 'character', label: 'Character', node: document.createElement('section') }] });
