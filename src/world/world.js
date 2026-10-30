@@ -7,6 +7,7 @@ import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
 import { chunkLift, hillRelief, MAX_LIFT, reliftCell } from './relief.js';
+import { Provinces } from './provinces.js';
 import { createSpawnRuins } from './spawn-ruins.js';
 import { groveField, groveProps } from './woodland.js';
 
@@ -63,8 +64,9 @@ export class World {
     // `woodland: 'dense'` grows groves around the trees (see woodland.js) and
     // brings the flowers unless `flora` says otherwise.
     // `relief: 'hill'` raises the hill scene's ground round spawn (see relief.js).
+    // `bogs: false` makes no province a bog (see provinces.js).
     const { season = 'summer', maxChunks = 128, woodland, flora, meadow = false, spawnRuins = false, rivers = true,
-      relief = null } = typeof options === 'number' ? { maxChunks: options } : options;
+      relief = null, bogs = true } = typeof options === 'number' ? { maxChunks: options } : options;
     this.seed = seed;
     this.woodland = woodland === 'dense' ? 'dense' : 'sparse';
     this.flora = !!(flora ?? this.woodland === 'dense');
@@ -106,8 +108,10 @@ export class World {
     // Spawn is found on the land as it lies before rivers and ruins, so it
     // is the same whether or not they are there; both then keep clear of it.
     this.rivers = null;
+    this.provinces = null;
     this.spawn = this.findSpawn();
     this.rivers = new RiverNetwork(seed, this.spawn, { enabled: rivers });
+    this.provinces = new Provinces(seed, { spawn: this.spawn, bogs });
     if (spawnRuins) {
       this.spawnRuins = createSpawnRuins(seed, this.spawn);
       for (const prop of this.spawnRuins.props) this.measureProp(prop);
