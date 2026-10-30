@@ -165,14 +165,27 @@ walks the frame's props for trees whose season isn't the one they want. A
 tree out of view, directly and in the water, is made again by the fine-bake
 workers (`rebake` in `world/fine-bakes.js`, at most 24 at once): the worker
 rebuilds it from its source in the new season and sends back its ordinary
-cells packed in one array (`packCells`) with its fine bake. Landings are
-applied at once, a millisecond's worth a frame; one that has come into view
-waits until it leaves. A tree in view keeps its season. Nothing is made
+cells packed in one array (`packCells`) with its fine bake. Trees in view
+are asked for first. Landings are applied a millisecond's worth a frame:
+the prop takes its new season, cells and fine bake at once, so everything
+that reads it sees one season. A tree seen directly or in the water
+(`visible`, with the old and new bounds) keeps a turn record beside it
+(`withTurn` in `world/prop-art.js`): its old season, cells, leaf colour and
+fine bake, its progress `k` over `TURN_SECONDS` (2 s) and its new measures.
+While `k < 1`, `drawProp` draws both looks with complementary masks (a
+cell's hash against `k`), in small letters if it was drawn in them and in
+ordinary cells (and its reflection) otherwise, with the tree's contact
+shadow drawn once; a tree that started in ordinary cells takes its new fine
+bake (`pending`) only at `k = 1`. Its canopy shadow's strength blends by
+`k`, falling leaves born before the landing keep the old season, cells and
+colour, and its bounds are the union of both crowns until the record ends,
+10 s after landing (the longest leaf's fall), when the new measures are set
+exactly. A tree out of view, or any tree behind the play card or in a pinned
+frame, lands with no record. Nothing is made
 again on the main thread: a tree no worker can make keeps its look
-(`game.seasons.failed`). Behind the play card or in a pinned frame,
-trees in view turn too. A page joining a lobby holds its season until its
+(`game.seasons.failed`). A page joining a lobby holds its season until its
 clock is shared; shared, it follows the realm's day with no pin. `game.seasons`
-(`name`, `dayOfSeason`, `length`, `pinned`, `pending`, `failed`, `finish()`)
+(`name`, `dayOfSeason`, `length`, `pinned`, `pending`, `turning`, `failed`, `finish()`)
 and `game.metrics.seasonMs` are on `?debug`.
 
 River debris (`world/debris.js`) is local to each player. Each frame, after

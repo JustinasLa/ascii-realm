@@ -102,8 +102,10 @@ short version see the [README](../README.md).
   day 84. Each brings its own tree palettes and falling leaves; winter bares
   the crowns and tips the evergreens with snow. A season begins at sunrise.
   Through the night before, each tree near you turns to the new season at
-  its own moment, but only while you can't see it, directly or in the
-  water: a tree in view keeps its season until it leaves the view. Land
+  its own moment: its crown dissolves letter by letter into the new look
+  over 2 seconds, its shadow thins or deepens with it, and leaves already
+  falling keep the colour they fell with. A tree out of sight turns at
+  once. Land
   first seen after sunrise grows in the new season, and the river's
   flotsam and the music follow it. The URL settings:
   - `?season=spring`, `summer`, `autumn` or `winter` pins a season: it never

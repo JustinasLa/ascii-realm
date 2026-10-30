@@ -85,13 +85,15 @@ test('the world\'s season rolls with the clock\'s days, and the URL can pin it',
   assert.equal(fresh.game.world.season, 'autumn');
   assert.deepEqual(seasons, ['summer', 'autumn'], 'the sound hears the world\'s season');
   assert.equal(typeof fresh.game.metrics.seasonMs, 'number');
-  // A tree in view, here only in the water, waits to turn until it leaves.
+  // A tree in view, here only in the water, is asked for at once (first);
+  // with no worker in this page it keeps its look.
   const tree = makeTree(2.5, 3.5, () => 0.5, { species: 'oak' });
   fresh.game.world.propsIn = () => [tree];
   fresh.game.dayClock.days = 55;
   fresh.game.dayClock.set(23999);
   fresh.frame();
   assert.equal(fresh.game.seasons.pending, 0);
+  assert.equal(fresh.game.seasons.failed, 1);
   assert.equal(tree.season, 'summer');
   // While a lobby is being joined, nothing about the season changes.
   fresh.game.multiplayer.status = 'connecting';

@@ -1,6 +1,6 @@
 import { FINE } from '../render/cells.js';
 import { LAYER } from '../render/glyphs.js';
-import { fineRecipe, fineSource } from './prop-art.js';
+import { fineRecipe, fineSource, turnOf } from './prop-art.js';
 import { normalByte } from './surface-light.js';
 
 // Trees and rocks are drawn in small letters on the renderer's fine grid
@@ -132,6 +132,8 @@ function finish(prop, job, cells) {
 export function fineOf(prop, seen = false) {
   const found = baked.get(prop);
   if (found?.from === prop.cells) return found;
+  // A tree turning from its ordinary cells stays in them until it is done.
+  if (turnOf(prop)?.pending) return null;
   const queued = queue.get(prop);
   if (queued?.from === prop.cells) {
     queued.seen ||= seen;
@@ -155,6 +157,8 @@ export function adoptFine(prop, cells) {
   baked.set(prop, { from: prop.cells, cells, ground: groundOf(prop.cells) });
   queue.delete(prop);
 }
+
+export const dropFine = (prop) => queue.delete(prop);
 
 // Asks a worker to make a tree again from `source`, ordinary cells and fine
 // bake both. The handle's `result` is set when it lands ({ fine, cells (see

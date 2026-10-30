@@ -1,5 +1,6 @@
 import { hash2 } from '../core/rng.js';
 import { dg } from '../render/glyphs.js';
+import { turnOf } from './prop-art.js';
 import { treeWind, windGust } from './wind.js';
 
 // A falling leaf tumbles: it turns through eight headings and, twice a
@@ -31,19 +32,17 @@ export function drawLeaves(r, view, props, t, seed = 1) {
   const count = list ? props.length : 1;
   for (let i = 0; i < count; i++) {
     const prop = list ? props[i] : props;
-    if ((prop.kind !== 'tree' && prop.kind !== 'bush') || prop.season === 'winter' ||
-        prop.species === 'pine' || prop.species === 'spruce') continue;
-    const cells = prop.cells;
-    if (!cells || cells.length === 0) continue;
+    if ((prop.kind !== 'tree' && prop.kind !== 'bush') || prop.species === 'pine' || prop.species === 'spruce') continue;
+    // A leaf born before its tree turned to another season (see
+    // season-turn.js) is the old season's, from the old crown.
+    const turn = turnOf(prop);
+    if ((prop.season === 'winter' && !turn) || !prop.cells?.length) continue;
 
     const bx = Math.floor(prop.x);
     const by = Math.floor(prop.y);
     // Leaves stay between their canopy and the ground at the tree's base.
     if (by < view.y0 || by + (prop.top ?? -prop.height) >= view.y0 + view.rows) continue;
 
-    const autumn = prop.season === 'autumn';
-    const blossom = prop.species === 'cherry' && prop.season === 'spring';
-    const chance = autumn ? 1 : blossom ? 0.8 : prop.season === 'spring' ? 0.5 : 0.3;
     const phase = prop.phase ?? 0;
 
     for (let slot = 0; slot < 2; slot++) {
@@ -54,7 +53,13 @@ export function drawLeaves(r, view, props, t, seed = 1) {
       const age = clock - cycle * period;
       const cycleSeed = slotSeed + Math.imul(cycle, 1931);
       const life = 4 + hash2(bx, by, cycleSeed + 2) * 4;
-      if (age >= life || hash2(bx, by, cycleSeed + 3) > chance) continue;
+      const old = turn !== null && t - age < turn.at;
+      const season = old ? turn.from : prop.season;
+      const autumn = season === 'autumn';
+      const blossom = prop.species === 'cherry' && season === 'spring';
+      const chance = autumn ? 1 : blossom ? 0.8 : season === 'spring' ? 0.5 : 0.3;
+      if (season === 'winter' || age >= life || hash2(bx, by, cycleSeed + 3) > chance) continue;
+      const cells = old ? turn.cells : prop.cells;
 
       // Search from a hashed index without creating a separate foliage list.
       // An origin always belongs to the baked canopy, never a trunk or gap.
@@ -90,7 +95,8 @@ export function drawLeaves(r, view, props, t, seed = 1) {
       const fade = Math.min(1, (1 - progress) * 4);
       if (fade < 0.04) continue;
       const light = fade * (0.85 + Math.sin(age * 2.5 + flutter) * 0.1);
-      const color = autumn ? AUTUMN[Math.floor(hash2(bx, by, cycleSeed + 6) * AUTUMN.length)] : prop.leafColor;
+      const color = autumn ? AUTUMN[Math.floor(hash2(bx, by, cycleSeed + 6) * AUTUMN.length)]
+        : old ? turn.leafColor : prop.leafColor;
       const cr = blossom ? 244 : color ? color[0] : 86;
       const cg = blossom ? 178 : color ? color[1] : 132;
       const cb = blossom ? 204 : color ? color[2] : 73;

@@ -54,6 +54,18 @@ export function withCanopy(prop, masses) {
 
 export const canopyOf = (prop) => canopies.get(prop) ?? null;
 
+// A tree turning to another season keeps its old look beside it for a few
+// seconds, as it dissolves into the new one (see season-turn.js).
+const turns = new WeakMap();
+
+export function withTurn(prop, turn) {
+  turns.set(prop, turn);
+  return prop;
+}
+
+export const turnOf = (prop) => turns.get(prop) ?? null;
+export const endTurn = (prop) => turns.delete(prop);
+
 // A random stream that remembers what it drew, so the same draws can be
 // replayed to make the same prop again.
 export function recording(rand) {

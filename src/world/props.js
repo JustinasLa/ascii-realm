@@ -10,7 +10,7 @@ import { makeNaturalProp } from './natural-props.js';
 import { paleCaps } from './pale-caps.js';
 import { fineOf, packCells, packFine } from './fine-bakes.js';
 import { shade } from './glow.js';
-import { bakeSurface, canopyOf, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, withCanopy, withFine } from './prop-art.js';
+import { bakeSurface, canopyOf, cellBounds, fineRecipe, makeCell, recording, replaying, ringGlyph, turnOf, withCanopy, withFine } from './prop-art.js';
 import { propDefinition } from './prop-catalog.js';
 import { GLOSS_DAMP, GLOSS_DRY, GLOSS_WET, MOON, VIEW_C, VIEW_S, glossByte } from './surface-light.js';
 import { tintRgb } from './moon-tint.js';
@@ -1054,18 +1054,25 @@ const GLOSS_BYTE = [GLOSS_DRY, GLOSS_DAMP, GLOSS_WET].map(glossByte);
 const GROUND_FG = [0, 0, 0];
 const GROUND_BG = [0, 0, 0];
 
+// A tree turning to another season (see season-turn.js) is drawn twice:
+// its old look where a cell's own hash is at least the turn's progress k,
+// its new look where it is below. The cells change one by one.
+const MASK_SEED = 4093;
+const masked = (mask, x, y, prop) => mask !== null && (hash2(x, y, prop.textureSeed + MASK_SEED) < mask.k) !== mask.side;
+
 // Draws a prop's fine bake (see fine-bakes.js) into the renderer's small
-// cells, with its ground cells beneath it on the ordinary grid.
-function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
+// cells, with its ground cells beneath it on the ordinary grid. A `mask`
+// draws only one side of a turn, and leaves the tree's shadow to drawProp.
+function drawFine(r, view, prop, baked, t, player, seed, bx, by, mask = null) {
   const { cells: p, ground } = baked;
-  if (prop.kind === 'tree') groundShadow(r, view, prop, bx, by);
+  if (prop.kind === 'tree' && !mask) groundShadow(r, view, prop, bx, by);
   // The prop's ground cells (its pebbles, its baked contact shadow) replace
   // ground a tree's shadow has already darkened or a moonbeam lit: they
   // take the same light as they go down, once (see night-light.js).
   const night = r.night;
   for (const c of ground) {
     const sy = by + c.dy;
-    if (sy < 0 || sy >= view.rows) continue;
+    if (sy < 0 || sy >= view.rows || masked(mask, c.dx, c.dy, prop)) continue;
     const wx = view.x0 + bx + c.dx, wy = view.y0 + sy;
     const k = night ? night.lightAt(wx, wy) : 1;
     const t = night ? night.tint : 0;
@@ -1113,6 +1120,7 @@ function drawFine(r, view, prop, baked, t, player, seed, bx, by) {
       continue;
     }
     for (let i = rows[q]; i < rows[q + 1]; i++) {
+      if (masked(mask, cdx[i], y, prop)) continue;
       const g = cg[i];
       let shift = 0;
       if (g >= LAYER && cdx[i] === lastDx && cdy[i] === lastDy) {
@@ -1163,8 +1171,14 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   const bx = Math.floor(prop.x) - view.x0;
   const by = Math.floor(prop.y) - view.y0;
   const baked = cells === prop.cells && direct && r.fine && !prop.chopped ? fineOf(prop, true) : null;
+  const turn = cells === prop.cells && !prop.chopped ? turnOf(prop) : null;
+  const turning = turn !== null && turn.k < 1;
   if (baked) {
-    drawFine(r, view, prop, baked, t, player, seed, bx, by);
+    if (turning && turn.fine) {
+      if (prop.kind === 'tree') groundShadow(r, view, prop, bx, by);
+      drawFine(r, view, prop, turn.fine, t, player, seed, bx, by, { k: turn.k, side: false });
+      drawFine(r, view, prop, baked, t, player, seed, bx, by, { k: turn.k, side: true });
+    } else drawFine(r, view, prop, baked, t, player, seed, bx, by);
     return;
   }
   if (prop.chopped) {
@@ -1179,6 +1193,15 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
   const bounds = prop.bounds;
   if (write.visible && bounds && !write.visible(r, bx + bounds.minX - 3, by + bounds.minY,
     bx + bounds.maxX + 3, by + bounds.maxY, by)) return;
+  if (turning) {
+    drawCells(r, view, prop, write, t, player, seed, reflected, turn.cells, bx, by, { k: turn.k, side: false });
+    drawCells(r, view, prop, write, t, player, seed, reflected, cells, bx, by, { k: turn.k, side: true });
+  } else drawCells(r, view, prop, write, t, player, seed, reflected, cells, bx, by);
+}
+
+// Draws a prop's ordinary cells; a `mask` draws one side of a turn.
+function drawCells(r, view, prop, write, t, player, seed, reflected, cells, bx, by, mask = null) {
+  const direct = write === putCell;
   const tree = prop.kind === 'tree' || prop.kind === 'bush';
   const sway = tree ? treeWind(prop, t, seed) : 0;
   const gust = tree ? windGust(seed, prop.x, prop.y, t) : 0;
@@ -1206,6 +1229,7 @@ export function drawProp(r, view, prop, write = putCell, t = 0, player = null, s
     }
     for (let i = row.start; i < row.end; i++) {
       const c = cells[i];
+      if (masked(mask, c.dx, c.dy, prop)) continue;
       let shift = 0;
       if (c.g >= LAYER && c.dx === lastDx && c.dy === lastDy) {
         if (lastHidden) continue;

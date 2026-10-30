@@ -1,6 +1,6 @@
 import { valueNoise } from '../core/noise.js';
 import { TILT } from '../entities/rig.js';
-import { canopyOf } from './prop-art.js';
+import { canopyOf, turnOf } from './prop-art.js';
 import { MOON, worldNormal } from './surface-light.js';
 import { EVERGREEN, MAX_TREE_HALF_WIDTH } from './trees.js';
 import { ASPECT } from './world.js';
@@ -56,12 +56,15 @@ const smoothstep = (a, b, x) => {
 };
 
 // How much shadow a tree throws: none once felled or burnt to a stump,
-// less as it burns, and a bare winter crown only a little.
+// less as it burns, and a bare winter crown only a little. A tree turning
+// to another season (see season-turn.js) goes from one to the other.
+const crownStrength = (season, species) => (season === 'winter' && species && !EVERGREEN.has(species) ? 0.35 : 1);
 export function stampStrength(prop) {
   if (prop.chopped || prop.burnt) return 0;
   if (prop.burning) return 1 - 0.75 * prop.burning.progress;
-  if (prop.season === 'winter' && prop.species && !EVERGREEN.has(prop.species)) return 0.35;
-  return 1;
+  const now = crownStrength(prop.season, prop.species);
+  const turn = turnOf(prop);
+  return turn ? now + (crownStrength(turn.from, prop.species) - now) * (1 - turn.k) : now;
 }
 
 const stamps = new WeakMap();

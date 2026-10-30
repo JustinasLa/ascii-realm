@@ -31,6 +31,9 @@
 // clock across dusk (ticks 12400 to 13100, once a round, in even steps), so
 // the beams fade in with the moon and their map is laid again at each of its
 // steps: `relays` counts those, `steps` the moon's light steps seen.
+// `--turning=<n>` has the n trees nearest the after build's view dissolving
+// into winter (see world/season-turn.js), held half way, so both looks are
+// drawn every frame.
 import os from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -73,6 +76,22 @@ const ms = (v) => +v.toFixed(3);
 const loadStart = os.loadavg()[0];
 const builds = { before: await scenes.before(start), after: await scenes.after(start) };
 for (let k = 0; k < 120; k++) { builds.before.frame(); builds.after.frame(); }
+let turning = 0;
+if (flags.turning) {
+  const load = (name) => import(new URL(`src/world/${name}.js`, roots.after));
+  const [{ Seasons, seasonal }, { rebakeHere }, { bakeWhole }, { turnOf }] =
+    await Promise.all(['season-turn', 'fine-bakes', 'props', 'prop-art'].map(load));
+  const { world, camera } = builds.after;
+  const trees = world.propsIn(camera.x - 200, camera.y - 150, camera.x + 200, camera.y + 150).filter(seasonal)
+    .sort((a, b) => Math.hypot(a.x - camera.x, a.y - camera.y) - Math.hypot(b.x - camera.x, b.y - camera.y))
+    .slice(0, +flags.turning);
+  rebakeHere(bakeWhole);
+  const seasons = new Seasons(world);
+  for (let i = 0; i < 200 && trees.some((p) => !turnOf(p)); i++) seasons.update(trees, 55, 23999, 0, { visible: () => true });
+  rebakeHere(null);
+  for (const p of trees) turnOf(p).k = 0.5;
+  turning = trees.length;
+}
 let relays = 0;
 const steps = new Set();
 if (twilight) {
@@ -113,6 +132,7 @@ out.shafts = rows.after.shafts ? ms(quantile(rows.after.shafts, 0.5)) : null;
 out.tier = night?.tierName ?? null;
 out.beams = night?.visible?.length ?? null;
 if (twilight) Object.assign(out, { relays, steps: steps.size, relaysPerRound: relays / +rounds });
+if (flags.turning) out.turning = turning;
 out.diff = Object.fromEntries(MAIN.map((k) => [k, ms(quantile(paired(k), 0.5))]));
 // The difference as a share of the before build's frame, round by round.
 out.diffPct = +quantile(rows.after.total.map((v, i) => (v - rows.before.total[i]) / rows.before.total[i] * 100), 0.5).toFixed(2);

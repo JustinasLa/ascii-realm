@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 import { test } from 'node:test';
 import { bakeFine, fineBaked, fineOf, packCells, packFine, rebake, rebakeHere, unpackCells } from '../src/world/fine-bakes.js';
-import { fineRecipe, fineSource } from '../src/world/prop-art.js';
+import { fineRecipe, fineSource, turnOf } from '../src/world/prop-art.js';
 import { bakeWhole, finishRecipe, rebuildProp } from '../src/world/props.js';
 import { Seasons, seasonal } from '../src/world/season-turn.js';
 import { SEASONS } from '../src/world/seasons.js';
@@ -107,34 +108,115 @@ test('on the season\'s last night the trees out of view turn, and the season beg
   }
 });
 
-test('a tree in view, directly or in the water, keeps its season until it leaves the view', () => {
-  rebakeHere(bakeWhole);
+// Re-bakes that land only once `answer` is called, as a worker's would.
+function answerLater(seasons) {
+  rebakeHere(() => null);
+  return () => { for (const job of seasons.jobs.values()) job.handle.result ??= bakeWhole(job.source); };
+}
+
+test('a tree in view dissolves into its new season over 2 s; one out of view turns at once', () => {
   try {
     const { world, trees } = scene();
     const seasons = new Seasons(world);
-    const [seen, ...rest] = trees;
-    settle(seasons, trees, ...LAST_NIGHT_END, { visible: (p) => p === seen });
-    assert.equal(seen.season, 'summer');
-    assert.ok(rest.every((p) => p.season === 'autumn'));
-    assert.equal(seasons.pending, 0, 'not even asked for');
-    // One asked for out of view that comes into it by its new crown waits.
+    const answer = answerLater(seasons);
+    const seen = trees.at(-1);
+    const visible = (p) => p === seen;
+    seasons.update(trees, ...LAST_NIGHT_END, 10, { visible });
+    assert.equal([...seasons.jobs.keys()][0], seen, 'the tree in view is asked for first');
+    answer();
+    for (let i = 0; i < 40 && seasons.pending; i++) seasons.update(trees, ...LAST_NIGHT_END, 10, { visible });
+    assert.ok(trees.every((p) => p.season === 'autumn'));
+    assert.equal(seasons.turning, 1);
+    const turn = turnOf(seen);
+    assert.deepEqual([turn.from, turn.at, turn.k], ['summer', 10, 0]);
+    assert.ok(trees.filter((p) => p !== seen).every((p) => turnOf(p) === null));
+    seasons.update(trees, ...LAST_NIGHT_END, 11, { visible });
+    assert.equal(turn.k, 0.5);
+    seasons.update(trees, ...LAST_NIGHT_END, 13, { visible });
+    assert.equal(turn.k, 1);
+    assert.equal(turnOf(seen), turn, 'kept while its old leaves are still falling');
+    seasons.update(trees, ...LAST_NIGHT_END, 20.01, { visible });
+    assert.equal(turnOf(seen), null);
+    assert.equal(seasons.turning, 0);
+    // Behind the play card a tree in view turns at once.
     const [other] = scene('summer', 8).trees;
-    const old = other.bounds;
-    seasons.update([other], ...LAST_NIGHT_END, 0, { visible: (p, b = p.bounds) => b !== old });
-    assert.equal(other.season, 'summer');
-    assert.equal(seasons.pending, 1);
-    seasons.update([other], ...LAST_NIGHT_END, 0);
+    seasons.update([other], ...LAST_NIGHT_END, 0, { instant: true, visible: () => true });
+    answer();
+    seasons.update([other], ...LAST_NIGHT_END, 0, { instant: true, visible: () => true });
     assert.equal(other.season, 'autumn');
-    // Behind the play card, a tree in view turns too.
-    seasons.update([seen], ...LAST_NIGHT_END, 0, { instant: true, visible: () => true });
-    assert.equal(seen.season, 'autumn');
+    assert.equal(turnOf(other), null);
+  } finally {
+    rebakeHere(null);
+  }
+});
+
+test('while it dissolves a tree keeps the bounds of both crowns, then exactly its new ones', () => {
+  try {
+    const { world, trees } = scene();
+    // A tree whose bare crown measures differently.
+    const prop = trees.find((p) => !isDeepStrictEqual(p.bounds, rebuildProp(inSeason(fineSource(p), 'winter')).bounds));
+    const seasons = new Seasons(world);
+    const answer = answerLater(seasons);
+    const old = { bounds: prop.bounds, top: prop.top, height: prop.height };
+    // From summer straight to winter's bare crown.
+    seasons.update([prop], 55, 23999, 0, { visible: () => true });
+    answer();
+    seasons.update([prop], 55, 23999, 0, { visible: () => true });
+    const grown = rebuildProp(inSeason(fineSource(prop), 'winter'));
+    const b = old.bounds, w = grown.bounds;
+    assert.notDeepEqual(b, w);
+    assert.deepEqual(prop.bounds, { minX: Math.min(b.minX, w.minX), maxX: Math.max(b.maxX, w.maxX),
+      minY: Math.min(b.minY, w.minY), maxY: Math.max(b.maxY, w.maxY) });
+    assert.equal(prop.top, Math.min(old.top, grown.top));
+    assert.equal(prop.top + prop.height, Math.max(old.top + old.height, grown.top + grown.height));
+    seasons.update([prop], 55, 23999, 11, { visible: () => true });
+    assert.deepEqual([prop.bounds, prop.top, prop.height], [grown.bounds, grown.top, grown.height]);
+  } finally {
+    rebakeHere(null);
+  }
+});
+
+test('a tree drawn in ordinary cells dissolves in them and takes its small letters when done', () => {
+  try {
+    const { world, trees } = scene();
+    const [coarse, fine] = trees;
+    fineOf(fine);
+    bakeFine();
+    const oldFine = fineBaked(fine);
+    const seasons = new Seasons(world);
+    const answer = answerLater(seasons);
+    seasons.update([coarse, fine], ...LAST_NIGHT_END, 0, { visible: () => true });
+    answer();
+    for (let i = 0; i < 4; i++) seasons.update([coarse, fine], ...LAST_NIGHT_END, 0, { visible: () => true });
+    assert.equal(turnOf(fine).fine, oldFine, 'fine to fine');
+    assert.ok(fineBaked(fine) && fineBaked(fine) !== oldFine);
+    const turn = turnOf(coarse);
+    assert.equal(turn.fine, null);
+    const { pending } = turn;
+    assert.ok(pending);
+    assert.equal(fineOf(coarse, true), null, 'no bake is asked for while it dissolves');
+    seasons.update([coarse, fine], ...LAST_NIGHT_END, 1.5, { visible: () => true });
+    assert.equal(fineBaked(coarse), null);
+    seasons.update([coarse, fine], ...LAST_NIGHT_END, 2, { visible: () => true });
+    assert.equal(fineBaked(coarse).cells, pending, 'adopted once the dissolve is done');
+    assert.equal(turn.pending, null);
+    // A turn cut short by another landing ends cleanly first.
+    const again = new Seasons(world);
+    const reply = answerLater(again);
+    coarse.season = 'spring';
+    again.update([coarse], 0, 0, 3, { visible: () => true });
+    reply();
+    again.update([coarse], 0, 0, 3, { visible: () => true });
+    assert.equal(coarse.season, 'summer');
+    assert.equal(turnOf(coarse).from, 'spring');
+    again.finish();
+    assert.equal(turnOf(coarse), null);
   } finally {
     rebakeHere(null);
   }
 });
 
 test('felled, burnt and burning trees, pins and a lobby being joined turn nothing', () => {
-  rebakeHere(bakeWhole);
   try {
     const { world, props, trees } = scene();
     assert.ok(trees.every(seasonal));
@@ -143,6 +225,7 @@ test('felled, burnt and burning trees, pins and a lobby being joined turn nothin
     chopped.chopped = true;
     burnt.burnt = true;
     burning.burning = { progress: 0.5, heat: 1 };
+    rebakeHere(bakeWhole);
     const pinned = new Seasons(world, { pinned: 'summer', length: 3 });
     pinned.update(trees, 83, 23999, 0);
     assert.equal(world.season, 'summer');
@@ -160,9 +243,11 @@ test('felled, burnt and burning trees, pins and a lobby being joined turn nothin
     assert.deepEqual([chopped, burnt, burning].map((p) => p.season), ['summer', 'summer', 'summer']);
     // A tree felled while it was being made again keeps its stump.
     const seasons = new Seasons(world);
-    seasons.update([late], 27, 23999, 0, { visible: (p, b) => b !== undefined });
+    const answer = answerLater(seasons);
+    seasons.update([late], 27, 23999, 0);
     assert.equal(seasons.pending, 1);
     late.chopped = true;
+    answer();
     seasons.update([], 27, 23999, 0);
     assert.equal(seasons.pending, 0);
     assert.equal(late.season, 'summer');
@@ -172,19 +257,18 @@ test('felled, burnt and burning trees, pins and a lobby being joined turn nothin
 });
 
 test('a tree wanted back in its own season before it lands is left as it is', () => {
-  rebakeHere(bakeWhole);
   try {
     const { world, trees } = scene();
     const [prop] = trees;
     const seasons = new Seasons(world);
+    answerLater(seasons);
     const cells = prop.cells;
-    seasons.update([prop], 27, 23999, 0, { visible: (p, b) => b !== undefined });
+    seasons.update([prop], 27, 23999, 0);
     assert.equal(seasons.pending, 1);
-    seasons.update([prop], 28, 0, 0, { shared: true, visible: (p, b) => b !== undefined });
+    seasons.update([prop], 28, 0, 0, { shared: true });
     assert.equal(seasons.pending, 1, 'the realm wants autumn too: kept');
-    seasons.update([prop], 0, 0, 0, { visible: (p, b) => b !== undefined });
-    assert.equal(seasons.pending, 0);
     seasons.update([prop], 0, 0, 0);
+    assert.equal(seasons.pending, 0);
     assert.equal(prop.cells, cells);
   } finally {
     rebakeHere(null);
@@ -192,13 +276,14 @@ test('a tree wanted back in its own season before it lands is left as it is', ()
 });
 
 test('landings stop for the frame once a millisecond has gone', () => {
-  rebakeHere(bakeWhole);
   const now = performance.now;
   try {
     const { world, trees } = scene();
     const seasons = new Seasons(world);
+    const answer = answerLater(seasons);
     const three = trees.slice(0, 3);
-    seasons.update(three, 27, 23999, 0, { visible: (p, b) => b !== undefined });
+    seasons.update(three, 27, 23999, 0);
+    answer();
     let clock = 0;
     performance.now = () => (clock += 2);
     seasons.update(three, 27, 23999, 0);
