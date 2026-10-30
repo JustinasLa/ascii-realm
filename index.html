@@ -57,6 +57,7 @@
     <div class="phone-sheet-head"><span>Menu</span><button type="button" id="phone-menu-close">Close</button></div>
     <button type="button" id="phone-menu-inventory" class="phone-sheet-row" aria-haspopup="dialog">Inventory</button>
     <button type="button" id="phone-menu-fullscreen" class="phone-sheet-row" hidden>Full screen</button>
+    <button type="button" id="phone-menu-save" class="phone-sheet-row" hidden>Save game</button>
     <details id="scenery-builder">
       <summary>Scenery builder <kbd>B</kbd></summary>
       <div class="builder-panel">
@@ -151,6 +152,13 @@
         <p id="lobby-tint-status" role="status" aria-live="polite"></p>
       </fieldset>
       <button id="lobby-leave" type="button" hidden>Leave lobby</button>
+    </details>
+    <details id="save-controls" hidden>
+      <summary>Game</summary>
+      <div class="builder-panel">
+        <p id="save-status" class="builder-intro" role="status">Saves every minute and when you leave.</p>
+        <div class="lobby-actions"><button id="save-now" type="button">Save now</button></div>
+      </div>
     </details>
     <details id="audio-controls">
       <summary>Audio</summary>

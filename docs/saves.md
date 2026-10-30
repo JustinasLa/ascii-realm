@@ -1,11 +1,41 @@
 # Saves
 
-Nothing saves play on its own yet. This page describes the save format, the
-store that reads and writes it (`src/save/format.js` and `src/save/store.js`)
-and how a body moves between the game and a save (`src/save/body.js`). With
-`?debug`, `game.save.now()` saves the body being played and
-`game.save.restore()` puts it back; `game.save.read()` and `game.save.claim()`
-reach the store.
+Play is saved on this device, one save per world, and picked up again when
+the page next opens. This page describes when the game saves and what it
+says (`src/save/session.js`), the save format and the store that reads and
+writes it (`src/save/format.js` and `src/save/store.js`), and how a body
+moves between the game and a save (`src/save/body.js`). With `?debug`,
+`game.save.now()` saves by hand, `game.save.tick()` runs an autosave,
+`game.save.restore()` continues again, `game.save.read()` and
+`game.save.claim()` reach the store and `game.save.saveSession` is the
+session.
+
+## Saving and Continue
+
+- **Continue.** A page that opens on a world with a save picks it up at
+  once: the active character's body (place, vitals, bag and worn gear) and
+  the time of day come back. The world holds still until they have. A
+  character with no body in the save sets out with the starter kit at the
+  world spawn. Nothing is written until the save has been picked up.
+- **When it saves.** Every minute while the page is shown, at an idle
+  moment; at once as the page hides or closes; after a defeat, with the body
+  woken at spawn; just before joining a lobby; after a character switch; and
+  by hand with the Game panel's **Save now** or the phone menu's **Save
+  game**. The Game panel's line tells when it last saved, or why it doesn't.
+- **Notices.** A short toast says when a save by hand lands, and when a save
+  fails: storage full, the save too big, or another error. Each failure is
+  said once until a save lands again; a save by hand always answers. As the
+  page opens it also says when storage can't be reached, when the save
+  couldn't be read (it starts fresh and keeps the old text aside), when some
+  saved things couldn't be read, and when the save comes from a newer
+  version (it plays on but never saves). A world open in another tab is
+  played here without saving; if another tab saves the world after this page
+  continued it, this page stops saving and says to reload.
+- **Lobbies.** Joining a lobby saves first and says whether that worked;
+  lobby play is never saved.
+- **Address options.** `?instruments` puts instruments in the bag only of a
+  game that starts fresh, `?time=` beats a saved time of day, and `?nogate`
+  neither continues nor saves.
 
 ## Keys
 
@@ -83,6 +113,9 @@ the same player, and the solo save takes up again on the next page load.
 
 ## Versions
 
+`features` counts the optional additions a build knows: 1 is the base
+format, 2 fills the realm's `clock`.
+
 - Filling a reserved field or adding an optional one keeps the version and
   raises `features`. A build that reads more features than it knows plays the
   save but never writes over it.
@@ -119,5 +152,6 @@ missing keeps its bag.
   blocked storage is reported, never fixed by deleting other keys, and the
   previous record stays as it was.
 - A paused store writes nothing for the rest of the page.
-- Code that saves keeps it out of the frame: a timed save waits for an idle
-  moment, and only the save as the page hides runs at once.
+- Saving stays out of the frame: the autosave and the saves after a defeat
+  or a character switch wait for an idle moment, and only the saves as the
+  page hides, before a lobby and by hand run at once.

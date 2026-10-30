@@ -46,9 +46,9 @@ import { Inventory } from './inventory/inventory.js';
 import { ITEMS } from './inventory/items.js';
 import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
-import { emptyRealm } from './save/format.js';
 import { SaveStore } from './save/store.js';
-import { applyBody, bodyIdOf, fileBody, putBody, starterKit } from './save/body.js';
+import { bodyIdOf, starterKit } from './save/body.js';
+import { AUTOSAVE_MS, IDLE_TIMEOUT_MS, SaveSession } from './save/session.js';
 import { attributeTotals, nameError, normalName } from './character/rules.js';
 import { classOf } from './character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
@@ -248,9 +248,6 @@ const player = new Player(spawn.x, spawn.y);
 // veins (and the torch, which is not an item). Only ore can be gathered.
 const inventory = new Inventory({ starter: false });
 inventory.restore(starterKit());
-// Until instruments can be crafted, ?instruments puts one of each in the bag.
-if (params.has('instruments')) for (const id of INSTRUMENT_IDS) inventory.add(id);
-inventory.events.length = 0;
 // The pouch: money carried, in cents, kept on this device between visits.
 let walletStorage = null;
 try { walletStorage = localStorage; } catch {}
@@ -259,6 +256,8 @@ const wallet = new Wallet({ storage: walletStorage });
 // its name and skin. Without one the outlaw is Kael in today's outfit.
 const characters = new Roster({ storage: walletStorage, bypassCooldown: params.has('debug'), events: window,
   onChange: () => applyCharacter() });
+// When play saves (see the save block below); null on pages that never save.
+let saveSession = null;
 player.skin = cleanSkin(characters.active?.skin);
 // ?name=... shows another valid name for this visit, for testing; the
 // roster keeps the character's own.
@@ -276,6 +275,8 @@ function applyCharacter() {
   if (!creator.isOpen) player.skin = cleanSkin(characters.active?.skin);
   characterPages.render();
   renderLobby?.(multiplayer);
+  // The new character's body goes on at once (`docs/saves.md`).
+  if (saveSession?.sync()) saveSoon('switch');
 }
 // Plants in the world: they burn and the sword cuts them, but drop nothing.
 // Harvestable tufts and berry bushes stay disabled.
@@ -626,17 +627,15 @@ const saveStations = () => { furnaces.save(); alloyBook.save(); };
 window.addEventListener('pagehide', saveStations);
 document.addEventListener('visibilitychange', () => document.hidden && saveStations());
 // Saves of play on this world, kept on this device (see docs/saves.md): solo
-// pages in a real world only. Nothing saves on its own yet; with ?debug,
-// `game.save` saves and restores by hand.
+// pages in a real world only. A page with a save picks it up as it starts
+// (Continue), then saves every minute when idle, as it hides, after a
+// defeat, before a lobby, after a character switch and by hand. ?nogate
+// never saves.
 const saveTarget = inLobby || ruinPreview || hillScene ? null : { seed, woodland: world.woodland };
-const saveOff = inLobby ? 'lobby' : 'scene';
 const saves = saveTarget && new SaveStore({ storage: walletStorage, world: saveTarget, events: window,
   locks: navigator.locks ?? null });
 // The live body and whose it is (`save/body.js`).
 const live = { player, inventory, world, appliedId: bodyIdOf(characters) };
-// Bodies a character switch filed that no save has written yet, by id. They
-// go into whichever realm the next save writes, even one claimed meanwhile.
-const unsaved = new Map();
 // After a body is put back, the camera and pose wake with it, as after a defeat.
 const wakeBody = () => {
   casting.reset();
@@ -644,38 +643,60 @@ const wakeBody = () => {
   camera.x = player.x;
   camera.y = player.y - focusRows() - playerLift();
 };
-if (params.has('debug')) debug.save = { store: saves, live,
-  // Files the unsaved bodies and the live body into the claimed save (a new
-  // one when none is stored) and writes it.
-  now() {
-    if (!saves) return { ok: false, reason: saveOff };
-    const realm = saves.realm ?? emptyRealm(saveTarget);
-    const liveIds = characters.characters.map((character) => character.id);
-    for (const [id, body] of unsaved) putBody(realm, id, body, liveIds);
-    const outgoing = live.appliedId;
-    if (fileBody(realm, live, characters)) {
-      wakeBody();
-      if (realm.bodies[outgoing]) unsaved.set(outgoing, realm.bodies[outgoing]);
-    }
-    const written = saves.write('realm', realm);
-    if (written.ok) {
-      saves.realm = realm;
-      unsaved.clear();
-    }
-    return written;
-  },
+// ?time= beats a saved time of day.
+const clockAdapter = { get: () => ({ day: dayClock.day, tick: dayClock.tick }),
+  set: ({ day, tick }) => {
+    if (params.has('time')) return;
+    dayClock.set(tick);
+    dayClock.days = day;
+  } };
+saveSession = saves && new SaveSession({ store: saves, world: saveTarget, live, characters, clock: clockAdapter,
+  notify: (text) => hud.notify(text, 'info'), off: params.has('nogate') ? 'tool' : null });
+const booted = saveSession?.boot();
+// Until instruments can be crafted, ?instruments puts one of each in the
+// bag of a game that starts fresh.
+if (params.has('instruments') && !['ok', 'repaired'].includes(booted?.status)) {
+  for (const id of INSTRUMENT_IDS) inventory.add(id);
+}
+inventory.events.length = 0;
+// Runs `run` while the browser is idle, within `timeout` ms.
+function whenIdle(run, timeout) {
+  (window.requestIdleCallback ?? ((then) => setTimeout(() => then({ timeRemaining: () => 4 }), 0)))(run, { timeout });
+}
+function saveSoon(reason) {
+  if (saveSession) whenIdle(() => saveSession.save(reason), IDLE_TIMEOUT_MS);
+}
+const autosave = () => !document.hidden && saveSession.save('auto');
+const saveRow = document.getElementById('phone-menu-save');
+const saveControls = document.getElementById('save-controls');
+const saveStatus = document.getElementById('save-status');
+const saving = !!saveSession && !saveSession.off;
+saveRow.hidden = !saving;
+if (saving) {
+  saveSession.onSwitch = wakeBody;
+  void saveSession.resume();
+  window.setInterval(() => whenIdle(autosave, IDLE_TIMEOUT_MS), AUTOSAVE_MS);
+  document.addEventListener('visibilitychange', () => document.hidden && saveSession.save('hide'));
+  saves.onHide = () => saveSession.save('hide');
+  // After the store's own: back from the back/forward cache, say if another
+  // tab saved meanwhile.
+  window.addEventListener('pageshow', (event) => event.persisted && saves.ready.then((state) => saveSession.tell(state)));
+  const showStatus = () => { saveStatus.textContent = saveSession.status(); };
+  const saveNow = () => {
+    saveSession.save('manual');
+    showStatus();
+  };
+  saveRow.addEventListener('click', saveNow);
+  document.getElementById('save-now').addEventListener('click', saveNow);
+  saveControls.addEventListener('toggle', showStatus);
+}
+// With ?debug, `game.save` saves, restores and runs an autosave by hand.
+const saveOff = inLobby ? 'lobby' : 'scene';
+if (params.has('debug')) debug.save = { store: saves, live, saveSession, tick: autosave,
+  now: () => saveSession ? saveSession.save('manual') : { ok: false, reason: saveOff },
   read: () => saves ? saves.read() : { status: saveOff },
   claim: async () => saves ? saves.claim() : { ok: false, reason: saveOff },
-  // Claims the save and puts the active character's body back.
-  async restore() {
-    const claimed = await debug.save.claim();
-    const status = claimed.ok ? claimed.status : claimed.reason;
-    const body = claimed.record?.bodies[bodyIdOf(characters)];
-    if (!claimed.ok || !body) return { status, repaired: claimed.repaired ?? 0, applied: false };
-    const { repaired } = applyBody(body, live, bodyIdOf(characters));
-    wakeBody();
-    return { status, repaired: claimed.repaired + repaired, applied: true };
-  } };
+  restore: async () => saveSession ? saveSession.resume() : { ok: false, reason: saveOff } };
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
   setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen
@@ -698,8 +719,9 @@ const remotePlayers = new RemotePlayers();
 const multiplayer = new MultiplayerClient({
   getState: () => playerState(player),
   onJoin: (lobby) => {
-    // A lobby moves this same player, so its play is never saved over the solo save.
-    saves?.pause('lobby');
+    // A lobby moves this same player, so its play is never saved over the
+    // solo save: it saves once now, then not again on this page.
+    saveSession?.beforeLobby();
     if (needsWorldReload(lobby, seed, world.woodland) || reloadsForLobby) {
       const url = lobbyWorldUrl(location.href, lobby, multiplayer.options?.server);
       try { sessionStorage.setItem('ascii-realm-rejoin', lobby.code); } catch {}
@@ -994,6 +1016,7 @@ function onPhoneChange(phone) {
     clock.setRate(pacer.rate);
   }
   updateWakeLock();
+  saveControls.hidden = phone || !saving;
   canvas.setAttribute('aria-label', phone ? 'Game scene.' : SCENE_LABEL);
   const changed = lastPhone !== undefined && phone !== lastPhone;
   lastPhone = phone;
@@ -1439,6 +1462,7 @@ function fallInBattle() {
   animals.disengage();
   target.clear();
   hud.notify('You were struck down. You wake where you began.', 'info');
+  saveSoon('death');
 }
 
 // A health bar over each monster's head once it has been cut.
@@ -1465,11 +1489,10 @@ let baking = false;
 function bakeWhenIdle() {
   if (baking || !fineBakesPending()) return;
   baking = true;
-  const idle = window.requestIdleCallback ?? ((run) => setTimeout(() => run({ timeRemaining: () => 4 }), 0));
-  idle((deadline) => {
+  whenIdle((deadline) => {
     baking = false;
     bakeFine(Math.max(2, deadline.timeRemaining() - 1));
-  }, { timeout: 120 });
+  }, 120);
 }
 
 function suspend() {
@@ -1516,8 +1539,9 @@ function frame(now) {
   const started = performance.now();
   // Behind the play card the whole world holds still: every system below
   // steps by zero, so time of day, fires, weather, fog, particles, monsters
-  // and the player all wait, while the scene is still drawn.
-  const dt = gate.waiting || debug.pinTime !== null ? 0 : step;
+  // and the player all wait, while the scene is still drawn. So it does
+  // while a save is being put back.
+  const dt = gate.waiting || saveSession?.holding || debug.pinTime !== null ? 0 : step;
   time = debug.pinTime ?? time + dt;
   // A lobby's clock is the wall clock's, shared by everyone in it; joining
   // jumps to it and leaving carries on from there.

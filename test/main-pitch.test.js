@@ -189,7 +189,7 @@ test('joining a lobby from a tilted solo page puts the camera back and keeps it 
   game.multiplayer.room = null;
   keydown(...code('BracketRight'));
   assert.equal(camera.look.deg, 35, 'solo again, the keys work');
-  assert.deepEqual(toasts, ['Camera pitch 45°', 'Camera pitch 30°', 'Camera pitch 35°']);
+  assert.deepEqual(toasts.filter((t) => t.startsWith('Camera')), ['Camera pitch 45°', 'Camera pitch 30°', 'Camera pitch 35°']);
   assert.deepEqual(looks.map((l) => l.deg), [45, 30, 35]);
 });
 
