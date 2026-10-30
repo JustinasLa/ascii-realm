@@ -1,4 +1,4 @@
-import { dg } from '../render/glyphs.js';
+import { BLANK_GLYPH, dg, GLYPH_KIND, GLYPH_MASK } from '../render/glyphs.js';
 
 // Shared ways for effects to add light and haze over a finished cell
 // without wiping out what is drawn there.
@@ -12,6 +12,24 @@ export function softLayer(r, cell, g, cr, cg, cb) {
   if (r.hasLayer(cell)) return false;
   r.layerAt(cell, g, cr, cg, cb);
   return true;
+}
+
+// Layers a glyph as softLayer does (or over anything, if not `soft`), faded
+// by `lit` (0..1) with no pop: down to half the glyph sinks into the ground
+// colour, and below that the cell keeps its own glyph, sunk into the ground
+// as far and rising back as `lit` falls, so at 0 it is untouched. A blank
+// glyph leaves the cell alone, as layerAt does.
+export function fadeLayer(r, cell, g, cr, cg, cb, lit, soft = true) {
+  if ((soft && r.hasLayer(cell)) || GLYPH_KIND[g & GLYPH_MASK] === BLANK_GLYPH) return;
+  const o = cell * 4;
+  const { fg, bg } = r;
+  if (lit < 0.5) {
+    for (let c = 0; c < 3; c++) fg[o + c] += (bg[o + c] - fg[o + c]) * 2 * lit;
+    return;
+  }
+  const k = 2 * lit - 1;
+  if (k < 1) [cr, cg, cb] = [bg[o] + (cr - bg[o]) * k, bg[o + 1] + (cg - bg[o + 1]) * k, bg[o + 2] + (cb - bg[o + 2]) * k];
+  r.layerAt(cell, g, cr, cg, cb);
 }
 
 // Lightens a cell toward a colour: k = 1 adds the full colour. The ground,
@@ -62,9 +80,10 @@ export function veil(r, o, k, cr, cg, cb, ground = 0.55) {
 // A soft round halo around the cell at sx, sy: the eight neighbours take a
 // slice of a drawn glow, coloured as the ground plus the light so it only
 // ever brightens; every cell in the block is lifted a little as well. The
-// centre cell is left for the light's own glyph.
-export function halo(r, sx, sy, k, cr, cg, cb) {
-  if (k <= 0.01) return;
+// centre cell is left for the light's own glyph. A light still fading in
+// (`lit` under 1) fades its halo's glyphs in with it (see fadeLayer).
+export function halo(r, sx, sy, k, cr, cg, cb, lit = 1) {
+  if (k <= 0.01 * lit) return;
   for (let i = 0; i < 9; i++) {
     const x = sx + (i % 3) - 1;
     const y = sy + Math.floor(i / 3) - 1;
@@ -73,7 +92,7 @@ export function halo(r, sx, sy, k, cr, cg, cb) {
     const o = cell * 4;
     lighten(r, o, k * (i === 4 ? 0.3 : 0.12), cr, cg, cb, 0.5);
     if (i === 4) continue;
-    softLayer(r, cell, HALO[i], r.bg[o] + cr * k, r.bg[o + 1] + cg * k, r.bg[o + 2] + cb * k);
+    fadeLayer(r, cell, HALO[i], r.bg[o] + cr * k, r.bg[o + 1] + cg * k, r.bg[o + 2] + cb * k, lit);
   }
 }
 

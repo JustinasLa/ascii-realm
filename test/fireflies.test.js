@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
+import { glyph } from '../src/render/glyphs.js';
 import { FADE_IN, Fireflies, WAKE_BAND } from '../src/world/fireflies.js';
 import { withLayers } from './helpers/renderer.js';
 import { GRASS, STONE } from '../src/world/world.js';
@@ -149,18 +150,59 @@ test('fireflies wake one by one as the firefly hours come, each at its own point
   });
 });
 
-test('a waking firefly fades out whole: its body, halo and pool all go to nothing', () => {
-  let last = Infinity;
-  for (let lit = 1; lit >= -1e-9; lit -= 0.05) {
+// The screen covered in bright grass, as the meadow is drawn before the
+// fireflies.
+function meadow() {
+  const r = screenOf();
+  for (let y = 0; y < r.rows; y++) {
+    for (let x = 0; x < r.cols; x++) {
+      r.bg.set([12, 26, 14], (y * r.cols + x) * 4);
+      r.put(x, y, glyph(','), 90, 190, 70);
+    }
+  }
+  return r;
+}
+
+// How far each cell looks from the bare meadow: its glyph's colour against
+// the ground, all of it where a firefly's glyph took the grass's place.
+function changes(r, bare) {
+  const out = [];
+  for (let cell = 0; cell < r.cols * r.rows; cell++) {
+    const o = cell * 4;
+    const ink = (a, c) => a.fg[o + c] - a.bg[o + c];
+    let d = 0;
+    for (let c = 0; c < 3; c++) {
+      d += r.glyphAt(cell) === bare.glyphAt(cell) ? Math.abs(ink(r, c) - ink(bare, c))
+        : Math.abs(ink(r, c)) + Math.abs(ink(bare, c));
+    }
+    out.push(d);
+  }
+  return out;
+}
+
+test('a waking firefly fades out whole: its body, halo and pool sink away and the grass comes back without a pop', () => {
+  const bare = meadow();
+  // Its body 2 rows over the grass it lights, at row 1 and column 0.
+  const body = (1 - VIEW.y0) * VIEW.cols - VIEW.x0;
+  let last = null;
+  for (let step = 20; step >= 0; step--) {
+    const lit = step / 20;
     const fireflies = new Fireflies();
-    fireflies.list.push({ x: 0.5, y: 3.5, h: 2, seed: 1, phase: 1, period: 3, lit: Math.max(0, lit) });
-    const r = screenOf();
-    let body = 0;
-    r.layer = (x, y, g, cr) => { body = cr / 215; };
+    fireflies.list.push({ x: 0.5, y: 3.5, h: 2, seed: 1, phase: 1, period: 3, lit });
+    const r = meadow();
     fireflies.draw(r, VIEW, 0);
-    assert.ok(body <= last + 1e-9, `lit ${lit}`);
-    last = body;
-    if (lit < 1e-9) assert.ok(body === 0 && r.fg.every((v) => v === 0), 'nothing at all asleep');
+    if (lit === 1) assert.notEqual(r.glyphAt(body), bare.glyphAt(body), 'awake, its body takes the cell');
+    if (lit === 0.25) assert.equal(r.glyphAt(body), bare.glyphAt(body), 'half asleep, the grass shows through');
+    const now = changes(r, bare);
+    assert.ok(now[body] > 0 || lit === 0);
+    if (last) {
+      for (let cell = 0; cell < now.length; cell++) {
+        assert.ok(now[cell] <= last[cell] + 3, `lit ${lit}: cell ${cell} brightens, ${last[cell]} to ${now[cell]} ${r.glyphAt(cell)} ${bare.glyphAt(cell)}`);
+        assert.ok(last[cell] - now[cell] <= 60, `lit ${lit}: cell ${cell} pops, ${last[cell]} to ${now[cell]}`);
+      }
+    }
+    last = now;
+    if (lit === 0) assert.deepEqual([r.fg, r.bg], [bare.fg, bare.bg], 'asleep, the meadow is as it was');
   }
 });
 

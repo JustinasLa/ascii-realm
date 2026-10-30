@@ -1,6 +1,6 @@
 import { valueNoise } from '../core/noise.js';
 import { dg } from '../render/glyphs.js';
-import { halo, lighten, subGlyph } from './glow.js';
+import { fadeLayer, halo, lighten, subGlyph } from './glow.js';
 import { ASPECT, GRASS } from './world.js';
 
 const BODY = Array.from({ length: 9 }, (_, i) => dg(`effects.fly.${i}`));
@@ -121,13 +121,14 @@ export class Fireflies {
           lighten(r, (y * r.cols + x) * 4, k, 120, 170, 70, 0.25);
         }
       }
-      halo(r, sx, sy, glow * 0.8, 120, 175, 45);
+      halo(r, sx, sy, glow * 0.8, 120, 175, 45, lit);
       if (sx < 0 || sy < 0 || sx >= r.cols || sy >= r.rows) continue;
-      // The body fades in from the colour of the ground behind it.
+      // The body glows out of the colour of the ground behind it, and fades
+      // in without hiding the grass there at once (see fadeLayer).
       const o = (sy * r.cols + sx) * 4;
-      const k = Math.min(1, 0.2 + b * 1.1) * lit;
-      r.layer(sx, sy, subGlyph(BODY, f.x, fy), r.bg[o] + (215 - r.bg[o]) * k,
-        r.bg[o + 1] + (255 - r.bg[o + 1]) * k, r.bg[o + 2] + (95 - r.bg[o + 2]) * k);
+      const k = Math.min(1, 0.2 + b * 1.1);
+      fadeLayer(r, o >> 2, subGlyph(BODY, f.x, fy), r.bg[o] + (215 - r.bg[o]) * k,
+        r.bg[o + 1] + (255 - r.bg[o + 1]) * k, r.bg[o + 2] + (95 - r.bg[o + 2]) * k, lit, false);
     }
   }
 }
