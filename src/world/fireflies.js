@@ -1,7 +1,7 @@
 import { valueNoise } from '../core/noise.js';
 import { dg } from '../render/glyphs.js';
 import { fadeLayer, halo, lighten, subGlyph } from './glow.js';
-import { ASPECT, GRASS } from './world.js';
+import { ASPECT, grassLike } from './world.js';
 
 const BODY = Array.from({ length: 9 }, (_, i) => dg(`effects.fly.${i}`));
 // How many fireflies per screen cell, so the meadow looks equally busy at
@@ -85,7 +85,7 @@ export class Fireflies {
     for (let tries = 0; tries < 8; tries++) {
       const x = cx + (Math.random() * 2 - 1) * halfW;
       const y = cy + (Math.random() * 2 - 1) * halfH;
-      if (world.typeAt(x, y) === GRASS) {
+      if (grassLike(world.typeAt(x, y))) {
         const seed = Math.random() * 1000;
         // Its point in the firefly hours, from its seed: no more random draws.
         return { x, y, h: 2, seed, phase: Math.random() * 6, period: 2.2 + Math.random() * 2.6,

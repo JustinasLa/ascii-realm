@@ -36,7 +36,8 @@ import { shaftTier } from '../../src/world/moon-shafts.js';
 import { FrameClock, FramePacer, FrameQuality, renderSize } from '../../src/render/budget.js';
 import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggleFullscreen, WakeLock } from '../../src/core/native.js';
 import { PlayGate } from '../../src/ui/play-gate.js';
-import { ASPECT, GRASS, WATER } from '../../src/world/world.js';
+import { ASPECT, GRASS, grassLike, WATER } from '../../src/world/world.js';
+import { findPlayPosition } from '../../src/editor/recovery.js';
 import { PHONE_QUERY, watchPhone } from '../../src/core/phone.js';
 import { FRAME_BIAS, LANDSCAPE_QUERY, phoneDefaultCell, watchLayout, ZoomSlots } from '../../src/core/layout.js';
 import { assistTarget, castAssist, strikeAssist } from '../../src/core/aim-assist.js';
@@ -66,6 +67,22 @@ const inert = () => class {
     return new Proxy(this, { get: (target, key) => key in target ? target[key] : () => [] });
   }
 };
+
+// The world main.js sees: meadow everywhere, with no bog to go to.
+export class FakeWorld {
+  constructor(seed, options = {}) {
+    this.spawn = { x: 0, y: 0 };
+    this.options = options;
+    this.woodland = options.woodland === 'dense' ? 'dense' : 'sparse';
+    this.provinces = { nearest: () => null };
+  }
+  isWalkable() { return true; }
+  typeAt() { return GRASS; }
+  propsIn() { return []; }
+  propsInView() { return []; }
+  waterDepthAt() { return 0; }
+  trim() {}
+}
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
   width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false, real = {},
@@ -350,20 +367,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     prepareSpellSounds: (_engine, spells) => { preparedSpellCount = spells.length; },
     moveAxis: () => move,
     wasTapped: code => !blocked && taps.delete(code),
-    Player, ASPECT, GRASS, CHUNK_SIZE: 64,
-    World: class {
-      constructor(seed, options = {}) {
-        this.spawn = { x: 0, y: 0 };
-        this.options = options;
-        this.woodland = options.woodland === 'dense' ? 'dense' : 'sparse';
-      }
-      isWalkable() { return true; }
-      typeAt() { return GRASS; }
-      propsIn() { return []; }
-      propsInView() { return []; }
-      waterDepthAt() { return 0; }
-      trim() {}
-    },
+    Player, ASPECT, GRASS, grassLike, findPlayPosition, CHUNK_SIZE: 64,
+    World: FakeWorld,
     Camera: class {
       constructor(x, y) { this.x = x; this.y = y; this.bias = 0; }
       centreY(view) { return this.y - this.bias * view.rows; }

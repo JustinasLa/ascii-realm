@@ -1,9 +1,9 @@
 # Provinces
 
 The world is split into **provinces**, regions about 160 m across. Each has
-one terrain: `land`, `water` or `bog`. Provinces don't change the ground yet.
-They are the map later systems use to decide where things happen, by
-province id.
+one terrain: `land`, `water` or `bog`. Bog provinces have their own ground
+(below). Provinces are also the map later systems use to decide where things
+happen, by province id.
 
 Provinces are a pure function of the world's seed, so nothing about them is
 saved. A save that needs one stores its id.
@@ -82,3 +82,39 @@ everywhere else.
 
 The world's provinces read the seeded land before any edits, rivers or ruins,
 so their terrains don't change when the land is painted.
+
+## Bogs
+
+Deep in a bog province the meadow gives way to **bog** (terrain type 5,
+`BOG`): a dark, olive floor of peat litter with clumps of moss, patches of wet
+soil and the odd pale glint of standing water, under olive sedge. The meadow
+thins into it across a ragged margin about half a screen wide, so a bog's
+edge reads as a darker place you walk into. Bog grows, burns, sounds and is
+walked like the meadow: fires spread across its sedge, glowcaps and fireflies
+find it, and dust over it throws blade bits rather than grit.
+
+`src/world/bogs.js` paints it as the chunk's last layer, after rivers:
+
+- A 3×3 lattice of lookups over the chunk skips the rest when no bog province
+  reaches it, as for most chunks.
+- Otherwise each point of a lattice 8 columns by 2 rows apart (about 0.4 m by
+  0.3 m, the world's own, so chunks agree) gets a **depth** `e`: the largest
+  of 2, 4, … 12 m, tried from the smallest up, whose ring of 8 probes
+  (`ringInside`) stays inside its bog. Rings within the lookup's safe radius
+  pass without probing, so a bog's interior costs one lookup per point.
+- A cell's **wetness** is `smooth(3, 9, e − 3n)`, with `n` slow noise, stored
+  in `chunk.bog` (0–255). No cell within 3 m of the border is wet.
+- Meadow still meadow after the rivers, with wetness above one half, becomes
+  bog. A river's shore and water win over it.
+- Sedge (grass style 6) grows where a hash falls under the wetness, plus
+  0.35 on bog, so it is nearly all sedge on the bog and thins out over the
+  margin.
+
+Bogs are a drawing layer only. Each bog chunk keeps `landType`, its land
+before rivers and bogs, and `preRiverTypeAt` reads it, so trees, rocks, veins
+and groves are exactly where they are without bogs, with the same ids. A bog
+chunk costs about as much to build as a meadow one once its province is
+known.
+
+The builder has a **Bog** brush, and `?bog` starts the game at the edge of
+the nearest bog (see [running](running.md)).

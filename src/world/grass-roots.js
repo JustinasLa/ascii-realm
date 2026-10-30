@@ -1,6 +1,6 @@
 import { valueNoise } from '../core/noise.js';
 import { hash2 } from '../core/rng.js';
-import { ASPECT, GRASS, SHORE } from './world.js';
+import { ASPECT, GRASS, grassLike, SHORE } from './world.js';
 
 // Night greens against the near-black ground, kept a step below rocks and
 // trees so the meadow reads as background: blue-green fine blades, leafy
@@ -8,6 +8,8 @@ import { ASPECT, GRASS, SHORE } from './world.js';
 export const PALETTES = [
   [38, 79, 61], [45, 84, 53], [38, 86, 57],
   [52, 83, 57], [67, 78, 52], [58, 78, 52],
+  // Sedge: the bog's darker, yellower olive (see bogs.js).
+  [60, 66, 34],
 ];
 
 // Wild flowers, by the number stored for a flowering root (0: none).
@@ -171,7 +173,7 @@ export function grassRoots(chunk, seed, size, { flora = true, meadow = false } =
       const grass = chunk.grassHeight[i];
       // Burnt ground keeps only its stubble and ash.
       if (chunk.burnt?.[i] || grass < 2) continue;
-      if (meadow && chunk.type[i] !== GRASS && chunk.type[i] !== SHORE) continue;
+      if (meadow && !grassLike(chunk.type[i]) && chunk.type[i] !== SHORE) continue;
       // Flowers and reeds share the islands, so gaps stay visibly open.
       // Reject bare ground before the more expensive habitat lookups.
       // The ruin meadow is a continuous sward, with gentle variation instead

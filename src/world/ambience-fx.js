@@ -3,7 +3,7 @@ import { hash2 } from '../core/rng.js';
 import { MIST_HEIGHTS } from '../render/glyph-packs/effects.js';
 import { dg, over } from '../render/glyphs.js';
 import { softLayer, subGlyph, veil } from './glow.js';
-import { ASPECT, GRASS, SHORE, WATER } from './world.js';
+import { ASPECT, grassLike, SHORE, WATER } from './world.js';
 
 // The small life of the night air: pollen and spores drifting over the
 // meadow, moths circling every flame, bats flickering across the sky now
@@ -63,7 +63,7 @@ export class Ambience {
     for (let tries = 0; tries < 6 && this.motes.length < count; tries++) {
       const x = view.x0 + random() * view.cols;
       const y = view.y0 + random() * view.rows + 4;
-      if (world.typeAt(x, y) !== GRASS) continue;
+      if (!grassLike(world.typeAt(x, y))) continue;
       const life = 7 + random() * 9;
       this.motes.push({ x, y, h: 1 + random() * 7, seed: random() * 1000, age: 0, life,
         spore: random() < 0.35 });

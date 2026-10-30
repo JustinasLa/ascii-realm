@@ -2,7 +2,7 @@ import { hash2 } from '../core/rng.js';
 import { dg, glyph } from '../render/glyphs.js';
 import { putCell } from '../render/cells.js';
 import { lighten } from './glow.js';
-import { ASPECT, CHUNK_SIZE, GRASS, WATER } from './world.js';
+import { ASPECT, CHUNK_SIZE, grassLike, WATER } from './world.js';
 
 const TAU = Math.PI * 2;
 const REACH = 6;
@@ -150,7 +150,7 @@ export class Mushrooms {
 
   open(x, y) {
     return [[0, 0], [-2, 0], [2, 0], [0, -1], [0, 1]].every(([dx, dy]) =>
-      this.world.typeAt(x + dx, y + dy) === GRASS && this.world.isWalkable(x + dx, y + dy));
+      grassLike(this.world.typeAt(x + dx, y + dy)) && this.world.isWalkable(x + dx, y + dy));
   }
 
   nodesOf(cx, cy) {
@@ -191,7 +191,7 @@ export class Mushrooms {
         if (loadedOnly && !this.world.loaded(cx, cy)?.props) continue;
         for (const p of this.nodesOf(cx, cy)) {
           if (p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1
-            && this.world.typeAt(p.x, p.y) === GRASS && this.world.isWalkable(p.x, p.y)) nodes.push(p);
+            && grassLike(this.world.typeAt(p.x, p.y)) && this.world.isWalkable(p.x, p.y)) nodes.push(p);
         }
       }
     }

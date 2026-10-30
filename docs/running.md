@@ -68,6 +68,9 @@ A first visit opens the [character creator](characters.md#the-creator);
 `?creator` always opens it and `?nocreator` (or `?nogate`) skips it, so
 screenshot tools on a fresh profile add `?nocreator` for play. With
 `?debug`, `?creator=age` (or another page) opens that page on a sample.
+`?bog` starts at the edge of the nearest [bog](provinces.md#bogs), on its
+side toward spawn, even when a save is put back; it says "No bog nearby." when none lies
+within about 2.5 km, and does nothing in a lobby.
 
 Tests are described in the [README](../README.md#tests). Run `npm run bench` for
 the repeatable CPU benchmark; measurements, browser checks and reproduction

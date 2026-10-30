@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { loadGame } from './helpers/main-game.js';
+import { FakeWorld, loadGame } from './helpers/main-game.js';
 import { emptyRealm, SAVE_FEATURES } from '../src/save/format.js';
 import { SaveStore } from '../src/save/store.js';
 import { NOTICES } from '../src/save/session.js';
@@ -97,6 +97,24 @@ test('play comes back on the next page load: place, bag, worn gear, health and t
   assert.equal(first.save.choice.mode, 'stale', 'and says so on a screen, not a toast');
   assert.deepEqual(first.hud.toasts, []);
   assert.deepEqual(plain(await second.save.restore()), { ok: true, status: 'ok', repaired: 0, applied: true });
+});
+
+// A world with a bog whose edge stands at a known cell.
+class BogWorld extends FakeWorld {
+  constructor(...args) {
+    super(...args);
+    this.provinces = { nearest: () => 26, edgePoint: () => ({ x: 40, y: 30 }) };
+  }
+}
+
+test('?bog wins over a save put back by Continue', async () => {
+  const storage = memory();
+  const first = await start(storage);
+  Object.assign(first.player, { x: 31.5, y: -12 });
+  assert.deepEqual(plain(first.save.tick()), { ok: true, rev: 1 });
+  const second = await start(storage, '&bog', { World: BogWorld });
+  assert.deepEqual([second.player.x, second.player.y], [40.5, 30.5]);
+  assert.equal(second.camera.x, 40.5);
 });
 
 test('?instruments and ?time= apply to a fresh start, and ?time= beats a saved clock', async () => {

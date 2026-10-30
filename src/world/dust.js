@@ -1,5 +1,5 @@
 import { dg, over } from '../render/glyphs.js';
-import { ASPECT, DIRT, GRASS, SHORE, STONE } from './world.js';
+import { ASPECT, BOG, DIRT, GRASS, grassLike, SHORE, STONE } from './world.js';
 
 // Little bursts kicked up by the wanderer: puffs of dust from footsteps and
 // landings with grit and pebbles skittering out of them, and clipped bits
@@ -26,6 +26,7 @@ const DUST_COLORS = {
   [SHORE]: [124, 124, 112],
   [STONE]: [128, 130, 138],
   [GRASS]: [96, 104, 84],
+  [BOG]: [84, 88, 62],
 };
 
 export class Dust {
@@ -59,7 +60,7 @@ export class Dust {
     }
     // Grit and small stones skip out of the puff on bare ground, bouncing
     // once before they settle; fine motes hang a moment longer.
-    if (type !== GRASS) {
+    if (!grassLike(type)) {
       const stones = Math.round(n * 0.6 + speed * 0.12);
       for (let i = 0; i < stones; i++) {
         const a = Math.random() * Math.PI * 2;
@@ -84,7 +85,7 @@ export class Dust {
       }
     }
     // Running through grass flicks up bits of blade as well.
-    if (type === GRASS) {
+    if (grassLike(type)) {
       for (let i = 0; i < n * 1.5; i++) {
         const life = 0.45 + Math.random() * 0.35;
         this.list.push({
