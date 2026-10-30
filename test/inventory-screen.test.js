@@ -911,6 +911,7 @@ test('on a phone a hold then a move drags, above the finger, scrolling the sheet
   assert.equal(screen.tooltip.shown, false, 'dragging hides it');
   assert.equal(ghost().style.transform, 'translate(95px, 269px)', 'above the finger');
   pointer('pointermove', slotButton('offHand'), 100, 8, touch);
+  assert.equal(ghost().style.transform, 'translate(95px, 0px)', 'never off the top of the screen');
   frame();
   assert.equal(screen.screen.scrollTop, 290, 'the sheet scrolls toward the doll');
   pointer('pointerup', slotButton('offHand'), 100, 8, touch);

@@ -266,10 +266,9 @@ body.inventory-open #inventory-root::before { opacity: 0; }
 .inventory-screen :is(.bag-card, .equipment-slot).selected { color: var(--accent); background: var(--hover); border-color: var(--frame); outline: 1px solid var(--accent); outline-offset: -4px; }
 /* A drag: a ghost of the art over the pointer, and the places it may land lit. */
 .drag-ghost { container-type: size; position: fixed; left: 0; top: 0; z-index: 4; display: grid; place-items: center; width: 56px; aspect-ratio: 1 / 2; color: var(--accent); background: #000; border: 1px solid var(--accent); opacity: 0.85; pointer-events: none; }
-.inventory-screen :is(.equipment-slot, .inventory-bag).drop-ok { border-color: var(--accent); }
-.inventory-bag.drop-ok { outline: 1px dashed var(--accent); outline-offset: 2px; }
+.inventory-screen :is(.equipment-slot, .inventory-bag).drop-ok { border-color: var(--accent); outline: 1px dashed var(--accent); outline-offset: 2px; }
 .inventory-screen :is(.equipment-slot, .bag-card, .inventory-bag).drop-hover { background: var(--hover); }
-.inventory-screen .bag-card.dragging { opacity: 0.4; }
+.inventory-screen :is(.bag-card, .equipment-slot).dragging { opacity: 0.4; }
 body.inventory-dragging, body.inventory-dragging .inventory-screen * { cursor: grabbing; }
 /* The item tooltip: a black box beside the pointer, its name bold light
    blue (an alloy's own colour), white lines and a dim help line. Pinned on

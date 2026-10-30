@@ -80,7 +80,7 @@ test('the item tooltip keeps inside the screen, its lines scrolling over 44 px b
 
 test('a drag ghost sizes its art to itself, and the details pane is gone', () => {
   assert.match(css, /\.drag-ghost \{ container-type: size;[^}]*width: 56px; aspect-ratio: 1 \/ 2;[^}]*pointer-events: none; \}/);
-  assert.match(css, /\.inventory-screen :is\(\.equipment-slot, \.inventory-bag\)\.drop-ok \{ border-color: var\(--accent\); \}/);
+  assert.match(css, /\.inventory-screen :is\(\.equipment-slot, \.inventory-bag\)\.drop-ok \{ border-color: var\(--accent\); outline: 1px dashed var\(--accent\);/);
   assert.doesNotMatch(css, /\.inventory-(details|actions|item-|stats|weight|durability|description)/);
 });
 

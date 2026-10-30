@@ -598,11 +598,12 @@ export class InventoryScreen {
     scroll();
   }
 
-  // The ghost rides above a finger and centred on a mouse; the target under
-  // it lights brighter, and near the scroller's top or bottom edge it scrolls.
+  // The ghost rides above a finger (never off the top) and centred on a
+  // mouse; the target under it lights brighter, and near the scroller's top
+  // or bottom edge it scrolls.
   _dragMove({ x, y, touch }, target) {
     const drag = this._drag;
-    drag.ghost.style.transform = `translate(${Math.round(x - drag.width / 2)}px, ${Math.round(y - drag.height * (touch ? 1.1 : 0.5))}px)`;
+    drag.ghost.style.transform = `translate(${Math.round(x - drag.width / 2)}px, ${Math.round(Math.max(0, y - drag.height * (touch ? 1.1 : 0.5)))}px)`;
     const hover = this._dropTarget(drag.selection, target);
     if (hover !== drag.hover) {
       drag.hover?.classList.remove('drop-hover');
