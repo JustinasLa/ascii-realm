@@ -97,11 +97,14 @@ find it, and dust over it throws blade bits rather than grit.
 
 - A 3×3 lattice of lookups over the chunk skips the rest when no bog province
   reaches it, as for most chunks.
-- Otherwise each point of a lattice 8 columns by 2 rows apart (about 0.4 m by
-  0.3 m, the world's own, so chunks agree) gets a **depth** `e`: the largest
-  of 2, 4, … 12 m, tried from the smallest up, whose ring of 8 probes
+- Otherwise each corner of a lattice 8 columns by 2 rows apart (about 0.4 m
+  by 0.3 m, the world's own, so chunks agree) gets a **depth** `e`: the
+  largest of 2, 4, … 12 m, tried from the smallest up, whose ring of 8 probes
   (`ringInside`) stays inside its bog. Rings within the lookup's safe radius
   pass without probing, so a bog's interior costs one lookup per point.
+- Each cell takes the least depth of its lattice block's four corners. A
+  border runs straight across a block, so no cell lies deeper than its own
+  rings allow; a test checks every cell along three bogs' edges.
 - A cell's **wetness** is `smooth(3, 9, e − 3n)`, with `n` slow noise, stored
   in `chunk.bog` (0–255). No cell within 3 m of the border is wet.
 - Meadow still meadow after the rivers, with wetness above one half, becomes
@@ -112,9 +115,11 @@ find it, and dust over it throws blade bits rather than grit.
 
 Bogs are a drawing layer only. Each bog chunk keeps `landType`, its land
 before rivers and bogs, and `preRiverTypeAt` reads it, so trees, rocks, veins
-and groves are exactly where they are without bogs, with the same ids. A bog
-chunk costs about as much to build as a meadow one once its province is
-known.
+and groves are exactly where they are without bogs, with the same ids. Measured
+warm (provinces already looked up), a chunk at a bog's edge takes about 1.4–1.5×
+a meadow chunk's build time and one inside a bog about 1.1–1.2×; meadow chunks
+cost the same as without bogs. Cold-cache builds and the render loop on desktop
+and phone were not measured.
 
 The builder has a **Bog** brush, and `?bog` starts the game at the edge of
 the nearest bog (see [running](running.md)).

@@ -54,18 +54,27 @@ export function paintBog(world, cx, cy, size, type, land) {
   if (!any) return null;
   const wet = new Uint8Array(size * size);
   const before = land ?? type.slice();
-  const cols = size / LATTICE_X;
-  const depth = new Uint8Array(cols * (size / LATTICE_Y));
-  for (let q = 0; q < depth.length; q++) {
-    const x = cx * size + (q % cols) * LATTICE_X + (LATTICE_X >> 1);
+  // Depth at each lattice corner, one past the chunk's last block too.
+  const cols = size / LATTICE_X + 1;
+  const corner = new Uint8Array(cols * (size / LATTICE_Y + 1));
+  for (let q = 0; q < corner.length; q++) {
+    const x = cx * size + (q % cols) * LATTICE_X;
     const y = cy * size + Math.floor(q / cols) * LATTICE_Y;
     const id = provinces.idAt(x, y);
-    depth[q] = provinces.terrain(id) === 'bog' ? bogDepth(provinces, id, x, y) : 0;
+    corner[q] = provinces.terrain(id) === 'bog' ? bogDepth(provinces, id, x, y) : 0;
+  }
+  // A block takes the least depth of its four corners: a border runs straight
+  // across 0.4 m, so no cell in it lies deeper than its own rings allow.
+  const depth = new Uint8Array((cols - 1) * (size / LATTICE_Y));
+  for (let q = 0; q < depth.length; q++) {
+    const a = Math.floor(q / (cols - 1)) * cols + (q % (cols - 1));
+    depth[q] = Math.min(corner[a], corner[a + 1], corner[a + cols], corner[a + cols + 1]);
   }
   for (let i = 0; i < wet.length; i++) {
     const lx = i % size;
     const ly = Math.floor(i / size);
-    const e = depth[Math.floor(ly / LATTICE_Y) * cols + Math.floor(lx / LATTICE_X)];
+    const q = Math.floor(ly / LATTICE_Y) * (cols - 1) + Math.floor(lx / LATTICE_X);
+    const e = depth[q];
     if (!e) continue;
     const w = wetness(e, cx * size + lx, cy * size + ly, world.seed);
     wet[i] = Math.round(w * 255);

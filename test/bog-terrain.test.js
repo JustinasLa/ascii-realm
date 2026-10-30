@@ -4,12 +4,13 @@ import { Scenery } from '../src/editor/scenery.js';
 import { GLYPHS } from '../src/render/glyphs.js';
 import { bogDepth, bogStyle, paintBog, SEDGE, wetness } from '../src/world/bogs.js';
 import { Dust } from '../src/world/dust.js';
-import { vegetationFuel } from '../src/world/fire-spread.js';
+import { ConnectedFire, vegetationFuel } from '../src/world/fire-spread.js';
 import { PALETTES } from '../src/world/grass-roots.js';
+import { Mushrooms } from '../src/world/mushrooms.js';
 import { toCellPoint, toMetres } from '../src/world/provinces.js';
 import * as bogShader from '../src/world/terrain/bog.js';
 import { TERRAIN_SHADERS } from '../src/world/terrain/index.js';
-import { BOG, CHUNK_SIZE, GRASS, grassLike, SHORE, World } from '../src/world/world.js';
+import { BOG, CHUNK_SIZE, GRASS, grassLike, SHORE, WATER, World } from '../src/world/world.js';
 import { FakeWorld, loadGame } from './helpers/main-game.js';
 
 const world = new World(1);
@@ -67,6 +68,29 @@ test('depth rises in 2 m steps away from the border, and wetness with it', () =>
   assert.equal(wetness(12, heart.x, heart.y, 1), 1);
 });
 
+test('no cell is painted deeper than its own ring allows', () => {
+  let painted = 0;
+  for (const seed of [1, 2, 3]) {
+    const w = seed === 1 ? world : new World(seed);
+    const id = w.provinces.nearest('bog', w.spawn.x, w.spawn.y);
+    const p = w.provinces.edgePoint(id, w.spawn);
+    for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1]]) {
+      const c = w.chunk(Math.floor(p.x / CHUNK_SIZE) + dx, Math.floor(p.y / CHUNK_SIZE) + dy);
+      for (let i = 0; c.bog && i < c.type.length; i++) {
+        const x = c.cx * CHUNK_SIZE + (i % CHUNK_SIZE);
+        const y = c.cy * CHUNK_SIZE + Math.floor(i / CHUNK_SIZE);
+        const own = w.provinces.idAt(x, y);
+        const e = w.provinces.terrain(own) === 'bog' ? bogDepth(w.provinces, own, x, y) : 0;
+        const w0 = wetness(e, x, y, seed);
+        assert.ok(c.bog[i] <= Math.round(w0 * 255), `${x},${y} wetter than its depth ${e} allows`);
+        if (c.type[i] === BOG) assert.ok(w0 > 0.5, `${x},${y} is bog at depth ${e}`);
+        painted += c.type[i] === BOG;
+      }
+    }
+  }
+  assert.ok(painted > 10000, `${painted} bog cells`);
+});
+
 test('the bog is a drawing layer: meadow chunks and every prop are as without bogs', () => {
   const meadow = world.chunk(0, 0);
   const same = plain.chunk(0, 0);
@@ -79,6 +103,35 @@ test('the bog is a drawing layer: meadow chunks and every prop are as without bo
     assert.ok(c.landType.every((t) => t !== BOG));
     assert.equal(world.preRiverTypeAt(p.x, p.y), plain.typeAt(p.x, p.y));
   }
+});
+
+test('props are as without bogs in dense groves and where a river crosses a bog', () => {
+  const ids = (w, cx, cy) => w.propsOf(cx, cy).map((p) => `${p.id}:${p.kind}:${p.x},${p.y}`);
+  let trees = 0;
+  let rivers = 0;
+  for (const seed of [1, 2, 3]) {
+    const on = new World(seed, { woodland: 'dense' });
+    const off = new World(seed, { woodland: 'dense', bogs: false });
+    const id = on.provinces.nearest('bog', on.spawn.x, on.spawn.y);
+    const h = on.provinces.heart(id);
+    const hx = Math.floor(h.x / CHUNK_SIZE);
+    const hy = Math.floor(h.y / CHUNK_SIZE);
+    for (let cy = hy - 4; cy <= hy + 4; cy++) {
+      for (let cx = hx - 4; cx <= hx + 4; cx++) {
+        const c = on.chunk(cx, cy);
+        if (!c.type.includes(BOG)) continue;
+        const river = c.type.includes(WATER);
+        rivers += river;
+        if (!river && (cx + cy) % 3) continue;
+        assert.deepEqual(ids(on, cx, cy), ids(off, cx, cy), `chunk ${cx},${cy} of seed ${seed}`);
+        // A grove's sward reads the land before the bog too.
+        assert.deepEqual(c.grove, off.chunk(cx, cy).grove);
+        trees += on.propsOf(cx, cy).length;
+      }
+    }
+  }
+  assert.ok(rivers >= 3, `${rivers} river chunks`);
+  assert.ok(trees > 40, `${trees} props`);
 });
 
 test('bog grass is mostly sedge, thinning into the meadow\'s own across the margin', () => {
@@ -102,24 +155,70 @@ test('painting bog lays a sedge lawn, and resetting brings the meadow back', () 
   assert.equal(c.grassStyle[i], SEDGE);
   assert.ok(c.grassHeight[i] > 2);
   assert.ok(Math.abs(c.elev[i] - 0.46) < 1e-6);
+  // A cell of the bog itself, painted meadow, is bog again after a reset.
+  const b = chunkOf(w, heart);
+  const k = b.type.indexOf(BOG);
+  const bx = b.cx * CHUNK_SIZE + (k % CHUNK_SIZE);
+  const by = b.cy * CHUNK_SIZE + Math.floor(k / CHUNK_SIZE);
+  const sedge = b.grassStyle[k];
+  assert.equal(scene.paint(bx, by, 0, GRASS), 1);
+  assert.equal(w.typeAt(bx, by), GRASS);
   scene.reset();
   assert.equal(c.type[i], GRASS);
   assert.equal(c.grassStyle[i], style);
+  const again = w.locate(bx, by);
+  assert.equal(again.c.type[again.i], BOG);
+  assert.equal(again.c.grassStyle[again.i], sedge);
   assert.throws(() => scene.paint(x, y, 0, 6));
 });
 
-test('bog grass is fuel, scorches and burns like the meadow', () => {
+test('a fire on bog grass spreads through it and stops where the fuel ends', () => {
   const w = new World(1);
   const c = chunkOf(w, heart);
   const i = c.type.findIndex((t, k) => t === BOG && c.blades.present[k]);
-  const x = c.cx * CHUNK_SIZE + (i % CHUNK_SIZE);
-  const y = c.cy * CHUNK_SIZE + Math.floor(i / CHUNK_SIZE);
-  assert.equal(vegetationFuel(w, x + 0.5, y + 0.5)?.kind, 'grass');
-  w.burnGrassCell(x, y);
-  assert.equal(c.burnt[i], 255);
-  const before = c.burnt.filter((v) => v > 0).length;
-  w.burnGrass(x, y);
-  assert.ok(c.burnt.filter((v) => v > 0).length > before + 5);
+  const x = c.cx * CHUNK_SIZE + (i % CHUNK_SIZE) + 0.5;
+  const y = c.cy * CHUNK_SIZE + Math.floor(i / CHUNK_SIZE) + 0.5;
+  const fire = new ConnectedFire(w, vegetationFuel(w, x, y), x, y);
+  for (let s = 0; s < 400 && fire.events.length; s++) fire.update(0.5);
+  assert.equal(fire.events.length, 0, 'the fire burns out');
+  const lit = [...fire.nodes.keys()].map((k) => k.slice(6).split(',').map(Number));
+  assert.ok(lit.length > 100, `${lit.length} cells burnt`);
+  for (const [lx, ly] of lit) {
+    assert.equal(w.typeAt(lx, ly), BOG);
+    const at = w.locate(lx, ly);
+    assert.equal(at.c.burnt[at.i], 255);
+    // Every unburnt neighbour is no fuel at all.
+    for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+      if (!fire.nodes.has(`grass:${lx + dx},${ly + dy}`)) assert.equal(vegetationFuel(w, lx + dx, ly + dy), null);
+    }
+  }
+});
+
+test('glowcaps grow on bog, and the meadow\'s glowcaps and fuel are as without bogs', () => {
+  const caps = new Mushrooms(world, { spawnRate: 1 });
+  const c = chunkOf(world, heart);
+  const x0 = (c.cx - 1) * CHUNK_SIZE;
+  const y0 = (c.cy - 1) * CHUNK_SIZE;
+  const listed = caps.nodesIn(x0, y0, x0 + 3 * CHUNK_SIZE, y0 + 3 * CHUNK_SIZE);
+  assert.ok(listed.filter((p) => world.typeAt(p.x, p.y) === BOG).length > 10);
+  const on = new Mushrooms(world);
+  const off = new Mushrooms(plain);
+  const at = (m, cx, cy) => m.nodesOf(cx, cy).map((p) => `${p.x},${p.y},${p.size}`);
+  assert.deepEqual(on.starters, off.starters);
+  const sx = Math.floor(world.spawn.x / CHUNK_SIZE);
+  const sy = Math.floor(world.spawn.y / CHUNK_SIZE);
+  let meadows = 0;
+  for (let cy = sy - 2; cy <= sy + 2; cy++) {
+    for (let cx = sx - 2; cx <= sx + 2; cx++) {
+      if (world.chunk(cx, cy).bog) continue;
+      meadows++;
+      assert.deepEqual(at(on, cx, cy), at(off, cx, cy));
+    }
+  }
+  assert.ok(meadows > 10);
+  const fuel = (w) => Array.from({ length: CHUNK_SIZE * 8 }, (_, k) => vegetationFuel(w, k % CHUNK_SIZE, Math.floor(k / CHUNK_SIZE))?.duration);
+  assert.deepEqual(fuel(world), fuel(plain));
+  assert.ok(fuel(world).some(Boolean));
 });
 
 test('dust over bog throws blade bits and no grit', () => {
