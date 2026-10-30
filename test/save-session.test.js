@@ -45,7 +45,7 @@ test('saves every minute when idle, within five seconds', () => {
 });
 
 test('every notice fits the phone\'s one-line toast', () => {
-  for (const [key, text] of Object.entries(NOTICES)) assert.ok(text.length <= 48, `${key}: ${text}`);
+  for (const [key, text] of Object.entries(NOTICES)) assert.ok(text.length <= 27, `${key}: ${text}`);
 });
 
 test('a world with no save starts fresh, then saves its body and the clock', async () => {
@@ -107,7 +107,7 @@ test('a save with things that couldn\'t be read says so, once', async () => {
   const { session, told } = setup({ storage });
   session.boot();
   assert.equal((await session.resume()).repaired, 1);
-  assert.deepEqual(told, ['Some saved things couldn\'t be read.']);
+  assert.deepEqual(told, [NOTICES.repaired]);
 });
 
 test('a damaged save starts fresh, and the first save writes over it', async () => {
@@ -115,7 +115,7 @@ test('a damaged save starts fresh, and the first save writes over it', async () 
   storage.setItem(KEY, '{ not json');
   const { session, told } = setup({ storage });
   assert.equal(session.boot().status, 'corrupt');
-  assert.deepEqual(told, ['Your save couldn\'t be read: starting fresh.']);
+  assert.deepEqual(told, [NOTICES.corrupt]);
   assert.equal(storage.map.get(`${KEY}-corrupt`), '{ not json');
   assert.equal((await session.resume()).applied, false);
   assert.deepEqual(session.save('auto'), { ok: true, rev: 1 });
@@ -134,7 +134,7 @@ test('a save from a newer version, or with newer parts, turns saving off and say
     assert.equal(resumed.ok, !fields.v, 'newer parts still play');
     assert.deepEqual(session.save('auto').ok, false);
     assert.equal(storage.map.get(KEY), before);
-    assert.deepEqual(told, ['Saved by a newer version: saving is off.']);
+    assert.deepEqual(told, [NOTICES['read-only']]);
     assert.equal(session.status(), NOTICES['read-only']);
   }
 });
@@ -143,9 +143,9 @@ test('storage that can\'t be reached says so once', async () => {
   const { session, told } = setup({ storage: { getItem: full, setItem: full } });
   assert.equal(session.boot().status, 'unavailable');
   assert.deepEqual(await session.resume(), { ok: false, reason: 'unavailable', status: 'unavailable', repaired: 0, applied: false });
-  assert.deepEqual(told, ['Saving isn\'t available in this browser.']);
+  assert.deepEqual(told, [NOTICES.unavailable]);
   assert.deepEqual(session.save('manual'), { ok: false, reason: 'gated' });
-  assert.deepEqual(told.at(-1), 'Saving isn\'t available in this browser.', 'a save by hand says why');
+  assert.deepEqual(told.at(-1), NOTICES.unavailable, 'a save by hand says why');
 });
 
 test('a world open in another tab isn\'t continued here and never written', async () => {
@@ -164,7 +164,7 @@ test('a world open in another tab isn\'t continued here and never written', asyn
   session.boot();
   assert.equal((await session.resume()).reason, 'other-tab');
   assert.equal(player.x, 4, 'the body stays as it started');
-  assert.deepEqual(told, ['Open in another tab: this tab won\'t save.']);
+  assert.deepEqual(told, [NOTICES['other-tab']]);
   assert.deepEqual(session.save('hide'), { ok: false, reason: 'gated' });
   assert.equal(session.status(), NOTICES['other-tab']);
   session.save('manual');
@@ -213,7 +213,7 @@ test('another tab saving after a Continue makes this page stale', async () => {
   await other.claim();
   other.write('realm', other.realm);
   assert.deepEqual(session.save('auto'), { ok: false, reason: 'other-tab' });
-  assert.deepEqual(told, ['Saved in another tab: reload to carry on.']);
+  assert.deepEqual(told, [NOTICES.stale]);
   session.tell('stale');
   session.tell('writer');
   assert.equal(told.length, 1);
@@ -289,7 +289,7 @@ test('before a lobby it saves once, says what happened, then saves no more', asy
   const ok = setup();
   await ok.session.resume();
   ok.session.beforeLobby();
-  assert.deepEqual(ok.told, ['Game saved. Lobby play isn\'t saved.']);
+  assert.deepEqual(ok.told, [NOTICES.lobby]);
   assert.equal(stored(ok.storage).rev, 1);
   assert.equal(ok.session.save('auto').reason, 'paused');
 
@@ -297,5 +297,5 @@ test('before a lobby it saves once, says what happened, then saves no more', asy
   await failed.session.resume();
   failed.storage.setItem = full;
   failed.session.beforeLobby();
-  assert.deepEqual(failed.told, [NOTICES.quota, 'Couldn\'t save before the lobby.']);
+  assert.deepEqual(failed.told, [NOTICES.quota, NOTICES['lobby-failed']]);
 });

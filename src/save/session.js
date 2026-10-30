@@ -16,23 +16,24 @@ import { cleanClock, emptyRealm } from './format.js';
 export const AUTOSAVE_MS = 60_000;
 export const IDLE_TIMEOUT_MS = 5000;
 
-// Each fits the phone's one-line toast (48 characters).
+// Each fits the phone's one-line toast (27 characters on a 393 px wide
+// phone held upright).
 export const NOTICES = {
   saved: 'Game saved.',
-  quota: 'Couldn\'t save: storage is full.',
-  'too-big': 'Couldn\'t save: the save is too big.',
+  quota: 'Storage full: not saved.',
+  'too-big': 'Save too big: not saved.',
   error: 'Couldn\'t save.',
-  unavailable: 'Saving isn\'t available in this browser.',
-  corrupt: 'Your save couldn\'t be read: starting fresh.',
-  repaired: 'Some saved things couldn\'t be read.',
-  'read-only': 'Saved by a newer version: saving is off.',
-  'other-tab': 'Open in another tab: this tab won\'t save.',
-  stale: 'Saved in another tab: reload to carry on.',
+  unavailable: 'This browser can\'t save.',
+  corrupt: 'Save damaged: fresh start.',
+  repaired: 'Some of the save was lost.',
+  'read-only': 'Newer save: saving is off.',
+  'other-tab': 'Other tab open: not saving.',
+  stale: 'Other tab saved: reload.',
   paused: 'Lobby play isn\'t saved.',
   gated: 'Your save is still opening.',
   tool: 'Saving is off on this page.',
-  lobby: 'Game saved. Lobby play isn\'t saved.',
-  'lobby-failed': 'Couldn\'t save before the lobby.',
+  lobby: 'Saved. Lobby play isn\'t.',
+  'lobby-failed': 'Not saved before the lobby.',
 };
 // Refusals an automatic save keeps to itself; a save by hand says why.
 const QUIET = ['unclaimed', 'pending', 'released', 'paused', 'gated', 'tool'];

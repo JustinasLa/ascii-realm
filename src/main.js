@@ -686,7 +686,11 @@ if (saving) {
     saveSession.save('manual');
     showStatus();
   };
-  saveRow.addEventListener('click', saveNow);
+  // The menu's sheet would hide the toast, so it closes.
+  saveRow.addEventListener('click', () => {
+    saveNow();
+    phoneMenu.setOpen(false);
+  });
   document.getElementById('save-now').addEventListener('click', saveNow);
   saveControls.addEventListener('toggle', showStatus);
 }

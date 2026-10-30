@@ -193,7 +193,9 @@ test('Save now and Save game save at once and say so; the Game panel tells how s
   saveElements.get('save-controls').dispatchEvent(new Event('toggle'));
   assert.equal(saveElements.get('save-status').textContent, 'Saves every minute and when you leave.');
   saveElements.get('save-now').dispatchEvent(new Event('click'));
+  game.phoneMenu.setOpen(true);
   saveElements.get('phone-menu-save').dispatchEvent(new Event('click'));
+  assert.equal(game.phoneMenu.open, false, 'the menu closes so the toast shows');
   assert.equal(JSON.parse(storage.map.get(KEY)).rev, 2);
   assert.deepEqual(game.hud.toasts, ['Game saved.', 'Game saved.']);
   assert.match(saveElements.get('save-status').textContent, /Last saved \d+:\d\d ago\.$/);
@@ -205,7 +207,7 @@ test('joining a lobby saves first, says so, then stops saving for the rest of th
   const storage = memory();
   const game = await start(storage);
   game.multiplayer.onJoin({ seed: 1, code: 'ABC234' });
-  assert.deepEqual(game.hud.toasts, ['Game saved. Lobby play isn\'t saved.']);
+  assert.deepEqual(game.hud.toasts, [NOTICES.lobby]);
   assert.equal(JSON.parse(storage.map.get(KEY)).rev, 1);
   game.multiplayer.room = null;
   assert.deepEqual(plain(game.save.now()), { ok: false, reason: 'paused' });
