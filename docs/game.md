@@ -238,8 +238,8 @@ short version see the [README](../README.md).
   lit from the top left, letters by brightness (bark letters for wood,
   `:;+=#%@` for metal) on a dark silhouette, the blade or head in the weapon's
   metal colour (its tier or forged alloy's). Once made they are kept, so the
-  window costs nothing per frame; other items, and devices without WebGL, show
-  an outline drawing.
+  window costs nothing per frame; the javelin, other items, and devices without
+  WebGL show an outline drawing.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn
   on the first strike and put away after a quiet spell standing still (`F`
   draws or sheathes it on a keyboard). Chain cuts into a combo, lunge from a

@@ -34,13 +34,14 @@ test('the trees\' bark ramp comes out as the letters the trees draw', () => {
   assert.equal(GLYPHS[BARK_RAMP[0][0]], '.');
 });
 
-test('every weapon item has a model, and every material its parts name has a paint', () => {
+test('every weapon item but the javelin has a model, and every material its parts name has a paint', () => {
   for (const [id, recipe] of Object.entries(ITEM_MODELS)) {
     assert.ok(ITEMS[id], id);
     assert.equal(recipe.from, 'weapon');
     assert.ok(WEAPONS[ITEMS[id].weapon].spriteParts.length, id);
   }
-  for (const item of Object.values(ITEMS)) if (item.weapon) assert.ok(ITEM_MODELS[item.id], `${item.id} has a model`);
+  // The javelin's picture comes with the next items.
+  for (const item of Object.values(ITEMS)) if (item.weapon) assert.equal(!!ITEM_MODELS[item.id], item.id !== 'javelin', item.id);
   for (const weapon of Object.values(WEAPONS)) {
     for (const part of weapon.spriteParts) assert.ok(PAINTS[WEAPON_PAINTS[part.material]], `${weapon.id} ${part.material}`);
   }
@@ -160,15 +161,28 @@ function fakeCanvas(t) {
   return canvases;
 }
 
+// A stand-in for the browser's animation frames: `paint()` runs the
+// callbacks asked for since the last one.
+function fakeFrames(t) {
+  let waiting = [];
+  globalThis.requestAnimationFrame = (callback) => waiting.push(callback);
+  t.after(() => { delete globalThis.requestAnimationFrame; });
+  return () => {
+    const due = waiting;
+    waiting = [];
+    for (const callback of due) callback();
+  };
+}
+
 const lib = async () => ({ THREE, outline });
 const sword = { id: 'shortSword', count: 1, material: 'steel' };
 
 test('pictures are made a couple a frame once three.js loads, kept, and the renderer let go when idle', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const canvases = fakeCanvas(t);
+  const paint = fakeFrames(t);
   const { made, factory } = fakeRenderer();
-  let clock = 0;
-  const studio = new ItemStudio({ webgl: true, load: lib, renderer: factory, ratio: () => 3, now: () => clock });
+  const studio = new ItemStudio({ webgl: true, load: lib, renderer: factory, ratio: () => 3, now: () => 0 });
   assert.equal(studio.art({ id: 'oakLog', count: 1 }, ITEMS.oakLog, null, 'card'), null, 'no model yet: the outline');
   assert.equal(studio.pump(), false, 'nothing to make');
   for (const id of ['shortSword', 'spear', 'longbow']) assert.equal(studio.art({ ...sword, id }, ITEMS[id], null, 'card'), null);
@@ -180,10 +194,7 @@ test('pictures are made a couple a frame once three.js loads, kept, and the rend
   assert.equal(studio.pump(), true);
   assert.equal(studio.jobs.size, 2, 'two a frame');
   assert.equal(studio.pump(), false, 'every update in a frame shares the one batch');
-  clock += 15;
-  assert.equal(studio.pump(), false);
   assert.equal(studio.jobs.size, 2);
-  clock += 1;
   assert.equal(made.length, 1);
   assert.deepEqual(made[0].sizes, [[GRIDS.card.cols * SX, GRIDS.card.rows * SY], [GRIDS.card.cols * SX, GRIDS.card.rows * SY]]);
   const card = studio.art({ ...sword }, ITEMS.shortSword, null, 'card');
@@ -194,6 +205,7 @@ test('pictures are made a couple a frame once three.js loads, kept, and the rend
   assert.equal(card.bytes, 120 * 240 * 4);
   assert.equal(made[0].scene.children.filter((node) => node.isLight).length, 3, 'the drawn models are taken away again');
   assert.equal(made[0].scene.children.length, 3);
+  paint();
   studio.pump();
   assert.equal(studio.jobs.size, 0);
   assert.match(studio.art(sword, ITEMS.shortSword, null, '2x4').src, /:238x409:/);
@@ -210,31 +222,66 @@ test('pictures are made a couple a frame once three.js loads, kept, and the rend
   studio.release();
   assert.ok(studio.art(sword, ITEMS.shortSword, null, 'card'), 'the pictures stay');
   studio.art({ ...sword, id: 'dagger' }, ITEMS.dagger, null, 'card');
-  clock += 16;
+  paint();
   assert.equal(studio.pump(), true);
   assert.equal(made.length, 2, 'the next picture makes a new renderer');
   assert.ok(studio.art({ ...sword, id: 'dagger' }, ITEMS.dagger, null, 'card'));
 });
 
-test('a frame stops making pictures after 8 ms', async (t) => {
+test('a frame stops making pictures after 8 ms, and the next batch waits for the frame to be painted', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   fakeCanvas(t);
+  const paint = fakeFrames(t);
+  const { made, factory } = fakeRenderer();
   let clock = 0;
-  const studio = new ItemStudio({ webgl: true, load: lib, renderer: fakeRenderer().factory, now: () => (clock += 9) });
-  for (const id of ['shortSword', 'spear']) studio.art({ ...sword, id }, ITEMS[id], null, 'card');
+  // Drawing a picture takes 20 ms, longer than a frame.
+  const slow = () => {
+    const renderer = factory();
+    const render = renderer.render;
+    renderer.render = (...args) => { clock += 10; render.apply(renderer, args); };
+    return renderer;
+  };
+  const studio = new ItemStudio({ webgl: true, load: lib, renderer: slow, now: () => clock });
+  for (const id of ['shortSword', 'spear', 'dagger']) studio.art({ ...sword, id }, ITEMS[id], null, 'card');
   studio.pump();
   await studio.loading;
   assert.equal(studio.pump(), true);
+  assert.equal(clock, 20);
+  assert.equal(studio.jobs.size, 2, 'one picture, then over 8 ms');
+  // A drop's two updates in one pointer-up: the second waits however long
+  // the first took.
+  assert.equal(studio.pump(), false);
+  clock += 1000;
+  assert.equal(studio.pump(), false);
+  assert.equal(studio.jobs.size, 2);
+  paint();
+  assert.equal(studio.pump(), true);
   assert.equal(studio.jobs.size, 1);
+  assert.equal(made[0].sizes.length, 2);
+});
+
+test('without animation frames, the next batch waits 16 ms after one ends', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  fakeCanvas(t);
+  const studio = new ItemStudio({ webgl: true, load: lib, renderer: fakeRenderer().factory, now: () => 0 });
+  for (const id of ['shortSword', 'spear', 'dagger']) studio.art({ ...sword, id }, ITEMS[id], null, 'card');
+  studio.pump();
+  await studio.loading;
+  assert.equal(studio.pump(), true);
+  t.mock.timers.tick(15);
+  assert.equal(studio.pump(), false);
+  t.mock.timers.tick(1);
+  assert.equal(studio.pump(), true);
+  assert.equal(studio.jobs.size, 0);
 });
 
 test('an unexpected context loss falls back to outlines, retried once on the next opening', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   fakeCanvas(t);
+  const paint = fakeFrames(t);
   const { made, factory } = fakeRenderer();
-  let clock = 0;
-  const frame = () => { clock += 16; return studio.pump(); };
-  const studio = new ItemStudio({ webgl: true, load: lib, renderer: factory, now: () => clock });
+  const frame = () => { paint(); return studio.pump(); };
+  const studio = new ItemStudio({ webgl: true, load: lib, renderer: factory, now: () => 0 });
   studio.reopen();
   assert.equal(studio.off, false);
   studio.art(sword, ITEMS.shortSword, null, 'card');

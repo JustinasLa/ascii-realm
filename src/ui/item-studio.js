@@ -101,7 +101,7 @@ export class ItemStudio {
   constructor({ webgl = typeof WebGLRenderingContext !== 'undefined', load = loadLibs, renderer = makeRenderer,
     budget = 24 * 2 ** 20, ratio = () => globalThis.devicePixelRatio || 1, now = () => performance.now() } = {}) {
     Object.assign(this, { load, makeRenderer: renderer, budget, ratio, now, off: !webgl, losses: 0, disposing: false,
-      cache: new Map(), bytes: 0, peak: 0, jobs: new Map(), lib: null, renderer: null, last: -Infinity });
+      cache: new Map(), bytes: 0, peak: 0, jobs: new Map(), lib: null, renderer: null, frame: null });
   }
 
   // The picture of `stack` (described as `own`) for a box shape: { src },
@@ -122,15 +122,15 @@ export class ItemStudio {
     return null;
   }
 
-  // Makes queued pictures, at most two or 8 ms (at least one) once every
-  // 16 ms, so all the updates in a frame share it; true when any was.
+  // Makes queued pictures: one batch of at most two or 8 ms (at least one)
+  // per painted frame, or per 16 ms without frames; true when any was.
   pump() {
-    if (this.off || !this.jobs.size || this.now() - this.last < 16) return false;
+    if (this.off || !this.jobs.size || this.frame) return false;
     if (!this.lib) {
       this.loading ??= this.load().then((lib) => { this.lib = lib; }, () => { this.off = true; });
       return false;
     }
-    const start = this.last = this.now();
+    const start = this.now();
     let made = 0;
     for (const [key, job] of this.jobs) {
       if (made === 2 || (made && this.now() - start > 8)) break;
@@ -138,6 +138,7 @@ export class ItemStudio {
       if (!this._make(job)) return false;
       made++;
     }
+    this.frame = (globalThis.requestAnimationFrame ?? setTimeout)(() => { this.frame = null; }, 16);
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.release(), IDLE_MS);
     return true;

@@ -33,7 +33,6 @@ export const ITEM_MODELS = {
   spear: { from: 'weapon' },
   dagger: { from: 'weapon' },
   quarterstaff: { from: 'weapon' },
-  javelin: { from: 'weapon' },
   longbow: { from: 'weapon' },
   stonePickaxe: { from: 'weapon' },
 };
