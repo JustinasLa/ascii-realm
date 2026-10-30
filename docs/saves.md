@@ -16,7 +16,9 @@ session.
   once: the active character's body (place, vitals, bag and worn gear) and
   the time of day come back. The world holds still until they have. A
   character with no body in the save sets out with the starter kit at the
-  world spawn. Nothing is written until the save has been picked up.
+  world spawn. Nothing is written until the save has been picked up. A
+  page hidden before its Continue finished continues when it comes back
+  from the back/forward cache.
 - **When it saves.** Every minute while the page is shown, at an idle
   moment; at once as the page hides or closes; after a defeat, with the body
   woken at spawn; just before joining a lobby; after a character switch; and
@@ -30,7 +32,9 @@ session.
   saved things couldn't be read, and when the save comes from a newer
   version (it plays on but never saves). A world open in another tab is
   played here without saving; if another tab saves the world after this page
-  continued it, this page stops saving and says to reload.
+  continued it, this page stops saving and says to reload. A notice raised
+  while the character creator or the phone's play card is up waits until
+  it closes.
 - **Lobbies.** Joining a lobby saves first and says whether that worked;
   lobby play is never saved.
 - **Address options.** `?instruments` puts instruments in the bag only of a
