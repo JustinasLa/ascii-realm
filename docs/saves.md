@@ -74,8 +74,8 @@ missing keeps its bag.
   wrote or claimed. A page that has only read a save must claim it before it
   writes, and a page that claimed it loses the right as soon as another tab
   writes.
-- A page hidden with `pagehide` lets the lock go; back from the
-  back/forward cache it asks again, and turns stale if another tab saved
+- A page hidden with `pagehide` lets the lock go, even mid-claim; back from
+  the back/forward cache it asks again, and turns stale if another tab saved
   meanwhile, until it claims again.
 - A record over its cap is refused before storage is touched. A full or
   blocked storage is reported, never fixed by deleting other keys, and the

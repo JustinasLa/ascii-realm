@@ -145,13 +145,15 @@ export class SaveStore {
   }
 
   // Makes this page the world's writer: takes the lock when it lacks it, reads
-  // both records, keeps the realm as `this.realm` and adopts the revs of the
-  // texts it read. For Continue and New game: `{ ok, reason?, ...read }`.
+  // both records, keeps the realm as `this.realm` and adopts their revs. For
+  // Continue and New game: `{ ok, reason?, ...read }`. A release meanwhile wins.
   async claim() {
+    const epoch = this.epoch;
     await this.ready;
-    if (this.locks && !this.unlock && await this.#request((held) => held ? 'writer' : 'other-tab') !== 'writer') {
-      return { ok: false, reason: 'other-tab' };
-    }
+    const lost = () => epoch !== this.epoch || this.writer === 'released';
+    if (!lost() && this.locks && !this.unlock) await this.#request((held) => held ? 'writer' : 'other-tab');
+    if (lost()) return { ok: false, reason: 'released' };
+    if (this.writer === 'other-tab') return { ok: false, reason: 'other-tab' };
     const raw = { realm: this.#raw('realm'), edits: this.#raw('edits') };
     const result = this.read('realm', raw.realm);
     const { status } = this.read('edits', raw.edits);

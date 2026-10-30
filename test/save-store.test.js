@@ -32,6 +32,26 @@ function fakeLocks() {
   };
 }
 
+// Like `fakeLocks`, but holds each request until `open()`, and counts them.
+function gatedLocks(locks = fakeLocks()) {
+  let open = null;
+  let gate = null;
+  const gated = {
+    calls: 0,
+    locks,
+    close() { gate = new Promise((resolve) => { open = resolve; }); },
+    open: () => open(),
+    async request(...args) {
+      gated.calls++;
+      await gate;
+      return locks.request(...args);
+    },
+  };
+  gated.close();
+  return gated;
+}
+
+const settle = async () => { for (let i = 0; i < 5; i++) await null; };
 const show = (persisted = true) => Object.assign(new Event('pageshow'), { persisted });
 const storageEvent = (key) => Object.assign(new Event('storage'), { key });
 const store = (options = {}) => new SaveStore({ storage: memory(), world: WORLD, locks: null, now: () => 1000, ...options });
@@ -366,6 +386,56 @@ test('a lock granted after the page let go is given up at once', async () => {
   assert.equal(await refused.ready, 'released');
   const other = store({ locks });
   assert.equal(await other.ready, 'writer');
+});
+
+test('letting go while a claim waits for ready wins: no new lock, and the claim is refused', async () => {
+  for (const letGo of [(saves) => saves.release(), (saves, events) => events.dispatchEvent(new Event('pagehide'))]) {
+    const events = new EventTarget();
+    const gated = gatedLocks();
+    const saves = store({ events, locks: gated });
+    const claim = saves.claim();
+    letGo(saves, events);
+    gated.open();
+    assert.deepEqual(await claim, { ok: false, reason: 'released' });
+    await settle();
+    assert.equal(saves.writer, 'released');
+    assert.equal(gated.calls, 1, 'the claim asked for no lock of its own');
+    assert.equal(gated.locks.held.size, 0);
+    const other = store({ locks: gated.locks });
+    assert.equal(await other.ready, 'writer');
+    other.release();
+    await settle();
+    events.dispatchEvent(show());
+    assert.equal(await saves.ready, 'writer', 'only a page back from the cache asks again');
+  }
+});
+
+test('letting go while a claim waits for its own lock wins as well', async () => {
+  const gated = gatedLocks();
+  const holder = store({ locks: gated.locks });
+  await holder.ready;
+  const saves = store({ locks: gated });
+  gated.open();
+  assert.equal(await saves.ready, 'other-tab');
+  holder.release();
+  gated.close();
+  const claim = saves.claim();
+  await settle();
+  assert.equal(gated.calls, 2);
+  saves.release();
+  gated.open();
+  assert.deepEqual(await claim, { ok: false, reason: 'released' });
+  await settle();
+  assert.equal(saves.writer, 'released');
+  assert.equal(gated.locks.held.size, 0);
+  assert.equal(await store({ locks: gated.locks }).ready, 'writer');
+});
+
+test('a page that let go cannot claim until it is back from the cache', async () => {
+  const saves = store();
+  saves.release();
+  assert.deepEqual(await saves.claim(), { ok: false, reason: 'released' });
+  assert.deepEqual(saves.write('realm', emptyRealm(WORLD)), { ok: false, reason: 'released' });
 });
 
 test('data that cannot be turned into JSON is an error, not a throw', () => {
