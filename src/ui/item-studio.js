@@ -1,13 +1,15 @@
+import { buildInstrumentShape } from '../entities/instrument-shapes.js';
 import { WEAPONS, WEAPON_MATERIALS, weaponMaterial } from '../entities/weapons.js';
 import { GLYPHS } from '../render/glyphs.js';
 import { BARK_RAMP } from '../world/tree-chars.js';
-import { ITEM_MODELS, PAINTS, WEAPON_PAINTS } from './item-models.js';
-import { ASPECT, GRIDS, SX, SY, artKey, artTint, cellsFromPixels, drawCells, poseAngle, seedOf } from './item-shading.js';
+import { INSTRUMENT_PAINTS, ITEM_MODELS, PAINTS, WEAPON_PAINTS } from './item-models.js';
+import { ASPECT, GRIDS, SX, SY, artKey, artTint, cellsFromPixels, drawCells, hash, poseAngle, seedOf } from './item-shading.js';
 
 // The inventory's item pictures: each item is a small 3D model (a weapon
-// from the same parts the hands carry), drawn once offscreen, lit from the
-// top left, turned into shaded letters the way the player is, and kept as
-// an image. three.js is loaded and its renderer made only when a picture is
+// from the same parts the hands carry, an instrument from the shape the
+// hand holds, anything else from a few simple parts), drawn once
+// offscreen, lit from the top left, turned into shaded letters the way the
+// player is, and kept as an image. three.js is loaded and its renderer made only when a picture is
 // first needed, and the renderer is let go when idle.
 
 // The trees' and figure's glyph ramps, as characters.
@@ -19,25 +21,88 @@ const IDLE_MS = 10000;
 
 const lumOf = (c) => (c[0] * 0.3 + c[1] * 0.55 + c[2] * 0.15) / 255;
 
-// A paint's name and colour in a model of metal `tint`: tinted paints take
-// their share of it, and stone tools are stone where the metal would be.
-export function paintFor(name, tint) {
+// A paint's name and colour (its own, unless `own` is given) in a model of
+// metal `tint`: tinted paints take their share of it, and stone tools are
+// stone where the metal would be.
+export function paintFor(name, tint, own = PAINTS[name].colour) {
   const paint = PAINTS[name];
-  const colour = paint.tinted && tint ? tint.map((c) => c * paint.tinted) : paint.colour;
+  const colour = paint.tinted && tint ? tint.map((c) => c * paint.tinted) : own;
   return { name: paint.tinted && tint === WEAPON_MATERIALS.stone.color ? 'stone' : name, colour };
 }
 
+// The geometry of each kind of part (see item-models.js).
+const GEOMETRY = {
+  box: (THREE, [w, h, d]) => new THREE.BoxGeometry(w, h, d),
+  cyl: (THREE, [top, bottom, h, sides = 12, start = 0]) => new THREE.CylinderGeometry(top, bottom, h, sides, 1, false, start),
+  cone: (THREE, [r, h]) => new THREE.ConeGeometry(r, h, 12),
+  ball: (THREE, [rx, ry, rz]) => new THREE.SphereGeometry(1, 12, 8).scale(rx, ry, rz),
+  torus: (THREE, [big, r]) => new THREE.TorusGeometry(big, r, 8, 16),
+  lathe: (THREE, points) => new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), 16),
+  slab: (THREE, [points, depth]) => new THREE.ExtrudeGeometry(new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y))),
+    { depth, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1 }).translate(0, 0, -depth / 2),
+  // Each corner pushed in or out by a hash of where it is, so the corners
+  // the faces share move together.
+  lump(THREE, [r, rough, detail], seed) {
+    const geometry = new THREE.IcosahedronGeometry(r, detail);
+    const at = geometry.attributes.position;
+    for (let i = 0; i < at.count; i++) {
+      const [x, y, z] = [at.getX(i), at.getY(i), at.getZ(i)];
+      const k = 1 + rough * (hash(Math.round(x * 1e4), Math.round(y * 1e4) ^ Math.round(z * 1e5), seed) - 0.5);
+      at.setXYZ(i, x * k, y * k, z * k);
+    }
+    return geometry;
+  },
+  tube: (THREE, [points, r]) => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p))), 16, r, 6),
+};
+
+// A group of parts; lumps and few-sided cylinders show their facets.
+function partsModel(THREE, parts, mesh, item, seed) {
+  const root = new THREE.Group();
+  parts.forEach(([kind, size, at, turn, paint, colour, scale], i) => {
+    const node = kind === 'group' ? partsModel(THREE, size, mesh, item, seed + i)
+      : mesh(GEOMETRY[kind](THREE, size, seed + i), paint, colour === 'item' ? item.colour : colour, kind === 'lump' || (kind === 'cyl' && size[3] < 7));
+    node.position.set(...at);
+    if (turn) node.rotation.set(...turn);
+    if (scale) node.scale.set(...scale);
+    root.add(node);
+  });
+  return root;
+}
+
+// Which way is up for an instrument: a turn about z from its long axis +x.
+const UP = { '+x': Math.PI / 2, '-x': -Math.PI / 2, '+y': 0 };
+
+// An instrument's held shape stood on its `up` axis and turned by `roll`,
+// each piece painted by its colour.
+function instrumentModel(THREE, recipe, item) {
+  const shape = buildInstrumentShape(THREE, item.id);
+  shape.traverse((node) => {
+    if (!node.isMesh) return;
+    const hex = node.material.color.getHex();
+    node.userData = { paint: INSTRUMENT_PAINTS[hex] ?? recipe.body ?? 'wood', colour: [hex >> 16, (hex >> 8) & 255, hex & 255] };
+  });
+  shape.rotation.set(0, recipe.roll ?? 0, UP[recipe.up]);
+  return new THREE.Group().add(shape);
+}
+
+// An item's recipe, in its `variant` ('card', 'compact', 'two' or '').
+export const recipeOf = (item, variant = '') => ({ ...ITEM_MODELS[item.id], ...ITEM_MODELS[item.id][variant] });
+
 // A model, in metres with +y along a long item: a weapon from the sprite
 // parts the hands carry (limbs, blobs and panels), its blades flattened to
-// 30% depth. Other items have no model yet and keep their outline.
-export function buildModel(THREE, { item, tint = null }) {
-  const mesh = (geometry, name) => {
-    const { name: paint, colour } = paintFor(name, tint);
-    const material = new THREE.MeshLambertMaterial({ color: new THREE.Color().setRGB(...colour.map((c) => c / 255), THREE.SRGBColorSpace) });
+// 30% depth; an instrument from its held shape; anything else from its parts.
+export function buildModel(THREE, { item, tint = null, variant = '' }) {
+  const mesh = (geometry, name, own, flatShading = false) => {
+    const { name: paint, colour } = paintFor(name, tint, own);
+    const material = new THREE.MeshLambertMaterial({ flatShading,
+      color: new THREE.Color().setRGB(...colour.map((c) => c / 255), THREE.SRGBColorSpace) });
     const node = new THREE.Mesh(geometry, material);
     node.userData = { paint, colour };
     return node;
   };
+  const recipe = recipeOf(item, variant);
+  if (recipe.from === 'instrument') return instrumentModel(THREE, recipe, item);
+  if (recipe.parts) return partsModel(THREE, recipe.parts, mesh, item, seedOf(item.id));
   const root = new THREE.Group();
   const up = new THREE.Vector3(0, 1, 0);
   for (const part of WEAPONS[item.weapon].spriteParts) {
@@ -67,13 +132,20 @@ export function buildModel(THREE, { item, tint = null }) {
 // is a few letters wide rather than a single stroke.
 const GIRTH = 1.8;
 
+// How other poses turn a model about its height (yaw) and then tip its top
+// towards the camera (pitch): upright items face on, flat ones lie seen
+// from 50° above.
+const TURNS = { upright: [0.44, 0.26], flat: [0.52, 0.87] };
+
 // The model turned for its box: long items along the grid's diagonal, tip
 // to the top right and turned a little so a blade's flat catches the light.
-export function posed(THREE, model, grid) {
+export function posed(THREE, model, grid, pose = 'long') {
   const outer = new THREE.Group().add(model);
-  model.scale.set(GIRTH, 1, GIRTH);
-  model.rotation.y = 0.35;
-  outer.rotation.z = poseAngle(grid) - Math.PI / 2;
+  if (pose === 'long') {
+    model.scale.set(GIRTH, 1, GIRTH);
+    model.rotation.y = 0.35;
+    outer.rotation.z = poseAngle(grid) - Math.PI / 2;
+  } else [model.rotation.y, outer.rotation.x] = TURNS[pose];
   outer.updateMatrixWorld(true);
   return outer;
 }
@@ -108,17 +180,21 @@ export class ItemStudio {
   // or null while it's made, or when the item has no model yet. Pictures
   // asked for while WebGL is off stay queued for a retry.
   art(stack, item, own, shape) {
-    if (!ITEM_MODELS[item.id]) return null;
+    const recipe = ITEM_MODELS[item.id];
+    if (!recipe) return null;
     const tint = artTint(stack, item, own, weaponMaterial);
     const dpr = Math.min(2, Math.ceil(this.ratio()));
-    const key = artKey(item.id, '', tint, shape, dpr);
+    // The recipe's own version for a small box, a card or a stack, if any.
+    const variant = (shape === '1x1' && recipe.compact && 'compact') || (shape === 'card' && recipe.card && 'card')
+      || (stack?.count > 1 && recipe.two && 'two') || '';
+    const key = artKey(item.id, variant, tint, shape, dpr);
     const hit = this.cache.get(key);
     if (hit) {
       this.cache.delete(key);
       this.cache.set(key, hit);
       return hit;
     }
-    if (!this.jobs.has(key)) this.jobs.set(key, { key, item, tint, shape, dpr });
+    if (!this.jobs.has(key)) this.jobs.set(key, { key, item, tint, shape, dpr, variant });
     return null;
   }
 
@@ -197,7 +273,7 @@ export class ItemStudio {
     const grid = GRIDS[job.shape];
     const w = grid.cols * SX;
     const h = grid.rows * SY;
-    const model = posed(THREE, buildModel(THREE, job), grid);
+    const model = posed(THREE, buildModel(THREE, job), grid, recipeOf(job.item, job.variant).pose);
     fit(THREE, this.camera, model, grid);
     this.scene.add(model);
     this.renderer.setSize(w, h, false);
@@ -211,7 +287,10 @@ export class ItemStudio {
     const shade = read();
     const meshes = [];
     model.traverse((node) => node.isMesh && meshes.push(node));
+    // Each paint's brightness is its first piece's colour.
+    const lums = {};
     for (const node of meshes) {
+      lums[node.userData.paint] ??= lumOf(node.userData.colour);
       node.material.dispose();
       node.material = this.ids[PAINT_IDS.indexOf(node.userData.paint)];
     }
@@ -219,7 +298,7 @@ export class ItemStudio {
     this.scene.remove(model);
     for (const node of meshes) node.geometry.dispose();
     const paints = PAINT_IDS.map((name) => ({ ...PAINTS[name], ramp: RAMPS[PAINTS[name].ramp] ?? PAINTS[name].ramp,
-      lum: Math.max(0.05, lumOf(paintFor(name, job.tint).colour)) }));
+      lum: Math.max(0.05, lums[name] ?? 1) }));
     const letter = (mx, my, cover) => {
       const o = outline(mx, my, cover);
       return { ch: GLYPHS[o.g], rim: o.rim };

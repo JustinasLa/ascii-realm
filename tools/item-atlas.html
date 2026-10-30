@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Item art atlas</title>
+  <!-- Every item's inventory picture in every box shape, and every weapon and
+       arrow in each metal tier and two alloy colours. Narrow it with
+       ?item=<id,…>, ?shape=<card|2x4|2x3|2x2|1x1> or ?ratio=<1|2>. -->
+  <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+  <style>
+    body { margin: 8px; background: #000; color: #9a9a9a; font: 11px monospace; }
+    .row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+    figure { margin: 0; padding: 2px; border: 1px solid #333; display: flex; flex-direction: column; align-items: center; }
+  </style>
+</head>
+<body>
+  <main id="atlas">Drawing…</main>
+  <script type="module">
+    import { MATERIAL_IDS } from '../src/entities/weapons.js';
+    import { PALETTE } from '../src/crafting/ingredients.js';
+    import { ITEMS } from '../src/inventory/items.js';
+    import { ITEM_MODELS } from '../src/ui/item-models.js';
+    import { GRIDS } from '../src/ui/item-shading.js';
+    import { ItemStudio } from '../src/ui/item-studio.js';
+
+    const query = new URLSearchParams(location.search);
+    const studio = new ItemStudio({ budget: Infinity, ratio: () => Number(query.get('ratio') ?? 2) });
+    const ids = query.has('item') ? query.get('item').split(',') : Object.keys(ITEM_MODELS);
+    const shapes = query.has('shape') ? [query.get('shape')] : Object.keys(GRIDS);
+    const alloys = [PALETTE[3], PALETTE[11]];
+    const pieces = [];
+    for (const id of ids) {
+      const item = ITEMS[id];
+      const kinds = [{ label: '', stack: { id, count: 1 } }];
+      if (ITEM_MODELS[id].two) kinds.push({ label: '×2', stack: { id, count: 2 } });
+      if (item.weapon || id === 'arrow') {
+        kinds.splice(0, 1, ...MATERIAL_IDS.map((material) => ({ label: material, stack: { id, count: 1, material } })),
+          ...alloys.map((colour) => ({ label: `#${colour}`, stack: { id, count: 1 }, own: { colour } })));
+      }
+      for (const { label, stack, own = null } of kinds) for (const shape of shapes) pieces.push({ id, item, label, stack, own, shape });
+    }
+    const pictureOf = (piece) => studio.art(piece.stack, piece.item, piece.own, piece.shape);
+    while (pieces.some((piece) => !pictureOf(piece))) {
+      studio.pump();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const rows = new Map();
+    for (const piece of pieces) {
+      if (!rows.has(piece.id)) rows.set(piece.id, Object.assign(document.createElement('div'), { className: 'row' }));
+      const figure = document.createElement('figure');
+      const img = Object.assign(new Image(), { src: pictureOf(piece).src, alt: piece.id });
+      figure.append(img, `${piece.id} ${piece.shape} ${piece.label}`);
+      rows.get(piece.id).append(figure);
+    }
+    document.getElementById('atlas').replaceChildren(...rows.values());
+    document.body.dataset.ready = 'true';
+  </script>
+</body>
+</html>

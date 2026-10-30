@@ -254,13 +254,17 @@ short version see the [README](../README.md).
   from and pickups top up first. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
-  Weapons in the boxes and on the cards are large shaded pictures in small
-  letters, drawn once from the 3D parts the hands carry: on the box's diagonal,
-  lit from the top left, letters by brightness (bark letters for wood,
-  `:;+=#%@` for metal) on a dark silhouette, the blade or head in the weapon's
-  metal colour (its tier or forged alloy's). Once made they are kept, so the
-  window costs nothing per frame; the javelin, other items, and devices without
-  WebGL show an outline drawing.
+  Weapons, arrows, instruments, ingots and ores in the boxes and on the cards
+  are large shaded pictures in small letters, drawn once from 3D models (the
+  parts the hands carry, the instrument the off hand holds, or a few simple
+  shapes): long items on the box's diagonal, instruments neck up, metals and
+  ores seen from above, lit from the top left, letters by brightness (bark
+  letters for wood, `:;+=#%@` for metal) on a dark silhouette. A blade, head
+  or arrowhead takes its metal's colour (its tier or forged alloy's) and an
+  alloy ingot its alloy's. Cards show three fanned arrows and the quiver box
+  the quiver; a stack of ingots shows two bars. Once made they are kept, so the
+  window costs nothing per frame; other items, and devices without WebGL, show
+  an outline drawing.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn
   on the first strike and put away after a quiet spell standing still (`F`
   draws or sheathes it on a keyboard). Chain cuts into a combo, lunge from a

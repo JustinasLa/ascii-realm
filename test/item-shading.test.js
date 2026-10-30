@@ -49,6 +49,9 @@ test('a stack takes its own colour, else its weapon tier; other items none', () 
   const forged = { id: 'shortSword', material: 'iron', forged: { metal: 'Red', colour: '113355' } };
   assert.deepEqual(artTint(forged, sword, null, weaponMaterial), [17, 51, 85]);
   assert.equal(artTint({ id: 'oakLog' }, ITEMS.oakLog, null, weaponMaterial), null);
+  assert.equal(artTint({ id: 'arrow', material: 'bronze' }, ITEMS.arrow, null, weaponMaterial), WEAPON_MATERIALS.bronze.color, 'arrowheads take their stack\'s metal');
+  assert.equal(artTint({ id: 'arrow' }, ITEMS.arrow, null, weaponMaterial), null);
+  assert.deepEqual(artTint({ id: 'alloyIngot' }, ITEMS.alloyIngot, { colour: 'C2A583' }, weaponMaterial), [194, 165, 131], 'an alloy ingot is its alloy\'s colour');
 });
 
 test('a picture key tells tints, shapes and pixel ratios apart', () => {
