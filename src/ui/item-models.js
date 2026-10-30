@@ -70,7 +70,7 @@ export const ITEM_MODELS = {
   longbow: { from: 'weapon' },
   stonePickaxe: { from: 'weapon' },
   arrow: { parts: arrow, card: { parts: [-0.1, 0, 0.1].map((z) => ['group', arrow, [0, 0, 0], [0, 0, z]]) },
-    compact: { parts: [['cyl', [0.07, 0.06, 0.4], [0, 0.2, 0], 0, 'leather', [160, 124, 86]],
+    compact: { pose: 'upright', parts: [['cyl', [0.07, 0.06, 0.4], [0, 0.2, 0], 0, 'leather', [160, 124, 86]],
       ['tube', [[[0.07, 0.04, 0], [0.1, 0.2, 0.02], [0.07, 0.36, 0]], 0.008], [0, 0, 0], 0, 'leather'],
       fletched(-0.03, 0.02), fletched(-0.01, -0.03), fletched(0.015, 0.03), fletched(0.035, -0.01)] } },
   lute: { from: 'instrument', up: '-x', pose: 'upright' },
