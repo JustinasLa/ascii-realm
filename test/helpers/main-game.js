@@ -10,9 +10,9 @@ import { HuntDrops } from '../../src/entities/hunt-drops.js';
 import { layLoot, logsOf, LootCredit, rollLoot, rollPay } from '../../src/world/loot.js';
 import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
-import { emptyRealm } from '../../src/save/format.js';
 import { SaveStore } from '../../src/save/store.js';
-import { applyBody, bodyIdOf, fileBody, putBody, starterKit } from '../../src/save/body.js';
+import { bodyIdOf, starterKit } from '../../src/save/body.js';
+import { AUTOSAVE_MS, IDLE_TIMEOUT_MS, SaveSession } from '../../src/save/session.js';
 import { attributeTotals, nameError, normalName } from '../../src/character/rules.js';
 import { classOf } from '../../src/character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
@@ -91,8 +91,13 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const landscapeQuery = Object.assign(new EventTarget(), { matches: width > height });
   const queries = { [PHONE_QUERY]: phoneQuery, [LANDSCAPE_QUERY]: landscapeQuery,
     '(display-mode: standalone)': { matches: standalone } };
+  // Idle callbacks and timers wait until a test runs them (`runIdle`, `intervals`).
+  const idles = [];
+  const intervals = [];
   const window = Object.assign(new EventTarget(), { innerWidth: width, innerHeight: height,
-    devicePixelRatio: dpr, matchMedia: text => queries[text] });
+    devicePixelRatio: dpr, matchMedia: text => queries[text],
+    requestIdleCallback: (run, options) => idles.push({ run, options }),
+    setInterval: (run, ms) => intervals.push({ run, ms }) });
   let pinch = null;
   const hint = { classList: { add: noop, remove: noop }, addEventListener: noop };
   let nextFrame;
@@ -136,11 +141,13 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   const gateAction = { textContent: 'TAP TO PLAY' };
   const gateButton = Object.assign(element(), { querySelector: () => gateAction });
   const fullscreenRow = element();
+  // The save menu's entries, by id.
+  const saveElements = new Map(['phone-menu-save', 'save-controls', 'save-status', 'save-now'].map((id) => [id, element()]));
   const audio = { suspends: 0, unlocks: 0 };
   const fullscreenRequests = [];
   const document = Object.assign(new EventTarget(), {
     getElementById: id => id === 'screen' ? canvas : id === 'play-gate' ? gateButton
-      : id === 'phone-menu-fullscreen' ? fullscreenRow : hint,
+      : id === 'phone-menu-fullscreen' ? fullscreenRow : saveElements.get(id) ?? hint,
     hidden: false, visibilityState: 'visible', body: { classList: classes() }, fullscreenElement: null,
     documentElement: fullscreen ? { requestFullscreen(options) {
       fullscreenRequests.push(options);
@@ -264,7 +271,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     // The HUD and the inventory record the names and pages they are given;
     // the real ones are tested on their own.
     Hud: class extends inert() {
-      constructor(options) { super(); this.name = options.name; }
+      constructor(options) { super(); this.name = options.name; this.toasts = []; }
+      notify(message) { this.toasts.push(message); }
       setName(name) { this.name = name; }
     },
     InventoryScreen: class extends inert() {
@@ -315,7 +323,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       render() { this.renders++; }
     },
     nameError, normalName, attributeTotals, classOf,
-    GroundItems: inert(), Harvesting: inert(), Mining, toolOf, Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, emptyRealm, SaveStore, applyBody, bodyIdOf, fileBody, putBody, starterKit, drawItem: noop, drawResource: noop,
+    GroundItems: inert(), Harvesting: inert(), Mining, toolOf, Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, SaveStore, SaveSession, AUTOSAVE_MS, IDLE_TIMEOUT_MS, bodyIdOf, starterKit, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }
@@ -476,6 +484,11 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     gateAction,
     fullscreenRow,
     fullscreenRequests,
+    saveElements,
+    idles,
+    intervals,
+    // Runs the idle callbacks waiting now.
+    runIdle: () => idles.splice(0).forEach(({ run }) => run({ timeRemaining: () => 4 })),
     locks,
     audio,
     // Clicks the play card, as a tap does.

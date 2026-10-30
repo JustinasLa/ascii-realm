@@ -10,8 +10,9 @@ import { EQUIPMENT_SLOTS } from '../inventory/items.js';
 export const SAVE_VERSION = 1;
 // How many optional additions this build knows. Filling a reserved field or
 // adding an optional one raises it without a version bump, so an older build
-// can still play a newer record but never writes over it.
-export const SAVE_FEATURES = 1;
+// can still play a newer record but never writes over it. 2: the realm's
+// clock is filled.
+export const SAVE_FEATURES = 2;
 export const GAME = 'ascii-realm';
 // The body played when no character is active.
 export const OUTLAW = 'outlaw';

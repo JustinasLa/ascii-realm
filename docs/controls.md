@@ -22,6 +22,7 @@
 | Weather & seasons panel's Weather / Intensity | Choose Clear or one of 17 weather presets and adjust sound and visual intensity |
 | `L` / Weather & seasons panel's Summon lightning button | Summon a nearby lightning strike for testing in any weather |
 | Audio panel's Weather slider | Adjust weather volume; Ambience and Master also affect it |
+| Game panel's Save now / phone menu's Save game | Save the game now (it also saves every minute and when you leave) |
 | Mouse wheel / `+` `-` | Zoom |
 | `1`–`8`, instrument in the off hand | Play notes C D E F G A B C |
 | `Shift`+`1`–`8`, instrument in the off hand | Play the chords (lute, vielle, celtic harp, dulcimer, kalimba, accordion) or notes 9–16 an octave up (flute, trumpet, bagpipe) |
@@ -196,7 +197,7 @@ reset when a touch is cancelled or the page is backgrounded.
 
 Phones show only the stick, the thumb cluster, a slim HP/MP strip on the top
 edge and a small **=** menu button in the top-right corner. The menu opens a
-full-screen sheet with **Inventory**, **Multiplayer** and **Audio**; **Close**
+full-screen sheet with **Inventory**, **Save game**, **Multiplayer** and **Audio**; **Close**
 returns to a clean screen. In a lobby a **CHAT** button sits under the menu
 button: it opens the chat bar above the keyboard and hides the touch controls
 until you send or tap the scene. The newest three chat lines (two in landscape)
