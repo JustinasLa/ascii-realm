@@ -237,7 +237,7 @@ export class ItemStudio {
     budget = 24 * 2 ** 20, ratio = () => globalThis.devicePixelRatio || 1, now = () => performance.now(),
     mannequin = 'assets/ual1.glb' } = {}) {
     Object.assign(this, { load, makeRenderer: renderer, budget, ratio, now, mannequin, off: !webgl, losses: 0, disposing: false,
-      cache: new Map(), bytes: 0, peak: 0, jobs: new Map(), lib: null, renderer: null, frame: null });
+      cache: new Map(), bytes: 0, peak: 0, watchers: new Set(), jobs: new Map(), lib: null, renderer: null, frame: null });
   }
 
   // The picture of `stack` (described as `own`) for a box shape, drawn at
@@ -391,6 +391,13 @@ export class ItemStudio {
     return true;
   }
 
+  // Calls `fn(src)` for each picture let go, so whatever shows it can take
+  // the image down; gives back the call that stops it.
+  watch(fn) {
+    this.watchers.add(fn);
+    return () => this.watchers.delete(fn);
+  }
+
   // Least recently used pictures go first once the budget is full.
   _store(key, entry) {
     this.cache.set(key, entry);
@@ -400,6 +407,7 @@ export class ItemStudio {
       if (this.bytes <= this.budget || old === key) break;
       this.cache.delete(old);
       this.bytes -= kept.bytes;
+      for (const fn of this.watchers) fn(kept.src);
     }
   }
 }

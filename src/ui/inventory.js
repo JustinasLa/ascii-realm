@@ -81,6 +81,12 @@ export class InventoryScreen {
     pages = [], isCovered = () => false, describe = () => null, describeVersion = () => 0, wallet = null,
     attributes = () => null, art = itemStudio }) {
     Object.assign(this, { isCovered, describe, describeVersion, wallet, attributes, art });
+    // A picture the studio lets go comes off the screen at once; its box
+    // shows the outline until the picture is made again.
+    this._unwatch = art?.watch?.((src) => {
+      for (const img of this.root.querySelectorAll('.item-art')) if (img.getAttribute('src') === src) img.remove();
+      this._signature = null;
+    });
     this.manaSource = null;
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
@@ -935,6 +941,7 @@ export class InventoryScreen {
 
   destroy() {
     if (this._isOpen) this.setOpen(false);
+    this._unwatch?.();
     window.removeEventListener('keydown', this._keydown, true);
     window.removeEventListener('keyup', this._keyup, true);
     window.removeEventListener('blur', this._blur);

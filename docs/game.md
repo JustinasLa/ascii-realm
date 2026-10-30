@@ -270,7 +270,8 @@ short version see the [README](../README.md).
   pictures get more rows to fill them, redrawn when the phone turns. Each
   picture is drawn at its box's size on screen times the pixel ratio (at
   most 2). Once made they are kept, up to 24 MiB of pictures, the least
-  recently shown let go first, so the window costs nothing per frame; until a picture
+  recently shown let go first and taken off the screen until they are drawn
+  again, so the window costs nothing per frame; until a picture
   is ready (clothing waits for the mannequin), and on devices without WebGL,
   an item shows an outline drawing.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn

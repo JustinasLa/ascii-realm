@@ -1880,7 +1880,7 @@ function fakeArt() {
   const made = new Map();
   const queued = new Set();
   return {
-    asked, made, opens: 0,
+    asked, made, opens: 0, watchers: new Set(),
     art(stack, item, own, shape, size) {
       const key = `${item.id}|${shape}|${own?.colour ?? stack.material ?? ''}`;
       asked.push({ id: item.id, shape, own, key, size });
@@ -1895,6 +1895,16 @@ function fakeArt() {
       return any;
     },
     reopen() { this.opens++; },
+    watch(fn) {
+      this.watchers.add(fn);
+      return () => this.watchers.delete(fn);
+    },
+    // Lets a made picture go, as the studio's budget does.
+    evict(key) {
+      const { src } = made.get(key);
+      made.delete(key);
+      for (const fn of this.watchers) fn(src);
+    },
   };
 }
 
@@ -2004,6 +2014,33 @@ test('each doll box and the cards ask for pictures of their laid-out size, read 
   screen._signature = null;
   screen.update();
   assert.deepEqual(art.asked.findLast((a) => a.shape === 'card').size, [58, 101]);
+});
+
+test('a picture the studio lets go comes off the screen until it is made again', (t) => {
+  const art = fakeArt();
+  const env = mount(t, { art });
+  const { screen, indexOf } = env;
+  const { pointer, ghost: dragGhost } = dragging(t, env);
+  screen.setOpen(true);
+  screen.update();
+  const bow = screen.bagNodes[indexOf('longbow')];
+  const src = bow.icon.querySelector('img').getAttribute('src');
+  // A drag's ghost shows the same picture.
+  pointer('pointerdown', bow.button);
+  pointer('pointermove', bow.button, 110, 100);
+  const ghost = dragGhost();
+  assert.equal(ghost.querySelector('img').getAttribute('src'), src);
+  art.evict('longbow|card|');
+  assert.equal(bow.icon.querySelector('img'), null);
+  assert.equal(ghost.querySelector('img'), null);
+  assert.equal(screen._signature, null, 'the boxes are asked again');
+  screen.update();
+  assert.equal(bow.icon.textContent, itemArt('longbow', ITEMS.longbow.glyph), 'the outline meanwhile');
+  pointer('pointerup', bow.button, 110, 100);
+  screen.update();
+  assert.equal(bow.icon.querySelector('img').getAttribute('src'), src);
+  screen.destroy();
+  assert.equal(art.watchers.size, 0, 'a closed screen stops watching');
 });
 
 test('turning to another page and back measures the doll again', (t) => {

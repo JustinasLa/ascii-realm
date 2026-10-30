@@ -517,8 +517,10 @@ test('pictures are drawn at the measured box size times the pixel ratio, at most
   studio.release();
 });
 
-test('past the byte budget the least recently used pictures go', () => {
+test('past the byte budget the least recently used pictures go, and whatever shows them is told', () => {
   const studio = new ItemStudio({ webgl: true, budget: 250 });
+  const gone = [];
+  const stop = studio.watch((src) => gone.push(src));
   studio._store('a', { src: 'a', bytes: 100 });
   studio._store('b', { src: 'b', bytes: 100 });
   // Seen again, `a` moves to the back of the queue.
@@ -529,8 +531,11 @@ test('past the byte budget the least recently used pictures go', () => {
   assert.deepEqual([...studio.cache.keys()], ['a', 'c']);
   assert.equal(studio.bytes, 200);
   assert.equal(studio.peak, 300);
+  assert.deepEqual(gone, ['b']);
+  stop();
   studio._store('d', { src: 'd', bytes: 400 });
   assert.deepEqual([...studio.cache.keys()], ['d'], 'a picture bigger than the budget still shows');
+  assert.deepEqual(gone, ['b'], 'no longer watched');
 });
 
 test('the mannequin rests in a T-pose, and its bones fall in the regions and sides the worn clothing paints', async () => {
