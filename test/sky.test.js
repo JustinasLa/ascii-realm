@@ -7,6 +7,7 @@ import { withLayers } from './helpers/renderer.js';
 import { AsciiRenderer } from '../src/render/renderer.js';
 import { family, GLYPHS } from '../src/render/glyphs.js';
 import { MOON_MAP, MOON_MAP_SIZE } from '../src/world/moon-map.js';
+import { NIGHT_SKY, skyAt } from '../src/world/clock.js';
 
 function renderer(cellH, dpr = 1) {
   const cellW = cellH * ASPECT * dpr;
@@ -173,4 +174,107 @@ test('moon respects land and floating leaves, and later objects occlude its fine
   r.putAt(m, 15, 100, 110, 120);
   assert.ok(r.fineBg[((sy * 2) * r.fineCols + sx * 2) * 4 + 3] & 64,
     'later full-size objects cover the lunar glyphs through normal painter order');
+});
+
+// A sky state at a tick and moon phase, with any part overridden.
+const skyOf = (tick, phase = 0, over = {}) => Object.assign(skyAt(tick, phase, phase), over);
+
+// The moon's face: the brightness of its fine cells left and right of its
+// centre (180 CSS px across), and in all.
+function face(r) {
+  let left = 0, right = 0;
+  for (let y = 0; y < r.fineRows; y++) for (let x = 0; x < r.fineCols; x++) {
+    const i = (y * r.fineCols + x) * 4;
+    if (r.fineBg[i + 3] < 16) continue;
+    const b = r.fine[i] + r.fine[i + 1] + r.fine[i + 2];
+    if ((x + 0.5) * r.cellW / 2 / r.dpr < 180) left += b; else right += b;
+  }
+  return { left, right, total: left + right };
+}
+
+test('the full-night sky draws exactly what the sky drew before it had a clock', () => {
+  const plain = lunarRenderer(), full = lunarRenderer(), start = lunarRenderer();
+  drawSkyReflection(plain, moonView, 3);
+  drawSkyReflection(full, moonView, 3, NIGHT_SKY);
+  drawSkyReflection(start, moonView, 3, skyOf(14000));
+  for (const key of ['fg', 'bg', 'ov', 'fine', 'fineBg']) {
+    assert.deepEqual(full[key], plain[key], key);
+    assert.deepEqual(start[key], plain[key], key);
+  }
+});
+
+test('stars show only while the sky has them', () => {
+  const r = renderer(10);
+  const s = star(7, 1, r.dpr);
+  const view = { y0: 0, offX: 0, offY: 0 };
+  const { index } = starCell(r, view, s);
+  r.mask[index] = WATER;
+  drawSkyReflection(r, view, 0, skyOf(18000, 0, { stars: 0 }));
+  assert.equal(r.hasLayer(index), false);
+  drawSkyReflection(r, view, 0, skyOf(18000, 0, { stars: 0.5 }));
+  assert.equal(layered(r, index), s.glyph);
+  const bright = renderer(10);
+  bright.mask[index] = WATER;
+  drawSkyReflection(bright, view, 0, skyOf(18000));
+  assert.ok(Math.abs(bright.ov[index * 4] - r.ov[index * 4] * 2) <= 1, 'half the starlight, half as bright');
+});
+
+test('by day the sun glints warm in the water and the moon is gone', () => {
+  const r = lunarRenderer();
+  drawSkyReflection(r, moonView, 3, skyOf(6000));
+  assert.equal(face(r).total, 0, 'no moon face');
+  const glints = new Set(family('water.glitter.'));
+  let warm = 0;
+  // On open water a glint is the cell's own glyph.
+  for (let i = 0; i < r.cols * r.rows; i++) {
+    if (glints.has(r.glyphAt(i)) && r.fg[i * 4] > r.fg[i * 4 + 2] * 1.15) warm++;
+  }
+  assert.ok(warm > 20, `${warm} sun glints`);
+  const o = (Math.floor(480 / r.cellH) * r.cols + Math.floor(180 / r.cellW)) * 4;
+  assert.ok(r.bg[o] > r.bg[o + 2], 'the glare warms the water under the sun');
+});
+
+test('at dusk a warm afterglow fills the water around the setting moon', () => {
+  const night = lunarRenderer();
+  drawSkyReflection(night, moonView, 3, skyOf(18000, 0, { moon: 0 }));
+  const r = lunarRenderer();
+  drawSkyReflection(r, moonView, 3, skyOf(12800, 0, { moon: 0 }));
+  const o = (Math.floor(480 / r.cellH) * r.cols + Math.floor(330 / r.cellW)) * 4;
+  assert.ok(r.bg[o] - night.bg[o] > r.bg[o + 2] - night.bg[o + 2] + 2, 'warm light beside the anchor');
+  const dawn = lunarRenderer();
+  drawSkyReflection(dawn, moonView, 3, skyOf(23200, 0, { moon: 0 }));
+  const blue = (x) => x.fg.reduce((sum, v, i) => (i % 4 === 2 ? sum + v : sum), 0);
+  assert.ok(blue(dawn) > blue(r) * 1.5, 'dawn is rosier than dusk');
+});
+
+test('the moon wanes and waxes: new is faint, quarters lit on the proper side', () => {
+  const draw = (phase, over) => { const r = lunarRenderer(); drawSkyReflection(r, moonView, 3, skyOf(18000, phase, over)); return face(r); };
+  const full = draw(0);
+  assert.ok(draw(4).total < full.total * 0.105, 'a new moon is a faint disc');
+  assert.ok(draw(4).total > 0, 'but still there');
+  const last = draw(2), first = draw(6);
+  assert.ok(last.left > last.right * 4, 'the last quarter is lit on the left');
+  assert.ok(first.right > first.left * 4, 'the first quarter is lit on the right');
+  assert.ok(draw(1).total > last.total && last.total > draw(3).total, 'it thins as it wanes');
+});
+
+test('a setting moon fades out rather than popping off', () => {
+  const draw = (moon) => { const r = lunarRenderer(); drawSkyReflection(r, moonView, 3, skyOf(18000, 0, { moon })); return face(r).total; };
+  const full = draw(1);
+  const half = draw(0.5);
+  assert.ok(half < full * 0.55 && half > full * 0.25, `half: ${half / full}`);
+  assert.ok(draw(0.02) < full * 0.01, 'almost nothing the moment before it sets');
+  assert.equal(draw(0), 0);
+});
+
+test('without a fine grid the moon is drawn in whole cells, phases and all', () => {
+  const brightness = (phase) => {
+    const r = renderer(8);
+    r.mask.fill(WATER);
+    drawSkyReflection(r, { x0: 0, y0: 0, offX: 0, offY: 0 }, 3, skyOf(18000, phase));
+    const m = Math.floor(288 / r.cellH) * r.cols + Math.floor(180 / r.cellW);
+    return r.fg[m * 4] + r.fg[m * 4 + 1] + r.fg[m * 4 + 2];
+  };
+  assert.ok(brightness(0) > 300, 'the full moon is bright');
+  assert.ok(brightness(4) < brightness(0) * 0.2, 'the new moon is dim');
 });

@@ -95,6 +95,27 @@ short version see the [README](../README.md).
   Add `?season=spring`, `?season=autumn` or `?season=winter` for seasonal
   palettes and snow-tipped evergreens. Summer is the default; the season
   stays fixed until reload and can be combined with `?seed=42&season=autumn`.
+- **Day and night.** Days pass. A day lasts 30 minutes, most of it night: a
+  new world starts at nightfall with about 12 minutes of full dark ahead,
+  then about 3 minutes of dawn, 11 of full day and 3 of dusk. The scene
+  brightens toward day and is tinted rose at dawn and amber at dusk; the
+  gaps between characters stay dark. Stars show in the lakes only at night,
+  the moon there wanes and waxes through eight phases, one a night (a new
+  moon is a faint ashen disc), and it sets before the sun shows, when the
+  sun's glare and a warm glitter take its place on the water. A warm
+  afterglow fills the water around them at dawn and dusk. The music and the
+  night sounds follow the same clock. The clock's URL settings:
+  - `?time=` starts at a tick of the 24000-tick day (0 is sunrise, 6000
+    noon, 12000 sunset, 18000 midnight), at a clock time such as `07:30`,
+    or at a named time: `day`, `noon`, `sunset`, `dusk`, `night`,
+    `midnight`, `sunrise` or `dawn`;
+  - `?daylen=120` sets the real seconds a day lasts (20 to 86400);
+  - `?moon=0` to `7` sets the first night's moon phase (0 full, 2 last
+    quarter, 4 new, 6 first quarter);
+  - `?daycycle=0` holds the time of day where it starts.
+
+  A lobby shares one clock, worked out from the wall clock, so everyone in
+  it sees the same sky; these settings are ignored there.
 - **Woodland density.** The world's woods are sparse by default: mature
   trees stand alone or in loose groups on grass-only meadows. Two URL
   parameters change that, and both stay fixed until reload:
@@ -115,8 +136,8 @@ short version see the [README](../README.md).
   character creator, if open, is closed). Saved
   scenery works in both: generated props keep their ids, and an erased grove
   prop is simply not there in the sparse world.
-- **Water.** Drifting ripple streaks, lapping foam, and a night sky (stars and
-  the moon) mirrored in every lake. Walk or run through any lake: the water
+- **Water.** Drifting ripple streaks, lapping foam, and the sky (stars and
+  the moon by night, the sun by day) mirrored in every lake. Walk or run through any lake: the water
   rises from your ankles to at most your knees, slows your stride, and hides
   the submerged boots. Each footfall throws up droplets and spreading rings;
   jumps, landings and sword impacts make larger splashes.

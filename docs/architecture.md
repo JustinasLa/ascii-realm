@@ -113,6 +113,25 @@ share (`moonlightOf`). `game.nightLight` (with `shafts`, `tier`, `visible`
 and `debugShaftAt`), `game.metrics.nightMs` and `game.metrics.shaftMs` (the
 columns alone, included in `nightMs`) are on `?debug`.
 
+The time of day comes from one clock (`world/clock.js`). A day is 24000
+ticks (0 sunrise, 6000 noon, 12000 sunset, 18000 midnight); the night half
+of the ticks takes `NIGHT_SHARE` of each real day, which only changes how
+fast ticks pass. Solo, the clock steps by the world's own step, so the play
+card and `?debug&pintime=` hold it; in a lobby it is worked out each frame
+from the wall clock (so a hidden tab is right again when it comes back),
+and only a pinned frame holds it. Each frame `main.js` asks it for one sky
+state, a reused object (daylight, night, stars, the moon's and sun's
+visibility, twilight warmth, the moon phase and the scene's grade), and
+passes it down: to the sky reflection (`world/sky.js`, which draws the
+stars, the moon's phase in `world/moon.js`, the sun and the afterglow by
+it), to the sound as its night, and to the renderer as `renderer.sky`.
+The grade is applied last in the shader, before the vignette: a lift of
+each channel that never clips (`c·g / (1 + c·(g − 1))`), a saturation and
+the vignette's colour and strength. Its keys are in `render/palette.js`;
+the night key is the identity, which the shader skips, so the night is
+drawn as it was before the clock. `game.dayClock` (`tick`, `day`, `phase`,
+`set()`) is on `?debug`.
+
 River debris (`world/debris.js`) is local to each player. Each frame, after
 the player and the monsters have moved, it is handed the bodies standing in
 the water, works out how each moved, and settles every meeting of a body and

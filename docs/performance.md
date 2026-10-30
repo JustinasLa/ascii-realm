@@ -123,3 +123,10 @@ for the stalls and a walk, `THROTTLE=4` for a slow phone, `TOGGLE=1` to time
 the control on and off by turns on one page, free of page-to-page noise, and
 to time the stages the beams touch inside the page, which resolves their
 cost far more finely than the whole frame).
+
+The time of day costs the CPU nothing extra: the scene's grade by day,
+dawn and dusk is applied in the shader, and the night skips it. By day the
+sky reflection skips its star search. To measure the day, add
+`&time=noon` (or `dusk`, the busiest reflection, or `midnight&moon=2` for a
+moon phase) to the page, and `--sky=dusk` or `--sky=phase2` to
+`bench/night-cpu.mjs`.

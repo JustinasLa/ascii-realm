@@ -50,7 +50,7 @@ export async function createScene(root = new URL('../', import.meta.url), option
     mark('update');
     drawGround(r, world, view, time);
     grass.drawTracks(r, view, time, world);
-    drawSkyReflection(r, view, time);
+    drawSkyReflection(r, view, time, options.sky);
     figure.drawShadow(r, view, player.x, player.y, player.air);
     mark('groundAndSky');
     // The same props the game's frame fetches (see main.js).

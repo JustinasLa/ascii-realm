@@ -22,12 +22,20 @@
 // With `off` for the before checkout, the before build is the after one with
 // its beams switched off, so the differences are the beams' own whole cost,
 // the grass and rocks they tint included.
+// `--sky=dusk` or `--sky=phase2` draws the after build's sky reflection at
+// dusk (the afterglow and a setting moon) or under a last-quarter moon,
+// against the before build's full night, so `groundAndSky` in `stageDiff`
+// is the cost of that sky; `--at=x,y` stands both there instead of the
+// lakeside, for a spot whose moon lies on the water.
 import os from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PLAYER, SEED } from './lakeside.js';
 
-const [beforeRoot, afterRoot = '.', width = 1280, height = 720, rounds = 25, frames = 240, tier] = process.argv.slice(2);
+const flags = Object.fromEntries(process.argv.slice(2).filter((a) => a.startsWith('--'))
+  .map((a) => a.slice(2).split('=')));
+const [beforeRoot, afterRoot = '.', width = 1280, height = 720, rounds = 25, frames = 240, tier] = process.argv.slice(2)
+  .filter((a) => !a.startsWith('--'));
 if (!beforeRoot) throw new Error('usage: node bench/night-cpu.mjs <before-checkout|off> [after-checkout] [width] [height] [rounds] [frames] [tier]');
 // The game's widest zoom draws cells this small (MIN_CELL in main.js).
 const WIDEST = 4.5;
@@ -35,12 +43,21 @@ const SPIKE_ROUNDS = Math.max(4, Math.round(+rounds / 3));
 const SPIKE_FRAMES = 40;
 
 const control = beforeRoot === 'off';
+const SKIES = { dusk: [12800, 0], phase2: [18000, 2] };
+let sky;
+if (flags.sky) {
+  const { skyAt } = await import(new URL('src/world/clock.js', pathToFileURL(`${resolve(afterRoot)}/`)));
+  const [tick, phase] = SKIES[flags.sky];
+  sky = skyAt(tick, phase, phase);
+}
+const start = flags.at ? (([x, y]) => ({ x: +x, y: +y }))(flags.at.split(',')) : PLAYER;
 const roots = { before: pathToFileURL(`${resolve(control ? afterRoot : beforeRoot)}/`), after: pathToFileURL(`${resolve(afterRoot)}/`) };
 const scenes = {};
 for (const [name, root] of Object.entries(roots)) {
   const { createScene } = await import(new URL('bench/scene.js', root));
   scenes[name] = async (options) => {
-    const scene = await createScene(root, { width: +width, height: +height, seed: SEED, tier, ...options });
+    const scene = await createScene(root, { width: +width, height: +height, seed: SEED, tier,
+      sky: name === 'after' ? sky : undefined, ...options });
     if (control && name === 'before') scene.night.shafts = false;
     return scene;
   };
@@ -49,7 +66,7 @@ for (const [name, root] of Object.entries(roots)) {
 const quantile = (a, p) => { const s = [...a].sort((u, v) => u - v); return s[Math.min(s.length - 1, Math.floor(s.length * p))]; };
 const ms = (v) => +v.toFixed(3);
 const loadStart = os.loadavg()[0];
-const builds = { before: await scenes.before(PLAYER), after: await scenes.after(PLAYER) };
+const builds = { before: await scenes.before(start), after: await scenes.after(start) };
 for (let k = 0; k < 120; k++) { builds.before.frame(); builds.after.frame(); }
 
 // Per build and measure, one median (p95 for the whole frame) per round.

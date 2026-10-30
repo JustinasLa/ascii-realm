@@ -83,3 +83,23 @@ test('rain splashes sample the player shoreline independently of the camera and 
   assert.equal(waterSamples, 1, 'silent rain adds no player-water terrain sampling');
   assert.equal(received.water, null);
 });
+
+test('the world clock sets how dark the music and ambience hear it, awake or not', () => {
+  const asleep = new GameAudio({}, { context: { state: 'suspended' }, setListener() {} });
+  const heard = [];
+  asleep.music.update = (signals) => heard.push(signals.night);
+  asleep.update(0.016, 0, {}, { x: 0, y: 0 }, [], [], 0.25);
+  asleep.update(0.016, 0, {}, { x: 0, y: 0 }, []);
+  assert.deepEqual(heard, [0.25, 1], 'without a clock, its own night (full at time 0)');
+
+  const awake = new GameAudio({}, { context: { state: 'running' }, setListener() {} });
+  awake.environment.update = () => ({ night: 0.8, gust: 0.4, water: null });
+  for (const key of ['charge', 'fires', 'weather']) awake[key].update = () => {};
+  const music = [], ambience = [];
+  awake.music.update = (signals) => music.push(signals.night);
+  awake.ambience.update = (signals) => ambience.push([signals.night, signals.gust]);
+  awake.update(0.016, 42, { combat: { charge: 0 } }, { x: 0, y: 0 }, [], [], 0.1);
+  awake.update(0.016, 42, { combat: { charge: 0 } }, { x: 0, y: 0 }, [], [], undefined);
+  assert.deepEqual(music, [0.1, 0.8]);
+  assert.deepEqual(ambience, [[0.1, 0.4], [0.8, 0.4]]);
+});
