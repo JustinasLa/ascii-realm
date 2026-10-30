@@ -198,8 +198,8 @@ test('a quiver box shows the quiver, a card fanned arrows, and a stack of ingots
   studio.art({ id: 'lute', count: 1 }, ITEMS.lute, null, '1x1');
   const steel = WEAPON_MATERIALS.steel.color.map((c) => c.toString(16).padStart(2, '0')).join('');
   assert.deepEqual([...studio.jobs.values()].map((job) => [job.key, job.variant]), [
-    [`arrow|compact|${steel}|1x1|1`, 'compact'], [`arrow|card|${steel}|card|1`, 'card'], [`arrow||${steel}|2x2|1`, ''],
-    ['ironIngot|two||card|1', 'two'], ['ironIngot|||card|1', ''], ['lute|||1x1|1', ''],
+    [`arrow|compact|${steel}|1x1|55x46`, 'compact'], [`arrow|card|${steel}|card|60x120`, 'card'], [`arrow||${steel}|2x2|119x99`, ''],
+    ['ironIngot|two||card|60x120', 'two'], ['ironIngot|||card|60x120', ''], ['lute|||1x1|55x46', ''],
   ]);
   const heads = meshesOf(buildModel(THREE, { item: ITEMS.arrow, tint: WEAPON_MATERIALS.copper.color, variant: 'card' }))
     .filter((mesh) => mesh.userData.paint === 'metal');
@@ -361,8 +361,9 @@ test('pictures are made a couple a frame once three.js loads, kept, and the rend
   paint();
   studio.pump();
   assert.equal(studio.jobs.size, 0);
-  assert.match(studio.art(sword, ITEMS.shortSword, null, '2x4').src, /:238x409:/);
-  assert.equal(studio.bytes, 3 * 120 * 240 * 4 + 238 * 409 * 4);
+  // 238 × 409 at the desktop size, the letters as large as fit.
+  assert.match(studio.art(sword, ITEMS.shortSword, null, '2x4').src, /:237x409:/);
+  assert.equal(studio.bytes, 3 * 120 * 240 * 4 + 237 * 409 * 4);
   assert.equal(studio.peak, studio.bytes);
 
   t.mock.timers.tick(10000);
@@ -488,6 +489,34 @@ test('no WebGL, or no three.js, means outlines', async (t) => {
   assert.equal(broken.off, true);
 });
 
+test('pictures are drawn at the measured box size times the pixel ratio, at most 2, keyed by that size', async (t) => {
+  const canvases = fakeCanvas(t);
+  fakeFrames(t);
+  let ratio = 1.5;
+  const studio = new ItemStudio({ webgl: true, load: lib, renderer: fakeRenderer().factory, ratio: () => ratio, now: () => 0 });
+  // A phone's weapon box, 85 × 182 CSS px, at 1.5 device pixels a px.
+  assert.equal(studio.art(sword, ITEMS.shortSword, null, '2x4', [85, 182]), null);
+  ratio = 3;
+  studio.art(sword, ITEMS.shortSword, null, '2x4', [85, 182]);
+  studio.art(sword, ITEMS.shortSword, null, '2x4', [101, 182]);
+  assert.deepEqual([...studio.jobs.values()].map((job) => [job.key, job.w, job.h, job.grid.rows]), [
+    ['shortSword||ced6e4|2x4|128x273', 128, 273, 38], ['shortSword||ced6e4|2x4|170x364', 170, 364, 39],
+    ['shortSword||ced6e4|2x4|202x364', 202, 364, 31]]);
+  studio.pump();
+  await studio.loading;
+  studio.pump();
+  // 30 columns of 0.6-wide letters 7.1 px tall fill 128 × 273 across;
+  // 39 rows 9.3 px tall fill 170 × 364 down.
+  ratio = 1.5;
+  assert.match(studio.art(sword, ITEMS.shortSword, null, '2x4', [85, 182]).src, /:128x270:/);
+  ratio = 3;
+  const phone = studio.art(sword, ITEMS.shortSword, null, '2x4', [85, 182]);
+  assert.match(phone.src, /:168x364:/);
+  assert.equal(phone.bytes, 168 * 364 * 4);
+  assert.equal(canvases.length, 1, 'one canvas, reused');
+  studio.release();
+});
+
 test('past the byte budget the least recently used pictures go', () => {
   const studio = new ItemStudio({ webgl: true, budget: 250 });
   studio._store('a', { src: 'a', bytes: 100 });
@@ -580,15 +609,15 @@ test('clothing waits for the mannequin, while the rest is made', async (t) => {
   assert.equal(studio.pump(), false, 'nothing to make yet');
   studio.art(sword, ITEMS.shortSword, null, 'card');
   assert.equal(studio.pump(), true);
-  assert.deepEqual([...studio.jobs.keys()], ['ridingBoots|||2x2|1'], 'the boots still wait');
+  assert.deepEqual([...studio.jobs.keys()], ['ridingBoots|||2x2|119x99'], 'the boots still wait');
   arrive(gltf);
   await studio.lib.mannequin;
   paint();
   assert.equal(studio.pump(), true);
   assert.ok(studio.art(boots, ITEMS.ridingBoots, null, '2x2'));
   // A phone's taller box has a picture of its own.
-  assert.equal(studio.art(boots, ITEMS.ridingBoots, null, '2x2', 85 / 86), null);
-  assert.deepEqual([...studio.jobs.values()].map((job) => [job.key, job.grid.rows]), [['ridingBoots|||2x2/18|1', 18]]);
+  assert.equal(studio.art(boots, ITEMS.ridingBoots, null, '2x2', [85, 86]), null);
+  assert.deepEqual([...studio.jobs.values()].map((job) => [job.key, job.grid.rows]), [['ridingBoots|||2x2|85x86', 18]]);
   // A mannequin that never comes keeps the outline.
   const lost = new ItemStudio({ webgl: true, load: async () => ({ THREE, outline, mannequin: Promise.reject(new Error('offline')) }) });
   lost.art(boots, ITEMS.ridingBoots, null, '2x2');

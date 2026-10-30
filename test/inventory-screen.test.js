@@ -1881,9 +1881,9 @@ function fakeArt() {
   const queued = new Set();
   return {
     asked, made, opens: 0,
-    art(stack, item, own, shape, aspect) {
+    art(stack, item, own, shape, size) {
       const key = `${item.id}|${shape}|${own?.colour ?? stack.material ?? ''}`;
-      asked.push({ id: item.id, shape, own, key, aspect });
+      asked.push({ id: item.id, shape, own, key, size });
       if (made.has(key)) return made.get(key);
       queued.add(key);
       return null;
@@ -1977,24 +1977,33 @@ test('a forged stack asks for its own picture, and the drag ghost carries the pi
   pointer('pointerup', bagButton(bow), 110, 100);
 });
 
-test('each doll box asks for a picture of its laid-out shape, read again after a resize', (t) => {
+test('each doll box and the cards ask for pictures of their laid-out size, read again after a resize', (t) => {
   const art = fakeArt();
-  const { window, screen } = mount(t, { art });
+  const { window, screen, indexOf } = mount(t, { art });
   const button = screen.equipmentNodes.get('mainHand').button;
-  // A phone's weapon box inside its padding: 85 × 182.
+  // A phone's weapon box inside its padding: 85 × 182; a card 58 × 101
+  // above its label.
   Object.assign(button, { clientWidth: 91, clientHeight: 188 });
+  for (const { button: card } of screen.bagNodes) Object.assign(card, { clientWidth: 64, clientHeight: 116 });
   screen.setOpen(true);
-  assert.equal(art.asked.findLast((a) => a.shape === '2x4').aspect, 85 / 182);
+  assert.deepEqual(art.asked.findLast((a) => a.shape === '2x4').size, [85, 182]);
+  assert.deepEqual(art.asked.findLast((a) => a.shape === 'card').size, [58, 101]);
   // Turned: the boxes are reshaped though nothing in the bag changed.
   Object.assign(button, { clientWidth: 107, clientHeight: 188 });
   window.dispatchEvent(new Event('resize'));
   screen.update();
-  assert.equal(art.asked.findLast((a) => a.shape === '2x4').aspect, 101 / 182);
-  // A hidden box has no shape to go by.
+  assert.deepEqual(art.asked.findLast((a) => a.shape === '2x4').size, [101, 182]);
+  // Hidden boxes and cards have no size to go by; one shown card is enough.
   Object.assign(button, { clientWidth: 0, clientHeight: 0 });
+  for (const { button: card } of screen.bagNodes) Object.assign(card, { clientWidth: 0, clientHeight: 0 });
   screen._signature = null;
   screen.update();
-  assert.equal(art.asked.findLast((a) => a.shape === '2x4').aspect, 0);
+  assert.equal(art.asked.findLast((a) => a.shape === '2x4').size, null);
+  assert.equal(art.asked.findLast((a) => a.shape === 'card').size, null);
+  Object.assign(screen.bagNodes[indexOf('longbow')].button, { clientWidth: 64, clientHeight: 116 });
+  screen._signature = null;
+  screen.update();
+  assert.deepEqual(art.asked.findLast((a) => a.shape === 'card').size, [58, 101]);
 });
 
 test('turning to another page and back measures the doll again', (t) => {

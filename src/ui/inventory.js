@@ -866,23 +866,24 @@ export class InventoryScreen {
 
   // The only place the doll gets its art, for the box `slot` names: the
   // picture's `src` (null while it's made) and the outline shown until then.
-  _art(item, slot, stack) { return this._picture(item, stack, shapeOf(DOLL_BOXES[slot]), this._aspects?.get(slot)); }
+  _art(item, slot, stack) { return this._picture(item, stack, shapeOf(DOLL_BOXES[slot]), this._sizes?.get(slot)); }
 
   // The only place the bag gets its art.
-  _cardArt(item, stack) { return this._picture(item, stack, 'card'); }
+  _cardArt(item, stack) { return this._picture(item, stack, 'card', this._cardSize); }
 
-  _picture(item, stack, shape, aspect) {
-    const art = this.art?.art(stack, item, this.describe(stack), shape, aspect);
+  _picture(item, stack, shape, size) {
+    const art = this.art?.art(stack, item, this.describe(stack), shape, size);
     return { src: art?.src ?? null, text: itemArt(item.id, item.glyph) };
   }
 
   _render() {
     const view = this._view;
-    // Each doll box's shape inside its 3 px padding (0 while hidden), read
-    // before anything is written, so a phone's taller boxes get pictures of
-    // their own shape.
-    this._aspects = new Map([...this.equipmentNodes].map(([slot, { button: { clientWidth: w, clientHeight: h } }]) =>
-      [slot, h > 6 ? (w - 6) / (h - 6) : 0]));
+    // Each doll box's picture size inside its 3 px padding, and the cards'
+    // inside theirs (a shown card's; null while hidden), read before anything
+    // is written, so pictures are drawn at the size they show at.
+    const inner = ({ clientWidth: w, clientHeight: h }, bottom) => (h > bottom ? [w - 6, h - bottom] : null);
+    this._sizes = new Map([...this.equipmentNodes].map(([slot, { button }]) => [slot, inner(button, 6)]));
+    this._cardSize = this.bagNodes.map(({ button }) => inner(button, 15)).find(Boolean) ?? null;
     setText(this.slotCounter, `Bag ${view.used}/${view.total}`);
     const drop = this.onDrop ? ` \u00b7 ${this.phone() ? 'hold' : 'RMB'} \u2014 drop` : '';
     setText(this.bagHint, `${this.phone() ? 'tap' : 'LMB'} \u2014 equip / take off${drop} \u00b7 drag to equip`);

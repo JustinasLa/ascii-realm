@@ -67,15 +67,15 @@ test('a stack takes its own colour, else its weapon tier; other items none', () 
   assert.deepEqual(artTint({ id: 'alloyIngot' }, ITEMS.alloyIngot, { colour: 'C2A583' }, weaponMaterial), [194, 165, 131], 'an alloy ingot is its alloy\'s colour');
 });
 
-test('a picture key tells tints, shapes and pixel ratios apart', () => {
-  const iron = artKey('shortSword', '', WEAPON_MATERIALS.iron.color, '2x4', 1);
-  assert.equal(iron, 'shortSword||a7b4c3|2x4|1');
-  assert.notEqual(iron, artKey('shortSword', '', WEAPON_MATERIALS.steel.color, '2x4', 1));
-  assert.notEqual(artKey('shortSword', '', [1, 2, 3], 'card', 1), artKey('shortSword', '', [1, 2, 4], 'card', 1));
-  assert.notEqual(iron, artKey('shortSword', '', WEAPON_MATERIALS.iron.color, 'card', 1));
-  assert.notEqual(iron, artKey('shortSword', '', WEAPON_MATERIALS.iron.color, '2x4', 2));
-  assert.equal(iron, artKey('shortSword', '', [...WEAPON_MATERIALS.iron.color], '2x4', 1), 'equal tints share');
-  assert.equal(artKey('oakLog', '', null, 'card', 1), 'oakLog|||card|1');
+test('a picture key tells tints, shapes and bitmap sizes apart', () => {
+  const iron = artKey('shortSword', '', WEAPON_MATERIALS.iron.color, '2x4', '119x99');
+  assert.equal(iron, 'shortSword||a7b4c3|2x4|119x99');
+  assert.notEqual(iron, artKey('shortSword', '', WEAPON_MATERIALS.steel.color, '2x4', '119x99'));
+  assert.notEqual(artKey('shortSword', '', [1, 2, 3], 'card', '60x120'), artKey('shortSword', '', [1, 2, 4], 'card', '60x120'));
+  assert.notEqual(iron, artKey('shortSword', '', WEAPON_MATERIALS.iron.color, 'card', '60x120'));
+  assert.notEqual(iron, artKey('shortSword', '', WEAPON_MATERIALS.iron.color, '2x4', '238x198'));
+  assert.equal(iron, artKey('shortSword', '', [...WEAPON_MATERIALS.iron.color], '2x4', '119x99'), 'equal tints share');
+  assert.equal(artKey('oakLog', '', null, 'card', '60x120'), 'oakLog|||card|60x120');
 });
 
 test('the hash is steady and spread over 0..1, and ramps pick by light', () => {

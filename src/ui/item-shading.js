@@ -46,8 +46,8 @@ export function artTint(stack, item, own, materialOf) {
   return item.weapon || stack?.material ? materialOf(stack, item.material ?? 'iron').color : null;
 }
 
-// The cache key of one picture.
-export const artKey = (id, variant, tint, shape, dpr) => `${id}|${variant}|${tint ? hex(tint) : ''}|${shape}|${dpr}`;
+// The cache key of one picture, `size` its bitmap's 'WxH'.
+export const artKey = (id, variant, tint, shape, size) => `${id}|${variant}|${tint ? hex(tint) : ''}|${shape}|${size}`;
 
 // A stable 0..1 hash of a cell, so equal-weight letters vary across the
 // picture but never between frames or runs.

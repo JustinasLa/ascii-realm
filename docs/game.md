@@ -267,8 +267,10 @@ short version see the [README](../README.md).
   alloy's) and an alloy ingot its alloy's. Cards show three fanned arrows and
   the quiver box the quiver, the cloak box the cloak folded; a stack of
   ingots shows two bars. On phones the doll boxes are taller, so their
-  pictures get more rows to fill them, redrawn when the phone turns. Once
-  made they are kept, so the window costs nothing per frame; until a picture
+  pictures get more rows to fill them, redrawn when the phone turns. Each
+  picture is drawn at its box's size on screen times the pixel ratio (at
+  most 2). Once made they are kept, up to 24 MiB of pictures, the least
+  recently shown let go first, so the window costs nothing per frame; until a picture
   is ready (clothing waits for the mannequin), and on devices without WebGL,
   an item shows an outline drawing.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn

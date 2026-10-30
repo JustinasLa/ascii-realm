@@ -240,20 +240,24 @@ export class ItemStudio {
       cache: new Map(), bytes: 0, peak: 0, jobs: new Map(), lib: null, renderer: null, frame: null });
   }
 
-  // The picture of `stack` (described as `own`) for a box shape, `aspect`
-  // (width / height) if it isn't the desktop one: { src }, or null while
-  // it's made, or when the item has no model. Pictures asked for while
-  // WebGL is off stay queued for a retry.
-  art(stack, item, own, shape, aspect = 0) {
+  // The picture of `stack` (described as `own`) for a box shape, drawn at
+  // the box's measured CSS `size` ([width, height], or its desktop size)
+  // × the pixel ratio up to 2: { src }, or null while it's made, or when the
+  // item has no model. Pictures asked for while WebGL is off stay queued for
+  // a retry.
+  art(stack, item, own, shape, size = null) {
     const recipe = ITEM_MODELS[item.id];
     if (!recipe) return null;
     const tint = artTint(stack, item, own, weaponMaterial);
-    const dpr = Math.min(2, Math.ceil(this.ratio()));
+    const ratio = Math.min(2, this.ratio());
     // The recipe's own version for a small box, a card or a stack, if any.
     const variant = (shape === '1x1' && recipe.compact && 'compact') || (shape === 'card' && recipe.card && 'card')
       || (stack?.count > 1 && recipe.two && 'two') || '';
-    const grid = gridOf(shape, aspect);
-    const key = artKey(item.id, variant, tint, grid === GRIDS[shape] ? shape : `${shape}/${grid.rows}`, dpr);
+    const desktop = GRIDS[shape];
+    const [w, h] = (size ?? [desktop.cols * ASPECT * desktop.font, desktop.rows * desktop.font])
+      .map((v) => Math.max(1, Math.round(v * ratio)));
+    const grid = gridOf(shape, w / h);
+    const key = artKey(item.id, variant, tint, shape, `${w}x${h}`);
     const hit = this.cache.get(key);
     if (hit) {
       this.cache.delete(key);
@@ -261,7 +265,7 @@ export class ItemStudio {
       return hit;
     }
     const waits = recipeOf(item, variant).from === 'mannequin';
-    if (!this.jobs.has(key)) this.jobs.set(key, { key, item, tint, grid, dpr, variant, waits });
+    if (!this.jobs.has(key)) this.jobs.set(key, { key, item, tint, grid, w, h, variant, waits });
     return null;
   }
 
@@ -377,7 +381,8 @@ export class ItemStudio {
       return { ch: GLYPHS[o.g], rim: o.rim };
     };
     const cells = cellsFromPixels({ shade, ids, grid, paints, outline: letter, seed: seedOf(job.item.id) });
-    const font = grid.font * job.dpr;
+    // Letters as large as the box allows; the picture keeps the grid's shape.
+    const font = Math.min(job.w / (grid.cols * ASPECT), job.h / grid.rows);
     this.canvas ??= document.createElement('canvas');
     this.canvas.width = Math.round(grid.cols * ASPECT * font);
     this.canvas.height = Math.round(grid.rows * font);
