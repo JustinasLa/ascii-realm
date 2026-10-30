@@ -120,7 +120,8 @@ test('props are as without bogs in dense groves and where a river crosses a bog'
       for (let cx = hx - 4; cx <= hx + 4; cx++) {
         const c = on.chunk(cx, cy);
         if (!c.type.includes(BOG)) continue;
-        const river = c.type.includes(WATER);
+        // A river's own water, not a lake's.
+        const river = !!c.flow?.river.some((v) => v);
         rivers += river;
         if (!river && (cx + cy) % 3) continue;
         assert.deepEqual(ids(on, cx, cy), ids(off, cx, cy), `chunk ${cx},${cy} of seed ${seed}`);
@@ -183,15 +184,20 @@ test('a fire on bog grass spreads through it and stops where the fuel ends', () 
   assert.equal(fire.events.length, 0, 'the fire burns out');
   const lit = [...fire.nodes.keys()].map((k) => k.slice(6).split(',').map(Number));
   assert.ok(lit.length > 100, `${lit.length} cells burnt`);
+  let shore = 0;
   for (const [lx, ly] of lit) {
     assert.equal(w.typeAt(lx, ly), BOG);
     const at = w.locate(lx, ly);
     assert.equal(at.c.burnt[at.i], 255);
     // Every unburnt neighbour is no fuel at all.
     for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
-      if (!fire.nodes.has(`grass:${lx + dx},${ly + dy}`)) assert.equal(vegetationFuel(w, lx + dx, ly + dy), null);
+      if (fire.nodes.has(`grass:${lx + dx},${ly + dy}`)) continue;
+      assert.equal(vegetationFuel(w, lx + dx, ly + dy), null);
+      shore += [SHORE, WATER].includes(w.typeAt(lx + dx, ly + dy));
     }
   }
+  // The front runs up to the water's edge.
+  assert.ok(shore > 10, `${shore} cells of the front meet the shore`);
 });
 
 test('glowcaps grow on bog, and the meadow\'s glowcaps and fuel are as without bogs', () => {
