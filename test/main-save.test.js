@@ -18,14 +18,24 @@ function memory() {
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const settle = async () => { for (let i = 0; i < 10; i++) await null; };
 
-// A page on `storage`, once its Continue has finished.
-const open = async (storage, query = '', real = {}) => {
+// A page on `storage`, once it has settled.
+const open = async (storage, query = '', real = {}, options = {}) => {
   const page = await loadGame(undefined, { href: `http://localhost/?debug&animals=0${query}`,
-    real: { localStorage: storage, ...real } });
+    real: { localStorage: storage, ...real }, ...options });
   await settle();
   return page;
 };
-const start = async (...args) => (await open(...args)).game;
+// Picks `action` on the save's choice and waits for it to go through.
+const choose = async (game, action) => {
+  game.save.choice.choose(action);
+  await settle();
+};
+// A page on `storage` that pressed Continue if it was offered.
+const start = async (...args) => {
+  const { game } = await open(...args);
+  if (game.save.choice.mode === 'continue') await choose(game, 'continue');
+  return game;
+};
 
 // Grants each name to one holder at a time, until it lets go; `wait` holds
 // every request until `go()`.
@@ -81,7 +91,8 @@ test('play comes back on the next page load: place, bag, worn gear, health and t
   assert.deepEqual([dayClock.day, Math.round(dayClock.tick)], [4, 3000]);
   assert.deepEqual(plain(second.save.tick()), { ok: true, rev: 2 }, 'the Continue claimed the save');
   assert.deepEqual(plain(first.save.tick()), { ok: false, reason: 'other-tab' }, 'the older page writes no more');
-  assert.deepEqual(first.hud.toasts, [NOTICES.stale]);
+  assert.equal(first.save.choice.mode, 'stale', 'and says so on a screen, not a toast');
+  assert.deepEqual(first.hud.toasts, []);
   assert.deepEqual(plain(await second.save.restore()), { ok: true, status: 'ok', repaired: 0, applied: true });
 });
 
@@ -140,28 +151,180 @@ test('save notices wait for the creator and the play card to go, so none runs ou
   assert.deepEqual(phone.game.hud.toasts, [NOTICES.corrupt]);
 });
 
-test('nothing moves while a save is being put back', async () => {
+test('nothing moves or saves while the choice is open or a save is being put back', async () => {
   const storage = memory();
   (await start(storage)).save.tick();
+  const before = storage.map.get(KEY);
   const locks = fakeLocks();
   locks.hold();
   const page = await open(storage, '', { navigator: { locks, vibrate() {} } });
   const { game } = page;
-  assert.equal(game.save.saveSession.holding, true);
+  game.inventoryScreen.isOpen = false;
+  assert.equal(game.save.choice.mode, 'continue');
+  assert.deepEqual(plain(game.save.choice.info), { who: 'Kael', day: 0, savedAt: JSON.parse(before).savedAt, hasBody: true,
+    newerFeatures: false });
+  assert.deepEqual([page.blocked(), game.player.takeDamage(10)], [true, 0], 'play is blocked and the player shielded');
   const tick = game.dayClock.tick;
-  page.hold('KeyD');
-  page.frame(0.5);
-  page.frame(0.5);
-  assert.deepEqual([game.player.x, game.dayClock.tick], [0, tick]);
+  const frames = () => {
+    page.hold('KeyD');
+    page.frame(0.5);
+    page.frame(0.5);
+    assert.deepEqual([game.player.x, game.dayClock.tick], [0, tick]);
+  };
+  frames();
   assert.deepEqual(plain(game.save.tick()), { ok: false, reason: 'gated' }, 'and nothing is written');
   page.setHidden(true);
   page.setHidden(false);
-  assert.equal(JSON.parse(storage.map.get(KEY)).rev, 1);
+  game.save.choice.choose('continue');
+  assert.equal(page.audio.unlocks, 1, 'Continue is the tap to play');
+  frames();
+  assert.equal(storage.map.get(KEY), before);
   locks.go();
   await settle();
-  assert.equal(game.save.saveSession.holding, false);
+  assert.deepEqual([game.save.choice.isOpen, game.save.saveSession.holding, page.blocked()], [false, false, false]);
   page.frame(0.5);
   assert.notEqual(game.dayClock.tick, tick);
+});
+
+test('New game asks first, then writes a fresh save with ?instruments in the bag and clears the land', async () => {
+  const storage = memory();
+  const first = await start(storage);
+  first.player.x = 20;
+  first.inventory.add('oakLog', 3);
+  first.save.tick();
+  first.save.store.release();
+  storage.setItem('ascii-realm-edits-1', JSON.stringify({ ...JSON.parse(storage.map.get(KEY)), kind: 'edits',
+    chunks: { '0,0': [['fell', 'a']] } }));
+  const { game } = await open(storage, '&instruments');
+  assert.ok(game.inventory.slots.some((stack) => stack?.id === 'lute'), 'the bag the page starts with');
+  await choose(game, 'new');
+  assert.equal(game.save.choice.isOpen, false);
+  const { bodies } = JSON.parse(storage.map.get(KEY));
+  assert.deepEqual([bodies.outlaw.x, bodies.outlaw.bag.some((stack) => stack?.id === 'oakLog')], [0, false]);
+  assert.ok(bodies.outlaw.bag.some((stack) => stack?.id === 'lute'));
+  assert.deepEqual(JSON.parse(storage.map.get('ascii-realm-edits-1')).chunks, {});
+  assert.equal(game.save.tick().ok, true);
+});
+
+test('a refused New game says why on the choice and leaves the save as it was', async () => {
+  const storage = memory();
+  (await start(storage)).save.tick();
+  const before = storage.map.get(KEY);
+  const { game } = await open(storage);
+  const { setItem } = storage;
+  storage.setItem = (key, value) => {
+    if (key === KEY) throw Object.assign(new Error('full'), { name: 'QuotaExceededError' });
+    setItem(key, value);
+  };
+  await choose(game, 'new');
+  assert.deepEqual([game.save.choice.mode, game.save.choice.failed], ['continue', NOTICES.quota]);
+  assert.equal(storage.map.get(KEY), before);
+  assert.deepEqual(game.hud.toasts, []);
+});
+
+test('a save from a newer version offers Reload or playing without saving', async () => {
+  const storage = memory();
+  (await start(storage)).save.tick();
+  storage.setItem(KEY, JSON.stringify({ ...JSON.parse(storage.map.get(KEY)), v: 99 }));
+  const page = await open(storage);
+  page.game.inventoryScreen.isOpen = false;
+  assert.equal(page.game.save.choice.mode, 'newer');
+  page.game.save.choice.choose('reload');
+  assert.equal(page.navigatedTo(), 'reload');
+  await choose(page.game, 'decline');
+  assert.deepEqual([page.game.save.choice.isOpen, page.blocked()], [false, false]);
+  assert.deepEqual(plain(page.game.save.now()), { ok: false, reason: 'declined' });
+  assert.deepEqual(page.game.hud.toasts, [NOTICES.tool]);
+  page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+  await settle();
+  assert.equal(page.game.save.choice.isOpen, false, 'nothing is offered again');
+});
+
+test('a save open in another tab shows that screen; Try again checks, then offers the choice', async () => {
+  const storage = memory();
+  (await start(storage)).save.tick();
+  const locks = fakeLocks();
+  const other = new SaveStore({ storage, world: WORLD, locks });
+  assert.equal(await other.ready, 'writer');
+  const page = await open(storage, '', { navigator: { locks, vibrate() {} } });
+  const { choice } = page.game.save;
+  assert.deepEqual(choice.shown, ['continue', 'other-tab']);
+  await choose(page.game, 'retry');
+  assert.deepEqual(choice.shown.slice(2), ['other-tab']);
+  other.release();
+  await choose(page.game, 'retry');
+  assert.equal(choice.mode, 'continue');
+  assert.equal(page.game.save.store.ownRev.realm, null, 'Try again claims nothing');
+  await choose(page.game, 'continue');
+  assert.equal(page.game.save.tick().ok, true);
+});
+
+test('a first visit with a save shows the choice first, then the creator', async () => {
+  const storage = memory();
+  (await start(storage)).save.tick();
+  const { game } = await open(storage, '&creator');
+  assert.deepEqual([game.save.choice.mode, game.creator.isOpen], ['continue', false]);
+  await choose(game, 'continue');
+  assert.deepEqual([game.save.choice.isOpen, game.creator.isOpen], [false, true]);
+});
+
+test('on a phone the choice is the tap to play: no play card over it, and none when the page comes back', async () => {
+  const storage = memory();
+  (await start(storage)).save.tick();
+  const page = await open(storage, '', {}, { phone: true });
+  const { game } = page;
+  assert.deepEqual([game.save.choice.mode, game.native.gate.waiting], ['continue', false]);
+  page.setHidden(true);
+  page.setHidden(false);
+  page.window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+  assert.equal(game.native.gate.waiting, false);
+  page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+  await settle();
+  await choose(game, 'continue');
+  assert.deepEqual([game.save.choice.isOpen, game.native.gate.waiting, page.audio.unlocks], [false, false, 1]);
+});
+
+test('a warning that waited behind the play card is dropped once the other tab has gone', async () => {
+  const storage = memory();
+  const locks = fakeLocks();
+  const other = new SaveStore({ storage, world: WORLD, locks });
+  await other.ready;
+  const page = await open(storage, '', { navigator: { locks, vibrate() {} } }, { phone: true });
+  const { game } = page;
+  assert.equal(game.save.choice.isOpen, false, 'the other-tab screen waits for the card');
+  page.window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+  other.release();
+  page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+  await settle();
+  page.tapGate();
+  assert.deepEqual([game.save.choice.shown, game.hud.toasts], [[], []]);
+  assert.equal(game.save.tick().ok, true);
+});
+
+test('another tab taking the world mid-play shows a screen; once it goes, play carries on saving', async () => {
+  const storage = memory();
+  const locks = fakeLocks();
+  const page = await open(storage, '', { navigator: { locks, vibrate() {} } });
+  const { game } = page;
+  game.save.tick();
+  page.window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+  const other = new SaveStore({ storage, world: WORLD, locks });
+  await other.ready;
+  page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+  await settle();
+  assert.equal(game.save.choice.mode, 'other-tab');
+  game.player.vitals.health = 1;
+  assert.equal(game.player.takeDamage(10), 0);
+  other.release();
+  await choose(game, 'retry');
+  assert.equal(game.save.choice.isOpen, false);
+  assert.equal(page.audio.unlocks, 0, 'play was already started');
+  assert.deepEqual(plain(game.save.tick()), { ok: true, rev: 3 });
+  game.save.saveSession.choosing = true;
+  game.save.store.writer = 'stale';
+  await choose(game, 'decline');
+  assert.equal(game.save.saveSession.choosing, false);
+  assert.deepEqual(plain(game.save.tick()), { ok: false, reason: 'declined' });
 });
 
 test('it saves every minute when idle, not while hidden, and at once as the page hides', async () => {
@@ -312,7 +475,8 @@ test('a page that waited on another tab continues once it closes, keeping a swit
   assert.equal(await other.ready, 'writer');
   const game = await start(storage, '', { navigator: { locks, vibrate() {} } });
   assert.equal(game.save.store.writer, 'other-tab');
-  assert.deepEqual(game.hud.toasts, [NOTICES['other-tab']]);
+  assert.equal(game.save.choice.mode, 'other-tab');
+  assert.deepEqual(game.hud.toasts, []);
   game.player.x = 12;
   game.inventory.add('oakLog', 3);
   const bag = plain(game.inventory.serialize());
@@ -326,7 +490,9 @@ test('a page that waited on another tab continues once it closes, keeping a swit
   const theirs = { ...emptyRealm(WORLD), bodies: { outlaw: body(40), [kept]: body(9) }, active: kept };
   assert.equal(other.write('realm', theirs).ok, true);
   other.release();
-  assert.equal((await game.save.restore()).ok, true);
+  await choose(game, 'retry');
+  assert.deepEqual([game.save.choice.mode, game.save.choice.info.hasBody], ['continue', false]);
+  await choose(game, 'continue');
   game.player.x = 3;
   assert.equal(game.save.now().ok, true);
   const { bodies, active } = JSON.parse(storage.map.get(KEY));
@@ -351,10 +517,13 @@ test('back from the back/forward cache after another tab saved, the page says to
   page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: false }));
   await settle();
   assert.equal(page.game.save.store.writer, 'stale');
-  assert.deepEqual(page.game.hud.toasts, [NOTICES.stale]);
+  assert.equal(page.game.save.choice.mode, 'stale');
+  assert.deepEqual(page.game.hud.toasts, []);
+  page.game.save.choice.choose('reload');
+  assert.equal(page.navigatedTo(), 'reload');
 });
 
-test('a Continue the page hid during runs again when it comes back from the back/forward cache', async () => {
+test('a Continue the page hid during is offered again when it comes back from the back/forward cache', async () => {
   const storage = memory();
   const first = await start(storage);
   first.player.x = 31.5;
@@ -364,13 +533,17 @@ test('a Continue the page hid during runs again when it comes back from the back
   locks.hold();
   const page = await open(storage, '', { navigator: { locks, vibrate() {} } });
   const { game } = page;
+  game.save.choice.choose('continue');
   page.window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
   locks.go();
   await settle();
   assert.deepEqual(plain(game.save.tick()), { ok: false, reason: 'gated' }, 'the Continue was cut short');
+  assert.equal(game.save.choice.failed, NOTICES.gated);
   assert.equal(game.player.x, 0);
   page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
   await settle();
+  assert.deepEqual(game.save.choice.shown, ['continue', 'continue'], 'the choice is offered again');
+  await choose(game, 'continue');
   assert.equal(game.player.x, 31.5, 'the save is put back');
   assert.deepEqual(plain(game.save.tick()), { ok: true, rev: 2 });
   assert.deepEqual(game.hud.toasts, []);

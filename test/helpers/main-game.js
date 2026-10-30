@@ -242,6 +242,17 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       close(character = null) { this.flow = null; this.onClose(character, this.mode); }
     },
     sampleDraft, wantsCreator, hidesPreview,
+    // The save's choice: the screens it showed and its error line. A test
+    // picks a button with `choose` (`onChoose`); the real one is tested on
+    // its own.
+    StartChoice: class {
+      constructor(options) { Object.assign(this, options); this.mode = null; this.shown = []; this.failed = null; }
+      get isOpen() { return this.mode !== null; }
+      open(mode, info) { Object.assign(this, { mode, info, failed: null }); this.shown.push(mode); }
+      close() { this.mode = null; }
+      fail(text) { this.failed = text; }
+      choose(action) { this.onChoose(action); }
+    },
     // What reaches the speech bubbles; the real ones are tested on their own.
     SpeechBubbles: class {
       constructor(options) { Object.assign(this, options); this.size = 0; this.received = []; this.rostered = []; this.updates = []; }
@@ -260,7 +271,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Grass: inert(),
     MAX_TREE_HALF_WIDTH: 40, MAX_TREE_HEIGHT: 160, MAX_LEAF_DRIFT: 8,
     propInView: () => true, drawLeaves: noop,
-    location: { search: new URL(href).search, href, replace: url => { navigatedTo = String(url); } },
+    location: { search: new URL(href).search, href, replace: url => { navigatedTo = String(url); },
+      reload: () => { navigatedTo = 'reload'; } },
     performance: { now: () => 0 },
     requestAnimationFrame: callback => { nextFrame = callback; },
     isDown: (...codes) => !blocked && codes.some(code => held.has(code)),
