@@ -123,6 +123,23 @@ test('a damaged save starts fresh and says so; the first save writes over it', a
   assert.equal((await other.save.restore()).reason, 'released');
 });
 
+test('save notices wait for the creator and the play card to go, so none runs out unseen', async () => {
+  const damaged = () => {
+    const storage = memory();
+    storage.setItem(KEY, '{ not json');
+    return storage;
+  };
+  const created = await open(damaged(), '&creator');
+  assert.deepEqual(created.game.hud.toasts, []);
+  created.game.creator.close();
+  assert.deepEqual(created.game.hud.toasts, [NOTICES.corrupt]);
+  const phone = await loadGame(undefined, { href: 'http://localhost/?debug&animals=0', phone: true, real: { localStorage: damaged() } });
+  await settle();
+  assert.deepEqual(phone.game.hud.toasts, []);
+  phone.tapGate();
+  assert.deepEqual(phone.game.hud.toasts, [NOTICES.corrupt]);
+});
+
 test('nothing moves while a save is being put back', async () => {
   const storage = memory();
   (await start(storage)).save.tick();

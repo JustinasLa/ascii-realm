@@ -459,6 +459,7 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
     if (deferredJoin && unsaved) hud.notify('The lobby wasn\'t joined: it could reload the page and lose this character.');
     deferredJoin = null;
     if (!inventoryScreen.isOpen) canvas.focus({ preventScroll: true });
+    showHeld();
   } });
 debug.creator = creator;
 if (wantsCreator(params, characters)) {
@@ -513,6 +514,7 @@ function startPlay() {
   cancelActions();
   updateWakeLock();
   canvas.focus({ preventScroll: true });
+  showHeld();
 }
 // Tools and benchmarks (?nogate) never see the card.
 const gated = () => device.phone && !params.has('nogate');
@@ -643,6 +645,13 @@ const wakeBody = () => {
   camera.x = player.x;
   camera.y = player.y - focusRows() - playerLift();
 };
+// Save notices wait while the page starts and while the creator or the play
+// card hides the HUD, so none runs out unseen.
+const heldNotices = [];
+let holdNotices = true;
+function showHeld() {
+  if (!holdNotices && !creator.isOpen && !gate.waiting) for (const text of heldNotices.splice(0)) hud.notify(text, 'info');
+}
 // ?time= beats a saved time of day.
 const clockAdapter = { get: () => ({ day: dayClock.day, tick: dayClock.tick }),
   set: ({ day, tick }) => {
@@ -651,7 +660,10 @@ const clockAdapter = { get: () => ({ day: dayClock.day, tick: dayClock.tick }),
     dayClock.days = day;
   } };
 saveSession = saves && new SaveSession({ store: saves, world: saveTarget, live, characters, clock: clockAdapter,
-  notify: (text) => hud.notify(text, 'info'), off: params.has('nogate') ? 'tool' : null });
+  notify: (text) => {
+    heldNotices.push(text);
+    showHeld();
+  }, off: params.has('nogate') ? 'tool' : null });
 const booted = saveSession?.boot();
 // Until instruments can be crafted, ?instruments puts one of each in the
 // bag of a game that starts fresh.
@@ -1037,6 +1049,8 @@ function onPhoneChange(phone) {
 }
 if (creator.isOpen) blockGameplay();
 else if (gated()) gate.show('start');
+holdNotices = false;
+showHeld();
 onPhoneChange(device.phone);
 
 // Skeletons rise from the ground around the player, goblins come running,
