@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mulberry32 } from '../src/core/rng.js';
+import { FINE } from '../src/render/cells.js';
 import { glyph } from '../src/render/glyphs.js';
+import { BG_KEEP, NIGHT } from '../src/render/palette.js';
+import { AsciiRenderer } from '../src/render/renderer.js';
 import { FADE_IN, Fireflies, WAKE_BAND } from '../src/world/fireflies.js';
 import { withLayers } from './helpers/renderer.js';
 import { GRASS, STONE } from '../src/world/world.js';
@@ -151,60 +154,94 @@ test('fireflies wake one by one as the firefly hours come, each at its own point
 });
 
 // The screen covered in bright grass, as the meadow is drawn before the
-// fireflies.
-function meadow() {
-  const r = screenOf();
+// fireflies: bare, with a tree's small cells over the firefly's body and the
+// right of its halo, or with a mushroom's soft letter drifting by its halo.
+function meadow(scene = 'grass') {
+  const r = Object.create(AsciiRenderer.prototype);
+  r.allocate(VIEW.cols, VIEW.rows);
+  r.clear();
   for (let y = 0; y < r.rows; y++) {
     for (let x = 0; x < r.cols; x++) {
       r.bg.set([12, 26, 14], (y * r.cols + x) * 4);
       r.put(x, y, glyph(','), 90, 190, 70);
     }
   }
+  if (scene === 'tree') {
+    for (let fy = 25 * FINE; fy < 29 * FINE; fy++) {
+      for (let fx = 40 * FINE; fx < 42 * FINE; fx++) r.fineAt(fx, fy, glyph(fx % 2 ? '#' : '%'), 60, 120, 90, 8, 10, 14);
+    }
+  }
+  if (scene === 'mushroom') {
+    r.beginFloating();
+    r.putFloating(41.3, 25.6, glyph('o'), 200, 120, 160);
+  }
   return r;
 }
 
-// How far each cell looks from the bare meadow: its glyph's colour against
-// the ground, all of it where a firefly's glyph took the grass's place.
-function changes(r, bare) {
-  const out = [];
-  for (let cell = 0; cell < r.cols * r.rows; cell++) {
-    const o = cell * 4;
-    const ink = (a, c) => a.fg[o + c] - a.bg[o + c];
-    let d = 0;
-    for (let c = 0; c < 3; c++) {
-      d += r.glyphAt(cell) === bare.glyphAt(cell) ? Math.abs(ink(r, c) - ink(bare, c))
-        : Math.abs(ink(r, c)) + Math.abs(ink(bare, c));
+// What the shader can show of a cell (see renderer.js). Each pixel is the
+// ground between letters, mix(NIGHT, bg, BG_KEEP), with the glyph's ink over
+// it by the glyph's coverage there; a sprite's small cells mix in by their
+// flags, and a soft letter drifting in by the cell's motion tag.
+function shown(r, cell) {
+  const o = cell * 4;
+  const x = cell % r.cols;
+  const y = (cell - x) / r.cols;
+  const small = [];
+  for (let j = 0; j < FINE; j++) {
+    for (let i = 0; i < FINE; i++) {
+      const at = ((y * FINE + j) * r.fineCols + x * FINE + i) * 4;
+      small.push([...r.fine.subarray(at, at + 4), ...r.fineBg.subarray(at, at + 4)]);
     }
-    out.push(d);
   }
-  return out;
+  const tag = r.motion[o + 2] | (r.motion[o + 3] << 8);
+  return { glyph: r.glyphAt(cell), ink: [...r.fg.subarray(o, o + 3)], small, motion: tag & 32769 ? tag : 0,
+    ground: [0, 1, 2].map((c) => NIGHT[c] + (r.bg[o + c] - NIGHT[c]) * BG_KEEP) };
 }
 
-test('a waking firefly fades out whole: its body, halo and pool sink away and the grass comes back without a pop', () => {
-  const bare = meadow();
-  // Its body 2 rows over the grass it lights, at row 1 and column 0.
-  const body = (1 - VIEW.y0) * VIEW.cols - VIEW.x0;
-  let last = null;
-  for (let step = 20; step >= 0; step--) {
-    const lit = step / 20;
-    const fireflies = new Fireflies();
-    fireflies.list.push({ x: 0.5, y: 3.5, h: 2, seed: 1, phase: 1, period: 3, lit });
-    const r = meadow();
-    fireflies.draw(r, VIEW, 0);
-    if (lit === 1) assert.notEqual(r.glyphAt(body), bare.glyphAt(body), 'awake, its body takes the cell');
-    if (lit === 0.25) assert.equal(r.glyphAt(body), bare.glyphAt(body), 'half asleep, the grass shows through');
-    const now = changes(r, bare);
-    assert.ok(now[body] > 0 || lit === 0);
-    if (last) {
-      for (let cell = 0; cell < now.length; cell++) {
-        assert.ok(now[cell] <= last[cell] + 3, `lit ${lit}: cell ${cell} brightens, ${last[cell]} to ${now[cell]} ${r.glyphAt(cell)} ${bare.glyphAt(cell)}`);
-        assert.ok(last[cell] - now[cell] <= 60, `lit ${lit}: cell ${cell} pops, ${last[cell]} to ${now[cell]}`);
+// The most any pixel of a cell can change from one frame to the next. With
+// its glyph kept, a pixel moves no more than its ground or ink; with the
+// glyph swapped, it can go from one glyph's ink to the ground and on to the
+// other's. A sprite's small letters are brightened up to 1.55 times and its
+// backdrop kept at BG_KEEP. A change of a small cell's glyph or flags, or of
+// the motion tag, shows another picture altogether.
+const far = (p, q) => Math.max(...p.map((v, c) => Math.abs(v - q[c])));
+function jump(a, b) {
+  if (a.motion !== b.motion || a.small.some((s, i) => s[3] !== b.small[i][3] || s[7] !== b.small[i][7])) return Infinity;
+  const glyphs = a.glyph === b.glyph ? Math.max(far(a.ground, b.ground), far(a.ink, b.ink))
+    : far(a.ground, b.ground) + far(a.ink, a.ground) + far(b.ink, b.ground);
+  return Math.max(glyphs, ...a.small.map((s, i) => Math.max(1.55 * far(s.slice(0, 3), b.small[i].slice(0, 3)),
+    BG_KEEP * far(s.slice(4, 7), b.small[i].slice(4, 7)))));
+}
+
+for (const scene of ['grass', 'tree', 'mushroom']) {
+  test(`a firefly falling asleep over ${scene} sinks away and leaves the cell as it was, with no jump on screen`, () => {
+    const bare = meadow(scene);
+    // Its body 2 rows over the grass it lights, at row 1 and column 0.
+    const body = (1 - VIEW.y0) * VIEW.cols - VIEW.x0;
+    const cells = bare.cols * bare.rows;
+    let last = null;
+    let worst = 0;
+    for (let step = 100; step >= 0; step--) {
+      const lit = step / 100;
+      const fireflies = new Fireflies();
+      fireflies.list.push({ x: 0.5, y: 3.5, h: 2, seed: 1, phase: 1, period: 3, lit });
+      const r = meadow(scene);
+      fireflies.draw(r, VIEW, 0);
+      const now = Array.from({ length: cells }, (_, cell) => shown(r, cell));
+      if (lit === 1) {
+        assert.equal(r.glyphAt(body) !== bare.glyphAt(body), scene === 'grass', 'awake, its body takes only a plain cell');
+        assert.ok(jump(now[body], shown(bare, body)) > 10, 'and is seen there');
+      }
+      if (last) for (let cell = 0; cell < cells; cell++) worst = Math.max(worst, jump(last[cell], now[cell]));
+      last = now;
+      if (lit === 0) {
+        assert.deepEqual([r.fg, r.bg, r.fine, r.fineBg, r.motion], [bare.fg, bare.bg, bare.fine, bare.fineBg, bare.motion],
+          'asleep, the meadow is as it was');
       }
     }
-    last = now;
-    if (lit === 0) assert.deepEqual([r.fg, r.bg], [bare.fg, bare.bg], 'asleep, the meadow is as it was');
-  }
-});
+    assert.ok(worst <= 8, `a step of 0.01 changes a pixel by up to ${worst}`);
+  });
+}
 
 test('a newcomer fades in, while the first swarm and one met after a jump show at once', () => {
   seeded(() => {

@@ -124,11 +124,14 @@ export class Fireflies {
       halo(r, sx, sy, glow * 0.8, 120, 175, 45, lit);
       if (sx < 0 || sy < 0 || sx >= r.cols || sy >= r.rows) continue;
       // The body glows out of the colour of the ground behind it, and fades
-      // in without hiding the grass there at once (see fadeLayer).
+      // in without hiding the grass there at once (see fadeLayer). In front
+      // of a tree or a soft sprite it shows as its light alone.
       const o = (sy * r.cols + sx) * 4;
       const k = Math.min(1, 0.2 + b * 1.1);
-      fadeLayer(r, o >> 2, subGlyph(BODY, f.x, fy), r.bg[o] + (215 - r.bg[o]) * k,
-        r.bg[o + 1] + (255 - r.bg[o + 1]) * k, r.bg[o + 2] + (95 - r.bg[o + 2]) * k, lit, false);
+      if (!fadeLayer(r, o >> 2, subGlyph(BODY, f.x, fy), r.bg[o] + (215 - r.bg[o]) * k,
+        r.bg[o + 1] + (255 - r.bg[o + 1]) * k, r.bg[o + 2] + (95 - r.bg[o + 2]) * k, lit, false)) {
+        lighten(r, o, 0.35 * k * lit, 215, 255, 95, 0.3);
+      }
     }
   }
 }

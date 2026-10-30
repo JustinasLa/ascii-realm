@@ -24,13 +24,11 @@ import { deviceGrid } from '../core/layout.js';
 import { ASPECT } from '../world/world.js';
 import { FINE } from './cells.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
-import { FOG, FOG_PILED, FOG_THIN, NIGHT } from './palette.js';
+import { BG_KEEP, FOG, FOG_PILED, FOG_THIN, NIGHT } from './palette.js';
 import { NIGHT_SKY } from '../world/clock.js';
 import { GLINT, LIT_INK, TINT, TINT_MAX, normalOf, shadeFactors } from '../world/surface-light.js';
 
 // An rgb triple as a GLSL vec3 literal.
-// How much of a cell's ground colour shows behind its glyph.
-const BG_KEEP = 0.12;
 // The character the fog is made of, and how many drifting layers of it can
 // pile up over one spot.
 const FOG_GLYPH = glyph('o');

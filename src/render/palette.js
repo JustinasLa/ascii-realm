@@ -5,6 +5,8 @@
 
 // Empty ground between things, and what the screen fades into at its edges.
 export const NIGHT = [10, 9, 20];
+// How much of a cell's ground colour tints the night behind its glyph.
+export const BG_KEEP = 0.12;
 export const VIGNETTE = [5, 4, 12];
 
 // Ground fog: a cold grey where it is thin, a pale moonlit white in the
