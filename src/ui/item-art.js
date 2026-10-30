@@ -1,3 +1,5 @@
+// The outline drawings: what the inventory shows until an item's shaded
+// picture is made, or always without WebGL, and what the furnace draws.
 // Hand-drawn ASCII silhouettes, at most 11 columns by 9 rows. Indentation is
 // intentional: each outline shares the same visual centre at column five.
 const art = (...rows) => rows.join('\n');

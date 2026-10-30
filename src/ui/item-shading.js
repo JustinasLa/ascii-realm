@@ -30,11 +30,12 @@ const hex = (rgb) => rgb.map((c) => Math.round(c).toString(16).padStart(2, '0'))
 const fromHex = (h) => [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
 
 // The metal colour of a stack, or null: its own (a forged weapon or alloy
-// ingot, as `own` describes it), else its weapon tier from `materialOf`
-// (weaponMaterial in weapons.js).
+// ingot, as `own` describes it), else the tier from `materialOf`
+// (weaponMaterial in weapons.js) of a weapon or of a stack with a material,
+// such as arrows.
 export function artTint(stack, item, own, materialOf) {
   if (/^#?[0-9a-f]{6}$/i.test(own?.colour ?? '')) return fromHex(own.colour.replace('#', ''));
-  return item.weapon ? materialOf(stack, item.material ?? 'iron').color : null;
+  return item.weapon || stack?.material ? materialOf(stack, item.material ?? 'iron').color : null;
 }
 
 // The cache key of one picture.
