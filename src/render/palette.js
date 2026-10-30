@@ -49,3 +49,17 @@ export const REFLECTION_TINT = [9, 12, 30];
 // The sky as seen in the water.
 export const MOON = [228, 232, 242];
 export const STARLIGHT = [182, 192, 228];
+
+// Daylight is a grade over the finished night scene: a lift of each channel
+// that never clips, a saturation and the colour and strength of the edges'
+// fade. Night is the identity, so it looks as it always has; the day's warm
+// lift cancels the night's blue, and the gaps between glyphs stay dark.
+export const GRADE_NIGHT = { gain: [1, 1, 1], sat: 1, edge: VIGNETTE, vignette: 0.7 };
+export const GRADE_DAY = { gain: [3.6, 3.8, 2.4], sat: 1.2, edge: [16, 18, 14], vignette: 0.45 };
+export const GRADE_DAWN = { gain: [2.6, 1.9, 1.7], sat: 1.15, edge: [14, 8, 18], vignette: 0.6 };
+export const GRADE_DUSK = { gain: [2.8, 1.8, 1.2], sat: 1.2, edge: [14, 7, 8], vignette: 0.6 };
+// The sun's glare and glints on the water, and the warm glow over the water
+// at dawn and dusk.
+export const SUN = [255, 236, 196];
+export const AFTERGLOW_DAWN = [236, 150, 178];
+export const AFTERGLOW_DUSK = [242, 128, 72];

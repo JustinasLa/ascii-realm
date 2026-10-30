@@ -96,6 +96,7 @@ import { drawProp, propDepthSlices, propInView } from './world/props.js';
 import { bakeFine, fineBakesPending, fineOf, startFineWorkers } from './world/fine-bakes.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
+import { WorldClock, clockOptions } from './world/clock.js';
 import { Splashes } from './world/splashes.js';
 import { Debris } from './world/debris.js';
 import { Torches } from './world/torch.js';
@@ -397,7 +398,9 @@ window.addEventListener('pageshow', (event) => {
 const fog = new Fog();
 const fogSpells = new SpellFogStirs();
 const nightLight = new NightLight();
-const debug = { player, camera, world, grass, splashes, debris, weather, fog, nightLight, fires, torches, renderer, quality, inventory,
+// The time of day (see world/clock.js): days pass, mostly at night.
+const dayClock = new WorldClock(clockOptions(params, { inLobby }));
+const debug = { dayClock, player, camera, world, grass, splashes, debris, weather, fog, nightLight, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
@@ -1462,6 +1465,14 @@ function frame(now) {
   // and the player all wait, while the scene is still drawn.
   const dt = gate.waiting || debug.pinTime !== null ? 0 : step;
   time = debug.pinTime ?? time + dt;
+  // A lobby's clock is the wall clock's, shared by everyone in it; joining
+  // jumps to it and leaving carries on from there.
+  if (!!multiplayer.room !== dayClock.shared) {
+    if (multiplayer.room) dayClock.share(Date.now()); else dayClock.unshare();
+  }
+  dayClock.hold(debug.freeze);
+  dayClock.advance(dt, Date.now());
+  const sky = dayClock.sky();
   updateZoom(debug.pinTime === null ? dt : step);
   glideFraming(step);
   if (debug.freeze || isGameplayBlocked() || player.magicStunned || gate.waiting) cancelActions();
@@ -1761,7 +1772,7 @@ function frame(now) {
   if (wide) world.load(view.x0, view.y0, view.x0 + view.cols, view.y0 + view.rows, 6);
   drawGround(renderer, world, view, time, player, weather.wind, wide);
   grass.drawTracks(renderer, view, time, world);
-  drawSkyReflection(renderer, view, time);
+  drawSkyReflection(renderer, view, time, sky);
   footprints.draw(renderer, view, time);
   // On raised ground the shadows laid here rise with the ground's tops.
   drawShadow(renderer, view, player.x, player.y, player.air);
@@ -2038,10 +2049,11 @@ function frame(now) {
   for (const p of props) if (!p.unbaked || bakes-- > 0) fineOf(p);
   bakeWhenIdle();
   if (debug.freeze || gate.waiting) sound.pause();
-  else sound.update(dt, time, player, camera, fireflies.list, fires.list);
+  else sound.update(dt, time, player, camera, fireflies.list, fires.list, sky.night);
   unbindAudio.updateSong();
   const atmosphere = fog.uniforms(view);
   if (ruinPreview) atmosphere.density *= 0.55;
+  renderer.sky = sky.grade;
   renderer.draw(view.offX, view.offY, atmosphere);
   lastFrame = { width: canvas.width, height: canvas.height, cellW: renderer.cellW, cellH: renderer.cellH, view };
   hud.setParty(multiplayer.room ? multiplayer.players.filter((member) => member.id !== multiplayer.id)

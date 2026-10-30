@@ -103,17 +103,21 @@ export class GameAudio {
     return handles ?? [];
   }
 
-  update(dt, time, player, camera, fireflies, fires = []) {
+  // `night` is how dark the world clock says it is (see world/clock.js);
+  // without it the sound keeps its own day and night.
+  update(dt, time, player, camera, fireflies, fires = [], night) {
+    const clocked = Number.isFinite(night);
     for (const handle of this.effects) if (handle.ended) this.effects.delete(handle);
     for (const [handle] of this.spellEffects) if (handle.ended) this.spellEffects.delete(handle);
     this.engine.setListener(camera.x, camera.y);
     if (this.engine.context?.state !== 'running') {
-      this.music.update({ night: nightAmount(time), time,
+      this.music.update({ night: clocked ? night : nightAmount(time), time,
         weather: this.weather.preset, weatherIntensity: this.weather.intensity });
       this.pause();
       return;
     }
-    const signals = this.environment.update(dt, camera.x, camera.y, time);
+    let signals = this.environment.update(dt, camera.x, camera.y, time);
+    if (clocked) signals = { ...signals, night };
     void prepareGrassFootsteps(this.engine);
     void prepareWaterSounds(this.engine);
     void prepareLightningSounds(this.engine);

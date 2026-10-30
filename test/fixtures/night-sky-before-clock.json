@@ -1,0 +1,8 @@
+{
+  "source": "drawSkyReflection(lunarRenderer(), moonView, 3) at 3df84c0, before the sky had a clock: SHA-256 of each buffer",
+  "fg": "c674d82434fbb5bfd964b9c0f220ea63ff8cf549ec91ca438e1541431aa003ad",
+  "bg": "1ccb3cb14681162a56368eba8df589b88a30dfedb24ebce6e6bb1005326138d5",
+  "ov": "a5c750ab8ae3f3c9ed7eeef5ec905f2fa8880d7f05db03125efb650e08ac3cc3",
+  "fine": "e8b23239f0bda54182aa9c8be45430df444f06c4699ac415e97195d7812e9839",
+  "fineBg": "3eecfe290256ac5021e5820d18138771862231b4908f6167dcee75a2a83a7dd4"
+}

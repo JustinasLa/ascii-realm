@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AsciiRenderer } from '../src/render/renderer.js';
+import { GRADE_NIGHT } from '../src/render/palette.js';
 
 // The WebGL side of the renderer, driven through a stand-in context that
 // records every call, so setup, resizing and drawing run outside a browser.
@@ -73,4 +74,18 @@ test('drawing uploads the cells and fog, with and without pushed fog and motion'
   assert.ok(calls.some(([name, , a, b]) => name === 'uniform4f' && a === 1 && b === 2), 'pushed area');
   assert.ok(calls.some(([name, , , , , , , , , data]) => name === 'texSubImage2D' && data === r.motion), 'motion uploaded');
   assert.ok(calls.some(([name, , a, b, c]) => name === 'uniform3f' && a === 0.5 && b === 0.4 && c === 3));
+});
+
+test('drawing grades the scene by the sky, the night unchanged when there is none', () => {
+  const { canvas, atlas, calls } = setup();
+  const r = new AsciiRenderer(canvas, atlas);
+  r.resize(64, 48, 1, 8, 12);
+  const sent = (location) => calls.filter(([name, at]) => name === 'uniform4f' && at === location).at(-1).slice(2);
+  r.draw();
+  assert.deepEqual(sent(r.u.uGrade), [1, 1, 1, 1]);
+  assert.deepEqual(sent(r.u.uEdge), [...GRADE_NIGHT.edge.map((v) => +(v / 255).toFixed(4)), 0.7]);
+  r.sky = { gain: [3, 2.5, 2], sat: 1.2, edge: [0.1, 0.2, 0.3], vignette: 0.45 };
+  r.draw();
+  assert.deepEqual(sent(r.u.uGrade), [3, 2.5, 2, 1.2]);
+  assert.deepEqual(sent(r.u.uEdge), [0.1, 0.2, 0.3, 0.45]);
 });

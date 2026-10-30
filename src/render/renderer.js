@@ -24,7 +24,8 @@ import { deviceGrid } from '../core/layout.js';
 import { ASPECT } from '../world/world.js';
 import { FINE } from './cells.js';
 import { BLANK_GLYPH, glyph, GLYPH_KIND, GLYPH_MASK, LAYER } from './glyphs.js';
-import { FOG, FOG_PILED, FOG_THIN, NIGHT, VIGNETTE } from './palette.js';
+import { FOG, FOG_PILED, FOG_THIN, NIGHT } from './palette.js';
+import { NIGHT_SKY } from '../world/clock.js';
 import { GLINT, LIT_INK, TINT, TINT_MAX, normalOf, shadeFactors } from '../world/surface-light.js';
 
 // An rgb triple as a GLSL vec3 literal.
@@ -92,6 +93,8 @@ uniform sampler2D uFine;
 uniform sampler2D uFineBg;
 uniform sampler2D uMotion;
 uniform bool uMotionActive;
+uniform vec4 uGrade;
+uniform vec4 uEdge;
 out vec4 outColor;
 
 const float NOISE = ${NOISE_SIZE.toFixed(1)};
@@ -306,8 +309,14 @@ void main() {
   // of the scene and the edges stay night rather than plain black.
   vec2 uv = gl_FragCoord.xy / uView - 0.5;
   uv.x *= uView.x / uView.y;
-  float vignette = 1.0 - smoothstep(0.35, 1.05, length(uv)) * 0.7;
-  outColor = vec4(mix(${vec3(VIGNETTE)}, color, vignette), 1.0);
+  // Daylight lifts the night's colours without clipping them; the night is
+  // the identity, so it skips this.
+  if (uGrade != vec4(1.0)) {
+    color = color * uGrade.rgb / (1.0 + color * (uGrade.rgb - 1.0));
+    color = clamp(mix(vec3(dot(color, vec3(0.2126, 0.7152, 0.0722))), color, uGrade.a), 0.0, 1.0);
+  }
+  float vignette = 1.0 - smoothstep(0.35, 1.05, length(uv)) * uEdge.a;
+  outColor = vec4(mix(uEdge.rgb, color, vignette), 1.0);
 }
 `;
 
@@ -342,6 +351,9 @@ export class AsciiRenderer {
     // the night's light reaches the ground under the trees. Null draws as
     // in the open.
     this.night = null;
+    // This frame's grade of the scene by the time of day (the sky state's
+    // `grade`, see world/clock.js). Null draws the night.
+    this.sky = null;
     this.restore();
   }
 
@@ -361,7 +373,7 @@ export class AsciiRenderer {
     this.u = {};
     for (const name of ['uFg', 'uBg', 'uAtlas', 'uView', 'uCell', 'uOffset', 'uAtlasCols',
       'uAtlasCell', 'uAtlasPad', 'uAtlasSize', 'uNoise', 'uWorld', 'uFogDrift', 'uFog', 'uPushed', 'uPushedArea',
-      'uFine', 'uFineBg', 'uMotion', 'uMotionActive']) {
+      'uFine', 'uFineBg', 'uMotion', 'uMotionActive', 'uGrade', 'uEdge']) {
       this.u[name] = gl.getUniformLocation(prog, name);
     }
 
@@ -871,6 +883,9 @@ export class AsciiRenderer {
     gl.uniform2f(this.u.uView, this.canvas.width, this.canvas.height);
     gl.uniform2f(this.u.uCell, this.cellW, this.cellH);
     gl.uniform2f(this.u.uOffset, offsetX, offsetY);
+    const grade = this.sky ?? NIGHT_SKY.grade;
+    gl.uniform4f(this.u.uGrade, grade.gain[0], grade.gain[1], grade.gain[2], grade.sat);
+    gl.uniform4f(this.u.uEdge, grade.edge[0], grade.edge[1], grade.edge[2], grade.vignette);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 }
