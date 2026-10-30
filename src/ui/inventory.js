@@ -591,8 +591,13 @@ export class InventoryScreen {
     const { width, height } = ghost.getBoundingClientRect();
     this._drag = { selection, node, ghost, lit, width, height, hover: null, speed: 0,
       scroller: this.phone() ? this.screen : this.cardGrid };
+    // The cards slide under a still pointer: what it is over now lights.
     const scroll = () => {
-      if (this._drag.speed) this._drag.scroller.scrollTop += this._drag.speed;
+      const { speed, scroller, point } = this._drag;
+      if (speed) {
+        scroller.scrollTop += speed;
+        this._dragMove(point, this.gestures.hitTest(point.x, point.y));
+      }
       this._drag.frame = requestAnimationFrame(scroll);
     };
     scroll();
@@ -601,8 +606,10 @@ export class InventoryScreen {
   // The ghost rides above a finger (never off the top) and centred on a
   // mouse; the target under it lights brighter, and near the scroller's top
   // or bottom edge it scrolls.
-  _dragMove({ x, y, touch }, target) {
+  _dragMove(point, target) {
+    const { x, y, touch } = point;
     const drag = this._drag;
+    drag.point = point;
     drag.ghost.style.transform = `translate(${Math.round(x - drag.width / 2)}px, ${Math.round(Math.max(0, y - drag.height * (touch ? 1.1 : 0.5)))}px)`;
     const hover = this._dropTarget(drag.selection, target);
     if (hover !== drag.hover) {

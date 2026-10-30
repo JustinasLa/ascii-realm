@@ -757,7 +757,9 @@ function dragging(t, env) {
   };
   const lit = () => [...env.screen.equipmentNodes].filter(([, { button }]) => button.classList.contains('drop-ok')).map(([slot]) => slot);
   const ghost = () => env.screen.root.querySelector('.drag-ghost');
-  return { frames, pointer, lit, ghost, frame: () => frames.at(-1)?.() };
+  // What a still pointer is over once the cards scroll beneath it.
+  const over = (target) => { under = target; };
+  return { frames, pointer, over, lit, ghost, frame: () => frames.at(-1)?.() };
 }
 
 test('a dropped card equips on a fitting box or moves onto another card; worn gear comes off in the bag', (t) => {
@@ -892,6 +894,24 @@ test('dragging worn gear lights the bag, and the cards scroll near their edges',
   assert.equal(inventory.equipment.helm, null);
   assert.equal(screen.bag.classList.contains('drop-ok'), false);
   assert.equal(ghost(), null);
+});
+
+test('a still pointer lights the card the edge scroll brings under it, and drops there', (t) => {
+  const env = mount(t);
+  const { screen, inventory, bagButton, indexOf } = env;
+  const { pointer, over, frame } = dragging(t, env);
+  screen.setOpen(true);
+  screen.cardGrid.rect = { left: 0, top: 500, width: 400, height: 200 };
+  const ore = indexOf('rawIron');
+  pointer('pointerdown', bagButton(ore));
+  pointer('pointermove', bagButton(2), 100, 690);
+  assert.ok(bagButton(2).classList.contains('drop-hover'));
+  over(bagButton(0));
+  frame();
+  assert.equal(bagButton(2).classList.contains('drop-hover'), false, 'the card scrolled away goes dark');
+  assert.ok(bagButton(0).classList.contains('drop-hover'), 'the card now under the pointer lights');
+  pointer('pointerup', bagButton(0), 100, 690);
+  assert.equal(inventory.slots[0].id, 'rawIron', 'the drop lands on the lit card');
 });
 
 test('on a phone a hold then a move drags, above the finger, scrolling the sheet', (t) => {
