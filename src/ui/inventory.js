@@ -311,7 +311,11 @@ export class InventoryScreen {
     window.addEventListener('keyup', this._keyup, true);
     window.addEventListener('blur', this._blur);
     // A turned phone re-places a pinned panel, its buttons on screen.
-    this._resize = () => { if (this.tooltip.pinned) this._pin(this._tip); };
+    // A turned phone reshapes the boxes, and so their pictures.
+    this._resize = () => {
+      this._signature = null;
+      if (this.tooltip.pinned) this._pin(this._tip);
+    };
     window.addEventListener('resize', this._resize);
   }
 
@@ -367,7 +371,11 @@ export class InventoryScreen {
   // Tab and arrow keys reach.
   _show(id, focus = false) {
     if (!this.pages.some((page) => page.id === id)) return;
-    if (id !== this.page) this._hideTip();
+    if (id !== this.page) {
+      this._hideTip();
+      // The doll's boxes are measured afresh when it shows again.
+      this._signature = null;
+    }
     this.page = id;
     for (const page of this.pages) {
       const selected = page.id === id;
@@ -858,18 +866,23 @@ export class InventoryScreen {
 
   // The only place the doll gets its art, for the box `slot` names: the
   // picture's `src` (null while it's made) and the outline shown until then.
-  _art(item, slot, stack) { return this._picture(item, stack, shapeOf(DOLL_BOXES[slot])); }
+  _art(item, slot, stack) { return this._picture(item, stack, shapeOf(DOLL_BOXES[slot]), this._aspects?.get(slot)); }
 
   // The only place the bag gets its art.
   _cardArt(item, stack) { return this._picture(item, stack, 'card'); }
 
-  _picture(item, stack, shape) {
-    const art = this.art?.art(stack, item, this.describe(stack), shape);
+  _picture(item, stack, shape, aspect) {
+    const art = this.art?.art(stack, item, this.describe(stack), shape, aspect);
     return { src: art?.src ?? null, text: itemArt(item.id, item.glyph) };
   }
 
   _render() {
     const view = this._view;
+    // Each doll box's shape inside its 3 px padding (0 while hidden), read
+    // before anything is written, so a phone's taller boxes get pictures of
+    // their own shape.
+    this._aspects = new Map([...this.equipmentNodes].map(([slot, { button: { clientWidth: w, clientHeight: h } }]) =>
+      [slot, h > 6 ? (w - 6) / (h - 6) : 0]));
     setText(this.slotCounter, `Bag ${view.used}/${view.total}`);
     const drop = this.onDrop ? ` \u00b7 ${this.phone() ? 'hold' : 'RMB'} \u2014 drop` : '';
     setText(this.bagHint, `${this.phone() ? 'tap' : 'LMB'} \u2014 equip / take off${drop} \u00b7 drag to equip`);

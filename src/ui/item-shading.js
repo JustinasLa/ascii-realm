@@ -23,6 +23,14 @@ export const GRIDS = Object.freeze({
 // A doll box's grid shape, from its width and height in doll cells.
 export const shapeOf = (box) => `${box.width}x${box.height}`;
 
+// A shape's grid for a box `aspect` (width / height) that is far from the
+// desktop one, as on phones: the same columns, and rows to match.
+export function gridOf(shape, aspect) {
+  const grid = GRIDS[shape];
+  const rows = Math.round((grid.cols * ASPECT) / aspect);
+  return aspect > 0 && Math.abs(rows - grid.rows) > grid.rows * 0.08 ? { ...grid, rows } : grid;
+}
+
 // The angle of a grid's diagonal from the horizontal: long items lie on it.
 export const poseAngle = (grid) => Math.atan2(grid.rows, grid.cols * ASPECT);
 
@@ -62,10 +70,10 @@ export function rampChar(ramp, light, r) {
 
 // Cells from a lit picture `shade` and a paint-id picture `ids` (RGBA, rows
 // bottom-up as WebGL reads them, SX × SY samples per cell). `paints[i]` is
-// { ramp, lum, floor, gain, glint?, edge? }, and an id pixel's red is
+// { ramp, lum, floor, gain, glint?, edge?, speckle? }, and an id pixel's red is
 // i * 8 + 4; the light level is how bright a cell is lit against its paint's
 // own brightness `lum` (0..1), so dark leather and pale steel both use their
-// whole ramp.
+// whole ramp. A `speckle` share of a paint's cells are pale dots.
 // `outline(mx, my, cover)` gives the { ch, rim } of a partly covered cell.
 // A cell is { x, y, ch, r, g, b }; uncovered cells are left out.
 export function cellsFromPixels({ shade, ids, grid, paints, outline, seed = 0 }) {
@@ -106,8 +114,10 @@ export function cellsFromPixels({ shade, ids, grid, paints, outline, seed = 0 })
       }
       const light = clamp01(((r * 0.3 + g * 0.55 + b * 0.15) / 255 / paint.lum - paint.floor) * paint.gain);
       const rnd = hash(x, y, seed);
-      const ch = paint.glint && light > 0.85 && rnd > 0.92 ? paint.glint : rampChar(paint.ramp, light, rnd);
-      cells.push({ x, y, ch, r: Math.min(255, 24 + r * 1.3), g: Math.min(255, 24 + g * 1.3), b: Math.min(255, 24 + b * 1.3) });
+      const fleck = hash(y, x, seed) < (paint.speckle ?? 0);
+      const ch = fleck ? '.' : paint.glint && light > 0.85 && rnd > 0.92 ? paint.glint : rampChar(paint.ramp, light, rnd);
+      const lift = fleck ? 1.7 : 1.3;
+      cells.push({ x, y, ch, r: Math.min(255, 24 + r * lift), g: Math.min(255, 24 + g * lift), b: Math.min(255, 24 + b * lift) });
     }
   }
   return cells;

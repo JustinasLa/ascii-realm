@@ -5,7 +5,7 @@ import { WEAPON_MATERIALS, weaponMaterial } from '../src/entities/weapons.js';
 import { ITEMS } from '../src/inventory/items.js';
 import { DOLL_BOXES } from '../src/ui/paper-doll.js';
 import {
-  ASPECT, GRIDS, SX, SY, artKey, artTint, cellsFromPixels, drawCells, hash, poseAngle, rampChar, seedOf, shapeOf,
+  ASPECT, GRIDS, SX, SY, artKey, artTint, cellsFromPixels, drawCells, gridOf, hash, poseAngle, rampChar, seedOf, shapeOf,
 } from '../src/ui/item-shading.js';
 
 test('the shading imports nothing: plain grids, pixels and ramps in, cells out', () => {
@@ -32,6 +32,19 @@ test('every doll box has a grid shaped like the box at its desktop size, and car
   assert.ok(Math.abs((card.cols * ASPECT) / card.rows / 0.5 - 1) < 0.03);
   assert.equal(shapeOf(DOLL_BOXES.mainHand), '2x4');
   assert.equal(shapeOf(DOLL_BOXES.quiver), '1x1');
+});
+
+test('a box far from its desktop shape, as on phones, gets rows to match its own', () => {
+  assert.equal(gridOf('2x2', 1.2), GRIDS['2x2'], 'the desktop shape');
+  assert.equal(gridOf('2x2', 1.16), GRIDS['2x2'], 'a phone in landscape is close enough');
+  assert.equal(gridOf('2x2', 0), GRIDS['2x2'], 'a hidden box');
+  assert.equal(gridOf('2x2', NaN), GRIDS['2x2']);
+  // A phone in portrait: 85 × 86 inside the padding.
+  const portrait = gridOf('2x2', 85 / 86);
+  assert.deepEqual(portrait, { ...GRIDS['2x2'], rows: 18 });
+  assert.ok(Math.abs((portrait.cols * ASPECT) / portrait.rows / (85 / 86) - 1) < 0.03);
+  assert.equal(gridOf('2x4', 85 / 182).rows, 39);
+  assert.equal(gridOf('1x1', 29 / 38).cols, 14, 'the same letters across');
 });
 
 test('long items lie on the grid diagonal', () => {
@@ -134,6 +147,16 @@ test('the majority paint picks the ramp; bright metal glints, and stroke paints 
     'small boxes keep thinner cells');
   const unknown = picture(1, 1, () => [255, 255, 255, 9]);
   assert.equal(cellsFromPixels({ ...unknown, paints: PAINTS, outline })[0].ch, '@', 'an unknown paint draws as the first');
+});
+
+test('a speckled paint has a share of pale dots', () => {
+  const { shade, ids, grid } = picture(40, 4, () => [100, 100, 100, 0]);
+  const plain = cellsFromPixels({ shade, ids, grid, paints: PAINTS, outline, seed: 5 });
+  const cells = cellsFromPixels({ shade, ids, grid, paints: [{ ...PAINTS[0], speckle: 0.12 }], outline, seed: 5 });
+  const dots = cells.filter((c) => c.ch === '.');
+  assert.ok(dots.length > 8 && dots.length < 32, `${dots.length} of 160`);
+  assert.ok(plain.every((c) => c.ch !== '.'));
+  assert.ok(dots.every((c) => c.r > plain[0].r), 'paler than the stone round them');
 });
 
 test('cells are drawn on a dark silhouette, one fill colour per group of letters', () => {

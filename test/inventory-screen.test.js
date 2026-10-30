@@ -1881,9 +1881,9 @@ function fakeArt() {
   const queued = new Set();
   return {
     asked, made, opens: 0,
-    art(stack, item, own, shape) {
+    art(stack, item, own, shape, aspect) {
       const key = `${item.id}|${shape}|${own?.colour ?? stack.material ?? ''}`;
-      asked.push({ id: item.id, shape, own, key });
+      asked.push({ id: item.id, shape, own, key, aspect });
       if (made.has(key)) return made.get(key);
       queued.add(key);
       return null;
@@ -1975,6 +1975,39 @@ test('a forged stack asks for its own picture, and the drag ghost carries the pi
   assert.equal(ghost().children[0].className, 'bag-card-art');
   assert.equal(ghost().children[0].children[0].getAttribute('src'), 'data:image/png;base64,longbow|card|');
   pointer('pointerup', bagButton(bow), 110, 100);
+});
+
+test('each doll box asks for a picture of its laid-out shape, read again after a resize', (t) => {
+  const art = fakeArt();
+  const { window, screen } = mount(t, { art });
+  const button = screen.equipmentNodes.get('mainHand').button;
+  // A phone's weapon box inside its padding: 85 × 182.
+  Object.assign(button, { clientWidth: 91, clientHeight: 188 });
+  screen.setOpen(true);
+  assert.equal(art.asked.findLast((a) => a.shape === '2x4').aspect, 85 / 182);
+  // Turned: the boxes are reshaped though nothing in the bag changed.
+  Object.assign(button, { clientWidth: 107, clientHeight: 188 });
+  window.dispatchEvent(new Event('resize'));
+  screen.update();
+  assert.equal(art.asked.findLast((a) => a.shape === '2x4').aspect, 101 / 182);
+  // A hidden box has no shape to go by.
+  Object.assign(button, { clientWidth: 0, clientHeight: 0 });
+  screen._signature = null;
+  screen.update();
+  assert.equal(art.asked.findLast((a) => a.shape === '2x4').aspect, 0);
+});
+
+test('turning to another page and back measures the doll again', (t) => {
+  const art = fakeArt();
+  const { screen } = mount(t, { art, pages: ({ document }) => [{ id: 'character', label: 'Character', node: document.createElement('section') }] });
+  screen.setOpen(true);
+  screen.setOpen(true, 'character');
+  assert.equal(screen._signature, null);
+  screen.update();
+  const asked = art.asked.length;
+  screen.setOpen(true, 'inventory');
+  screen.update();
+  assert.ok(art.asked.length > asked, 'the boxes asked again');
 });
 
 test('without a studio every box keeps its outline', (t) => {

@@ -3,7 +3,7 @@ import { WEAPONS, WEAPON_MATERIALS, weaponMaterial } from '../entities/weapons.j
 import { GLYPHS } from '../render/glyphs.js';
 import { BARK_RAMP } from '../world/tree-chars.js';
 import { INSTRUMENT_PAINTS, ITEM_MODELS, PAINTS, WEAPON_PAINTS } from './item-models.js';
-import { ASPECT, GRIDS, SX, SY, artKey, artTint, cellsFromPixels, drawCells, hash, poseAngle, seedOf } from './item-shading.js';
+import { ASPECT, GRIDS, SX, SY, artKey, artTint, cellsFromPixels, drawCells, gridOf, hash, poseAngle, seedOf } from './item-shading.js';
 
 // The inventory's item pictures: each item is a small 3D model (a weapon
 // from the same parts the hands carry, an instrument from the shape the
@@ -33,9 +33,11 @@ export function paintFor(name, tint, own = PAINTS[name].colour) {
 // The geometry of each kind of part (see item-models.js).
 const GEOMETRY = {
   box: (THREE, [w, h, d]) => new THREE.BoxGeometry(w, h, d),
-  cyl: (THREE, [top, bottom, h, sides = 12, start = 0]) => new THREE.CylinderGeometry(top, bottom, h, sides, 1, false, start),
+  cyl: (THREE, [top, bottom, h, sides = 12, start = 0, turn = Math.PI * 2]) =>
+    new THREE.CylinderGeometry(top, bottom, h, sides, 1, turn < Math.PI * 2, start, turn),
   cone: (THREE, [r, h]) => new THREE.ConeGeometry(r, h, 12),
   ball: (THREE, [rx, ry, rz]) => new THREE.SphereGeometry(1, 12, 8).scale(rx, ry, rz),
+  shell: (THREE, [r, start, turn]) => new THREE.SphereGeometry(r, 18, 12, start, turn),
   torus: (THREE, [big, r]) => new THREE.TorusGeometry(big, r, 8, 16),
   lathe: (THREE, points) => new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), 16),
   slab: (THREE, [points, depth]) => new THREE.ExtrudeGeometry(new THREE.Shape(points.map(([x, y]) => new THREE.Vector2(x, y))),
@@ -85,16 +87,71 @@ function instrumentModel(THREE, recipe, item) {
   return new THREE.Group().add(shape);
 }
 
+// The mannequin's body regions and sides, as gear.js paints them, matched
+// against bone names as the loader cleans them up.
+const REGIONS = [['head|neck', 'head'], ['upper_arm', 'upperArm'], ['forearm', 'forearm'], ['hand|f_|thumb', 'hand'],
+  ['thigh', 'thigh'], ['shin', 'shin'], ['foot|toe', 'foot'], ['hips|spine|shoulder', 'torso']];
+const SIDES = [['L', '.L'], ['R', '.R']];
+
+// A bone's { region, side }: side is '' down the middle.
+export function boneRegion(THREE, name) {
+  const clean = THREE.PropertyBinding.sanitizeNodeName;
+  return { region: REGIONS.find(([pattern]) => new RegExp(clean(pattern)).test(name))?.[1] ?? 'torso',
+    side: SIDES.find(([, end]) => name.endsWith(clean(end)))?.[0] ?? '' };
+}
+
+// Clothing cut out of the mannequin (`gltf`) in its rest pose, a T-pose:
+// the triangles whose three corners all move with bones of the regions
+// `cut` paints ({ region: [paint, colour] }), on one `side` if given, one
+// piece per region, then any `parts` (in its metres), all turned by `turn`
+// (about y, then x, then z).
+function mannequinModel(THREE, recipe, gltf, mesh, item) {
+  const body = new THREE.Group();
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse((o) => {
+    if (!o.isSkinnedMesh || o.material.name === 'M_Joints') return;
+    const { position, normal, skinIndex, skinWeight } = o.geometry.attributes;
+    const bones = o.skeleton.bones.map(({ name }) => boneRegion(THREE, name));
+    const region = Array.from({ length: position.count }, (_, i) => {
+      let best = 0;
+      for (let k = 1; k < 4; k++) if (skinWeight.getComponent(i, k) > skinWeight.getComponent(i, best)) best = k;
+      const bone = bones[skinIndex.getComponent(i, best)];
+      return (!recipe.side || bone.side === recipe.side) && recipe.cut[bone.region] ? bone.region : null;
+    });
+    const pieces = {};
+    const index = o.geometry.index.array;
+    for (let t = 0; t < index.length; t += 3) {
+      const corners = [index[t], index[t + 1], index[t + 2]];
+      if (corners.every((v) => region[v])) (pieces[region[corners[0]]] ??= []).push(...corners);
+    }
+    for (const [name, corners] of Object.entries(pieces)) {
+      const used = [...new Set(corners)];
+      const at = new Map(used.map((v, i) => [v, i]));
+      const geometry = new THREE.BufferGeometry();
+      for (const [key, from] of [['position', position], ['normal', normal]]) {
+        geometry.setAttribute(key, new THREE.Float32BufferAttribute(used.flatMap((v) => [from.getX(v), from.getY(v), from.getZ(v)]), 3));
+      }
+      geometry.setIndex(corners.map((v) => at.get(v)));
+      const [paint, colour] = recipe.cut[name];
+      body.add(mesh(geometry.applyMatrix4(o.matrixWorld), paint, colour === 'item' ? item.colour : colour));
+    }
+  });
+  if (recipe.parts) body.add(partsModel(THREE, recipe.parts, mesh, item, seedOf(item.id)));
+  if (recipe.turn) body.rotation.set(...recipe.turn, 'ZXY');
+  return new THREE.Group().add(body);
+}
+
 // An item's recipe, in its `variant` ('card', 'compact', 'two' or '').
 export const recipeOf = (item, variant = '') => ({ ...ITEM_MODELS[item.id], ...ITEM_MODELS[item.id][variant] });
 
 // A model, in metres with +y along a long item: a weapon from the sprite
 // parts the hands carry (limbs, blobs and panels), its blades flattened to
-// 30% depth; an instrument from its held shape; anything else from its parts.
-export function buildModel(THREE, { item, tint = null, variant = '' }) {
+// 30% depth; an instrument from its held shape; clothing from the
+// mannequin `gltf`; anything else from its parts.
+export function buildModel(THREE, { item, tint = null, variant = '', gltf = null }) {
   const mesh = (geometry, name, own, flatShading = false) => {
     const { name: paint, colour } = paintFor(name, tint, own);
-    const material = new THREE.MeshLambertMaterial({ flatShading,
+    const material = new THREE.MeshLambertMaterial({ flatShading, side: THREE.DoubleSide,
       color: new THREE.Color().setRGB(...colour.map((c) => c / 255), THREE.SRGBColorSpace) });
     const node = new THREE.Mesh(geometry, material);
     node.userData = { paint, colour };
@@ -102,6 +159,7 @@ export function buildModel(THREE, { item, tint = null, variant = '' }) {
   };
   const recipe = recipeOf(item, variant);
   if (recipe.from === 'instrument') return instrumentModel(THREE, recipe, item);
+  if (recipe.from === 'mannequin') return mannequinModel(THREE, recipe, gltf, mesh, item);
   if (recipe.parts) return partsModel(THREE, recipe.parts, mesh, item, seedOf(item.id));
   const root = new THREE.Group();
   const up = new THREE.Vector3(0, 1, 0);
@@ -135,7 +193,7 @@ const GIRTH = 1.8;
 // How other poses turn a model about its height (yaw) and then tip its top
 // towards the camera (pitch): upright items face on, flat ones lie seen
 // from 50° above.
-const TURNS = { upright: [0.44, 0.26], flat: [0.52, 0.87] };
+const TURNS = { upright: [0.44, 0.26], flat: [0.52, 0.87], front: [0, 0.14] };
 
 // The model turned for its box: long items along the grid's diagonal, tip
 // to the top right and turned a little so a blade's flat catches the light.
@@ -164,22 +222,29 @@ export function fit(THREE, camera, object, grid) {
   camera.updateProjectionMatrix();
 }
 
-const loadLibs = async () => ({ THREE: await import('three'), outline: (await import('../entities/model.js')).outline });
+// three.js, the outline picker and, when it comes, the mannequin (shared
+// with the player's, so it's fetched once).
+const loadLibs = async (mannequin) => {
+  const { ModelFigure, outline } = await import('../entities/model.js');
+  return { THREE: await import('three'), outline, mannequin: ModelFigure.library(mannequin) };
+};
 const makeRenderer = (THREE) => new THREE.WebGLRenderer({ canvas: document.createElement('canvas'), alpha: true,
   antialias: false, preserveDrawingBuffer: true });
 
 export class ItemStudio {
   // `budget` caps the decoded size of the kept pictures in bytes.
   constructor({ webgl = typeof WebGLRenderingContext !== 'undefined', load = loadLibs, renderer = makeRenderer,
-    budget = 24 * 2 ** 20, ratio = () => globalThis.devicePixelRatio || 1, now = () => performance.now() } = {}) {
-    Object.assign(this, { load, makeRenderer: renderer, budget, ratio, now, off: !webgl, losses: 0, disposing: false,
+    budget = 24 * 2 ** 20, ratio = () => globalThis.devicePixelRatio || 1, now = () => performance.now(),
+    mannequin = 'assets/ual1.glb' } = {}) {
+    Object.assign(this, { load, makeRenderer: renderer, budget, ratio, now, mannequin, off: !webgl, losses: 0, disposing: false,
       cache: new Map(), bytes: 0, peak: 0, jobs: new Map(), lib: null, renderer: null, frame: null });
   }
 
-  // The picture of `stack` (described as `own`) for a box shape: { src },
-  // or null while it's made, or when the item has no model yet. Pictures
-  // asked for while WebGL is off stay queued for a retry.
-  art(stack, item, own, shape) {
+  // The picture of `stack` (described as `own`) for a box shape, `aspect`
+  // (width / height) if it isn't the desktop one: { src }, or null while
+  // it's made, or when the item has no model. Pictures asked for while
+  // WebGL is off stay queued for a retry.
+  art(stack, item, own, shape, aspect = 0) {
     const recipe = ITEM_MODELS[item.id];
     if (!recipe) return null;
     const tint = artTint(stack, item, own, weaponMaterial);
@@ -187,33 +252,41 @@ export class ItemStudio {
     // The recipe's own version for a small box, a card or a stack, if any.
     const variant = (shape === '1x1' && recipe.compact && 'compact') || (shape === 'card' && recipe.card && 'card')
       || (stack?.count > 1 && recipe.two && 'two') || '';
-    const key = artKey(item.id, variant, tint, shape, dpr);
+    const grid = gridOf(shape, aspect);
+    const key = artKey(item.id, variant, tint, grid === GRIDS[shape] ? shape : `${shape}/${grid.rows}`, dpr);
     const hit = this.cache.get(key);
     if (hit) {
       this.cache.delete(key);
       this.cache.set(key, hit);
       return hit;
     }
-    if (!this.jobs.has(key)) this.jobs.set(key, { key, item, tint, shape, dpr, variant });
+    const waits = recipeOf(item, variant).from === 'mannequin';
+    if (!this.jobs.has(key)) this.jobs.set(key, { key, item, tint, grid, dpr, variant, waits });
     return null;
   }
 
   // Makes queued pictures: one batch of at most two or 8 ms (at least one)
   // per painted frame, or per 16 ms without frames; true when any was.
+  // Clothing waits for the mannequin.
   pump() {
     if (this.off || !this.jobs.size || this.frame) return false;
     if (!this.lib) {
-      this.loading ??= this.load().then((lib) => { this.lib = lib; }, () => { this.off = true; });
+      this.loading ??= this.load(this.mannequin).then((lib) => {
+        this.lib = lib;
+        lib.mannequin?.then((gltf) => { lib.gltf = gltf; }, () => {});
+      }, () => { this.off = true; });
       return false;
     }
     const start = this.now();
     let made = 0;
     for (const [key, job] of this.jobs) {
       if (made === 2 || (made && this.now() - start > 8)) break;
+      if (job.waits && !this.lib.gltf) continue;
       this.jobs.delete(key);
       if (!this._make(job)) return false;
       made++;
     }
+    if (!made) return false;
     this.frame = (globalThis.requestAnimationFrame ?? setTimeout)(() => { this.frame = null; }, 16);
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.release(), IDLE_MS);
@@ -257,7 +330,7 @@ export class ItemStudio {
     rim.position.set(0.7, -0.2, -0.6);
     this.scene.add(key, rim, new THREE.HemisphereLight(0xffffff, 0x404040, 1));
     this.camera = new THREE.OrthographicCamera();
-    this.ids = PAINT_IDS.map((_, i) => new THREE.MeshBasicMaterial({ color: new THREE.Color().setRGB((i * 8 + 4) / 255, 0, 0, THREE.SRGBColorSpace) }));
+    this.ids = PAINT_IDS.map((_, i) => new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, color: new THREE.Color().setRGB((i * 8 + 4) / 255, 0, 0, THREE.SRGBColorSpace) }));
     this.renderer = renderer;
   }
 
@@ -270,10 +343,10 @@ export class ItemStudio {
       this.jobs.clear();
       return false;
     }
-    const grid = GRIDS[job.shape];
+    const { grid } = job;
     const w = grid.cols * SX;
     const h = grid.rows * SY;
-    const model = posed(THREE, buildModel(THREE, job), grid, recipeOf(job.item, job.variant).pose);
+    const model = posed(THREE, buildModel(THREE, { ...job, gltf: this.lib.gltf }), grid, recipeOf(job.item, job.variant).pose);
     fit(THREE, this.camera, model, grid);
     this.scene.add(model);
     this.renderer.setSize(w, h, false);

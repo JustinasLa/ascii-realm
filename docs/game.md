@@ -254,17 +254,23 @@ short version see the [README](../README.md).
   from and pickups top up first. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
-  Weapons, arrows, instruments, ingots and ores in the boxes and on the cards
-  are large shaded pictures in small letters, drawn once from 3D models (the
-  parts the hands carry, the instrument the off hand holds, or a few simple
-  shapes): long items on the box's diagonal, instruments neck up, metals and
-  ores seen from above, lit from the top left, letters by brightness (bark
-  letters for wood, `:;+=#%@` for metal) on a dark silhouette. A blade, head
-  or arrowhead takes its metal's colour (its tier or forged alloy's) and an
-  alloy ingot its alloy's. Cards show three fanned arrows and the quiver box
-  the quiver; a stack of ingots shows two bars. Once made they are kept, so the
-  window costs nothing per frame; other items, and devices without WebGL, show
-  an outline drawing.
+  Every item in the boxes and on the cards is a large shaded picture in small
+  letters, drawn once from a 3D model (the parts the hands carry, the
+  instrument the off hand holds, clothing cut by body region out of the
+  mannequin the outlaw is made of, or a few simple shapes): long items on the
+  box's diagonal, instruments and bottles upright, the jerkin, hood and cloak
+  face on, one glove fingers to the left, one boot toe to the right, and
+  materials, food and coins seen from above, lit from the top left, letters
+  by brightness (bark letters for wood, `:;+=#%@` for metal, wool, fur and
+  flesh ramps, granite speckled with pale dots) on a dark silhouette. A
+  blade, head or arrowhead takes its metal's colour (its tier or forged
+  alloy's) and an alloy ingot its alloy's. Cards show three fanned arrows and
+  the quiver box the quiver, the cloak box the cloak folded; a stack of
+  ingots shows two bars. On phones the doll boxes are taller, so their
+  pictures get more rows to fill them, redrawn when the phone turns. Once
+  made they are kept, so the window costs nothing per frame; until a picture
+  is ready (clothing waits for the mannequin), and on devices without WebGL,
+  an item shows an outline drawing.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn
   on the first strike and put away after a quiet spell standing still (`F`
   draws or sheathes it on a keyboard). Chain cuts into a combo, lunge from a

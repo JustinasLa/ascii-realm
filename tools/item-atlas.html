@@ -5,7 +5,8 @@
   <title>Item art atlas</title>
   <!-- Every item's inventory picture in every box shape, and every weapon and
        arrow in each metal tier and two alloy colours. Narrow it with
-       ?item=<id,…>, ?shape=<card|2x4|2x3|2x2|1x1> or ?ratio=<1|2>. -->
+       ?item=<id,…>, ?shape=<card|2x4|2x3|2x2|1x1> or ?ratio=<1|2>. When no
+       picture comes for 10 s (no WebGL), it says so and shows what it has. -->
   <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
   <style>
     body { margin: 8px; background: #000; color: #9a9a9a; font: 11px monospace; }
@@ -24,7 +25,7 @@
     import { ItemStudio } from '../src/ui/item-studio.js';
 
     const query = new URLSearchParams(location.search);
-    const studio = new ItemStudio({ budget: Infinity, ratio: () => Number(query.get('ratio') ?? 2) });
+    const studio = new ItemStudio({ budget: Infinity, ratio: () => Number(query.get('ratio') ?? 2), mannequin: '../assets/ual1.glb' });
     const ids = query.has('item') ? query.get('item').split(',') : Object.keys(ITEM_MODELS);
     const shapes = query.has('shape') ? [query.get('shape')] : Object.keys(GRIDS);
     const alloys = [PALETTE[3], PALETTE[11]];
@@ -40,20 +41,26 @@
       for (const { label, stack, own = null } of kinds) for (const shape of shapes) pieces.push({ id, item, label, stack, own, shape });
     }
     const pictureOf = (piece) => studio.art(piece.stack, piece.item, piece.own, piece.shape);
-    while (pieces.some((piece) => !pictureOf(piece))) {
+    let made = 0;
+    let since = performance.now();
+    while (pieces.some((piece) => !pictureOf(piece)) && performance.now() - since < 10000) {
       studio.pump();
+      const now = pieces.filter(pictureOf).length;
+      if (now > made) [made, since] = [now, performance.now()];
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     const rows = new Map();
     for (const piece of pieces) {
       if (!rows.has(piece.id)) rows.set(piece.id, Object.assign(document.createElement('div'), { className: 'row' }));
       const figure = document.createElement('figure');
-      const img = Object.assign(new Image(), { src: pictureOf(piece).src, alt: piece.id });
-      figure.append(img, `${piece.id} ${piece.shape} ${piece.label}`);
+      const src = pictureOf(piece)?.src;
+      figure.append(src ? Object.assign(new Image(), { src, alt: piece.id }) : '(none)', `${piece.id} ${piece.shape} ${piece.label}`);
       rows.get(piece.id).append(figure);
     }
-    document.getElementById('atlas').replaceChildren(...rows.values());
-    document.body.dataset.ready = 'true';
+    const missing = pieces.filter((piece) => !pictureOf(piece)).length;
+    const note = missing ? [`${missing} of ${pieces.length} pictures did not come in 10 s: is WebGL available?`] : [];
+    document.getElementById('atlas').replaceChildren(...note, ...rows.values());
+    document.body.dataset.ready = missing ? 'partly' : 'true';
   </script>
 </body>
 </html>

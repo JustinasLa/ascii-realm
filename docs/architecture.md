@@ -26,7 +26,8 @@ src/
 Animals are described in [wildlife](wildlife.md), horses in [horses](horses.md).
 
 `tools/item-atlas.html` is a dev page (not linked from the game) that draws
-every item's inventory picture in every box shape and metal.
+every item's inventory picture in every box shape and metal. If no picture
+comes for 10 s (no WebGL), it says so and shows what it has.
 
 `server/` contains the HTTP/WebSocket server and in-memory lobby lifecycle.
 The server owns lobby membership, IDs, colours and world seeds. Players
