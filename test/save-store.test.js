@@ -321,3 +321,102 @@ test('without locks a page back from the cache checks the rev at once', () => {
   events.dispatchEvent(show());
   assert.equal(saves.writer, 'stale', 'an unreadable rev counts as moved');
 });
+
+test('claiming reads the edits record too, so newer edits are never written over', async () => {
+  const saves = store();
+  saves.storage.map.set(EDITS, JSON.stringify({ ...emptyEdits(WORLD), rev: 3, features: 99 }));
+  const claimed = await saves.claim();
+  assert.deepEqual([claimed.ok, saves.readOnly], [true, 'newer-features']);
+  assert.deepEqual(saves.write('edits', emptyEdits(WORLD)), { ok: false, reason: 'read-only' });
+  const newer = store();
+  newer.storage.map.set(EDITS, JSON.stringify({ ...emptyEdits(WORLD), v: SAVE_VERSION + 1 }));
+  assert.equal((await newer.claim()).reason, 'read-only');
+  assert.deepEqual(newer.write('edits', emptyEdits(WORLD)), { ok: false, reason: 'read-only' });
+  assert.equal(stored(newer.storage, EDITS).v, SAVE_VERSION + 1);
+});
+
+test('claiming adopts the rev of the text it read, even when another tab saves mid-claim', async () => {
+  const storage = memory();
+  storage.map.set(KEY, JSON.stringify({ ...emptyRealm(WORLD), rev: 1 }));
+  const getItem = storage.getItem;
+  storage.getItem = (key) => {
+    const text = getItem(key);
+    if (key === KEY) storage.map.set(KEY, JSON.stringify({ ...emptyRealm(WORLD), rev: 2, active: null, later: 'b' }));
+    return text;
+  };
+  const saves = store({ storage });
+  await saves.claim();
+  storage.getItem = getItem;
+  assert.deepEqual([saves.realm.rev, saves.ownRev.realm], [1, 1]);
+  assert.deepEqual(saves.write('realm', saves.realm), { ok: false, reason: 'other-tab' });
+  assert.equal(stored(storage).later, 'b');
+});
+
+test('a lock granted after the page let go is given up at once', async () => {
+  const events = new EventTarget();
+  const locks = fakeLocks();
+  const saves = store({ events, locks });
+  events.dispatchEvent(new Event('pagehide'));
+  assert.equal(await saves.ready, 'released');
+  assert.deepEqual(saves.write('realm', emptyRealm(WORLD)), { ok: false, reason: 'released' });
+  await null;
+  assert.equal(locks.held.size, 0);
+  const refused = store({ locks: { request: () => Promise.reject(new Error('insecure')) } });
+  refused.release();
+  assert.equal(await refused.ready, 'released');
+  const other = store({ locks });
+  assert.equal(await other.ready, 'writer');
+});
+
+test('data that cannot be turned into JSON is an error, not a throw', () => {
+  const saves = store();
+  const cyclic = emptyRealm(WORLD);
+  cyclic.self = cyclic;
+  assert.deepEqual(saves.write('realm', cyclic), { ok: false, reason: 'error' });
+  let deep = [];
+  for (let i = 0; i < 1e6; i++) deep = [deep];
+  assert.deepEqual(saves.write('realm', { ...emptyRealm(WORLD), deep }), { ok: false, reason: 'error' });
+  assert.deepEqual(saves.write('realm', { ...emptyRealm(WORLD), big: 1n }), { ok: false, reason: 'error' });
+  assert.equal(saves.storage.map.size, 0);
+});
+
+test('a save that throws as the page hides still lets the lock go', async () => {
+  const listeners = {};
+  const locks = fakeLocks();
+  const saves = store({ locks, events: { addEventListener: (type, listener) => { listeners[type] = listener; } } });
+  await saves.ready;
+  saves.onHide = () => { throw new Error('boom'); };
+  assert.throws(() => listeners.pagehide(), /boom/);
+  assert.equal(saves.writer, 'released');
+  await null;
+  await null;
+  assert.equal(locks.held.size, 0);
+});
+
+test('the default locks are the page navigator.locks, and the default clock is the real one', async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  try {
+    const locks = fakeLocks();
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { locks } });
+    const saves = new SaveStore({ storage: memory(), world: WORLD });
+    assert.equal(await saves.ready, 'writer');
+    assert.ok(locks.held.has(KEY));
+    const before = Date.now();
+    const realm = emptyRealm(WORLD);
+    saves.write('realm', realm);
+    assert.ok(realm.savedAt >= before && realm.savedAt <= Date.now());
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: undefined });
+    assert.equal(new SaveStore({ storage: memory(), world: WORLD }).locks, null);
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'navigator', original);
+    else delete globalThis.navigator;
+  }
+});
+
+test('a stored rev that is not a whole number counts as 0', async () => {
+  const saves = store();
+  saves.storage.map.set(KEY, JSON.stringify({ ...emptyRealm(WORLD), rev: 'x' }));
+  await saves.claim();
+  assert.equal(saves.ownRev.realm, 0);
+  assert.deepEqual(saves.write('realm', saves.realm), { ok: true, rev: 1 });
+});

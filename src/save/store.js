@@ -48,6 +48,8 @@ export class SaveStore {
     this.realm = null;
     this.quarantined = {};
     this.unlock = null;
+    // Raised by `release()`, so a lock request still out then lets the lock go.
+    this.epoch = 0;
     this.writer = 'pending';
     this.ready = this.#request((held) => held ? 'writer' : 'other-tab');
     events?.addEventListener('storage', (event) => {
@@ -56,8 +58,7 @@ export class SaveStore {
       this.onForeign?.();
     });
     events?.addEventListener('pagehide', () => {
-      this.onHide?.();
-      this.release();
+      try { this.onHide?.(); } finally { this.release(); }
     });
     events?.addEventListener('pageshow', (event) => {
       if (!event.persisted) return;
@@ -76,22 +77,25 @@ export class SaveStore {
     this.unlock?.();
     this.unlock = null;
     this.writer = 'released';
+    this.epoch++;
   }
 
   // Asks for the lock without waiting for it, then sets `writer` to what
   // `settle(held)` says. Resolves to the new state.
   #request(settle) {
-    if (!this.locks) return Promise.resolve(this.writer = settle(true));
+    const epoch = this.epoch;
+    const state = (held) => epoch === this.epoch ? (this.writer = settle(held)) : this.writer;
+    if (!this.locks) return Promise.resolve(state(true));
     return new Promise((resolve) => {
       let settled = false;
       const done = (held) => {
-        if (!settled) resolve(this.writer = settle(held));
+        if (!settled) resolve(state(held));
         settled = true;
       };
       Promise.resolve()
         .then(() => this.locks.request(this.keys.realm, { mode: 'exclusive', ifAvailable: true }, (lock) => {
           done(!!lock);
-          if (lock) return new Promise((free) => { this.unlock = free; });
+          if (lock && epoch === this.epoch) return new Promise((free) => { this.unlock = free; });
         }))
         // A browser that refuses locks falls back to the `rev` check alone.
         .catch(() => done(true));
@@ -126,8 +130,7 @@ export class SaveStore {
   // `{ status, record, repaired, newerFeatures }` (see `readRecord`), or
   // status 'unavailable'. A corrupt text is first copied aside; a newer one
   // makes the store read-only. Reading never makes this page the owner.
-  read(kind = 'realm') {
-    const raw = this.#raw(kind);
+  read(kind = 'realm', raw = this.#raw(kind)) {
     if (raw === undefined) return { status: 'unavailable', record: null, repaired: 0, newerFeatures: false };
     const result = readRecord(raw, kind, this.world);
     if (result.status === 'corrupt' && this.quarantined[kind] !== raw) {
@@ -141,18 +144,20 @@ export class SaveStore {
     return result;
   }
 
-  // Makes this page the world's writer: takes the lock when it lacks it, then
-  // reads the realm into `this.realm` and adopts the stored revs. For Continue
-  // and for a deliberate New game: `{ ok, reason?, ...read }`.
+  // Makes this page the world's writer: takes the lock when it lacks it, reads
+  // both records, keeps the realm as `this.realm` and adopts the revs of the
+  // texts it read. For Continue and New game: `{ ok, reason?, ...read }`.
   async claim() {
     await this.ready;
     if (this.locks && !this.unlock && await this.#request((held) => held ? 'writer' : 'other-tab') !== 'writer') {
       return { ok: false, reason: 'other-tab' };
     }
-    const result = this.read('realm');
-    if (result.status === 'unavailable') return { ok: false, reason: 'unavailable', ...result };
-    if (result.status === 'newer') return { ok: false, reason: 'read-only', ...result };
-    for (const kind of KINDS) this.ownRev[kind] = this.#rev(this.#raw(kind));
+    const raw = { realm: this.#raw('realm'), edits: this.#raw('edits') };
+    const result = this.read('realm', raw.realm);
+    const { status } = this.read('edits', raw.edits);
+    if ([result.status, status].includes('unavailable')) return { ok: false, reason: 'unavailable', ...result };
+    if ([result.status, status].includes('newer')) return { ok: false, reason: 'read-only', ...result };
+    for (const kind of KINDS) this.ownRev[kind] = this.#rev(raw[kind]);
     this.writer = 'writer';
     this.foreign = false;
     this.realm = result.record;
@@ -179,9 +184,9 @@ export class SaveStore {
       return refuse('other-tab');
     }
     const stamp = { rev: (stored ?? this.ownRev[kind] ?? 0) + 1, savedAt: this.now(), features: SAVE_FEATURES };
-    const out = serialize({ ...record, ...stamp });
-    if (out.reason) return refuse(out.reason);
     try {
+      const out = serialize({ ...record, ...stamp });
+      if (out.reason) return refuse(out.reason);
       this.storage.setItem(this.keys[kind], out.text);
     } catch (error) {
       return refuse(isQuota(error) ? 'quota' : 'error');
