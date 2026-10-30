@@ -60,6 +60,7 @@ class FakeElement {
     }
   }
 
+  get firstElementChild() { return this.children[0] ?? null; }
   get id() { return this.getAttribute('id') ?? ''; }
   set id(value) { this.setAttribute('id', value); }
   get hidden() { return this.hasAttribute('hidden'); }
@@ -1870,4 +1871,115 @@ test('a resize re-places a pinned panel by its card', (t) => {
   assert.equal(screen.tooltip.pinned, true);
   assert.equal(screen.tooltip.node.style.transform, 'translate(600px, 216px)');
   assert.deepEqual(screen.tooltip.actions.children.map((button) => button.textContent), ['use'], 'its button kept');
+});
+
+// Item pictures from a fake studio: made on the first pump after they're
+// asked for, with each request recorded.
+function fakeArt() {
+  const asked = [];
+  const made = new Map();
+  const queued = new Set();
+  return {
+    asked, made, opens: 0,
+    art(stack, item, own, shape) {
+      const key = `${item.id}|${shape}|${own?.colour ?? stack.material ?? ''}`;
+      asked.push({ id: item.id, shape, own, key });
+      if (made.has(key)) return made.get(key);
+      queued.add(key);
+      return null;
+    },
+    pump() {
+      for (const key of queued) made.set(key, { src: `data:image/png;base64,${key}` });
+      const any = queued.size > 0;
+      queued.clear();
+      return any;
+    },
+    reopen() { this.opens++; },
+  };
+}
+
+test('cards and boxes show an item outline until its picture is made, then the picture', (t) => {
+  const art = fakeArt();
+  const { screen, inventory, indexOf } = mount(t, { art });
+  inventory.equipment.quiver = { id: 'arrow', count: 10 };
+  screen.setOpen(true);
+  assert.equal(art.opens, 1, 'opening lets the studio try WebGL again');
+  const sword = screen.equipmentNodes.get('mainHand').icon;
+  const card = screen.bagNodes[indexOf('longbow')].icon;
+  assert.equal(sword.className, 'equipment-slot-icon');
+  assert.equal(card.tagName, 'DIV');
+  assert.ok(art.asked.some((a) => a.id === 'shortSword' && a.shape === '2x4'), 'the weapon box is 2 × 4');
+  assert.ok(art.asked.some((a) => a.id === 'longbow' && a.shape === 'card'));
+  assert.ok(art.asked.some((a) => a.id === 'arrow' && a.shape === '1x1'), 'the quiver is a small box');
+  assert.equal(sword.textContent, itemArt('shortSword', ITEMS.shortSword.glyph), 'the outline first');
+
+  screen.update();
+  const image = sword.children[0];
+  assert.equal(image.tagName, 'IMG');
+  assert.equal(image.className, 'item-art');
+  assert.equal(image.alt, '', 'the button names the item; the picture is decorative');
+  assert.equal(image.getAttribute('src'), 'data:image/png;base64,shortSword|2x4|');
+  assert.equal(sword.getAttribute('aria-hidden'), 'true');
+  assert.equal(screen.equipmentNodes.get('mainHand').button.getAttribute('aria-label'), 'Main hand: Short Sword');
+  assert.equal(card.children[0].getAttribute('src'), 'data:image/png;base64,longbow|card|');
+
+  // A redraw with nothing new keeps the same image and source.
+  let writes = 0;
+  const set = image.setAttribute.bind(image);
+  image.setAttribute = (name, value) => { writes++; set(name, value); };
+  screen._signature = null;
+  screen.update();
+  assert.equal(sword.children[0], image);
+  assert.equal(writes, 0);
+
+  // Another sword shows its outline until its own picture is made.
+  inventory.equipment.mainHand = { id: 'shortSword', count: 1, material: 'steel' };
+  screen.update();
+  assert.equal(sword.children.length, 0);
+  screen.update();
+  assert.equal(sword.children[0].getAttribute('src'), 'data:image/png;base64,shortSword|2x4|steel');
+  // A source change on a kept image only rewrites the attribute.
+  art.made.set('shortSword|2x4|steel', { src: 'data:image/png;base64,other' });
+  const kept = sword.children[0];
+  screen._signature = null;
+  screen.update();
+  assert.equal(sword.children[0], kept);
+  assert.equal(kept.getAttribute('src'), 'data:image/png;base64,other');
+
+  // A picture let go shows the outline again, and an emptied box nothing.
+  art.made.clear();
+  screen._signature = null;
+  screen.update();
+  assert.equal(sword.children.length, 0);
+  assert.equal(sword.textContent, itemArt('shortSword', ITEMS.shortSword.glyph));
+  screen.update();
+  inventory.equipment.mainHand = null;
+  screen.update();
+  assert.equal(sword.children.length, 0);
+  assert.equal(sword.textContent, '');
+});
+
+test('a forged stack asks for its own picture, and the drag ghost carries the picture', (t) => {
+  const art = fakeArt();
+  const env = mount(t, { art, describe: (stack) => (stack.forged ? { name: 'Red Sword', colour: '#aa3322' } : null) });
+  const { screen, inventory, bagButton, indexOf } = env;
+  const forged = inventory.slots.findIndex((stack) => !stack);
+  inventory.slots[forged] = { id: 'shortSword', count: 1, material: 'iron', forged: { metal: 'Red', colour: 'aa3322' } };
+  const { pointer, ghost } = dragging(t, env);
+  screen.setOpen(true);
+  screen.update();
+  assert.equal(bagButton(forged).children[0].children[0].getAttribute('src'), 'data:image/png;base64,shortSword|card|#aa3322');
+  const bow = indexOf('longbow');
+  pointer('pointerdown', bagButton(bow));
+  pointer('pointermove', bagButton(bow), 110, 100);
+  assert.equal(ghost().children[0].className, 'bag-card-art');
+  assert.equal(ghost().children[0].children[0].getAttribute('src'), 'data:image/png;base64,longbow|card|');
+  pointer('pointerup', bagButton(bow), 110, 100);
+});
+
+test('without a studio every box keeps its outline', (t) => {
+  const { screen, indexOf } = mount(t, { art: null });
+  screen.setOpen(true);
+  screen.update();
+  assert.equal(screen.bagNodes[indexOf('longbow')].icon.textContent, itemArt('longbow', ITEMS.longbow.glyph));
 });
