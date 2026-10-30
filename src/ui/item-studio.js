@@ -101,13 +101,14 @@ export class ItemStudio {
   constructor({ webgl = typeof WebGLRenderingContext !== 'undefined', load = loadLibs, renderer = makeRenderer,
     budget = 24 * 2 ** 20, ratio = () => globalThis.devicePixelRatio || 1, now = () => performance.now() } = {}) {
     Object.assign(this, { load, makeRenderer: renderer, budget, ratio, now, off: !webgl, losses: 0, disposing: false,
-      cache: new Map(), bytes: 0, peak: 0, jobs: new Map(), lib: null, renderer: null });
+      cache: new Map(), bytes: 0, peak: 0, jobs: new Map(), lib: null, renderer: null, last: -Infinity });
   }
 
   // The picture of `stack` (described as `own`) for a box shape: { src },
-  // or null while it's made, or when the item has no model yet.
+  // or null while it's made, or when the item has no model yet. Pictures
+  // asked for while WebGL is off stay queued for a retry.
   art(stack, item, own, shape) {
-    if (!ITEM_MODELS[item.id] || this.off) return null;
+    if (!ITEM_MODELS[item.id]) return null;
     const tint = artTint(stack, item, own, weaponMaterial);
     const dpr = Math.min(2, Math.ceil(this.ratio()));
     const key = artKey(item.id, '', tint, shape, dpr);
@@ -121,15 +122,15 @@ export class ItemStudio {
     return null;
   }
 
-  // Makes queued pictures, at most two or 8 ms a call (at least one); true
-  // when any was.
+  // Makes queued pictures, at most two or 8 ms (at least one) once every
+  // 16 ms, so all the updates in a frame share it; true when any was.
   pump() {
-    if (this.off || !this.jobs.size) return false;
+    if (this.off || !this.jobs.size || this.now() - this.last < 16) return false;
     if (!this.lib) {
       this.loading ??= this.load().then((lib) => { this.lib = lib; }, () => { this.off = true; });
       return false;
     }
-    const start = this.now();
+    const start = this.last = this.now();
     let made = 0;
     for (const [key, job] of this.jobs) {
       if (made === 2 || (made && this.now() - start > 8)) break;
@@ -165,7 +166,6 @@ export class ItemStudio {
     this.renderer = null;
     this.losses++;
     this.off = true;
-    this.jobs.clear();
   }
 
   _setup() {
