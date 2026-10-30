@@ -2,7 +2,7 @@ import { randomSeed } from '../core/rng.js';
 import { createProp } from '../world/props.js';
 import { isArchitectureKind } from '../world/architecture-props.js';
 import { PROP_KINDS, propDefinition } from '../world/prop-catalog.js';
-import { ASPECT, STONE, WATER } from '../world/world.js';
+import { ASPECT, BOG, WATER } from '../world/world.js';
 import { isSpawnRuinId } from '../world/spawn-ruins.js';
 import { MAX_CHUNK_PROPS } from '../world/woodland.js';
 
@@ -25,7 +25,7 @@ function checkRadius(radius) {
 }
 
 function checkType(type) {
-  if (!Number.isInteger(type) || type < WATER || type > STONE) throw new Error('Terrain type must be an integer from 0 to 4.');
+  if (!Number.isInteger(type) || type < WATER || type > BOG) throw new Error('Terrain type must be an integer from 0 to 5.');
 }
 
 function checkProp(kind, x, y, scale, seed, variant = 1, rotation = 0) {

@@ -39,7 +39,14 @@ class FakeElement extends EventTarget {
   set id(value) { this.attributes.set('id', String(value)); }
   setAttribute(name, value) { this.attributes.set(name, String(value)); }
   getAttribute(name) { return this.attributes.get(name) ?? null; }
-  append(...nodes) { this.children.push(...nodes); }
+  append(...nodes) {
+    for (const node of nodes) if (node instanceof FakeElement) node.parent = this;
+    this.children.push(...nodes);
+  }
+  after(node) {
+    node.parent = this.parent;
+    this.parent.children.splice(this.parent.children.indexOf(this) + 1, 0, node);
+  }
   descendants() {
     return this.children.flatMap((child) => child instanceof FakeElement ? [child, ...child.descendants()] : []);
   }
@@ -55,7 +62,7 @@ class FakeElement extends EventTarget {
 
 const IDS = ['cursor', 'banner', 'mode', 'status', 'undo', 'redo', 'radius', 'scale', 'props',
   'radius-value', 'scale-value', 'ruins', 'reset', 'save', 'load', 'export', 'import', 'file'];
-const TERRAIN_TOOLS = ['grass', 'dirt', 'shore', 'water', 'stone', 'erase'];
+const TERRAIN_TOOLS = ['grass', 'dirt', 'shore', 'water', 'stone', 'bog', 'erase'];
 
 function setGlobal(t, name, value) {
   const original = Object.getOwnPropertyDescriptor(globalThis, name);
@@ -77,7 +84,8 @@ function memoryStorage() {
 }
 
 // Builds a real SceneryBuilder through its constructor on fake browser globals.
-function setup(t, { allowed, location = { search: '' }, world = new World(42), callbacks = true } = {}) {
+function setup(t, { allowed, location = { search: '' }, world = new World(42), callbacks = true,
+  markup = TERRAIN_TOOLS.filter((tool) => tool !== 'bog') } = {}) {
   const elements = new Map();
   const panel = new FakeElement('details', 'scenery-builder');
   elements.set(panel.id, panel);
@@ -86,7 +94,8 @@ function setup(t, { allowed, location = { search: '' }, world = new World(42), c
     el[id] = new FakeElement(id === 'radius' || id === 'scale' || id === 'file' ? 'input' : 'div', `builder-${id}`);
     elements.set(el[id].id, el[id]);
   }
-  for (const tool of TERRAIN_TOOLS) {
+  // The page has no Bog button; the builder adds it.
+  for (const tool of markup) {
     const button = new FakeElement('button');
     button.dataset.tool = tool;
     panel.append(button);
@@ -196,6 +205,17 @@ test('the constructor builds the prop palette and describes the starting scene',
   assert.equal(el.radius.disabled, false);
   assert.equal(el.scale.disabled, true);
   assert.equal(status(ctx), 'Seed 42. Choose a tool or start building. 0 terrain cells · 0 placed props.');
+});
+
+test('the Bog brush is added after Stone', (t) => {
+  const ctx = setup(t);
+  const tools = ctx.builder.tools.map((button) => button.dataset.tool);
+  assert.equal(tools.indexOf('bog'), tools.indexOf('stone') + 1);
+  const bog = ctx.tool('bog');
+  assert.equal(bog.children[0].textContent, '"');
+  assert.equal(bog.children[1].textContent, ' Bog');
+  // Markup without a Stone button gets no Bog brush.
+  assert.ok(!setup(t, { markup: ['grass'] }).builder.tools.some((button) => button.dataset.tool === 'bog'));
 });
 
 test('the mode button switches between building and play', (t) => {

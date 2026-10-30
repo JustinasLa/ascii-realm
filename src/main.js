@@ -109,7 +109,8 @@ import { Debris } from './world/debris.js';
 import { Torches } from './world/torch.js';
 import { MAX_TREE_HALF_WIDTH, MAX_TREE_HEIGHT } from './world/trees.js';
 import { WeatherEffects } from './world/weather.js';
-import { ASPECT, CHUNK_SIZE, GRASS, WATER, World } from './world/world.js';
+import { ASPECT, CHUNK_SIZE, grassLike, WATER, World } from './world/world.js';
+import { findPlayPosition } from './editor/recovery.js';
 import { guardLobbyConnect, lobbyWorldUrl, needsWorldReload, PENDING_LOBBY, resumePendingLobby, sparseWorldUrl, woodlandOptions } from './world/woodland.js';
 
 const FONT = '"Cascadia Mono", Consolas, Menlo, "DejaVu Sans Mono", monospace';
@@ -653,8 +654,22 @@ const saves = saveTarget && new SaveStore({ storage: walletStorage, world: saveT
   locks: navigator.locks ?? null });
 // The live body and whose it is (`save/body.js`).
 const live = { player, inventory, world, appliedId: bodyIdOf(characters) };
+// ?bog starts at the edge of the nearest bog (see provinces.js), even over a
+// save put back. It stays off in a lobby, which places its own players.
+const bogStart = params.has('bog') && !inLobby;
+function toBog() {
+  const id = world.provinces.nearest('bog', world.spawn.x, world.spawn.y);
+  const edge = id && world.provinces.edgePoint(id, world.spawn);
+  const p = edge && findPlayPosition(world, { x: edge.x + 0.5, y: edge.y + 0.5 }, world.spawn);
+  if (!p) return hud.notify('No bog nearby.');
+  player.x = p.x;
+  player.y = p.y;
+  camera.x = player.x;
+  camera.y = player.y - focusRows() - playerLift();
+}
 // After a body is put back, the camera and pose wake with it, as after a defeat.
 const wakeBody = () => {
+  if (bogStart) toBog();
   casting.reset();
   model?.resetPose(player);
   camera.x = player.x;
@@ -935,6 +950,8 @@ const playerLift = () => world.relief ? world.liftAt(player.x, player.y) : 0;
 // above the feet the camera aims: the figure's middle.
 const lookScale = () => camera.look?.scale ?? 1;
 const focusRows = () => 11 * lookScale();
+// ?bog moves the player once the camera's aim is known.
+if (bogStart) toBog();
 // The ground cell under the cursor, or null when it is off the scene. On
 // raised ground it is read on the player's own height, or with `drawn` on
 // the ground drawn under it, where a foe there stands.
@@ -1536,7 +1553,7 @@ function monsterEvent(e) {
       sound.play({ type: 'slam', x: e.x, y: e.y, strength: e.strength });
       dust.burst(world, e.x, e.y, 20, 11);
       const surface = world.typeAt(e.x, e.y);
-      if (surface !== GRASS && surface !== WATER) dust.sparks(e.x, e.y, 10);
+      if (!grassLike(surface) && surface !== WATER) dust.sparks(e.x, e.y, 10);
       splashes.react(world, { type: 'land', x: e.x, y: e.y, strength: 1 });
       const near = Math.hypot((e.x - player.x) * ASPECT / SCALE, (e.y - player.y) / (SCALE * TILT));
       camera.shake(0.8 * Math.max(0, 1 - near / 14));
@@ -1826,7 +1843,7 @@ function frame(now) {
     if (e.type === 'slam') {
       dust.burst(world, e.x, e.y, Math.round(22 * e.strength), 12 * e.strength);
       const surface = world.typeAt(e.x, e.y);
-      if (surface !== GRASS && surface !== WATER) dust.sparks(e.x, e.y, Math.round(14 * e.strength));
+      if (!grassLike(surface) && surface !== WATER) dust.sparks(e.x, e.y, Math.round(14 * e.strength));
       camera.shake(0.7 * e.strength);
       // Freeze the warrior for a heartbeat as the blow lands, to sell its
       // weight.

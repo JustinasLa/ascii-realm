@@ -1,6 +1,6 @@
 import { clumpAt, patchAt } from './grass-roots.js';
 import { blocks } from './props.js';
-import { ASPECT, CHUNK_SIZE, GRASS, SHORE, WATER } from './world.js';
+import { ASPECT, CHUNK_SIZE, grassLike, SHORE, WATER } from './world.js';
 
 export const MAX_BURN_OBJECTS = 384;
 export const MAX_BURN_EVENTS = 256;
@@ -42,7 +42,7 @@ export function vegetationFuel(world, x, y, resourcesIn = () => []) {
   const chunk = world.chunks?.get(`${cx},${cy}`) ?? world.chunk?.(cx, cy);
   if (!chunk) return null;
   const i = (y - cy * CHUNK_SIZE) * CHUNK_SIZE + x - cx * CHUNK_SIZE;
-  if (![GRASS, SHORE].includes(chunk.type[i]) || chunk.burnt?.[i] || chunk.grassHeight[i] < 2 ||
+  if (!(grassLike(chunk.type[i]) || chunk.type[i] === SHORE) || chunk.burnt?.[i] || chunk.grassHeight[i] < 2 ||
     !(chunk.grassDensity[i] > 0)) return null;
   // Include visible fringe roots as well as the continuous clump interior.
   // The rendering mask can keep a few blades beyond the noise threshold.

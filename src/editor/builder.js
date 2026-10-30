@@ -3,13 +3,13 @@ import { liftView } from '../world/camera.js';
 import { createProp, drawProp } from '../world/props.js';
 import { PROP_CATALOG, PROP_KINDS, propDefinition } from '../world/prop-catalog.js';
 import { groundUnder } from '../world/relief.js';
-import { ASPECT, DIRT, GRASS, SHORE, STONE, WATER } from '../world/world.js';
+import { ASPECT, BOG, DIRT, GRASS, SHORE, STONE, WATER } from '../world/world.js';
 import { brushSize, screenToWorld, worldToScreen } from './coordinates.js';
 import { findPlayPosition } from './recovery.js';
 import { placeRuinScene } from './ruin-scene.js';
 import { Scenery } from './scenery.js';
 
-const TERRAIN = { grass: GRASS, dirt: DIRT, shore: SHORE, water: WATER, stone: STONE };
+const TERRAIN = { grass: GRASS, dirt: DIRT, shore: SHORE, water: WATER, stone: STONE, bog: BOG };
 const PROPS = PROP_KINDS;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
@@ -42,6 +42,7 @@ export class SceneryBuilder {
     this.radiusInput = byId('radius');
     this.scaleInput = byId('scale');
     this.buildPalette(byId('props'));
+    this.addBogTool();
     this.tools = [...this.panel.querySelectorAll('[data-tool]')];
     this.modeButton.addEventListener('click', () => this.setEnabled(!this.enabled));
     this.panel.addEventListener('toggle', () => {
@@ -122,6 +123,21 @@ export class SceneryBuilder {
         }
       });
     }
+  }
+
+  // The Bog brush, after Stone; the page's markup has no button for it yet.
+  addBogTool() {
+    const stone = [...this.panel.querySelectorAll('[data-tool]')].find((b) => b.dataset.tool === 'stone');
+    if (!stone) return;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.tool = 'bog';
+    button.setAttribute('aria-pressed', 'false');
+    const icon = document.createElement('span');
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '"';
+    button.append(icon, document.createTextNode(' Bog'));
+    stone.after(button);
   }
 
   buildPalette(container) {

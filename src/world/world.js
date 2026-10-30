@@ -7,6 +7,7 @@ import { DEADWOOD_REACH_X, DEADWOOD_REACH_Y } from './deadwood.js';
 import { grassRoots } from './grass-roots.js';
 import { ACROSS, groundHalfWidth, RiverNetwork, WIDTH } from './rivers.js';
 import { chunkLift, hillRelief, MAX_LIFT, reliftCell } from './relief.js';
+import { bogStyle, paintBog } from './bogs.js';
 import { Provinces } from './provinces.js';
 import { createSpawnRuins } from './spawn-ruins.js';
 import { groveField, groveProps } from './woodland.js';
@@ -16,6 +17,9 @@ export const SHORE = 1;
 export const GRASS = 2;
 export const DIRT = 3;
 export const STONE = 4;
+export const BOG = 5;
+// Bog grows, burns and is walked like the meadow.
+export const grassLike = (t) => t === GRASS || t === BOG;
 
 // Cells are taller than they are wide, so horizontal distances are squashed
 // before sampling noise. Without this every lake would look stretched.
@@ -35,7 +39,7 @@ export const SHORE_LEVEL = 0.415;
 // Raises the whole landscape, so only about a twelfth of it lies under water.
 export const LAND_LIFT = 0.09;
 const LAKE_SHELF = 1.6;
-const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78];
+const EDIT_ELEVATION = [0.36, (WATER_LEVEL + SHORE_LEVEL) / 2, 0.54, 0.54, 0.78, 0.46];
 const cellKey = (x, y) => `${x},${y}`;
 const LINE_AT = { x: 0, y: 0, speed: 0, tau: 0 };
 const chunkKey = (cx, cy) => `${cx},${cy}`;
@@ -193,6 +197,8 @@ export class World {
     const preRiverType = this.rivers?.reaches(cx, cy) ? type.slice() : null;
     const facing = preRiverType ? new Float32Array(n) : null;
     const flow = preRiverType ? this.rivers.carve(cx, cy, type, height, facing) : null;
+    // Bogs are painted last, over meadow the rivers left (see bogs.js).
+    const bog = this.provinces && paintBog(this, cx, cy, CHUNK, type, preRiverType);
     for (let ly = 0; ly < CHUNK; ly++) {
       for (let lx = 0; lx < CHUNK; lx++) {
         const x = cx * CHUNK + lx;
@@ -201,7 +207,7 @@ export class World {
         const i = ly * CHUNK + lx;
         const t = type[i];
         const e = height[i];
-        if (t === GRASS || t === SHORE) {
+        if (grassLike(t) || t === SHORE) {
           // Fractional heights are dithered per root when drawn, so even the
           // cell grid has no hard height bands.
           const meadow = fbm(nx * 0.022, y * 0.022, s + 701, 3);
@@ -211,7 +217,7 @@ export class World {
           const wet = (1 - smoothRange(0.41, 0.45, e)) * open;
           const lush = smoothRange(0.35, 0.68, meadow);
           let reed = false;
-          if (t === GRASS) {
+          if (grassLike(t)) {
             const fieldHeight = this.meadow ? 3.1 + lush * 1.4 : 2.6 + lush * 1.3;
             const bank = wet * smoothRange(0.35, 0.6, meadow);
             const target = fieldHeight + (4.7 - fieldHeight) * bank;
@@ -226,6 +232,7 @@ export class World {
           const species = valueNoise(nx * 0.012, y * 0.012, s + 1801);
           const edge = (hash2(x, y, s + 1802) - 0.5) * 0.7;
           grassStyle[i] = reed ? 5 : Math.max(0, Math.min(4, Math.floor(species * 5 + edge)));
+          if (bog?.wet[i] && !reed) grassStyle[i] = bogStyle(grassStyle[i], t, bog.wet[i] / 255, x, y, s);
         }
       }
     }
@@ -233,7 +240,7 @@ export class World {
     // still being looked for while this.spawn is unset; those chunks go.
     const grove = this.woodland === 'dense' && this.spawn ? groveField(this, cx, cy, CHUNK) : null;
     for (let i = 0; grove && i < n; i++) {
-      if (!grove[i] || type[i] !== GRASS) continue;
+      if (!grove[i] || !grassLike(type[i])) continue;
       const g = grove[i] / 255;
       grassHeight[i] = Math.min(4.4, grassHeight[i] + 0.7 * g);
       grassDensity[i] *= 1 + 0.45 * g;
@@ -245,6 +252,8 @@ export class World {
       grove, baseGrass: null, props: null, burnt: this.burns.get(chunkKey(cx, cy)) ?? null, version: 0,
       // How many rows each cell is raised, and each row at most (see relief.js).
       lift: null, liftRows: null,
+      // Bog wetness, and the land before rivers and bogs that generators read.
+      bog: bog ? bog.wet : null, landType: bog ? bog.land : preRiverType,
       flow, preRiverType, riverStones: flow ? this.rivers.stonesNear(cx, cy) : null,
       // The water shader times a river's foam by its water's own lines.
       rivers: flow ? this.rivers : null };
@@ -326,10 +335,10 @@ export class World {
       c.grassHeight[i] = g.height[i];
       c.grassDensity[i] = g.density[i];
       c.grassStyle[i] = g.style[i];
-    } else if (type === GRASS) {
+    } else if (grassLike(type)) {
       c.grassHeight[i] = this.meadow ? 3.8 : 2.6;
       c.grassDensity[i] = this.meadow ? 0.38 : 0.22;
-      c.grassStyle[i] = 0;
+      c.grassStyle[i] = type === BOG ? 6 : 0;
     } else {
       c.grassHeight[i] = 0;
     }
@@ -414,7 +423,7 @@ export class World {
           c.grassHeight[i] = 0;
         } else if (cell && --cell.count <= 0) {
           cleared.delete(i);
-          if (c.type[i] === GRASS || c.type[i] === SHORE) c.grassHeight[i] = cell.height;
+          if (grassLike(c.type[i]) || c.type[i] === SHORE) c.grassHeight[i] = cell.height;
           changed.add(c);
         }
       }
@@ -529,7 +538,7 @@ export class World {
   // The terrain the seeded land had before rivers were cut into it.
   preRiverTypeAt(x, y) {
     const { c, i } = this.locate(Math.floor(x), Math.floor(y));
-    return (c.preRiverType ?? c.baseType)[i];
+    return (c.landType ?? c.baseType)[i];
   }
 
   // Whether a cell is river water in the seeded land.
@@ -551,7 +560,7 @@ export class World {
         const edge = 0.88 + hash2(wx, wy, this.seed + 919) * 0.18;
         if (distance >= edge) continue;
         const { c, i } = this.locate(wx, wy);
-        if (c.type[i] !== GRASS) continue;
+        if (!grassLike(c.type[i])) continue;
         if (!c.burnt) {
           c.burnt = new Uint8Array(CHUNK * CHUNK);
           this.burns.set(chunkKey(c.cx, c.cy), c.burnt);
@@ -570,7 +579,7 @@ export class World {
     const key = chunkKey(cx, cy);
     const c = this.chunks.get(key) ?? this.chunk(cx, cy);
     const i = (y - cy * CHUNK) * CHUNK + x - cx * CHUNK;
-    if (c.type[i] !== GRASS && c.type[i] !== SHORE) return;
+    if (!grassLike(c.type[i]) && c.type[i] !== SHORE) return;
     if (!c.burnt) { c.burnt = new Uint8Array(CHUNK * CHUNK); this.burns.set(key, c.burnt); }
     if (c.burnt[i] === 255) return;
     c.burnt[i] = 255;
