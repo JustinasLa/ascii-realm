@@ -69,7 +69,7 @@ const inert = () => class {
 
 export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost/?debug', phone = false, coarse = phone,
   width = 800, height = 600, dpr = undefined, wakeLock = true, fullscreen = true, standalone = false, real = {},
-  session = new Map(), creator = new URL(href).searchParams.has('creator') } = {}) {
+  session = new Map(), creator = new URL(href).searchParams.has('creator'), onWindow = noop } = {}) {
   const taps = new Set();
   const held = new Set();
   let blocked = false;
@@ -242,6 +242,17 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       close(character = null) { this.flow = null; this.onClose(character, this.mode); }
     },
     sampleDraft, wantsCreator, hidesPreview,
+    // The save's choice: the screens it showed and its error line. A test
+    // picks a button with `choose` (`onChoose`); the real one is tested on
+    // its own.
+    StartChoice: class {
+      constructor(options) { Object.assign(this, options); this.mode = null; this.shown = []; this.failed = null; }
+      get isOpen() { return this.mode !== null; }
+      open(mode, info) { Object.assign(this, { mode, info, failed: null }); this.shown.push(mode); }
+      close() { this.mode = null; }
+      fail(text) { this.failed = text; }
+      choose(action) { this.onChoose(action); }
+    },
     // What reaches the speech bubbles; the real ones are tested on their own.
     SpeechBubbles: class {
       constructor(options) { Object.assign(this, options); this.size = 0; this.received = []; this.rostered = []; this.updates = []; }
@@ -260,7 +271,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     Grass: inert(),
     MAX_TREE_HALF_WIDTH: 40, MAX_TREE_HEIGHT: 160, MAX_LEAF_DRIFT: 8,
     propInView: () => true, drawLeaves: noop,
-    location: { search: new URL(href).search, href, replace: url => { navigatedTo = String(url); } },
+    location: { search: new URL(href).search, href, replace: url => { navigatedTo = String(url); },
+      reload: () => { navigatedTo = 'reload'; } },
     performance: { now: () => 0 },
     requestAnimationFrame: callback => { nextFrame = callback; },
     isDown: (...codes) => !blocked && codes.some(code => held.has(code)),
@@ -445,6 +457,8 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
   };
   // `real` swaps stand-ins for real systems (or for test worlds).
   Object.assign(context, real);
+  // Real panels made in the test's own realm listen on this window too.
+  onWindow(window);
   runInNewContext(source.replace(/^import .*;\r?\n/gm, ''), context);
   await Promise.resolve();
   await Promise.resolve();

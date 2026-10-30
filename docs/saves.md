@@ -7,18 +7,43 @@ writes it (`src/save/format.js` and `src/save/store.js`), and how a body
 moves between the game and a save (`src/save/body.js`). With `?debug`,
 `game.save.now()` saves by hand, `game.save.tick()` runs an autosave,
 `game.save.restore()` continues again, `game.save.read()` and
-`game.save.claim()` reach the store and `game.save.saveSession` is the
-session.
+`game.save.claim()` reach the store, `game.save.saveSession` is the
+session and `game.save.choice` is the Continue / New game panel
+(`src/ui/start-choice.js`).
 
 ## Saving and Continue
 
-- **Continue.** A page that opens on a world with a save picks it up at
-  once: the active character's body (place, vitals, bag and worn gear) and
-  the time of day come back. The world holds still until they have. A
-  character with no body in the save sets out with the starter kit at the
-  world spawn. Nothing is written until the save has been picked up. A
-  page hidden before its Continue finished continues when it comes back
-  from the back/forward cache.
+- **Continue or New game.** A page that opens on a world with a save shows
+  **Welcome back** before play: who is played, the day and how long ago it
+  was saved. The panel is the character creator's, so phones get the same
+  big buttons in a bottom sheet (portrait) or a side panel (landscape), and
+  its buttons are the phone's tap to play. The world holds still behind it
+  and nothing is saved until a choice is made.
+  - **Continue** puts back the active character's body (place, vitals, bag
+    and worn gear) and the time of day. A character with no body in the
+    save sets out with the starter kit at the world spawn.
+  - **New game** asks first ("Start this world over?", with **Keep my
+    save** focused). **Start over** writes a fresh save holding only the
+    body the page started with, then clears the land's changes, but only
+    once the fresh save has landed. Characters, the pouch, furnaces and the
+    alloy book stay. If the save can't be written, the panel says why and
+    nothing changes.
+  - A world with no save starts at once. On a first visit the character
+    creator opens after the choice.
+- **Screens that stop saving.** The same panel says when this page can't
+  save, and offers **Play without saving**:
+  - **A newer save**: the save, or its changes to the land, come from a
+    newer version of the game. **Reload** gets it.
+  - **Open in another tab**: another tab is playing this world. **Try
+    again** checks once more without taking the save, and shows the choice
+    once the other tab has gone.
+  - **Saved in another tab**: another tab saved this world while this page
+    was away. **Reload** carries on from that save.
+
+  A save whose newer parts this version can't keep still offers Continue,
+  says the page won't save, and offers no New game. A page back from the
+  back/forward cache shows the screen for the store as it is then, and drops
+  one that no longer applies.
 - **When it saves.** Every minute while the page is shown, at an idle
   moment; at once as the page hides or closes; after a defeat, with the body
   woken at spawn; just before joining a lobby; after a character switch; and
@@ -29,17 +54,14 @@ session.
   said once until a save lands again; a save by hand always answers. As the
   page opens it also says when storage can't be reached, when the save
   couldn't be read (it starts fresh and keeps the old text aside), when some
-  saved things couldn't be read, and when the save comes from a newer
-  version (it plays on but never saves). A world open in another tab is
-  played here without saving; if another tab saves the world after this page
-  continued it, this page stops saving and says to reload. A notice raised
-  while the character creator or the phone's play card is up waits until
-  it closes.
+  saved things couldn't be read. A notice raised while the choice, the
+  character creator or the phone's play card is up waits until it closes.
 - **Lobbies.** Joining a lobby saves first and says whether that worked;
   lobby play is never saved.
-- **Address options.** `?instruments` puts instruments in the bag only of a
-  game that starts fresh, `?time=` beats a saved time of day, and `?nogate`
-  neither continues nor saves.
+- **Address options.** `?instruments` puts instruments in the bag the page
+  starts with, so a fresh start or New game has them and Continue doesn't;
+  `?time=` beats a saved time of day; `?nogate` shows no choice and neither
+  continues nor saves.
 
 ## Keys
 

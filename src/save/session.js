@@ -2,16 +2,17 @@
 // The store decides whether a write may land; the session decides when to
 // try: on its timer, as the page hides, after a defeat, before a lobby,
 // after a character switch and by hand. It writes nothing until a Continue
-// has finished (`writable`), and holds the world while one is under way
+// or New game has finished (`writable`), and holds the world while the
+// choice is open (`choosing`, set by the page) or one is under way
 // (`holding`).
 //
 // `live` is the body's `{ player, inventory, world, appliedId }`; `clock` is
-// `{ get() → { day, tick }, set({ day, tick }) }`; `notify(text)` shows a
-// toast; `off` is 'tool' on pages that never save (?nogate). Lobby pages and
+// `{ get() → { day, tick }, set({ day, tick }) }`; `notify(text, reason)`
+// tells the player (the page shows 'other-tab' and 'stale' as screens); `off` is 'tool' on pages that never save (?nogate). Lobby pages and
 // preview scenes have no store and so no session.
 
 import { bodyIdOf, applyBody, fileBody, putBody, starterKit } from './body.js';
-import { cleanClock, emptyRealm } from './format.js';
+import { cleanClock, emptyEdits, emptyRealm } from './format.js';
 
 export const AUTOSAVE_MS = 60_000;
 export const IDLE_TIMEOUT_MS = 5000;
@@ -36,8 +37,9 @@ export const NOTICES = {
   'lobby-failed': 'Not saved before the lobby.',
 };
 // Refusals an automatic save keeps to itself; a save by hand says why.
-const QUIET = ['unclaimed', 'pending', 'released', 'paused', 'gated', 'tool'];
-const AS_TOLD = { pending: 'gated', unclaimed: 'gated', released: 'gated' };
+// A save from a newer build is told on the Continue screen instead.
+const QUIET = ['unclaimed', 'pending', 'released', 'paused', 'gated', 'tool', 'declined', 'read-only'];
+const AS_TOLD = { pending: 'gated', unclaimed: 'gated', released: 'gated', declined: 'tool' };
 
 // "0:42", "12:05" or "1:02:05".
 const ago = (s) => {
@@ -50,7 +52,12 @@ export class SaveSession {
   constructor({ store, world, live, characters, clock, notify, now = () => Date.now(), off = null }) {
     Object.assign(this, { store, world, live, characters, clock, notify, now, off });
     this.writable = false;
-    this.holding = false;
+    this.restoring = false;
+    this.choosing = false;
+    // Set by "Play without saving": nothing more is written on this page.
+    this.declined = false;
+    // The read `boot()` made, for the Continue screen.
+    this.booted = null;
     this.lastSaved = null;
     // Why the last Continue was refused, for a save by hand.
     this.refused = null;
@@ -67,16 +74,33 @@ export class SaveSession {
   tell(reason, always = false) {
     if (!NOTICES[reason] || !always && this.told.has(reason)) return;
     this.told.add(reason);
-    this.notify(NOTICES[reason]);
+    this.notify(NOTICES[reason], reason);
   }
 
+  // The notice for a refusal's `reason`, for the choice's message line.
+  explain(reason) {
+    return NOTICES[AS_TOLD[reason] ?? reason] ?? NOTICES.error;
+  }
+
+  get holding() { return this.restoring || this.choosing; }
+
   // Reads this world's save as the page starts: the read (`store.read`), or
-  // status 'off'. Says when it can't be read, can't be written or is missing.
+  // status 'off'. Says when it can't be read or this browser can't save; the
+  // choice tells the rest.
   boot() {
     if (this.off) return { status: this.off };
-    const read = this.store.read('realm');
-    this.tell(read.status === 'newer' || read.newerFeatures ? 'read-only' : read.status);
+    const read = this.booted = this.store.read('realm');
+    if (['corrupt', 'unavailable'].includes(read.status)) this.tell(read.status);
     return read;
+  }
+
+  // What the Continue screen says about the save `boot()` read:
+  // `{ day, savedAt, hasBody, newerFeatures }`, with day null when no time
+  // of day was saved.
+  summary() {
+    const { record, newerFeatures } = this.booted;
+    return { day: record.clock?.day ?? null, savedAt: record.savedAt,
+      hasBody: Object.hasOwn(record.bodies, bodyIdOf(this.characters)), newerFeatures };
   }
 
   // Continue: claims the save and puts the active character's body and the
@@ -84,14 +108,10 @@ export class SaveSession {
   // is when nothing is stored). Writes nothing; the next save does.
   async resume({ restoreClock = true } = {}) {
     if (this.off) return { ok: false, reason: this.off };
-    this.holding = true;
+    this.restoring = true;
     try {
-      const claimed = await this.store.claim();
-      if (!claimed.ok) {
-        this.refused = claimed.reason;
-        this.tell(claimed.reason);
-        return { ok: false, reason: claimed.reason, status: claimed.status, repaired: 0, applied: false };
-      }
+      const claimed = await this.#claim();
+      if (!claimed.ok) return { ok: false, reason: claimed.reason, status: claimed.status, repaired: 0, applied: false };
       const realm = claimed.record;
       let repaired = claimed.repaired;
       if (realm) {
@@ -106,8 +126,44 @@ export class SaveSession {
       this.writable = true;
       return { ok: true, status: claimed.status, repaired, applied: !!realm };
     } finally {
-      this.holding = false;
+      this.restoring = false;
     }
+  }
+
+  async #claim() {
+    const claimed = await this.store.claim();
+    if (!claimed.ok) {
+      this.refused = claimed.reason;
+      this.tell(claimed.reason);
+    }
+    return claimed;
+  }
+
+  // New game: claims the save and writes a fresh one holding only the body
+  // played now, then clears the land's changes, but only once the fresh save
+  // has landed. A refused write leaves both records as they were and isn't
+  // told: the choice shows it (`explain`).
+  async startOver() {
+    this.restoring = true;
+    try {
+      const claimed = await this.#claim();
+      if (!claimed.ok) return claimed;
+      this.store.realm = emptyRealm(this.world);
+      this.unsaved.clear();
+      this.refused = null;
+      this.writable = true;
+      const written = this.save('new');
+      if (!written.ok) this.writable = false;
+      else this.store.write('edits', emptyEdits(this.world));
+      return written;
+    } finally {
+      this.restoring = false;
+    }
+  }
+
+  // Play without saving: nothing more is written on this page.
+  decline() {
+    this.declined = true;
   }
 
   // Files the unsaved bodies and the live body into the save in memory (a
@@ -132,17 +188,18 @@ export class SaveSession {
     return bodyIdOf(this.characters) !== this.live.appliedId && this.#file().switched;
   }
 
-  // Saves for `reason` ('auto', 'hide', 'death', 'lobby', 'switch' or
-  // 'manual'): `{ ok: true, rev }`, or `{ ok: false, reason }` with the
-  // store's reason, 'tool' or 'gated'. A save by hand always answers.
+  // Saves for `reason` ('auto', 'hide', 'death', 'lobby', 'switch', 'new'
+  // or 'manual'): `{ ok: true, rev }`, or `{ ok: false, reason }` with the
+  // store's reason, 'tool', 'declined' or 'gated'. A save by hand always
+  // answers; New game's never does.
   save(reason) {
     const manual = reason === 'manual';
-    const blocked = this.off ?? (this.writable ? null : 'gated');
+    const blocked = this.off ?? (this.declined ? 'declined' : this.writable ? null : 'gated');
     if (blocked) return this.#refuse(blocked, manual);
     const { realm } = this.#file();
     realm.clock = cleanClock(this.clock.get());
     const written = this.store.write('realm', realm);
-    if (!written.ok) return this.#refuse(written.reason, manual);
+    if (!written.ok) return reason === 'new' ? written : this.#refuse(written.reason, manual);
     this.store.realm = realm;
     this.unsaved.clear();
     this.told.clear();
@@ -162,13 +219,13 @@ export class SaveSession {
   beforeLobby() {
     const { ok, reason } = this.save('lobby');
     this.store.pause('lobby');
-    this.notify(NOTICES[ok ? 'lobby' : ['gated', 'tool'].includes(reason) ? 'paused' : 'lobby-failed']);
+    this.notify(NOTICES[ok ? 'lobby' : ['gated', 'tool', 'declined'].includes(reason) ? 'paused' : 'lobby-failed']);
   }
 
   // The menu's line: how saving goes, or why it doesn't.
   status() {
     const { store } = this;
-    const why = this.off ?? (store.readOnly ? 'read-only' : store.paused ? 'paused'
+    const why = this.off ?? (this.declined ? 'declined' : store.readOnly ? 'read-only' : store.paused ? 'paused'
       : ['other-tab', 'stale'].includes(store.writer) ? store.writer : this.writable ? null : this.refused ?? 'gated');
     if (why) return NOTICES[AS_TOLD[why] ?? why];
     const last = this.lastSaved === null ? '' : ` Last saved ${ago((this.now() - this.lastSaved) / 1000)} ago.`;

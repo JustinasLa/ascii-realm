@@ -67,6 +67,7 @@ import { AsciiRenderer } from './render/renderer.js';
 import { ChatUi } from './ui/chat.js';
 import { CharacterPages } from './ui/character-pages.js';
 import { CharacterCreator, hidesPreview } from './ui/creator.js';
+import { StartChoice } from './ui/start-choice.js';
 import { figureTop, SpeechBubbles } from './ui/bubbles.js';
 import { Nameplates } from './ui/nameplates.js';
 import { Hud } from './ui/hud.js';
@@ -424,8 +425,8 @@ reducedMotionQuery.addEventListener('change', (event) => { reducedMotion = event
 // The character creator, built before the phone menu and the inventory so
 // its key listener runs first: a key listener added before this one would
 // get keys the creator owns. A first visit opens it (?creator always, never
-// with ?nocreator or ?nogate), and ?debug&creator=<page> opens that page on
-// a sample character.
+// with ?nocreator or ?nogate), after the save's choice if there is one, and
+// ?debug&creator=<page> opens that page on a sample character.
 const creator = new CharacterCreator({ root: document.getElementById('creator-root'),
   outside: ['hud-root', 'touch-controls', 'panel-dock', 'phone-menu', 'chat', 'chat-open', 'inventory-root', 'screen']
     .map((id) => document.getElementById(id)),
@@ -463,14 +464,21 @@ const creator = new CharacterCreator({ root: document.getElementById('creator-ro
     showHeld();
   } });
 debug.creator = creator;
-if (wantsCreator(params, characters)) {
+// The save's choice, and the screens that say why this page can't save, in
+// the creator's root (`ui/start-choice.js`); built next, so it gets keys first too.
+const choice = new StartChoice({ root: document.getElementById('creator-root'), outside: creator.outside,
+  onChoose: (action) => void choose(action) });
+let firstVisit = wantsCreator(params, characters);
+function welcome() {
+  if (!firstVisit) return;
+  firstVisit = false;
   const start = params.has('debug') && params.get('creator');
   creator.open({ roster: characters, start: start || 'welcome', draft: start ? sampleDraft(characters, Date.now()) : null });
 }
 // Nothing may hurt the player while the creator is open: every blow, spell
 // and burn lands through takeDamage, and a friend's spell aimed at the
 // player, which can also set health or shove, is dropped.
-const playerShielded = () => creator.isOpen;
+const playerShielded = () => creator.isOpen || choice.isOpen;
 const takeDamage = player.takeDamage.bind(player);
 player.takeDamage = (amount, attacker) => playerShielded() ? 0 : takeDamage(amount, attacker);
 
@@ -630,10 +638,10 @@ const saveStations = () => { furnaces.save(); alloyBook.save(); };
 window.addEventListener('pagehide', saveStations);
 document.addEventListener('visibilitychange', () => document.hidden && saveStations());
 // Saves of play on this world, kept on this device (see docs/saves.md): solo
-// pages in a real world only. A page with a save picks it up as it starts
-// (Continue), then saves every minute when idle, as it hides, after a
-// defeat, before a lobby, after a character switch and by hand. ?nogate
-// never saves.
+// pages in a real world only. A page whose world has a save opens on the
+// Continue / New game choice; one with none starts at once. Then it saves
+// every minute when idle, as it hides, after a defeat, before a lobby, after
+// a character switch and by hand. ?nogate never saves.
 const saveTarget = inLobby || ruinPreview || hillScene ? null : { seed, woodland: world.woodland };
 const saves = saveTarget && new SaveStore({ storage: walletStorage, world: saveTarget, events: window,
   locks: navigator.locks ?? null });
@@ -646,12 +654,17 @@ const wakeBody = () => {
   camera.x = player.x;
   camera.y = player.y - focusRows() - playerLift();
 };
-// Save notices wait while the page starts and while the creator or the play
-// card hides the HUD, so none runs out unseen.
+// Save notices wait while the page starts and while the choice, the creator
+// or the play card hides the HUD, so none runs out unseen. The other-tab or
+// stale screen waits the same way, and is dropped if the store recovers.
 const heldNotices = [];
 let holdNotices = true;
+let heldScreen = null;
 function showHeld() {
-  if (!holdNotices && !creator.isOpen && !gate.waiting) for (const text of heldNotices.splice(0)) hud.notify(text, 'info');
+  if (holdNotices || creator.isOpen || gate.waiting) return;
+  if (heldScreen) openChoice(heldScreen);
+  heldScreen = null;
+  if (!choice.isOpen) for (const text of heldNotices.splice(0)) hud.notify(text, 'info');
 }
 // ?time= beats a saved time of day.
 const clockAdapter = { get: () => ({ day: dayClock.day, tick: dayClock.tick }),
@@ -661,16 +674,14 @@ const clockAdapter = { get: () => ({ day: dayClock.day, tick: dayClock.tick }),
     dayClock.days = day;
   } };
 saveSession = saves && new SaveSession({ store: saves, world: saveTarget, live, characters, clock: clockAdapter,
-  notify: (text) => {
+  notify: (text, reason) => {
+    if (reason === 'other-tab' || reason === 'stale') return warn(reason);
     heldNotices.push(text);
     showHeld();
   }, off: params.has('nogate') ? 'tool' : null });
-const booted = saveSession?.boot();
-// Until instruments can be crafted, ?instruments puts one of each in the
-// bag of a game that starts fresh.
-if (params.has('instruments') && !['ok', 'repaired'].includes(booted?.status)) {
-  for (const id of INSTRUMENT_IDS) inventory.add(id);
-}
+// Until instruments can be crafted, ?instruments puts one of each in the bag
+// the page starts with, which New game saves; Continue puts the saved bag on.
+if (params.has('instruments')) for (const id of INSTRUMENT_IDS) inventory.add(id);
 inventory.events.length = 0;
 // Runs `run` while the browser is idle, within `timeout` ms.
 function whenIdle(run, timeout) {
@@ -685,16 +696,76 @@ const saveControls = document.getElementById('save-controls');
 const saveStatus = document.getElementById('save-status');
 const saving = !!saveSession && !saveSession.off;
 saveRow.hidden = !saving;
+// Opens the choice on `mode`'s screen, with the world held behind it.
+function openChoice(mode) {
+  saveSession.choosing = true;
+  choice.open(mode, mode === 'continue' ? { who: name, ...saveSession.summary() } : {});
+  if (!holdNotices) blockGameplay();
+}
+// Offers this world's save: the choice when one is stored (or the newer-save
+// screen), else a quiet start. Again after Try again and back from the
+// back/forward cache, so the choice shows the save as it is now.
+function offer() {
+  const { status } = saveSession.boot();
+  if (!['ok', 'repaired', 'newer'].includes(status)) return void settle(saveSession.resume());
+  openChoice(status === 'newer' ? 'newer' : 'continue');
+  void saves.ready.then((state) => state === 'other-tab' && warn(state));
+}
+// The other-tab and stale screens, unless the player plays without saving
+// or a newer save stops saving anyway.
+function warn(state) {
+  if (saveSession.declined || [choice.mode, heldScreen].includes('newer')) return;
+  heldScreen = state;
+  showHeld();
+}
+// After Try again or a return from the back/forward cache: the screen for
+// the store's state now. Once clear, a waiting screen is dropped, an open
+// one goes, and a page not saving yet offers its save again.
+function reflect(state) {
+  if (state === 'other-tab' || state === 'stale') return warn(state);
+  heldScreen = null;
+  if (saveSession.declined) return;
+  if (!saveSession.writable) offer();
+  else if (choice.isOpen) play();
+}
+async function choose(action) {
+  if (action === 'reload') return location.reload();
+  if (action === 'retry') return reflect(await saves.retry());
+  // Inside the tap, as Create is: the browser allows sound and full screen only here.
+  if (!saveSession.writable) startPlay();
+  if (action !== 'decline') return settle(action === 'new' ? saveSession.startOver() : saveSession.resume());
+  saveSession.decline();
+  play();
+}
+// After Continue, New game or a quiet start: play, or say why not.
+async function settle(started) {
+  const done = await started;
+  // Land changes from a newer version make the save read-only too.
+  if (done.reason === 'read-only') {
+    heldScreen = 'newer';
+    return showHeld();
+  }
+  if (!choice.isOpen) return;
+  if (done.ok) play();
+  else if (choice.mode !== 'other-tab') choice.fail(saveSession.explain(done.reason));
+}
+// The choice is made: play, after the creator on a first visit.
+function play() {
+  saveSession.choosing = false;
+  choice.close();
+  welcome();
+  blockGameplay();
+  if (!creator.isOpen) canvas.focus({ preventScroll: true });
+  showHeld();
+}
 if (saving) {
   saveSession.onSwitch = wakeBody;
-  void saveSession.resume();
+  offer();
   window.setInterval(() => whenIdle(autosave, IDLE_TIMEOUT_MS), AUTOSAVE_MS);
   document.addEventListener('visibilitychange', () => document.hidden && saveSession.save('hide'));
   saves.onHide = () => saveSession.save('hide');
-  // After the store's own: back from the back/forward cache, a Continue the
-  // page hid during runs again; otherwise say if another tab saved meanwhile.
-  window.addEventListener('pageshow', (event) => event.persisted && saves.ready.then((state) =>
-    state === 'writer' && !saveSession.writable ? saveSession.resume() : saveSession.tell(state)));
+  // After the store's own: back from the back/forward cache.
+  window.addEventListener('pageshow', (event) => event.persisted && saves.ready.then(reflect));
   const showStatus = () => { saveStatus.textContent = saveSession.status(); };
   const saveNow = () => {
     saveSession.save('manual');
@@ -708,9 +779,10 @@ if (saving) {
   document.getElementById('save-now').addEventListener('click', saveNow);
   saveControls.addEventListener('toggle', showStatus);
 }
+if (!choice.isOpen) welcome();
 // With ?debug, `game.save` saves, restores and runs an autosave by hand.
 const saveOff = inLobby ? 'lobby' : 'scene';
-if (params.has('debug')) debug.save = { store: saves, live, saveSession,
+if (params.has('debug')) debug.save = { store: saves, live, saveSession, choice,
   tick: () => saveSession ? autosave() : { ok: false, reason: saveOff },
   now: () => saveSession ? saveSession.save('manual') : { ok: false, reason: saveOff },
   read: () => saves ? saves.read() : { status: saveOff },
@@ -718,7 +790,7 @@ if (params.has('debug')) debug.save = { store: saves, live, saveSession,
   restore: async () => saveSession ? saveSession.resume() : { ok: false, reason: saveOff } };
 // Play stops while any of these is open, and resumes only once all are shut.
 function blockGameplay() {
-  setGameplayBlocked(creator.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen
+  setGameplayBlocked(creator.isOpen || choice.isOpen || phoneMenu.open || inventoryScreen.isOpen || furnaceScreen.isOpen || forgeScreen.isOpen
     || smithyScreen.isOpen || chat.isOpen);
 }
 debug.hud = hud;
@@ -1049,7 +1121,7 @@ function onPhoneChange(phone) {
   applyFraming();
   resize();
 }
-if (creator.isOpen) blockGameplay();
+if (creator.isOpen || choice.isOpen) blockGameplay();
 else if (gated()) gate.show('start');
 holdNotices = false;
 showHeld();
@@ -1529,14 +1601,14 @@ function suspend() {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     suspend();
-    if (gated() && !creator.isOpen) gate.show('resume');
+    if (gated() && !creator.isOpen && !choice.isOpen) gate.show('resume');
   } else {
     if (gate.waiting) void sound.engine.suspend();
     schedule();
   }
 });
 window.addEventListener('pagehide', (event) => {
-  if (event.persisted && gated() && !creator.isOpen) gate.show('resume');
+  if (event.persisted && gated() && !creator.isOpen && !choice.isOpen) gate.show('resume');
 });
 canvas.addEventListener('webglcontextlost', (e) => {
   e.preventDefault();

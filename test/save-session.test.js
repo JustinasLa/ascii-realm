@@ -27,9 +27,13 @@ function setup({ storage = memory(), active = null, ids = [], off = null, now = 
   const clock = { day: 0, tick: 14000, get() { return { day: this.day, tick: this.tick }; },
     set({ day, tick }) { Object.assign(this, { day, tick }); } };
   const told = [];
+  const reasons = [];
   store ??= new SaveStore({ storage, world: WORLD, locks: null, now });
-  const session = new SaveSession({ store, world: WORLD, live, characters, clock, notify: (text) => told.push(text), now, off });
-  return { storage, store, session, live, player, inventory, characters, clock, told };
+  const session = new SaveSession({ store, world: WORLD, live, characters, clock, now, off, notify: (text, reason) => {
+    told.push(text);
+    reasons.push(reason);
+  } });
+  return { storage, store, session, live, player, inventory, characters, clock, told, reasons };
 }
 
 const stored = (storage) => JSON.parse(storage.map.get(KEY));
@@ -123,18 +127,21 @@ test('a damaged save starts fresh, and the first save writes over it', async () 
   assert.equal(storage.map.get(`${KEY}-corrupt`), '{ not json', 'the damaged text stays aside');
 });
 
-test('a save from a newer version, or with newer parts, turns saving off and says so once', async () => {
+test('a save from a newer version, or with newer parts, is never written; the choice tells it', async () => {
   for (const fields of [{ v: 99 }, { features: 99 }]) {
     const storage = memory();
     storage.setItem(KEY, record(fields));
     const before = storage.map.get(KEY);
     const { session, told } = setup({ storage });
     session.boot();
+    assert.deepEqual(told, []);
     const resumed = await session.resume();
     assert.equal(resumed.ok, !fields.v, 'newer parts still play');
     assert.deepEqual(session.save('auto').ok, false);
     assert.equal(storage.map.get(KEY), before);
-    assert.deepEqual(told, [NOTICES['read-only']]);
+    assert.deepEqual(told, fields.v ? [NOTICES['read-only']] : [], 'an automatic save keeps it quiet');
+    session.save('manual');
+    assert.equal(told.at(-1), NOTICES['read-only'], 'a save by hand says why');
     assert.equal(session.status(), NOTICES['read-only']);
   }
 });
@@ -154,21 +161,32 @@ test('a world open in another tab isn\'t continued here and never written', asyn
     await null;
     if (held.has(name)) return callback(null);
     held.add(name);
-    return callback({ name });
+    try {
+      return await callback({ name });
+    } finally {
+      held.delete(name);
+    }
   } };
   const storage = memory();
   storage.setItem(KEY, record());
   const other = new SaveStore({ storage, world: WORLD, locks });
   await other.ready;
-  const { session, told, player } = setup({ storage, store: new SaveStore({ storage, world: WORLD, locks }) });
+  const { session, told, reasons, player, store } = setup({ storage, store: new SaveStore({ storage, world: WORLD, locks }) });
   session.boot();
   assert.equal((await session.resume()).reason, 'other-tab');
   assert.equal(player.x, 4, 'the body stays as it started');
   assert.deepEqual(told, [NOTICES['other-tab']]);
+  assert.equal(reasons[0], 'other-tab', 'the page shows it as a screen');
   assert.deepEqual(session.save('hide'), { ok: false, reason: 'gated' });
   assert.equal(session.status(), NOTICES['other-tab']);
   session.save('manual');
   assert.equal(told.length, 2, 'a save by hand says why again');
+  assert.equal(storage.map.get(KEY), record());
+  assert.equal(await store.retry(), 'other-tab', 'Try again asks for the lock again');
+  other.release();
+  assert.equal(await store.retry(), 'writer');
+  assert.equal(await store.retry(), 'writer', 'and only while another tab held it');
+  assert.equal(store.ownRev.realm, null, 'without claiming the save');
   assert.equal(storage.map.get(KEY), record());
 });
 
@@ -298,4 +316,88 @@ test('before a lobby it saves once, says what happened, then saves no more', asy
   failed.storage.setItem = full;
   failed.session.beforeLobby();
   assert.deepEqual(failed.told, [NOTICES.quota, NOTICES['lobby-failed']]);
+});
+
+test('the Continue screen\'s summary: the day, when it was saved, and whether this character has a body', () => {
+  const storage = memory();
+  storage.setItem(KEY, record({ savedAt: 5000 }));
+  const ok = setup({ storage });
+  ok.session.boot();
+  assert.deepEqual(ok.session.summary(), { day: 3, savedAt: 5000, hasBody: true, newerFeatures: false });
+  storage.setItem(KEY, record({ clock: null, features: 99 }));
+  const other = setup({ storage, active: 'c0123456789abcdef', ids: ['c0123456789abcdef'] });
+  other.session.boot();
+  assert.deepEqual(other.session.summary(), { day: null, savedAt: 1, hasBody: false, newerFeatures: true });
+});
+
+test('the world is held while the choice is open as well as while a save opens', () => {
+  const { session } = setup();
+  assert.equal(session.holding, false);
+  session.choosing = true;
+  assert.equal(session.holding, true);
+});
+
+test('New game writes a fresh save with only the body played now, then clears the land\'s changes', async () => {
+  const storage = memory();
+  storage.setItem(KEY, record({ bodies: { outlaw: body(), c0123456789abcdef: body() } }));
+  storage.setItem('ascii-realm-edits-1', JSON.stringify({ v: SAVE_VERSION, game: 'ascii-realm', kind: 'edits', rev: 2,
+    savedAt: 1, features: SAVE_FEATURES, world: WORLD, chunks: { '0,0': [['fell', 'tree-1']] } }));
+  const { session, inventory, told } = setup({ storage });
+  inventory.add('lute');
+  const order = [];
+  const { setItem } = storage;
+  storage.setItem = (key, value) => {
+    order.push(key);
+    setItem(key, value);
+  };
+  session.boot();
+  assert.equal(session.save('auto').reason, 'gated');
+  const started = session.startOver();
+  assert.equal(session.holding, true);
+  assert.deepEqual(await started, { ok: true, rev: 5 });
+  assert.equal(session.holding, false);
+  assert.deepEqual(order, [KEY, 'ascii-realm-edits-1'], 'the save first, the land second');
+  const fresh = stored(storage);
+  assert.deepEqual(Object.keys(fresh.bodies), ['outlaw']);
+  assert.deepEqual([fresh.bodies.outlaw.x, fresh.bodies.outlaw.bag.some((stack) => stack?.id === 'lute')], [4, true]);
+  const edits = JSON.parse(storage.map.get('ascii-realm-edits-1'));
+  assert.deepEqual([edits.rev, edits.chunks], [3, {}]);
+  assert.deepEqual(session.save('auto'), { ok: true, rev: 6 });
+  assert.deepEqual(told, []);
+});
+
+test('a New game whose save is refused changes nothing, says nothing and keeps saving off', async () => {
+  const storage = memory();
+  storage.setItem(KEY, record());
+  const edits = JSON.stringify({ v: SAVE_VERSION, game: 'ascii-realm', kind: 'edits', rev: 2, savedAt: 1,
+    features: SAVE_FEATURES, world: WORLD, chunks: {} });
+  storage.setItem('ascii-realm-edits-1', edits);
+  const { session, told } = setup({ storage });
+  storage.setItem = full;
+  session.boot();
+  assert.deepEqual(await session.startOver(), { ok: false, reason: 'quota' });
+  assert.deepEqual([storage.map.get(KEY), storage.map.get('ascii-realm-edits-1')], [record(), edits]);
+  assert.deepEqual(told, []);
+  assert.equal(session.writable, false);
+  assert.equal(session.explain('quota'), NOTICES.quota);
+  assert.equal(session.explain('released'), NOTICES.gated);
+  assert.equal(session.explain('nothing-like-this'), NOTICES.error);
+
+  const released = setup({ storage });
+  released.store.release();
+  assert.equal((await released.session.startOver()).reason, 'released');
+});
+
+test('playing without saving writes nothing more on this page', async () => {
+  const { session, storage, told } = setup();
+  await session.resume();
+  session.decline();
+  assert.deepEqual(session.save('auto'), { ok: false, reason: 'declined' });
+  assert.deepEqual(told, []);
+  session.save('manual');
+  assert.deepEqual(told, [NOTICES.tool]);
+  assert.equal(session.status(), NOTICES.tool);
+  session.beforeLobby();
+  assert.equal(told.at(-1), NOTICES.paused);
+  assert.equal(storage.map.has(KEY), false);
 });

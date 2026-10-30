@@ -63,7 +63,7 @@ export class SaveStore {
     events?.addEventListener('pageshow', (event) => {
       if (!event.persisted) return;
       this.writer = 'pending';
-      this.ready = this.#request((held) => !held ? 'other-tab' : this.#moved() ? 'stale' : 'writer');
+      this.ready = this.#request(this.#again);
     });
   }
 
@@ -79,6 +79,15 @@ export class SaveStore {
     this.writer = 'released';
     this.epoch++;
   }
+
+  // Asks again for the lock another tab held (Try again), without claiming:
+  // `ready` settles anew, 'stale' when another tab saved since this page did.
+  retry() {
+    if (this.writer !== 'other-tab') return this.ready.then(() => this.writer);
+    return this.ready = this.#request(this.#again);
+  }
+
+  #again = (held) => !held ? 'other-tab' : this.#moved() ? 'stale' : 'writer';
 
   // Asks for the lock without waiting for it, then sets `writer` to what
   // `settle(held)` says. Resolves to the new state.
