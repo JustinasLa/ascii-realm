@@ -233,6 +233,11 @@ body.inventory-open #inventory-root::before { opacity: 0; }
 .equipment-slot-label { position: absolute; top: 3px; left: 5px; color: var(--quiet); font-size: 10px; line-height: 1; text-transform: lowercase; }
 .filled .equipment-slot-label { display: none; }
 .equipment-slot-icon { font-size: 4.5px; line-height: 1; font-size: min(calc(100cqw / 7.2), calc(100cqh / 10)); white-space: pre; text-align: left; }
+/* Item pictures fill their box (or card) without stretching; the outline
+   text above shows only until a picture is made. */
+:is(.equipment-slot-icon, .bag-card-art):has(> .item-art) { display: block; box-sizing: border-box; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; padding: 3px; }
+.bag-card-art:has(> .item-art) { padding: 3px 3px 12px; }
+.item-art { display: block; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
 .equipment-slot-count { position: absolute; right: 4px; bottom: 3px; color: var(--quiet); font-size: 9px; line-height: 1; }
 /* The stats strip: wrapping `label value` pairs. */
 .sheet-stats { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 0; font-size: 12px; font-variant-numeric: tabular-nums; }

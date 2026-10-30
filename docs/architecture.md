@@ -14,7 +14,7 @@ src/
   inventory/         items, satchel, equipment and carry weight
   render/            glyph atlas, WebGL renderer (with a fine grid for trees and rocks), cell writers
   spells/            rune casting simulation, rune definitions by element, animations and sounds
-  ui/                status frames, inventory panel, item art and notifications
+  ui/                status frames, inventory panel, item art (drawn from 3D models) and notifications
   world/             terrain, rivers and their current, drifting river debris, grass and water
                      shading, props and their fine bakes (with a worker), sky, reflections,
                      fireflies, campfires, dust

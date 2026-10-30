@@ -233,6 +233,13 @@ short version see the [README](../README.md).
   from and pickups top up first. Clothes are part of the character;
   the torch is carried separately from the inventory. Opening the inventory
   blocks movement and attacks while the world, including enemies, keeps running.
+  Weapons in the boxes and on the cards are large shaded pictures in small
+  letters, drawn once from the 3D parts the hands carry: on the box's diagonal,
+  lit from the top left, letters by brightness (bark letters for wood,
+  `:;+=#%@` for metal) on a dark silhouette, the blade or head in the weapon's
+  metal colour (its tier or forged alloy's). Once made they are kept, so the
+  window costs nothing per frame; other items, and devices without WebGL, show
+  an outline drawing.
 - **Sword and scenery.** The short sword is the available weapon. It is drawn
   on the first strike and put away after a quiet spell standing still (`F`
   draws or sheathes it on a keyboard). Chain cuts into a combo, lunge from a

@@ -2,6 +2,8 @@ import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS, fitsSlot } from '../inventory/item
 import { BagGestures } from './bag-gestures.js';
 import { BAG_TABS, bagView, cardLabel, itemKind } from './bag-view.js';
 import { itemArt } from './item-art.js';
+import { shapeOf } from './item-shading.js';
+import { itemStudio } from './item-studio.js';
 import { ItemTooltip, tooltipFor } from './item-tooltip.js';
 import { DOLL_BOXES, dollArea } from './paper-doll.js';
 import { sheetStats } from './sheet-stats.js';
@@ -32,6 +34,23 @@ function setText(node, text) {
   if (node.textContent !== text) node.textContent = text;
 }
 
+// A box's art: the picture `src` when there is one, else the outline text.
+function setArt(node, src, text) {
+  const image = node.firstElementChild;
+  if (!src) {
+    if (image) node.replaceChildren();
+    setText(node, text);
+    return;
+  }
+  if (image) attribute(image, 'src', src);
+  else {
+    const img = element('img', 'item-art');
+    img.alt = '';
+    img.setAttribute('src', src);
+    node.replaceChildren(img);
+  }
+}
+
 function attribute(node, name, value) {
   if (node.getAttribute(name) !== String(value)) node.setAttribute(name, String(value));
 }
@@ -56,11 +75,12 @@ export class InventoryScreen {
   // `describe(stack)` gives a stack's own { name, colour, description, stats }
   // (an alloy ingot's), or null for its item's; `describeVersion()` changes with them.
   // The stats strip reads `wallet.cents` and `attributes()`, the six totals
-  // or null; `className` heads the sheet beside the name.
+  // or null; `className` heads the sheet beside the name. `art` makes the
+  // item pictures (item-studio.js); without it the outlines show.
   constructor({ inventory, player, onToggle, onNotify, onDrop, name = 'Kael', className = null, phone = () => false,
     pages = [], isCovered = () => false, describe = () => null, describeVersion = () => 0, wallet = null,
-    attributes = () => null }) {
-    Object.assign(this, { isCovered, describe, describeVersion, wallet, attributes });
+    attributes = () => null, art = itemStudio }) {
+    Object.assign(this, { isCovered, describe, describeVersion, wallet, attributes, art });
     this.manaSource = null;
     // Phones have no keyboard, so their hints name taps instead of keys.
     this.phone = phone;
@@ -147,7 +167,7 @@ export class InventoryScreen {
       button.dataset.box = DOLL_BOXES[slot].small ? 'small' : 'large';
       button.style.gridArea = dollArea(slot);
       const label = element('span', 'equipment-slot-label', DOLL_BOXES[slot].label);
-      const icon = element('pre', 'equipment-slot-icon');
+      const icon = element('div', 'equipment-slot-icon');
       icon.setAttribute('aria-hidden', 'true');
       const count = element('span', 'equipment-slot-count');
       count.setAttribute('aria-hidden', 'true');
@@ -194,7 +214,7 @@ export class InventoryScreen {
       button.type = 'button';
       button.tabIndex = -1;
       button.dataset.slotIndex = String(index);
-      const icon = element('pre', 'bag-card-art');
+      const icon = element('div', 'bag-card-art');
       icon.setAttribute('aria-hidden', 'true');
       const count = element('span', 'bag-card-label');
       count.setAttribute('aria-hidden', 'true');
@@ -315,6 +335,7 @@ export class InventoryScreen {
     this._hideTip();
     this.onToggle(open);
     if (open) {
+      this.art?.reopen();
       this.update();
       // The sheet opens at its top, on the doll, wherever the selection is
       // and however far down it was scrolled when it closed.
@@ -581,7 +602,10 @@ export class InventoryScreen {
     const node = this._selectedButton();
     const ghost = element('div', 'drag-ghost');
     ghost.setAttribute('aria-hidden', 'true');
-    ghost.append(element('pre', 'bag-card-art', node.querySelector('pre').textContent));
+    const art = node.querySelector('.bag-card-art, .equipment-slot-icon');
+    const copy = element('div', 'bag-card-art');
+    setArt(copy, art.querySelector('img')?.getAttribute('src'), art.textContent);
+    ghost.append(copy);
     this.root.append(ghost);
     const lit = [...this.equipmentNodes.values()].map(({ button }) => button).concat(this.bag)
       .filter((target) => this._accepts(selection, target));
@@ -788,6 +812,8 @@ export class InventoryScreen {
     // rest redraws when its state changes.
     this._updateStats();
     if (this._tip && this._tipKey(this._tip.selection) !== this._tip.key) this._refreshTip();
+    // New pictures are made a couple a frame; each batch redraws the boxes.
+    if (this.art?.pump()) this._signature = null;
     if (this._state() === this._signature) return;
     // A bag selection is always a shown card: the first when the selected
     // one hid (taken off, swapped, used, dropped or filtered out), none
@@ -830,11 +856,17 @@ export class InventoryScreen {
     for (const { key, value } of pairs) setText(this._statValues.get(key), value);
   }
 
-  // The only place the doll gets its art, for the box `slot` names.
-  _art(item, slot) { return itemArt(item.id, item.glyph); }
+  // The only place the doll gets its art, for the box `slot` names: the
+  // picture's `src` (null while it's made) and the outline shown until then.
+  _art(item, slot, stack) { return this._picture(item, stack, shapeOf(DOLL_BOXES[slot])); }
 
   // The only place the bag gets its art.
-  _cardArt(item) { return itemArt(item.id, item.glyph); }
+  _cardArt(item, stack) { return this._picture(item, stack, 'card'); }
+
+  _picture(item, stack, shape) {
+    const art = this.art?.art(stack, item, this.describe(stack), shape);
+    return { src: art?.src ?? null, text: itemArt(item.id, item.glyph) };
+  }
 
   _render() {
     const view = this._view;
@@ -866,7 +898,8 @@ export class InventoryScreen {
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'data-item-kind', item ? itemKind(item) : 'empty');
       attribute(nodes.button, 'data-item-id', item?.id || '');
-      setText(nodes.icon, item ? this._cardArt(item) : '');
+      const art = item ? this._cardArt(item, stack) : { src: null, text: '' };
+      setArt(nodes.icon, art.src, art.text);
       setText(nodes.count, item ? cardLabel(stack, item, own) : '');
     }
     for (const [slot, nodes] of this.equipmentNodes.entries()) {
@@ -880,7 +913,8 @@ export class InventoryScreen {
       attribute(nodes.button, 'aria-label', `${SLOT_NAMES[slot]}: ${item?.name || 'empty'}`);
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'data-item-id', item?.id || '');
-      setText(nodes.icon, item ? this._art(item, slot) : '');
+      const art = item ? this._art(item, slot, stack) : { src: null, text: '' };
+      setArt(nodes.icon, art.src, art.text);
       setText(nodes.count, item && STACK_SLOTS.includes(slot) ? String(stack.count) : '');
     }
   }
