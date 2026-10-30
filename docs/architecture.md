@@ -132,8 +132,27 @@ The grade is applied last in the shader, before the vignette: a lift of
 each channel that never clips (`c·g / (1 + c·(g − 1))`), a saturation and
 the vignette's colour and strength. Its keys are in `render/palette.js`;
 the night key is the identity, which the shader skips, so the night is
-drawn as it was before the clock. `game.dayClock` (`tick`, `day`, `phase`,
-`set()`) is on `?debug`.
+drawn as it was before the clock. The state also holds four light levels
+that are all exactly 1 at a full-moon midnight, so that night is drawn and
+played as before: `moonlight` (the moon's visibility times its phase's
+brightness, never below `MOON_FLOOR` of it), `direct` (the moon's or the
+sun's, whichever lights the land), `fireflies` (how far into the firefly
+hours it is) and `glow`. Night-only effects multiply by them where they
+already compute a strength: `NightLight.prepare` takes the sky as
+`env.sky`, steps the moonlight to `BEAM_STEPS` so the beams' map is laid
+again only once a step through twilight, and shades the canopy by
+`direct`; the grass's `light` (`direct`) pales its tips and lights its dew;
+`Mushrooms.drawGlow` takes `glow`; and `Fireflies.update` takes `fireflies`
+as its presence, each firefly waking at a point from its seed, and one that
+takes another's place fading in. Night creatures (`night: true` in
+`entities/monsters.js`'s profiles: skeletons and trolls) spawn by the chance
+`spawnChance` in `entities/night-spawns.js` gives: 0 outside the night's
+hours (ticks 13000-23000), otherwise how likely the sky's light (15 less the
+hour's and the weather's darkening) is dark enough, normalised so a clear
+night is 1, and 0.8 of it under a new moon. A spawn there also fails where
+a fire or a torch in flight lights the ground (`lightSources`,
+`lightLevel`). `game.dayClock` (`tick`, `day`, `phase`, `set()`) and
+`game.monsters.chances` (each kind's last spawn chance) are on `?debug`.
 
 River debris (`world/debris.js`) is local to each player. Each frame, after
 the player and the monsters have moved, it is handed the bodies standing in

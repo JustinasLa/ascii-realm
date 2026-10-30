@@ -1,7 +1,9 @@
 import { mulberry32 } from '../core/rng.js';
+import { NIGHT_SKY } from '../world/clock.js';
 import { Projectiles } from '../world/projectiles.js';
 import { currentAt, easeCarry, immersion, settleBump, toCells as flowCells } from '../world/rivers.js';
 import { ASPECT, MAX_WATER_DEPTH, WATER } from '../world/world.js';
+import { lightLevel, spawnChance } from './night-spawns.js';
 import { SCALE, TILT } from './rig.js';
 
 // Monsters that hunt the player. Each kind shares one way of thinking and
@@ -20,6 +22,8 @@ export const KINDS = freeze({
     // meets floating debris with, in kilograms: light bones.
     wade: freeze({ radius: 0.12, mass: 5 }),
     name: 'Skeleton',
+    // The restless dead keep to the dark: they rise only at night.
+    night: true,
     health: 60,
     // Climbing out of the ground, in seconds; 0 for a monster that arrives
     // on its feet.
@@ -86,6 +90,7 @@ export const KINDS = freeze({
     // Shins in the water and footing against floating debris (m, kg).
     wade: freeze({ radius: 0.12, mass: 6 }),
     name: 'Goblin',
+    night: false,
     health: 35,
     rise: 0,
     walkSpeed: 1.5,
@@ -127,6 +132,8 @@ export const KINDS = freeze({
     // Shins in the water and footing against floating debris (m, kg).
     wade: freeze({ radius: 0.28, mass: 30 }),
     name: 'Troll',
+    // Trolls shun the daylight and come out only at night.
+    night: true,
     health: 150,
     rise: 0,
     walkSpeed: 1.3,
@@ -169,6 +176,7 @@ export const KINDS = freeze({
     // Shins in the water and footing against floating debris (m, kg).
     wade: freeze({ radius: 0.13, mass: 7 }),
     name: 'Elf',
+    night: false,
     health: 40,
     rise: 0,
     walkSpeed: 1.6,
@@ -635,6 +643,11 @@ export class Monsters {
     this.spawnIn = {};
     for (const id of Object.keys(this.counts)) this.spawnIn[id] = first ?? KINDS[id].spawn.first;
     this.every = every;
+    // The weather and the lights (a list of { x, y, level }, or a function
+    // giving one) a night creature's spawn heeds, and each kind's last
+    // spawn chance.
+    this.env = { weather: null, lights: [] };
+    this.chances = {};
     this.events = [];
     this.kills = 0;
     // Arrows loosed at the player, flying or stuck where they fell.
@@ -655,13 +668,14 @@ export class Monsters {
     const k = KINDS[kind];
     near ??= k.spawn.near;
     far ??= k.spawn.far;
+    const lights = k.night ? (typeof this.env.lights === 'function' ? this.env.lights() : this.env.lights) : null;
     for (let attempt = 0; attempt < 24; attempt++) {
       const angle = this.random() * Math.PI * 2;
       const distance = near + this.random() * (far - near);
       const [dx, dy] = toCells(Math.sin(angle) * distance, Math.cos(angle) * distance);
       const x = player.x + dx;
       const y = player.y + dy;
-      if (!dryLand(world, x, y)) continue;
+      if (!dryLand(world, x, y) || (k.night && lightLevel(x, y, lights) > 0)) continue;
       const monster = new Monster(x, y, { kind: k, heading: angle + Math.PI, risen });
       this.list.push(monster);
       if (monster.state === 'rise') this.events.push({ type: 'rise', x, y, strength: 0.7, monster });
@@ -670,13 +684,18 @@ export class Monsters {
     return null;
   }
 
-  update(dt, world, player) {
+  // `sky` is the clock's: night creatures come only in the dark.
+  update(dt, world, player, sky = NIGHT_SKY) {
     for (const [kind, max] of Object.entries(this.counts)) {
       if (this.of(kind).filter((m) => m.alive).length >= max) continue;
       this.spawnIn[kind] -= dt;
       if (this.spawnIn[kind] <= 0) {
-        this.spawnNear(world, player, kind);
+        // A sure spawn draws no random number, so a clear full-moon night
+        // brings them exactly as they always came.
+        const chance = spawnChance(KINDS[kind], sky, this.env.weather);
+        if (chance >= 1 || (chance > 0 && this.random() < chance)) this.spawnNear(world, player, kind);
         this.spawnIn[kind] = this.every ?? KINDS[kind].spawn.every;
+        this.chances[kind] = chance;
       }
     }
     this.flyArrows(dt, world, player);

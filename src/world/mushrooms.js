@@ -376,7 +376,8 @@ export class Mushrooms {
     }
   }
 
-  drawGlow(r, view, nodes) {
+  // `glow` is how much of it shows: all of it at night, less by day.
+  drawGlow(r, view, nodes, glow = 1) {
     for (const p of nodes) {
       const bx = Math.floor(p.x) - view.x0, by = Math.floor(p.y) - view.y0;
       const centreY = by - p.height + PROFILES[p.shape].capRows + 1.3;
@@ -385,7 +386,7 @@ export class Mushrooms {
       for (let y = Math.max(0, Math.floor(centreY - 4)); y <= Math.min(r.rows - 1, Math.ceil(centreY + 4)); y++) {
         for (let x = Math.max(0, bx - 5); x <= Math.min(r.cols - 1, bx + 4); x++) {
           const d2 = ((x - bx + 0.7) / 4.5) ** 2 + ((y - centreY) / 3.2) ** 2;
-          if (d2 < 1) lighten(r, (y * r.cols + x) * 4, (1 - d2) ** 2 * 0.45, 80, 187, 155, 0.65);
+          if (d2 < 1) lighten(r, (y * r.cols + x) * 4, (1 - d2) ** 2 * 0.45 * glow, 80, 187, 155, 0.65);
         }
       }
       const pulse = 0.55 + Math.sin(this.time * 1.8 + p.phase) * 0.025;
@@ -396,7 +397,7 @@ export class Mushrooms {
           const x = bx + dx;
           if (x < 0 || x >= r.cols) continue;
           const d2 = (dx / 9) ** 2 + ((dy + 1) / 5) ** 2;
-          if (d2 < 1) lighten(r, (y * r.cols + x) * 4, (1 - d2) ** 2 * pulse * 0.12, 35, 139, 111, 0.4);
+          if (d2 < 1) lighten(r, (y * r.cols + x) * 4, (1 - d2) ** 2 * pulse * 0.12 * glow, 35, 139, 111, 0.4);
         }
       }
     }

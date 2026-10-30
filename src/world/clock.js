@@ -19,6 +19,9 @@ export const START_TICK = 14000;
 export const MOON_PHASES = 8;
 // How bright the moon is in each phase, from full through new and back.
 export const MOON_BRIGHTNESS = [1, 0.75, 0.5, 0.25, 0, 0.25, 0.5, 0.75];
+// The share of the moon's light a new moon still gives the land: the
+// earthshine and the stars.
+export const MOON_FLOOR = 0.15;
 export const NAMED_TIMES = { day: 1000, noon: 6000, sunset: 12000, dusk: 12800, night: 13000,
   midnight: 18000, sunrise: 23000, dawn: 23200 };
 // The limits of ?daylen=, in seconds.
@@ -87,6 +90,7 @@ export function clockOptions(params, { inLobby = false } = {}) {
 function emptySky() {
   return { tick: 0, day: 0, daylight: 0, night: 0, stars: 0, moon: 0, sun: 0, warm: 0, dawn: false,
     moonPhase: { index: 0, cos: 1, sin: 0, waxing: false }, moonLit: 1, moonBrightness: 1,
+    moonlight: 1, direct: 1, fireflies: 1, glow: 1,
     grade: { gain: [1, 1, 1], sat: 1, edge: [0, 0, 0], vignette: 0 } };
 }
 
@@ -116,6 +120,13 @@ export function skyAt(tick, day, phase, out = emptySky()) {
   p.waxing = phase > MOON_PHASES / 2;
   out.moonLit = (1 + p.cos) / 2;
   out.moonBrightness = MOON_BRIGHTNESS[phase];
+  // The moon's light on the land, the light that casts shadows and pales the
+  // grass (the sun's by day, the moon's by night, little between them), how
+  // far into the firefly hours it is, and how much a glowcap's light shows.
+  out.moonlight = out.moon * (MOON_FLOOR + (1 - MOON_FLOOR) * out.moonBrightness);
+  out.direct = Math.max(out.moonlight, out.sun);
+  out.fireflies = smoothstep(0.25, 0.55, night);
+  out.glow = 0.3 + 0.7 * night;
   // Night to day by the daylight, then toward dawn or dusk by the warmth,
   // which is 0 where the two meet, so the switch never shows.
   const tw = dawn ? GRADE_DAWN : GRADE_DUSK;

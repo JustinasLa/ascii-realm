@@ -500,3 +500,11 @@ test('ambience clock jumps prune expired notes and keep wildlife bounded with co
   assert.equal(audio.routes.length, totalRoutes);
   assertDisposed(audio);
 });
+
+test('an asleep firefly makes no glint; one with no waking state glints as before', t => {
+  t.mock.method(Math, 'random', () => 0.5);
+  const firefly = { x: 120, y: 40, phase: Math.PI / 2 };
+  assert.equal(recordWildlife('nextShimmer', { time: 0, night: 1, fireflies: [{ ...firefly, lit: 0 }] }).length, 0);
+  assert.ok(recordWildlife('nextShimmer', { time: 0, night: 1, fireflies: [{ ...firefly, lit: 0.2 }] }).length > 0);
+  assert.ok(recordWildlife('nextShimmer', { time: 0, night: 1, fireflies: [firefly] }).length > 0);
+});

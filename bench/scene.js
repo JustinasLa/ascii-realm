@@ -49,6 +49,8 @@ export async function createScene(root = new URL('../', import.meta.url), option
     const view = camera.view(r);
     mark('update');
     drawGround(r, world, view, time);
+    // The clock's direct light on the grass, when a sky is given.
+    if (options.sky) grass.light = options.sky.direct;
     grass.drawTracks(r, view, time, world);
     drawSkyReflection(r, view, time, options.sky);
     figure.drawShadow(r, view, player.x, player.y, player.air);
@@ -67,7 +69,7 @@ export async function createScene(root = new URL('../', import.meta.url), option
     drawables.sort((a, b) => a.y - b.y);
     mark('prepareSprites');
     if (night) {
-      night.prepare(view, props, { seed: world.seed, world, tier });
+      night.prepare(view, props, { seed: world.seed, world, tier, sky: options.sky });
       night.shadeGround(r, view);
       r.night = night.active ? night : null;
       mark('night');

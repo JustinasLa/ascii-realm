@@ -324,6 +324,9 @@ export class Grass {
     this.touched = [];
     this.prepared = null;
     this.field = null;
+    // The direct light on the blades, the moon's or the sun's (the sky's
+    // `direct`): their tips pale and their dew glints with it.
+    this.light = 1;
   }
 
   bendAt(x, y, t) {
@@ -624,7 +627,7 @@ export class Grass {
     const right = view.x0 + view.cols + SIDE_PAD;
     // Trees' shadows and moonbeams on this row, if any (see night-light.js).
     const night = r.night?.rowShaded(y) ? r.night : null;
-    moonlit = 1;
+    moonlit = this.light;
     moontint = 0;
     const windNoise = valueNoiseRow(y * 0.045 + t * 0.03, world.seed + 900);
     for (let cx = Math.floor(left / CHUNK_SIZE); cx <= Math.floor((right - 1) / CHUNK_SIZE); cx++) {
@@ -688,6 +691,7 @@ export class Grass {
         if (night) {
           moonlit = gain < 1 ? Math.max(0, (gain - GAIN_FLOOR) / (1 - GAIN_FLOOR)) :
             gain > 1 ? 1 + (gain - 1) / PEAK_LIFT * TIP_BOOST : 1;
+          moonlit *= this.light;
           moontint = night.tint;
         }
         const light = (0.62 + chunk.shade[i] * 0.6 + Math.max(0, wind - 0.6) * 0.1) *
@@ -736,10 +740,10 @@ export class Grass {
             // A drop on the blade's middle glints now and then as the
             // blade turns in the wind.
             const glint = ripple(t * 0.23 + variation * 7.1 + rnd * 3);
-            if (bladeRows > 1 && glint > 0.5) {
+            if (bladeRows > 1 && glint > 0.5 && this.light > 0) {
               const j = bladeRows >> 1;
               // A glint is the moon's own reflection: shade all but hides it.
-              const g = (glint - 0.5) * 2 * (1 - sink) * Math.min(DEW_CAP, gain * gain);
+              const g = (glint - 0.5) * 2 * (1 - sink) * Math.min(DEW_CAP, gain * gain) * this.light;
               paint(r, ROW_X[j], base - j, DEWDROPS[(variation * 40) & 3],
                 DEW_LIGHT[0] * g, DEW_LIGHT[1] * g, DEW_LIGHT[2] * g, base);
             }

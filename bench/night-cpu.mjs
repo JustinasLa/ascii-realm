@@ -26,7 +26,11 @@
 // dusk (the afterglow and a setting moon) or under a last-quarter moon,
 // against the before build's full night, so `groundAndSky` in `stageDiff`
 // is the cost of that sky; `--at=x,y` stands both there instead of the
-// lakeside, for a spot whose moon lies on the water.
+// lakeside, for a spot whose moon lies on the water. `--sky=midnight` lights
+// the after build by the clock's full night, and `--sky=twilight` moves its
+// clock across dusk (ticks 12400 to 13100, once a round, in even steps), so
+// the beams fade in with the moon and their map is laid again at each of its
+// steps: `relays` counts those, `steps` the moon's light steps seen.
 import os from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -43,13 +47,14 @@ const SPIKE_ROUNDS = Math.max(4, Math.round(+rounds / 3));
 const SPIKE_FRAMES = 40;
 
 const control = beforeRoot === 'off';
-const SKIES = { dusk: [12800, 0], phase2: [18000, 2] };
-let sky;
+const SKIES = { dusk: [12800, 0], phase2: [18000, 2], midnight: [18000, 0], twilight: [12400, 0] };
+let sky, skyAt;
 if (flags.sky) {
-  const { skyAt } = await import(new URL('src/world/clock.js', pathToFileURL(`${resolve(afterRoot)}/`)));
+  ({ skyAt } = await import(new URL('src/world/clock.js', pathToFileURL(`${resolve(afterRoot)}/`))));
   const [tick, phase] = SKIES[flags.sky];
   sky = skyAt(tick, phase, phase);
 }
+const twilight = flags.sky === 'twilight';
 const start = flags.at ? (([x, y]) => ({ x: +x, y: +y }))(flags.at.split(',')) : PLAYER;
 const roots = { before: pathToFileURL(`${resolve(control ? afterRoot : beforeRoot)}/`), after: pathToFileURL(`${resolve(afterRoot)}/`) };
 const scenes = {};
@@ -68,6 +73,13 @@ const ms = (v) => +v.toFixed(3);
 const loadStart = os.loadavg()[0];
 const builds = { before: await scenes.before(start), after: await scenes.after(start) };
 for (let k = 0; k < 120; k++) { builds.before.frame(); builds.after.frame(); }
+let relays = 0;
+const steps = new Set();
+if (twilight) {
+  const { night } = builds.after;
+  const lay = night.layBeams.bind(night);
+  night.layBeams = () => { relays++; steps.add(night.moonlight); lay(); };
+}
 
 // Per build and measure, one median (p95 for the whole frame) per round.
 const rows = { before: {}, after: {} };
@@ -76,6 +88,7 @@ for (let round = 0; round < +rounds; round++) {
   const run = { before: {}, after: {} };
   for (let k = 0; k < +frames; k++) {
     for (const name of (round + k) % 2 ? ['after', 'before'] : ['before', 'after']) {
+      if (twilight && name === 'after') skyAt(12400 + 700 * k / +frames, 0, 0, sky);
       const stages = builds[name].frame();
       const total = Object.values(stages).reduce((a, b) => a + b, 0);
       for (const [key, v] of Object.entries({ ...stages, total })) (run[name][key] ??= []).push(v);
@@ -99,6 +112,7 @@ out.night = rows.after.night ? ms(quantile(rows.after.night, 0.5)) : null;
 out.shafts = rows.after.shafts ? ms(quantile(rows.after.shafts, 0.5)) : null;
 out.tier = night?.tierName ?? null;
 out.beams = night?.visible?.length ?? null;
+if (twilight) Object.assign(out, { relays, steps: steps.size, relaysPerRound: relays / +rounds });
 out.diff = Object.fromEntries(MAIN.map((k) => [k, ms(quantile(paired(k), 0.5))]));
 // The difference as a share of the before build's frame, round by round.
 out.diffPct = +quantile(rows.after.total.map((v, i) => (v - rows.before.total[i]) / rows.before.total[i] * 100), 0.5).toFixed(2);

@@ -25,6 +25,7 @@ import { Inventory } from '../../src/inventory/inventory.js';
 import { ITEMS } from '../../src/inventory/items.js';
 import { INSTRUMENT_IDS, instrumentFalloff, layerNote, noteMidi, prepareInstrument, secondLayer } from '../../src/audio/instruments.js';
 import { toMetres } from '../../src/entities/monsters.js';
+import { lightSources } from '../../src/entities/night-spawns.js';
 import { InstrumentKeys } from '../../src/core/instrument-keys.js';
 import { MusicNotes } from '../../src/world/music-notes.js';
 import { heldKey, isBow, isThrown } from '../../src/entities/loadout.js';
@@ -393,7 +394,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
     drawFigure: noop, drawTrail: noop, putCell: noop, putOutlinedCell: noop,
     ModelFigure: { load: () => Promise.resolve(model), library: () => new Promise(noop) },
     Monsters: class extends inert() { constructor() { super(); this.living = []; this.arrows = { landedDrawables: () => [], drawFlying() {} }; } },
-    MonsterFigures: class {}, KINDS: {}, toMetres,
+    MonsterFigures: class {}, KINDS: {}, toMetres, lightSources,
     Animals, Birds, Fishes, AnimalFigures: animalFigures, Horses, HorseFigures: horseFigures,
     SceneryBuilder: class {
       constructor(options) { this.enabled = false; this.panel = { open: false }; Object.assign(this, options); }

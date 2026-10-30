@@ -27,6 +27,7 @@ import { blockPageGestures, enterFullscreen, fullscreenApi, isStandalone, toggle
 import { dressFigure, drawFigure, drawShadow, drawTrail } from './entities/figure.js';
 import { ModelFigure } from './entities/model.js';
 import { KINDS, Monsters, toMetres } from './entities/monsters.js';
+import { lightSources } from './entities/night-spawns.js';
 import { figureScale, MonsterFigures } from './entities/monster-figures.js';
 import { Animals } from './entities/animals.js';
 import { Birds } from './entities/birds.js';
@@ -1023,6 +1024,7 @@ const countOf = (name, fallback) => {
 const monsters = new Monsters({ seed,
   counts: { skeleton: countOf('skeletons', 2), goblin: countOf('goblins', 1), troll: countOf('trolls', 1),
     elf: countOf('elves', 1) } });
+monsters.env = { weather, lights: () => lightSources(fires.list, torches.list) };
 // Deer herds, rabbits and wolf packs live on the land round the player.
 // ?deer=N, ?rabbits=N and ?wolves=N cap how many of each may be about;
 // ?animals=0 leaves the land without them.
@@ -1711,7 +1713,7 @@ function frame(now) {
     syncSpellPeers();
     casting.update(playerDt);
     // Foes hold still while the creator is open.
-    monsters.update(foeDt, world, player);
+    monsters.update(foeDt, world, player, sky);
     monsterFigures?.update(foeDt, monsters.list);
   }
   for (const e of monsters.events) monsterEvent(e);
@@ -1825,6 +1827,7 @@ function frame(now) {
   // A wide view generates its missing chunks a little each frame.
   if (wide) world.load(view.x0, view.y0, view.x0 + view.cols, view.y0 + view.rows, 6);
   drawGround(renderer, world, view, time, player, weather.wind, wide);
+  grass.light = sky.direct;
   grass.drawTracks(renderer, view, time, world);
   drawSkyReflection(renderer, view, time, sky);
   footprints.draw(renderer, view, time);
@@ -1884,7 +1887,7 @@ function frame(now) {
   // ground cells as they are drawn, and moonbeams light them; warm light is
   // added over them later.
   const nightStart = performance.now();
-  nightLight.prepare(view, props, { weather, seed: world.seed, world,
+  nightLight.prepare(view, props, { weather, seed: world.seed, world, sky,
     tier: shaftTier({ phone: device.phone, reduced: pacer.reduced }) });
   nightLight.shadeGround(renderer, view);
   renderer.night = nightLight.active ? nightLight : null;
@@ -2049,7 +2052,7 @@ function frame(now) {
   weather.drawSurface(renderer, view, time);
   ambience.drawMist(renderer, view, time);
   grass.drawLayered(renderer, world, view, time, drawables);
-  liftedPass(visibleMushrooms, (v, list) => mushrooms.drawGlow(renderer, v, list));
+  liftedPass(visibleMushrooms, (v, list) => mushrooms.drawGlow(renderer, v, list, sky.glow));
   splashes.drawContacts(renderer, view, time, contacts);
   // The moonbeams' columns of lit air, under the warm light.
   const shaftStart = performance.now();
@@ -2093,7 +2096,7 @@ function frame(now) {
   dust.draw(renderer, view);
   splashes.drawSpray(renderer, view);
   fires.drawParticles(renderer, view, world.relief ? (x, y) => world.liftAt(x, y) : null);
-  fireflies.update(dt, time, world, camera.x, camera.centreY(view), view.cols / 2, view.rows / 2);
+  fireflies.update(dt, time, world, camera.x, camera.centreY(view), view.cols / 2, view.rows / 2, sky.fireflies);
   fireflies.draw(renderer, view, time);
   ambience.draw(renderer, view, time);
   weather.draw(renderer, view);

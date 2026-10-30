@@ -241,3 +241,38 @@ test('bending keeps roots fixed and the reflection uses the same deformed cells'
     after.filter(c => c[1] === Math.floor(node.y) - view.y0));
   assert.notDeepEqual(before, after);
 });
+
+test('a glowcap\'s light shows by the clock: all of it at night, less by day, none at 0', () => {
+  const { mushrooms, node } = setup();
+  const view = { x0: -30, y0: -30, cols: 100, rows: 100 };
+  const glow = (...k) => {
+    const r = { cols: 100, rows: 100, fg: new Float32Array(40000), bg: new Float32Array(40000), ov: new Float32Array(40000) };
+    mushrooms.drawGlow(r, view, [node], ...k);
+    return r;
+  };
+  const full = glow(), night = glow(1), day = glow(0.3), none = glow(0);
+  assert.deepEqual(night, full);
+  const sum = (r) => r.fg.reduce((a, b) => a + b, 0);
+  assert.ok(sum(day) < sum(full) && sum(day) > 0);
+  assert.ok(Math.abs(sum(day) - 0.3 * sum(full)) < 1e-3 * sum(full));
+  assert.equal(sum(none), 0);
+});
+
+test('a spore fades in and out over its life; only a released one lights the ground', () => {
+  const { mushrooms } = setup();
+  const view = { x0: 0, y0: 0, cols: 20, rows: 20 };
+  const draw = (s) => {
+    const r = { cols: 20, rows: 20, fg: new Float32Array(1600), bg: new Float32Array(1600), ov: new Float32Array(1600), layers: [] };
+    r.layer = (...args) => r.layers.push(args);
+    mushrooms.drawSpore(r, view, { x: 5, y: 8, h: 2, age: 0.5, life: 2, g: 7, color: [100, 200, 150], ...s });
+    return r;
+  };
+  const released = draw({});
+  assert.deepEqual(released.layers, [[5, 6, 7, 100, 200, 150]]);
+  assert.ok(released.fg[(6 * 20 + 5) * 4 + 1] > 0);
+  const ambient = draw({ ambient: true });
+  assert.equal(ambient.layers.length, 1);
+  assert.ok(ambient.fg.every((v) => v === 0));
+  assert.equal(draw({ age: 0 }).layers.length, 0, 'not yet faded in');
+  assert.equal(draw({ x: -5 }).layers.length, 0, 'off screen');
+});
