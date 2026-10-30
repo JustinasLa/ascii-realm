@@ -238,6 +238,7 @@ test('lobby pages, preview scenes and ?nogate save nothing and offer no save', a
     assert.equal(game.save.store, null, query);
     assert.equal(game.save.saveSession, null, query);
     assert.deepEqual(plain(game.save.now()), { ok: false, reason }, query);
+    assert.deepEqual(plain(game.save.tick()), { ok: false, reason }, query);
     assert.deepEqual(plain(game.save.read()), { status: reason }, query);
     assert.deepEqual(plain(await game.save.claim()), { ok: false, reason }, query);
     assert.deepEqual(plain(await game.save.restore()), { ok: false, reason }, query);

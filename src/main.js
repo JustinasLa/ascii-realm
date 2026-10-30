@@ -709,7 +709,8 @@ if (saving) {
 }
 // With ?debug, `game.save` saves, restores and runs an autosave by hand.
 const saveOff = inLobby ? 'lobby' : 'scene';
-if (params.has('debug')) debug.save = { store: saves, live, saveSession, tick: autosave,
+if (params.has('debug')) debug.save = { store: saves, live, saveSession,
+  tick: () => saveSession ? autosave() : { ok: false, reason: saveOff },
   now: () => saveSession ? saveSession.save('manual') : { ok: false, reason: saveOff },
   read: () => saves ? saves.read() : { status: saveOff },
   claim: async () => saves ? saves.claim() : { ok: false, reason: saveOff },
