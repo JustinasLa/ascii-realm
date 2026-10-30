@@ -594,3 +594,75 @@ test('a stored stack is cleaned to the bag\'s own shape, keeping each property',
   for (const raw of [null, 'oakLog', { id: 'gone', count: 1 }, { id: 'oakLog', count: 0 }, { id: 'oakLog', count: 1.5 },
     { id: 'toString', count: 1 }]) assert.equal(cleanStack(raw), null, JSON.stringify(raw));
 });
+
+test('a bag serializes to plain copies that later play doesn\'t change', () => {
+  const inventory = new Inventory();
+  inventory.add('shortSword', 1, { material: 'steel' });
+  const saved = inventory.serialize();
+  assert.equal(saved.bag.length, BAG_SLOTS);
+  assert.deepEqual(Object.keys(saved.worn), EQUIPMENT_SLOTS);
+  assert.deepEqual(saved.worn.mainHand, { id: 'shortSword', count: 1 });
+  assert.ok(saved.bag.some((stack) => stack?.material === 'steel'));
+  const before = structuredClone(saved);
+  inventory.slots[0].count = 0;
+  inventory.equipment.mainHand.id = 'dagger';
+  inventory.remove(1, 1);
+  assert.deepEqual(saved, before);
+});
+
+test('serializing then restoring on a fresh bag gives the same bag and gear', () => {
+  const inventory = new Inventory();
+  inventory.add('oakLog', 3, { alloy: 'a2' });
+  inventory.equip(inventory.slots.findIndex((stack) => stack?.id === 'arrow'));
+  const copy = emptyInventory();
+  assert.deepEqual(copy.restore(inventory.serialize()), { dropped: 0 });
+  assert.deepEqual(copy.slots, inventory.slots);
+  assert.deepEqual(copy.equipment, inventory.equipment);
+  assert.equal(copy.equipment.quiver.count, 30, 'a stack slot keeps the whole stack');
+});
+
+test('restoring changes the bag and gear in place and re-seats what no longer fits', () => {
+  const inventory = emptyInventory(1);
+  inventory.add('dagger');
+  const { slots, equipment } = inventory;
+  const bag = [{ id: 'oakLog', count: 2 }, null, { id: 'gone', count: 1 }, null, null, { id: 'oakLog', count: 1 }];
+  const result = inventory.restore({ bag, worn: {
+    mainHand: { id: 'javelin', count: 3 }, // one held, the rest in the bag
+    offHand: { id: 'stonePickaxe', count: 1 }, // fits only the main hand, which is taken: into the bag
+    helm: { id: 'shortSword', count: 1 },
+    chest: { id: 'oakLog', count: 1 }, // nowhere to wear it: into the bag
+    feet: { id: 'ridingBoots', count: 3 }, // cut to its limit
+    legs: { id: 'gone', count: 1 },
+    cape: null,
+  } });
+  assert.equal(inventory.slots, slots);
+  assert.equal(inventory.equipment, equipment);
+  assert.deepEqual(result, { dropped: 0 });
+  assert.deepEqual(inventory.equipment.mainHand, { id: 'javelin', count: 1 });
+  assert.deepEqual(inventory.equipment.feet, { id: 'ridingBoots', count: 1 });
+  assert.deepEqual(inventory.slots.slice(0, 6), [{ id: 'oakLog', count: 3 }, { id: 'javelin', count: 2 },
+    { id: 'stonePickaxe', count: 1 }, { id: 'shortSword', count: 1 }, null, { id: 'oakLog', count: 1 }]);
+  inventory.restore({ worn: { offHand: { id: 'stonePickaxe', count: 1 } } });
+  assert.equal(inventory.equipment.mainHand.id, 'stonePickaxe', 'gear that no longer fits is worn where it does');
+  assert.equal(carriedCount(inventory, 'dagger'), 0, 'the old bag is gone');
+  assert.ok(inventory.weight > inventory.capacity, 'a load may be over capacity');
+  assert.deepEqual(inventory.events, []);
+});
+
+test('restoring sends the off hand to the bag under a two-handed weapon and counts what finds no room', () => {
+  const inventory = emptyInventory();
+  const full = Array.from({ length: BAG_SLOTS }, () => ({ id: 'shortSword', count: 1 }));
+  const overflow = [{ id: 'oakLog', count: ITEMS.oakLog.stackLimit }];
+  const result = inventory.restore({ bag: [...full, ...overflow],
+    worn: { mainHand: { id: 'greatsword', count: 1 }, offHand: { id: 'woodenBuckler', count: 1 } } });
+  assert.equal(inventory.equipment.mainHand.id, 'greatsword');
+  assert.equal(inventory.equipment.offHand, null);
+  assert.deepEqual(result, { dropped: ITEMS.oakLog.stackLimit + 1 });
+  assert.deepEqual(inventory.restore(), { dropped: 0 });
+  assert.deepEqual(inventory.slots, Array(BAG_SLOTS).fill(null));
+  assert.deepEqual(inventory.restore({ bag: [null, { id: 'oakLog', count: 2 }] }).dropped, 0);
+  assert.deepEqual(inventory.slots[1], { id: 'oakLog', count: 2 });
+  inventory.restore({ bag: [], worn: { mainHand: { id: 'shortSword', count: 1 } } });
+  assert.equal(inventory.restore({ bag: 'junk', worn: null }).dropped, 0);
+  assert.equal(inventory.equipment.mainHand, null);
+});

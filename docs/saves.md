@@ -1,7 +1,11 @@
 # Saves
 
-The game doesn't save play yet. This page describes the save format and the
-store that saving is built on (`src/save/format.js` and `src/save/store.js`).
+Nothing saves play on its own yet. This page describes the save format, the
+store that reads and writes it (`src/save/format.js` and `src/save/store.js`)
+and how a body moves between the game and a save (`src/save/body.js`). With
+`?debug`, `game.save.now()` saves the body being played and
+`game.save.restore()` puts it back; `game.save.read()` and `game.save.claim()`
+reach the store.
 
 ## Keys
 
@@ -42,6 +46,38 @@ The edits record holds `chunks`, keyed `"cx,cy"`, each a list of edits
 `[type, target, value?]`. A type has up to 16 characters, a target is a
 number or up to 64 characters, and a value is plain JSON at most four levels
 deep and 2048 characters long.
+
+## What a body holds
+
+A body is one character's place, `heading`, `health` and `stamina`, the 24
+bag slots and the worn gear, each stack copied in the bag's own shape. It
+leaves out what a reload resets: a mount, a swing, a jump or a spell under
+way, and mana. The skin belongs to the character, and the pouch stays the
+browser's own.
+
+- **Whose body.** Each body is filed under the character it was played as,
+  or `outlaw`. When the active character has changed by the time of a save
+  (in another tab, or by creating one), the body being played is filed
+  under its own character first, and the active character's body is put on,
+  or the starter kit (a short sword and a stone pickaxe) at the world spawn
+  when they have none.
+- **Keeping old bodies.** Saving drops the bodies of characters that no
+  longer exist, keeps `outlaw`, and past 8 drops the oldest. Fields of a
+  stored body that this build doesn't know are kept.
+- **Putting a body back.** The bag and worn gear are emptied, then filled in
+  place. Bag stacks keep their slots and stacks waiting for room go where a
+  pickup would. Gear that no longer fits its slot is worn in another free
+  slot of its kind or goes in the bag, and a two-handed weapon sends the off
+  hand to the bag. What finds no room is lost and counted, and the load may
+  be over the weight limit. Putting a body back makes no pickup sounds.
+- **Where it wakes.** At its saved place, facing the same way, with its
+  health (at least 1) and stamina. A place that is missing, out of bounds or
+  no longer walkable wakes at the world spawn instead, and a body saved
+  fallen wakes there with full health and stamina.
+
+Lobby pages and the hill and ruins scenes build no store. Joining a lobby
+stops saving for the rest of the page, even after leaving it: a lobby moves
+the same player, and the solo save takes up again on the next page load.
 
 ## Versions
 
