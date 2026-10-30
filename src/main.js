@@ -100,7 +100,9 @@ import { drawProp, propDepthSlices, propInView } from './world/props.js';
 import { bakeFine, fineBakesPending, fineOf, startFineWorkers } from './world/fine-bakes.js';
 import { reflector } from './world/reflection.js';
 import { drawSkyReflection } from './world/sky.js';
-import { WorldClock, clockOptions } from './world/clock.js';
+import { WorldClock, clockOptions, realmDay } from './world/clock.js';
+import { Seasons } from './world/season-turn.js';
+import { seasonAt, seasonOptions } from './world/seasons.js';
 import { Splashes } from './world/splashes.js';
 import { Debris } from './world/debris.js';
 import { Torches } from './world/torch.js';
@@ -231,7 +233,10 @@ const hillScene = params.get('scene') === 'hill' && !inLobby;
 // ?debug&pitch=25…45 and [ ] \ tilt the developer camera (see docs/terrain.md);
 // a lobby draws friends at the usual angle, so it keeps that.
 const pitchAllowed = params.has('debug') && !inLobby;
-const world = new World(seed, { ...woodlandOptions(params, { inLobby }), season: params.get('season') ?? undefined,
+// The seasons roll with the clock's days; a lobby page starts in the realm's.
+const seasonPlan = seasonOptions(params);
+const world = new World(seed, { ...woodlandOptions(params, { inLobby }),
+  season: inLobby ? seasonAt(realmDay(Date.now())) : seasonAt(0, seasonPlan),
   maxChunks: baseChunks, meadow: ruinPreview || hillScene, spawnRuins: !ruinPreview && !hillScene,
   ...(hillScene ? { relief: 'hill', rivers: false } : {}) });
 // Keep every chunk a zoomed-out view touches, including the tallest trees
@@ -360,6 +365,7 @@ const grass = new Grass();
 const splashes = new Splashes();
 // Driftwood and flotsam on the rivers: local and never saved.
 const debris = new Debris({ season: world.season, world });
+const seasons = new Seasons(world, { ...seasonPlan, debris });
 const fires = new Fires({ resourcesIn: (...bounds) => harvesting.resourcesIn(...bounds) });
 const torches = new Torches();
 const weather = new WeatherEffects({ onImpact: (world, bolt) => fires.ignite(world, bolt.x, bolt.y, { source: 'lightning' }) });
@@ -402,7 +408,7 @@ const fogSpells = new SpellFogStirs();
 const nightLight = new NightLight();
 // The time of day (see world/clock.js): days pass, mostly at night.
 const dayClock = new WorldClock(clockOptions(params, { inLobby }));
-const debug = { dayClock, player, camera, world, grass, splashes, debris, weather, fog, nightLight, fires, torches, renderer, quality, inventory,
+const debug = { dayClock, seasons, player, camera, world, grass, splashes, debris, weather, fog, nightLight, fires, torches, renderer, quality, inventory,
   ambience, fireflies, dust, footprints,
   harvesting, mushrooms, touch,
   layout: { zoomSlots, phoneDefaultCell, get orientation() { return layout.orientation; }, get bias() { return camera.bias; } },
@@ -1883,6 +1889,13 @@ function frame(now) {
   const tall = Math.max(world.propRenderH, MAX_TREE_HEIGHT);
   const props = world.propsIn(view.x0 - marginX, view.y0 - Math.max(view.rows, tall + 1) - 1,
     view.x0 + view.cols + marginX, view.y0 + view.rows + tall + below, wide);
+  // Trees turn while a season's last night passes (see world/season-turn.js).
+  const seasonStart = performance.now();
+  seasons.update(props, dayClock.day, dayClock.tick, time, { instant: gate.waiting || debug.pinTime !== null,
+    hold: !dayClock.shared && ['connecting', 'reconnecting'].includes(multiplayer.status), shared: dayClock.shared,
+    visible: (p, bounds = p.bounds) => propInView(lv(p.x, p.y), { x: p.x, y: p.y, bounds }, false, MAX_LEAF_DRIFT)
+      || propInView(view, { x: p.x, y: p.y, bounds }, true) });
+  debug.metrics.seasonMs = performance.now() - seasonStart;
   // Trees' shadows darken the ground drawn so far, and the grass and rocks'
   // ground cells as they are drawn, and moonbeams light them; warm light is
   // added over them later.
@@ -2106,7 +2119,7 @@ function frame(now) {
   for (const p of props) if (!p.unbaked || bakes-- > 0) fineOf(p);
   bakeWhenIdle();
   if (debug.freeze || gate.waiting) sound.pause();
-  else sound.update(dt, time, player, camera, fireflies.list, fires.list, sky.night);
+  else sound.update(dt, time, player, camera, fireflies.list, fires.list, sky.night, world.season);
   unbindAudio.updateSong();
   const atmosphere = fog.uniforms(view);
   if (ruinPreview) atmosphere.density *= 0.55;

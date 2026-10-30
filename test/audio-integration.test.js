@@ -103,3 +103,17 @@ test('the world clock sets how dark the music and ambience hear it, awake or not
   assert.deepEqual(music, [0.1, 0.8]);
   assert.deepEqual(ambience, [[0.1, 0.4], [0.8, 0.4]]);
 });
+
+test('the world\'s season reaches the music, awake or not', () => {
+  const asleep = new GameAudio({}, { context: { state: 'suspended' }, setListener() {} });
+  const heard = [];
+  asleep.music.update = (signals) => heard.push(signals.season);
+  asleep.update(0.016, 0, {}, { x: 0, y: 0 }, [], [], 0.25, 'winter');
+  const awake = new GameAudio({}, { context: { state: 'running' }, setListener() {} });
+  awake.environment.update = () => ({ night: 0.8, gust: 0.4, water: null });
+  for (const key of ['charge', 'fires', 'weather', 'ambience']) awake[key].update = () => {};
+  awake.music.update = (signals) => heard.push(signals.season);
+  awake.update(0.016, 42, { combat: { charge: 0 } }, { x: 0, y: 0 }, [], [], 0.1, 'autumn');
+  awake.update(0.016, 42, { combat: { charge: 0 } }, { x: 0, y: 0 }, [], [], 0.1);
+  assert.deepEqual(heard, ['winter', 'autumn', undefined]);
+});

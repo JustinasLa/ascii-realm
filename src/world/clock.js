@@ -150,6 +150,10 @@ for (const part of [NIGHT_SKY.moonPhase, NIGHT_SKY.grade.gain, NIGHT_SKY.grade.e
 }
 
 const realmStart = fractionAt(START_TICK);
+// The realm's days and the share of today gone, from the wall clock: what a
+// lobby's clock follows.
+const realmCycles = (nowMs) => nowMs / 1000 / DAY_SECONDS + realmStart;
+export const realmDay = (nowMs) => Math.floor(realmCycles(nowMs));
 
 export class WorldClock {
   constructor({ dayLength = DAY_SECONDS, start = START_TICK, moon = 0, cycle = true, nightShare = NIGHT_SHARE } = {}) {
@@ -197,7 +201,7 @@ export class WorldClock {
   unshare() { this.shared = false; }
 
   #follow(nowMs) {
-    const cycles = nowMs / 1000 / DAY_SECONDS + realmStart;
+    const cycles = realmCycles(nowMs);
     this.days = Math.floor(cycles);
     this.f = cycles - this.days;
   }

@@ -6,7 +6,7 @@ import { loadGame } from './helpers/main-game.js';
 async function load(query, options = {}) {
   const skies = [];
   const loaded = await loadGame(undefined, { href: `http://localhost/?debug&nogate${query}`, ...options,
-    real: { drawSkyReflection: (r, view, t, sky) => skies.push(sky) } });
+    real: { drawSkyReflection: (r, view, t, sky) => skies.push(sky), ...options.real } });
   const nights = [];
   loaded.game.sound.update = (...args) => nights.push(args[6]);
   return { ...loaded, skies, nights };
@@ -67,4 +67,42 @@ test('the frame hands its sky to the moonlight, the grass, the glowcaps, the fir
   game.torches.list.push({ x: 6, y: 7 });
   assert.deepEqual(game.monsters.env.lights(), [{ x: 4, y: 5, level: 15 }, { x: 6, y: 7, level: 14 }]);
   assert.equal(game.monsters.env.weather, game.weather);
+});
+
+test('the world\'s season rolls with the clock\'s days, and the URL can pin it', async () => {
+  const { makeTree } = await import('../src/world/trees.js');
+  const { seasonAt } = await import('../src/world/seasons.js');
+  const { realmDay } = await import('../src/world/clock.js');
+  // Trees are seen only in the water here.
+  const fresh = await load('', { real: { propDepthSlices: () => null, propInView: (view, p, reflected) => reflected === true } });
+  assert.equal(fresh.game.world.options.season, 'summer', 'a fresh world is summer, as it was');
+  const seasons = [];
+  fresh.game.sound.update = (...args) => seasons.push(args[7]);
+  fresh.frame();
+  assert.equal(fresh.game.world.season, 'summer');
+  fresh.game.dayClock.days = 28;
+  fresh.frame();
+  assert.equal(fresh.game.world.season, 'autumn');
+  assert.deepEqual(seasons, ['summer', 'autumn'], 'the sound hears the world\'s season');
+  assert.equal(typeof fresh.game.metrics.seasonMs, 'number');
+  // A tree in view, here only in the water, waits to turn until it leaves.
+  const tree = makeTree(2.5, 3.5, () => 0.5, { species: 'oak' });
+  fresh.game.world.propsIn = () => [tree];
+  fresh.game.dayClock.days = 55;
+  fresh.game.dayClock.set(23999);
+  fresh.frame();
+  assert.equal(fresh.game.seasons.pending, 0);
+  assert.equal(tree.season, 'summer');
+  // While a lobby is being joined, nothing about the season changes.
+  fresh.game.multiplayer.status = 'connecting';
+  fresh.game.dayClock.days = 60;
+  fresh.frame();
+  assert.equal(fresh.game.world.season, 'autumn');
+
+  const pinned = await load('&season=winter&seasondays=3');
+  assert.equal(pinned.game.world.options.season, 'winter');
+  assert.equal(pinned.game.seasons.pinned, 'winter');
+  assert.equal(pinned.game.seasons.length, 3);
+  const lobby = await load('&season=winter&room=AB7K2D');
+  assert.equal(lobby.game.world.options.season, seasonAt(realmDay(Date.now())), 'a lobby starts in the realm\'s season');
 });

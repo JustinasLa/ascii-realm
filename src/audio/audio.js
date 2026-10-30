@@ -104,14 +104,15 @@ export class GameAudio {
   }
 
   // `night` is how dark the world clock says it is (see world/clock.js);
-  // without it the sound keeps its own day and night.
-  update(dt, time, player, camera, fireflies, fires = [], night) {
+  // without it the sound keeps its own day and night. `season` is the
+  // world's (see world/seasons.js); without it the music keeps its own year.
+  update(dt, time, player, camera, fireflies, fires = [], night, season) {
     const clocked = Number.isFinite(night);
     for (const handle of this.effects) if (handle.ended) this.effects.delete(handle);
     for (const [handle] of this.spellEffects) if (handle.ended) this.spellEffects.delete(handle);
     this.engine.setListener(camera.x, camera.y);
     if (this.engine.context?.state !== 'running') {
-      this.music.update({ night: clocked ? night : nightAmount(time), time,
+      this.music.update({ night: clocked ? night : nightAmount(time), time, season,
         weather: this.weather.preset, weatherIntensity: this.weather.intensity });
       this.pause();
       return;
@@ -123,7 +124,7 @@ export class GameAudio {
     void prepareLightningSounds(this.engine);
     void prepareSpellSounds(this.engine);
     this.charge.update(player.combat.charge, player.x, player.y);
-    this.music.update({ night: signals.night, time, dt,
+    this.music.update({ night: signals.night, time, dt, season,
       weather: this.weather.preset, weatherIntensity: this.weather.intensity });
     this.ambience.update({ ...signals, time, fireflies, season: this.music.season,
       weather: this.weather.preset, weatherIntensity: this.weather.intensity });

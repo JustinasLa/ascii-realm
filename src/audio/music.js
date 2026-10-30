@@ -29,6 +29,8 @@ export class Music {
     this.room = null;
     this.simulationTime = 0;
     this.seasonPreference = 'auto';
+    // The world's season, which automatic seasons follow when it is given.
+    this.worldSeason = null;
     this.weatherPreset = 'clear';
     this.weatherIntensity = 0.6;
     this.environmentKey = null;
@@ -53,7 +55,8 @@ export class Music {
   }
 
   get season() {
-    return this.seasonPreference === 'auto' ? seasonAt(this.simulationTime) : this.seasonPreference;
+    if (this.seasonPreference !== 'auto') return this.seasonPreference;
+    return this.worldSeason ?? seasonAt(this.simulationTime);
   }
 
   get seasonOptions() { return SEASON_OPTIONS; }
@@ -81,8 +84,9 @@ export class Music {
     return this.currentSong;
   }
 
-  _environment({ time, weather, weatherIntensity }) {
+  _environment({ time, weather, weatherIntensity, season: world }) {
     if (Number.isFinite(time)) this.simulationTime = Math.max(0, time);
+    if (SEASONS.includes(world)) this.worldSeason = world;
     if (typeof weather === 'string') this.weatherPreset = weather;
     if (Number.isFinite(weatherIntensity)) this.weatherIntensity = clamp(weatherIntensity);
     if (time !== undefined || weather !== undefined || weatherIntensity !== undefined) this.adaptive = true;
@@ -140,10 +144,10 @@ export class Music {
     }
   }
 
-  update({ night = 0, time, weather, weatherIntensity } = {}) {
+  update({ night = 0, time, weather, weatherIntensity, season } = {}) {
     if (this.disposed) return;
     this.night = Number.isFinite(night) ? clamp(night) : 0;
-    this._environment({ time, weather, weatherIntensity });
+    this._environment({ time, weather, weatherIntensity, season });
     const context = this.engine.context;
     if (!context || context.state !== 'running') {
       // Suspension stops future voices too; resume starts a fresh phrase.
