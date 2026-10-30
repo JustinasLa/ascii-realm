@@ -3,6 +3,7 @@ import { isMaterialId } from '../entities/weapons.js';
 import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS, fitsSlot, slotsFor } from './items.js';
 
 const SLOT_COUNT = 24;
+export const BAG_SLOTS = SLOT_COUNT;
 const WEIGHT_EPSILON = 1e-9;
 
 const itemFor = (id) => typeof id === 'string' && Object.hasOwn(ITEMS, id) ? ITEMS[id] : null;
@@ -35,6 +36,15 @@ export function stackExtras(stack) {
   const forged = readForged(stack?.forged);
   if (forged) extras.forged = forged;
   return extras;
+}
+// A stored stack as the bag holds it, or null when its item is unknown or its
+// count isn't a whole number above zero. A count over the item's limit is cut
+// to the limit and the stack marked `clamped`.
+export function cleanStack(raw) {
+  const item = itemFor(raw?.id);
+  if (!item || !validCount(raw.count)) return null;
+  const stack = { id: raw.id, count: Math.min(raw.count, item.stackLimit), ...stackExtras(raw) };
+  return validStack(raw) ? stack : { ...stack, clamped: true };
 }
 const sameExtras = (stack, extras) => JSON.stringify(stackExtras(stack)) === JSON.stringify(stackExtras(extras));
 
