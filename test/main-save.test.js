@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { loadGame } from './helpers/main-game.js';
+import { emptyRealm } from '../src/save/format.js';
+import { SaveStore } from '../src/save/store.js';
 
 const KEY = 'ascii-realm-save-1';
 
@@ -13,8 +15,25 @@ function memory() {
 // What the page returns, as plain data from this test's own realm.
 const plain = (value) => JSON.parse(JSON.stringify(value));
 
-const start = async (storage, query = '') => (await loadGame(undefined, {
-  href: `http://localhost/?debug&animals=0${query}`, real: { localStorage: storage } })).game;
+const start = async (storage, query = '', real = {}) => (await loadGame(undefined, {
+  href: `http://localhost/?debug&animals=0${query}`, real: { localStorage: storage, ...real } })).game;
+
+// Grants each name to one holder at a time, until it lets go.
+function fakeLocks() {
+  const held = new Set();
+  return {
+    async request(name, options, callback) {
+      await null;
+      if (held.has(name)) return callback(null);
+      held.add(name);
+      try {
+        return await callback({ name });
+      } finally {
+        held.delete(name);
+      }
+    },
+  };
+}
 
 test('a body saved by hand comes back on the next page load: place, bag, worn gear and health', async () => {
   const storage = memory();
@@ -135,4 +154,55 @@ test('a refused first save after a character switch keeps the outgoing body for 
   assert.equal(bodies.outlaw.x, 12, 'the outgoing body was kept through the refusal');
   assert.deepEqual({ bag: bodies.outlaw.bag, worn: bodies.outlaw.worn }, bag);
   assert.equal(bodies.c0123456789abcdef.x, 3);
+});
+
+test('bodies a refused save filed survive claiming the save from another tab, which keeps its other bodies', async () => {
+  const storage = memory();
+  const locks = fakeLocks();
+  const other = new SaveStore({ storage, world: { seed: 1, woodland: 'sparse' }, locks, now: () => 1 });
+  assert.equal(await other.ready, 'writer');
+  const game = await start(storage, '', { navigator: { locks, vibrate() {} } });
+  assert.equal(await game.save.store.ready, 'other-tab');
+  game.player.x = 12;
+  game.inventory.add('oakLog', 3);
+  const bag = plain(game.inventory.serialize());
+  const [next, kept] = ['c0123456789abcdef', 'cfedcba9876543210'];
+  Object.defineProperty(game.characters, 'active', { get: () => ({ id: next }) });
+  Object.defineProperty(game.characters, 'characters', { get: () => [{ id: next }, { id: kept }] });
+  assert.deepEqual(plain(game.save.now()), { ok: false, reason: 'other-tab' });
+  assert.equal(game.player.x, 0, 'the new character is played');
+  assert.deepEqual(plain(await game.save.claim()), { ok: false, reason: 'other-tab' });
+  assert.equal((await other.claim()).ok, true);
+  const body = (x) => ({ savedAt: 1, x, y: 0, heading: 0, health: 50, stamina: 50, respawn: null, bag: [], worn: {} });
+  const theirs = { ...emptyRealm(other.world), bodies: { outlaw: body(40), [kept]: body(9) }, active: kept };
+  assert.equal(other.write('realm', theirs).ok, true);
+  other.release();
+  assert.equal((await game.save.claim()).ok, true);
+  game.player.x = 3;
+  assert.equal(game.save.now().ok, true);
+  const { bodies, active } = JSON.parse(storage.map.get(KEY));
+  assert.equal(bodies.outlaw.x, 12, 'the body this page played wins over the other tab\'s');
+  assert.deepEqual({ bag: bodies.outlaw.bag, worn: bodies.outlaw.worn }, bag);
+  assert.equal(bodies[next].x, 3);
+  assert.equal(bodies[kept].x, 9, 'a body this page never played is left as stored');
+  assert.equal(active, next);
+  game.player.x = 5;
+  storage.setItem(KEY, JSON.stringify({ ...JSON.parse(storage.map.get(KEY)), bodies: { [next]: body(1) } }));
+  assert.equal((await game.save.claim()).ok, true);
+  assert.equal(game.save.now().ok, true);
+  assert.equal(JSON.parse(storage.map.get(KEY)).bodies.outlaw, undefined, 'a written body is no longer pending');
+});
+
+test('a switch away from a character deleted meanwhile files no body for them, even after a refused save', async () => {
+  const storage = memory();
+  const game = await start(storage);
+  const [gone, next] = ['c0123456789abcdef', 'cfedcba9876543210'];
+  game.save.live.appliedId = gone;
+  Object.defineProperty(game.characters, 'active', { get: () => ({ id: next }) });
+  Object.defineProperty(game.characters, 'characters', { get: () => [{ id: next }] });
+  game.save.store.pause('test');
+  assert.deepEqual(plain(game.save.now()), { ok: false, reason: 'paused' });
+  game.save.store.pausedBy = null;
+  assert.equal(game.save.now().ok, true);
+  assert.deepEqual(Object.keys(JSON.parse(storage.map.get(KEY)).bodies).sort(), [next]);
 });

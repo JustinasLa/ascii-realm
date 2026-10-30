@@ -60,7 +60,9 @@ browser's own.
   (in another tab, or by creating one), the body being played is filed
   under its own character first, and the active character's body is put on,
   or the starter kit (a short sword and a stone pickaxe) at the world spawn
-  when they have none.
+  when they have none. When that save is refused, the page keeps the body it
+  filed and puts it into the next save that lands, even one of a save it
+  claimed from another tab meanwhile; that tab's other bodies stay as stored.
 - **Keeping old bodies.** Saving drops the bodies of characters that no
   longer exist, keeps `outlaw`, and past 8 drops the oldest. Fields of a
   stored body that this build doesn't know are kept.

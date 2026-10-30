@@ -12,7 +12,7 @@ import { Wallet } from '../../src/inventory/wallet.js';
 import { Roster } from '../../src/character/roster.js';
 import { emptyRealm } from '../../src/save/format.js';
 import { SaveStore } from '../../src/save/store.js';
-import { applyBody, bodyIdOf, fileBody, starterKit } from '../../src/save/body.js';
+import { applyBody, bodyIdOf, fileBody, putBody, starterKit } from '../../src/save/body.js';
 import { attributeTotals, nameError, normalName } from '../../src/character/rules.js';
 import { classOf } from '../../src/character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from '../../src/character/skin.js';
@@ -314,7 +314,7 @@ export async function loadGame(move = { x: 0, y: 0 }, { href = 'http://localhost
       render() { this.renders++; }
     },
     nameError, normalName, attributeTotals, classOf,
-    GroundItems: inert(), Harvesting: inert(), Mining, toolOf, Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, emptyRealm, SaveStore, applyBody, bodyIdOf, fileBody, starterKit, drawItem: noop, drawResource: noop,
+    GroundItems: inert(), Harvesting: inert(), Mining, toolOf, Collection, HuntDrops, layLoot, logsOf, LootCredit, rollLoot, rollPay, Wallet, Roster, cleanSkin, PALETTES, presetSkin, PRESETS, mulberry32, emptyRealm, SaveStore, applyBody, bodyIdOf, fileBody, putBody, starterKit, drawItem: noop, drawResource: noop,
     Mushrooms: class extends inert() {
       constructor() { super(); this.spores = []; this.ambient = []; this.time = 0; }
       nearby() { return null; }

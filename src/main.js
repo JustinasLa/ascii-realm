@@ -48,7 +48,7 @@ import { Wallet } from './inventory/wallet.js';
 import { Roster } from './character/roster.js';
 import { emptyRealm } from './save/format.js';
 import { SaveStore } from './save/store.js';
-import { applyBody, bodyIdOf, fileBody, starterKit } from './save/body.js';
+import { applyBody, bodyIdOf, fileBody, putBody, starterKit } from './save/body.js';
 import { attributeTotals, nameError, normalName } from './character/rules.js';
 import { classOf } from './character/catalog.js';
 import { cleanSkin, PALETTES, presetSkin, PRESETS } from './character/skin.js';
@@ -634,6 +634,9 @@ const saves = saveTarget && new SaveStore({ storage: walletStorage, world: saveT
   locks: navigator.locks ?? null });
 // The live body and whose it is (`save/body.js`).
 const live = { player, inventory, world, appliedId: bodyIdOf(characters) };
+// Bodies a character switch filed that no save has written yet, by id. They
+// go into whichever realm the next save writes, even one claimed meanwhile.
+const unsaved = new Map();
 // After a body is put back, the camera and pose wake with it, as after a defeat.
 const wakeBody = () => {
   casting.reset();
@@ -642,14 +645,24 @@ const wakeBody = () => {
   camera.y = player.y - focusRows() - playerLift();
 };
 if (params.has('debug')) debug.save = { store: saves, live,
-  // Files the live body into the claimed save (a new one when none is
-  // stored) and writes it. The realm stays in memory whether or not the write
-  // lands, so a refused save loses no body filed by a character switch.
+  // Files the unsaved bodies and the live body into the claimed save (a new
+  // one when none is stored) and writes it.
   now() {
     if (!saves) return { ok: false, reason: saveOff };
-    const realm = saves.realm ??= emptyRealm(saveTarget);
-    if (fileBody(realm, live, characters)) wakeBody();
-    return saves.write('realm', realm);
+    const realm = saves.realm ?? emptyRealm(saveTarget);
+    const liveIds = characters.characters.map((character) => character.id);
+    for (const [id, body] of unsaved) putBody(realm, id, body, liveIds);
+    const outgoing = live.appliedId;
+    if (fileBody(realm, live, characters)) {
+      wakeBody();
+      if (realm.bodies[outgoing]) unsaved.set(outgoing, realm.bodies[outgoing]);
+    }
+    const written = saves.write('realm', realm);
+    if (written.ok) {
+      saves.realm = realm;
+      unsaved.clear();
+    }
+    return written;
   },
   read: () => saves ? saves.read() : { status: saveOff },
   claim: async () => saves ? saves.claim() : { ok: false, reason: saveOff },
