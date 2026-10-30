@@ -678,9 +678,10 @@ if (saving) {
   window.setInterval(() => whenIdle(autosave, IDLE_TIMEOUT_MS), AUTOSAVE_MS);
   document.addEventListener('visibilitychange', () => document.hidden && saveSession.save('hide'));
   saves.onHide = () => saveSession.save('hide');
-  // After the store's own: back from the back/forward cache, say if another
-  // tab saved meanwhile.
-  window.addEventListener('pageshow', (event) => event.persisted && saves.ready.then((state) => saveSession.tell(state)));
+  // After the store's own: back from the back/forward cache, a Continue the
+  // page hid during runs again; otherwise say if another tab saved meanwhile.
+  window.addEventListener('pageshow', (event) => event.persisted && saves.ready.then((state) =>
+    state === 'writer' && !saveSession.writable ? saveSession.resume() : saveSession.tell(state)));
   const showStatus = () => { saveStatus.textContent = saveSession.status(); };
   const saveNow = () => {
     saveSession.save('manual');

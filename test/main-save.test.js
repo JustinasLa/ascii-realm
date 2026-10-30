@@ -336,6 +336,28 @@ test('back from the back/forward cache after another tab saved, the page says to
   assert.deepEqual(page.game.hud.toasts, [NOTICES.stale]);
 });
 
+test('a Continue the page hid during runs again when it comes back from the back/forward cache', async () => {
+  const storage = memory();
+  const first = await start(storage);
+  first.player.x = 31.5;
+  first.save.tick();
+  first.save.store.release();
+  const locks = fakeLocks();
+  locks.hold();
+  const page = await open(storage, '', { navigator: { locks, vibrate() {} } });
+  const { game } = page;
+  page.window.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+  locks.go();
+  await settle();
+  assert.deepEqual(plain(game.save.tick()), { ok: false, reason: 'gated' }, 'the Continue was cut short');
+  assert.equal(game.player.x, 0);
+  page.window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+  await settle();
+  assert.equal(game.player.x, 31.5, 'the save is put back');
+  assert.deepEqual(plain(game.save.tick()), { ok: true, rev: 2 });
+  assert.deepEqual(game.hud.toasts, []);
+});
+
 test('a switch away from a character deleted meanwhile files no body for them, even after a refused save', async () => {
   const storage = memory();
   const game = await start(storage);
