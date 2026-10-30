@@ -1,5 +1,4 @@
-import { noteReference } from '../audio/instruments.js';
-import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS } from '../inventory/items.js';
+import { EQUIPMENT_SLOTS, ITEMS, STACK_SLOTS, fitsSlot } from '../inventory/items.js';
 import { BagGestures } from './bag-gestures.js';
 import { BAG_TABS, bagView, cardLabel, itemKind } from './bag-view.js';
 import { itemArt } from './item-art.js';
@@ -34,31 +33,20 @@ function setText(node, text) {
 }
 
 function attribute(node, name, value) {
-  if (value === null) {
-    if (node.hasAttribute(name)) node.removeAttribute(name);
-  } else if (node.getAttribute(name) !== String(value)) node.setAttribute(name, String(value));
+  if (node.getAttribute(name) !== String(value)) node.setAttribute(name, String(value));
 }
 
 function hidden(node, value) {
   if (node.hidden !== value) node.hidden = value;
 }
 
-function kg(value) {
-  return Number(value || 0).toLocaleString('en', { maximumFractionDigits: 2 });
-}
-
-function statName(key) {
-  return key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (char) => char.toUpperCase());
-}
-
-// What an empty slot says. Phones have no pointer to click with, so they name taps.
-export function emptySlotHint(carried, phone = false) {
-  if (carried) return 'Drag another item into this slot to move or swap it.';
+// What an empty box says. Phones have no pointer to click with, so they name taps.
+export function emptySlotHint(phone = false) {
   return phone ? 'Tap gear in the bag to equip it.' : 'Click gear in the bag to equip it.';
 }
 
-// Mouse desktops drag cards; a touch holds instead, so it never starts a native drag.
-const FINE_POINTER = '(hover: hover) and (pointer: fine)';
+// Within this many px of a scrolling edge, a drag scrolls toward it.
+const EDGE = 48;
 
 /** A live inventory panel. Opening it blocks controls, while the world keeps moving. */
 export class InventoryScreen {
@@ -91,8 +79,7 @@ export class InventoryScreen {
     };
     this._isOpen = false;
     this._signature = null;
-    this._statsSignature = null;
-    this._dragFrom = null;
+    this._drag = null;
     this._consumedKeys = new Set();
     const firstItem = inventory.slots.findIndex((stack) => stack);
     this.selection = firstItem >= 0 ? { source: 'bag', index: firstItem } : null;
@@ -213,78 +200,18 @@ export class InventoryScreen {
       count.setAttribute('aria-hidden', 'true');
       button.append(icon, count);
       button.addEventListener('click', () => this._press({ source: 'bag', index }));
-      button.addEventListener('dragstart', (event) => {
-        if (!this.inventory.slots[index]) {
-          event.preventDefault();
-          return;
-        }
-        this._dragFrom = index;
-        this._hideTip();
-        this._select({ source: 'bag', index });
-        event.dataTransfer.setData('application/x-ascii-realm-slot', String(index));
-        event.dataTransfer.effectAllowed = 'move';
-      });
-      button.addEventListener('dragover', (event) => {
-        if (this._dragFrom === null) return;
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'move';
-      });
-      button.addEventListener('drop', (event) => {
-        if (this._dragFrom === null) return;
-        event.preventDefault();
-        const from = this._dragFrom;
-        this._dragFrom = null;
-        if (this.inventory.move(from, index)) this._select({ source: 'bag', index }, true);
-        this.update();
-      });
-      button.addEventListener('dragend', () => { this._dragFrom = null; });
       this.cardGrid.append(button);
       return { button, icon, count };
     });
     this.bagEmpty = element('p', 'bag-empty');
-    bag.append(bagHeading, filters, this.cardGrid, this.bagEmpty);
-
-    this.details = element('section', 'inventory-details inventory-tooltip');
-    this.details.id = 'inventory-item-details';
-    this.details.setAttribute('aria-label', 'Selected item details');
-    this.details.tabIndex = -1;
-    this.itemPreview = element('pre', 'inventory-item-preview');
-    this.itemPreview.setAttribute('aria-hidden', 'true');
-    const itemInfo = element('div', 'inventory-item-info');
-    this.itemType = element('p', 'inventory-item-type');
-    this.itemName = element('h3', 'inventory-item-name');
-    this.description = element('p', 'inventory-description');
-    // The keys an instrument plays; phones play them once there's a keyboard.
-    this.notes = element('div', 'inventory-notes');
-    this.noteLines = [0, 1, 2].map(() => element('p', 'inventory-description'));
-    this.notes.append(...this.noteLines);
-    this.stats = element('dl', 'inventory-stats');
-    this.itemWeight = element('p', 'inventory-weight');
-    this.durability = element('p', 'inventory-durability');
-    const actions = element('div', 'inventory-actions');
-    this.equipButton = element('button', 'inventory-equip', 'Equip');
-    this.equipButton.append(element('kbd', '', 'E'));
-    this.useButton = element('button', 'inventory-use', 'Use');
-    this.useButton.append(element('kbd', '', 'Enter'));
-    this.unequipButton = element('button', 'inventory-unequip', 'Unequip');
-    this.unequipButton.append(element('kbd', '', 'U'));
-    this.dropButton = element('button', 'inventory-drop', 'Drop');
-    this.dropButton.append(element('kbd', '', 'X'));
-    for (const button of [this.equipButton, this.useButton, this.unequipButton, this.dropButton]) button.type = 'button';
-    this.dropButton.addEventListener('click', () => this._drop());
-    this.equipButton.addEventListener('click', () => this._equip());
-    this.useButton.addEventListener('click', () => this._use());
-    this.unequipButton.addEventListener('click', () => this._unequip());
-    actions.append(this.equipButton, this.useButton, this.unequipButton, this.dropButton);
     this.feedback = element('p', 'inventory-feedback');
     this.feedback.setAttribute('role', 'status');
     this.feedback.setAttribute('aria-atomic', 'true');
     this.feedback.hidden = true;
-    itemInfo.append(this.itemType, this.itemName, this.description, this.notes, this.stats, this.itemWeight,
-      this.durability, actions, this.feedback);
-    this.details.append(this.itemPreview, itemInfo);
+    this.bag = bag;
+    bag.append(bagHeading, filters, this.cardGrid, this.bagEmpty, this.feedback);
     const carried = element('div', 'inventory-carried');
-    carried.append(bag, this.details);
+    carried.append(bag);
     body.append(doll, this.statsStrip, carried);
 
     const help = element('div', 'inventory-help');
@@ -318,7 +245,7 @@ export class InventoryScreen {
     this.tooltip = new ItemTooltip(this.root);
     this._tip = null;
     this.screen.addEventListener('pointermove', (event) => {
-      if (event.pointerType === 'touch' || this.tooltip.pinned) return;
+      if (event.pointerType === 'touch' || this.tooltip.pinned || this._drag) return;
       const source = this._sourceOf(event.target);
       if (!source) this._hideTip();
       else if (this._tip?.node === source.node && !this._tip.keyboard) {
@@ -327,7 +254,7 @@ export class InventoryScreen {
         this.tooltip.move(event.clientX, event.clientY);
       } else this._showTip(source, { x: event.clientX, y: event.clientY });
     });
-    this.screen.addEventListener('pointerleave', () => { if (!this.tooltip.pinned) this._hideTip(); });
+    this.screen.addEventListener('pointerleave', () => { if (!this.tooltip.pinned && !this._drag) this._hideTip(); });
     // A scroll moves the cards away from a tooltip; one the keys showed
     // follows its button. A pinned panel waits for the next press, and a
     // touch on its way to a hold carries on.
@@ -336,10 +263,9 @@ export class InventoryScreen {
       else if (this._tip && !this.tooltip.pinned) this._hideTip();
     }, { capture: true, passive: true });
     this.gestures = new BagGestures({ surface: this.screen, swallowOn: this.root,
-      sourceOf: (target) => this._sourceOf(target), onHold: (selection) => this._hold(selection) });
-    this._fine = globalThis.matchMedia?.(FINE_POINTER) ?? { matches: true };
-    this._fineChange = () => { this._signature = null; this.update(); };
-    this._fine.addEventListener?.('change', this._fineChange);
+      sourceOf: (target) => this._sourceOf(target), onHold: (selection) => this._hold(selection),
+      onDragStart: (selection) => this._dragStart(selection), onDragMove: (point, target) => this._dragMove(point, target),
+      onDrop: (selection, target) => this._dropOn(selection, target), onDragEnd: () => this._dragEnd() });
     // No browser menu in the window; a right-click drops a card's stack. A
     // long touch sends one too on Android, and drops nothing.
     this.screen.addEventListener('contextmenu', (event) => {
@@ -396,7 +322,6 @@ export class InventoryScreen {
       if (this.page === 'inventory') this._focusTarget().focus({ preventScroll: true });
       else this._tab().focus();
     } else {
-      this._dragFrom = null;
       // Gameplay handlers ignore UI controls, so closing returns to the scene.
       const canvas = document.getElementById('screen');
       if (canvas && !canvas.hasAttribute('tabindex')) canvas.tabIndex = 0;
@@ -473,9 +398,11 @@ export class InventoryScreen {
       event.stopImmediatePropagation();
       return;
     }
+    // Esc ends a drag first, and closes the window after.
     if (event.code === 'Escape') {
       this._consume(event);
-      this.setOpen(false);
+      if (this.gestures.dragging) this.gestures.cancel();
+      else this.setOpen(false);
       return;
     }
     // C turns to the next page; arrows, Home and End move along the tabs.
@@ -560,7 +487,7 @@ export class InventoryScreen {
   // What the tooltip says about `selection`: its item, or an empty box's hint.
   _tipContent(selection, phone = false) {
     const held = this._selectedItem(selection);
-    if (!held) return { name: SLOT_NAMES[selection.slot], colour: null, lines: [], help: emptySlotHint(false, this.phone()) };
+    if (!held) return { name: SLOT_NAMES[selection.slot], colour: null, lines: [], help: emptySlotHint(this.phone()) };
     return tooltipFor({ item: held.item, stack: held.stack, own: this.describe(held.stack), where: selection.source,
       phone, drop: Boolean(this.onDrop) });
   }
@@ -574,14 +501,23 @@ export class InventoryScreen {
   _showTip({ selection, node }, point = null) {
     const { right, top } = node.getBoundingClientRect();
     this._tip = { selection, node, point, keyboard: !point, key: this._tipKey(selection) };
+    this._describe(node);
     this.tooltip.show(this._tipContent(selection), point?.x ?? right, point?.y ?? top);
   }
 
-  // Hides the tooltip and drops a hold in progress.
+  // Hides the tooltip and drops a hold or drag in progress.
   _hideTip() {
     this._tip = null;
+    this._describe(null);
     this.tooltip.hide();
     this.gestures.cancel();
+  }
+
+  // The tooltip describes the card or box it shows for.
+  _describe(node) {
+    if (this._described !== node) this._described?.removeAttribute('aria-describedby');
+    node?.setAttribute('aria-describedby', this.tooltip.node.id);
+    this._described = node;
   }
 
   // After a key moves focus onto a card or box, its tooltip shows beside it.
@@ -616,7 +552,95 @@ export class InventoryScreen {
       : item.equipmentSlot ? { label: 'equip', run: run(this._equip) } : item.use ? { label: 'use', run: run(this._use) } : null;
     const drop = selection.source === 'bag' && this.onDrop ? { label: 'drop', run: run(this._drop) } : null;
     this._tip = { selection, node, point: null, keyboard: false, key: this._tipKey(selection) };
+    this._describe(node);
     this.tooltip.pin(this._tipContent(selection, true), node.getBoundingClientRect(), [main, drop].filter(Boolean));
+  }
+
+  // What a drag from `from` may end on: a doll box its piece fits (a worn
+  // piece's, by a swap), the bag for worn gear, another card for a card.
+  _accepts(from, node) {
+    const slot = node.dataset.equipmentSlot;
+    if (from.source === 'equipment') return slot ? this.inventory.canSwapEquipped(from.slot, slot) : node === this.bag;
+    const item = this._selectedItem(from)?.item;
+    return Boolean(item) && (slot ? fitsSlot(item, slot) : node.classList.contains('bag-card') && node !== this.bagNodes[from.index].button);
+  }
+
+  // The card, box or bag under `target` that a drag from `from` may end on.
+  _dropTarget(from, target) {
+    const node = target?.closest?.(from.source === 'bag' ? '.equipment-slot, .bag-card' : '.equipment-slot, .inventory-bag');
+    return node && this.screen.contains(node) && this._accepts(from, node) ? node : null;
+  }
+
+  // A drag picks the piece up: a ghost of its art, and only the boxes (or
+  // the bag) it may go to lit.
+  _dragStart(selection) {
+    this._tip = null;
+    this._describe(null);
+    this.tooltip.hide();
+    this._select(selection);
+    const node = this._selectedButton();
+    const ghost = element('div', 'drag-ghost');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.append(element('pre', 'bag-card-art', node.querySelector('pre').textContent));
+    this.root.append(ghost);
+    const lit = [...this.equipmentNodes.values()].map(({ button }) => button).concat(this.bag)
+      .filter((target) => this._accepts(selection, target));
+    for (const target of lit) target.classList.add('drop-ok');
+    node.classList.add('dragging');
+    document.body.classList.add('inventory-dragging');
+    const { width, height } = ghost.getBoundingClientRect();
+    this._drag = { selection, node, ghost, lit, width, height, hover: null, speed: 0,
+      scroller: this.phone() ? this.screen : this.cardGrid };
+    const scroll = () => {
+      if (this._drag.speed) this._drag.scroller.scrollTop += this._drag.speed;
+      this._drag.frame = requestAnimationFrame(scroll);
+    };
+    scroll();
+  }
+
+  // The ghost rides above a finger and centred on a mouse; the target under
+  // it lights brighter, and near the scroller's top or bottom edge it scrolls.
+  _dragMove({ x, y, touch }, target) {
+    const drag = this._drag;
+    drag.ghost.style.transform = `translate(${Math.round(x - drag.width / 2)}px, ${Math.round(y - drag.height * (touch ? 1.1 : 0.5))}px)`;
+    const hover = this._dropTarget(drag.selection, target);
+    if (hover !== drag.hover) {
+      drag.hover?.classList.remove('drop-hover');
+      hover?.classList.add('drop-hover');
+      drag.hover = hover;
+    }
+    const { top, bottom } = drag.scroller.getBoundingClientRect();
+    const near = (edge) => Math.max(0, EDGE - edge) / 4;
+    drag.speed = y < top || y > bottom ? 0 : near(bottom - y) - near(y - top);
+  }
+
+  // A card on a lit box equips there, on another card moves or merges; worn
+  // gear in the bag comes off, on a lit box swaps. Anywhere else, nothing.
+  _dropOn(from, target) {
+    const node = this._dropTarget(from, target);
+    if (!node) return;
+    const slot = node.dataset.equipmentSlot;
+    const index = Number(node.dataset.slotIndex);
+    this.selection = from;
+    if (from.source === 'bag') {
+      if (slot) this._equip({ pointer: true, slot });
+      else if (this.inventory.move(from.index, index)) this._select({ source: 'bag', index });
+    } else if (slot) {
+      this.inventory.swapEquipped(from.slot, slot);
+      this._select({ source: 'equipment', slot });
+    } else this._unequip({ pointer: true });
+  }
+
+  _dragEnd() {
+    const { node, ghost, lit, hover } = this._drag;
+    cancelAnimationFrame(this._drag.frame);
+    this._drag = null;
+    ghost.remove();
+    for (const target of lit) target.classList.remove('drop-ok');
+    hover?.classList.remove('drop-hover');
+    node.classList.remove('dragging');
+    document.body.classList.remove('inventory-dragging');
+    this.update();
   }
 
   _filterBy(id) {
@@ -708,29 +732,26 @@ export class InventoryScreen {
     else if (selected.item.use) this._use(options);
   }
 
-  _equip({ pointer = false } = {}) {
+  // Into `wanted`, a box its kind fits, else where it goes by itself.
+  _equip({ pointer = false, slot: wanted } = {}) {
     const selected = this._selectedItem();
     if (this.selection?.source !== 'bag' || !selected?.item.equipmentSlot) return;
-    const context = this.details.contains(document.activeElement);
-    const slot = this.inventory.targetSlot(selected.item);
-    const equipped = this.inventory.equip(this.selection.index);
+    const slot = this.inventory.targetSlot(selected.item, wanted);
+    const equipped = this.inventory.equip(this.selection.index, wanted);
     const refusal = slot === 'quiver' ? 'Your quiver is full.' : 'No room to replace equipped gear.';
     this.onNotify(equipped ? `Equipped ${selected.item.name}.` : refusal, equipped ? 'success' : 'error');
     if (equipped && pointer) this._settle(this.selection.index);
-    else if (equipped) this._select({ source: 'equipment', slot }, !context);
+    else if (equipped) this._select({ source: 'equipment', slot }, true);
     else this.update();
-    if (context) this._focusDetails(equipped ? this.unequipButton : this.equipButton);
   }
 
   _use({ pointer = false } = {}) {
     const selected = this._selectedItem();
     if (this.selection?.source !== 'bag' || !selected?.item.use) return;
-    const context = this.details.contains(document.activeElement);
     const used = this.inventory.useItem(this.selection.index, this.player.vitals);
     this.onNotify(used ? `Used ${selected.item.name}.` : 'Your vitality is already full.', used ? 'success' : 'info');
     this._settle(this.selection.index);
-    if (context) this._focusDetails(this.useButton);
-    else if (!pointer) this._focusTarget().focus();
+    if (!pointer) this._focusTarget().focus();
   }
 
   // Sets the selected bag stack down at the outlaw's feet.
@@ -745,21 +766,11 @@ export class InventoryScreen {
   _unequip({ pointer = false } = {}) {
     const selected = this._selectedItem();
     if (this.selection?.source !== 'equipment' || !selected) return;
-    const context = this.details.contains(document.activeElement);
     const unequipped = this.inventory.unequip(this.selection.slot);
     this.onNotify(unequipped ? `Unequipped ${selected.item.name}.` : 'Your bag has no room for this gear.', unequipped ? 'success' : 'error');
     const index = this.inventory.slots.findIndex((stack) => stack?.id === selected.item.id);
-    if (unequipped && index >= 0 && !pointer) this._select({ source: 'bag', index }, !context);
+    if (unequipped && index >= 0 && !pointer) this._select({ source: 'bag', index }, true);
     else this.update();
-    if (context) this._focusDetails(unequipped ? this.equipButton : this.unequipButton);
-  }
-
-  _focusDetails(button) {
-    // A contextual action should keep the item details in view, including
-    // when consuming the last item hides or disables its Use button.
-    const target = button && !button.hidden && !button.disabled ? button : this.details;
-    target.focus({ preventScroll: true });
-    this.feedback.scrollIntoView({ block: 'nearest' });
   }
 
   update() {
@@ -784,10 +795,8 @@ export class InventoryScreen {
   }
 
   _state() {
-    const vitals = this.player.vitals;
     return JSON.stringify([this.inventory.slots, this.inventory.equipment,
-      this.inventory.capacity, this.selection, this.filter, this._fine.matches,
-      vitals.health >= vitals.maxHealth, vitals.stamina >= vitals.maxStamina, this.phone(), this.describeVersion()]);
+      this.inventory.capacity, this.selection, this.filter, this.phone(), this.describeVersion()]);
   }
 
   // Writes only the values that changed, and rebuilds the pairs when the
@@ -820,11 +829,10 @@ export class InventoryScreen {
   _cardArt(item) { return itemArt(item.id, item.glyph); }
 
   _render() {
-    const vitals = this.player.vitals;
     const view = this._view;
     setText(this.slotCounter, `Bag ${view.used}/${view.total}`);
-    setText(this.bagHint, this.phone() ? `tap \u2014 equip / take off${this.onDrop ? ' \u00b7 hold \u2014 drop' : ''}`
-      : `LMB \u2014 equip / take off${this.onDrop ? ' \u00b7 RMB \u2014 drop' : ''}`);
+    const drop = this.onDrop ? ` \u00b7 ${this.phone() ? 'hold' : 'RMB'} \u2014 drop` : '';
+    setText(this.bagHint, `${this.phone() ? 'tap' : 'LMB'} \u2014 equip / take off${drop} \u00b7 drag to equip`);
     const counts = new Map(view.tabs.map((tab) => [tab.id, tab.count]));
     for (const [id, { button, count }] of this.filterNodes) {
       const selected = id === view.filter;
@@ -848,10 +856,8 @@ export class InventoryScreen {
       attribute(nodes.button, 'aria-label', item
         ? `Slot ${index + 1}: ${own?.name ?? item.name}, count ${stack.count}` : `Slot ${index + 1}: empty`);
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
-      attribute(nodes.button, 'draggable', Boolean(item) && this._fine.matches);
       attribute(nodes.button, 'data-item-kind', item ? itemKind(item) : 'empty');
       attribute(nodes.button, 'data-item-id', item?.id || '');
-      attribute(nodes.button, 'aria-describedby', selected ? this.details.id : null);
       setText(nodes.icon, item ? this._cardArt(item) : '');
       setText(nodes.count, item ? cardLabel(stack, item, own) : '');
     }
@@ -866,57 +872,9 @@ export class InventoryScreen {
       attribute(nodes.button, 'aria-label', `${SLOT_NAMES[slot]}: ${item?.name || 'empty'}`);
       attribute(nodes.button, 'tabindex', selected ? 0 : -1);
       attribute(nodes.button, 'data-item-id', item?.id || '');
-      attribute(nodes.button, 'aria-describedby', selected ? this.details.id : null);
       setText(nodes.icon, item ? this._art(item, slot) : '');
       setText(nodes.count, item && STACK_SLOTS.includes(slot) ? String(stack.count) : '');
     }
-
-    const selected = this._selectedItem();
-    const item = selected?.item;
-    const stack = selected?.stack;
-    const carried = this.selection?.source !== 'equipment';
-    const own = stack ? this.describe(stack) : null;
-    attribute(this.details, 'data-item-id', item?.id || '');
-    setText(this.itemPreview, item ? itemArt(item.id, item.glyph) : '');
-    hidden(this.itemPreview, !item);
-    setText(this.itemType, item ? item.use ? 'Consumable' : item.equipmentSlot ? 'Equipment' : 'Material' : '');
-    setText(this.itemName, item ? own?.name ?? item.name : carried ? 'Empty slot' : `${SLOT_NAMES[this.selection.slot]} slot`);
-    this.itemName.style.color = own?.colour ?? '';
-    setText(this.description, own?.description ?? (item?.description || emptySlotHint(carried, this.phone())));
-    const notes = noteReference(item?.id);
-    if (notes.length && this.phone()) notes.push('Played with a keyboard for now.');
-    for (const [index, line] of this.noteLines.entries()) {
-      setText(line, notes[index] ?? '');
-      hidden(line, !notes[index]);
-    }
-    hidden(this.notes, !notes.length);
-    const stats = own?.stats ?? item?.stats ?? {};
-    const statsSignature = JSON.stringify(stats);
-    if (statsSignature !== this._statsSignature) {
-      this._statsSignature = statsSignature;
-      this.stats.replaceChildren();
-      for (const [key, value] of Object.entries(stats)) {
-        this.stats.append(element('dt', '', statName(key)), element('dd', '',
-          typeof value === 'number' && value > 0 ? `+${value}` : String(value)));
-      }
-    }
-    hidden(this.stats, !item || !Object.keys(stats).length);
-    hidden(this.itemWeight, !item);
-    setText(this.itemWeight, item
-      ? `${kg(item.weight)} kg each / ${kg(item.weight * stack.count)} kg carried / ${stack.count} ${stack.count === 1 ? 'item' : 'items'}` : '');
-    // A smithed weapon's own maximum comes from its metal.
-    const most = own?.durability ?? item?.durability;
-    hidden(this.durability, !most);
-    setText(this.durability, most ? `Durability: ${stack.durability ?? most} / ${most}` : '');
-    hidden(this.equipButton, !carried || !item?.equipmentSlot);
-    hidden(this.useButton, !carried || !item?.use);
-    const useDisabled = Boolean(item?.use)
-      && (!item.use.health || vitals.health >= vitals.maxHealth)
-      && (!item.use.stamina || vitals.stamina >= vitals.maxStamina);
-    if (this.useButton.disabled !== useDisabled) this.useButton.disabled = useDisabled;
-    attribute(this.useButton, 'title', useDisabled ? 'Your vitality is already full.' : '');
-    hidden(this.unequipButton, carried || !item);
-    hidden(this.dropButton, !carried || !item || !this.onDrop);
   }
 
   destroy() {
@@ -925,7 +883,6 @@ export class InventoryScreen {
     window.removeEventListener('keyup', this._keyup, true);
     window.removeEventListener('blur', this._blur);
     window.removeEventListener('resize', this._resize);
-    this._fine.removeEventListener?.('change', this._fineChange);
     this.gestures.destroy();
     this.tooltip.destroy();
     this.screen.remove();

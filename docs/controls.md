@@ -28,6 +28,7 @@
 | `I` / `Tab` | Open or close the inventory (`Escape` also closes it) |
 | Left click, with inventory open | On a bag card: equip it (arrows fill the quiver) or use it; on a filled equipment box: take it off. On a filter tab: show only that kind |
 | Right click, with inventory open | Drop a bag card's whole stack on the ground |
+| Drag, with inventory open | Drag a bag card onto a lit equipment box to equip it there, or onto another card to swap them; drag worn gear into the bag to take it off, or a ring onto the other ring box to swap them. `Escape` cancels a drag |
 | Hover, with inventory open | Show the item tooltip for a bag card or a filled equipment box (the arrow keys show the selected one's) |
 | `G`, with inventory open | Switch between the bag and equipment |
 | Arrow keys, with inventory open | Move through the shown cards, or around the equipment |
@@ -179,10 +180,11 @@ run. The other thumb has a cluster in the bottom-right corner:
   **Finish**.
 - The **inventory** (in the phone menu) is a full-screen sheet that scrolls as
   a whole. Tap a filter tab to show one kind. Tap a bag card to equip or use
-  it, and a filled equipment box to take its gear off; the selected item's
-  details show below the bag. Hold a card or a filled box to pin its
-  tooltip, with buttons to **equip**, **use** or **take off** and to
-  **drop**; tap anywhere else to close it.
+  it, and a filled equipment box to take its gear off. Hold a card or a
+  filled box to pin its tooltip, with buttons to **equip**, **use** or
+  **take off** and to **drop**; tap anywhere else to close it. Hold, then
+  move to drag it: the item rides above your finger, the boxes it fits light
+  up, and the sheet scrolls near its top and bottom edges.
 
 Strikes, shots and attack runes from these buttons turn to the nearest enemy
 within 30° either side of your facing, within the weapon's reach plus a stride,

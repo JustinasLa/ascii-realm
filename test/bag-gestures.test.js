@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BagGestures, HOLD_MS, TOUCH_SLOP } from '../src/ui/bag-gestures.js';
+import { BagGestures, HOLD_MS, MOUSE_SLOP, TOUCH_SLOP } from '../src/ui/bag-gestures.js';
 
 // A surface that records its listeners, and events that record what was done to them.
 function surface() {
@@ -21,13 +21,20 @@ function surface() {
 function setup(t, { source = true } = {}) {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const pad = surface();
+  pad.setPointerCapture = (id) => drags.push(['capture', id]);
   const holds = [];
+  const drags = [];
   const node = { getBoundingClientRect: () => ({ left: 1, top: 2, right: 3, bottom: 4 }) };
   const gestures = new BagGestures({ surface: pad, sourceOf: (target) => (source && target === 'card' ? { selection: 'bow', node } : null),
-    onHold: (selection, rect) => holds.push([selection, rect]) });
+    onHold: (selection, rect) => holds.push([selection, rect]),
+    onDragStart: (selection, point) => drags.push(['start', selection, point]),
+    onDragMove: (point, target) => drags.push(['move', point, target]),
+    onDrop: (selection, target) => drags.push(['drop', selection, target]),
+    onDragEnd: () => drags.push(['end']),
+    hitTest: (x, y) => `${x},${y}` });
   const down = (fields = {}) => pad.fire('pointerdown', { pointerType: 'touch', pointerId: 1, button: 0, isPrimary: true,
     clientX: 50, clientY: 50, timeStamp: 0, target: 'card', ...fields });
-  return { pad, holds, gestures, down };
+  return { pad, holds, drags, gestures, down };
 }
 
 test('a touch held still for the hold time pins, stops scrolling and swallows its click', (t) => {
@@ -81,14 +88,18 @@ test('a lift that runs before the late timer still holds', (t) => {
   assert.equal(holds.length, 1, 'the timer does not fire again');
 });
 
-test('mice, other buttons and fingers, empty places and an unclaimed swallow are left alone', (t) => {
-  const { pad, holds, gestures, down } = setup(t);
+test('mice never hold, and other buttons and fingers, empty places and an unclaimed swallow are left alone', (t) => {
+  const { pad, holds, drags, gestures, down } = setup(t);
   down({ pointerType: 'mouse' });
+  t.mock.timers.tick(HOLD_MS);
+  pad.fire('pointerup', { pointerId: 1, timeStamp: 2000 });
+  assert.equal(pad.fire('click').stopped, false, 'a long mouse press is a click');
   down({ button: 2 });
   down({ isPrimary: false });
   down({ target: 'gap' });
   t.mock.timers.tick(HOLD_MS);
   assert.deepEqual(holds, []);
+  assert.deepEqual(drags, []);
   // A hold whose click never came does not eat the next tap.
   down();
   t.mock.timers.tick(HOLD_MS);
@@ -116,20 +127,84 @@ test('the click can be swallowed on a wider surface than the presses', (t) => {
   assert.equal(root.listeners.get('click').length, 0);
 });
 
-test('a pinned hold keeps the finger from scrolling, however far it moves, until it lifts or is cancelled', (t) => {
-  const { pad, gestures, down } = setup(t);
+test('a hold, then a move past the slop, drags to where the finger lifts, and swallows its click', (t) => {
+  const { pad, holds, drags, gestures, down } = setup(t);
   down();
   t.mock.timers.tick(HOLD_MS);
-  pad.fire('pointermove', { pointerId: 1, clientX: 50, clientY: 50 + TOUCH_SLOP * 10 });
-  assert.equal(gestures.active, true);
-  assert.equal(pad.fire('touchmove').defaultPrevented, true, 'the sheet under the panel stays put');
-  pad.fire('pointerup', { timeStamp: 900 });
+  pad.fire('pointermove', { pointerId: 1, clientX: 50, clientY: 50 + TOUCH_SLOP });
+  assert.deepEqual(drags, [], 'a wobble stays a hold');
+  pad.fire('pointermove', { pointerId: 1, clientX: 50, clientY: 50 - TOUCH_SLOP - 5 });
+  pad.fire('pointermove', { pointerId: 2, clientX: 9, clientY: 9 });
+  pad.fire('pointermove', { pointerId: 1, clientX: 40, clientY: 20 });
+  assert.equal(holds.length, 1);
+  assert.deepEqual(drags, [['start', 'bow', { x: 50, y: 35, touch: true }], ['move', { x: 50, y: 35, touch: true }, '50,35'],
+    ['move', { x: 40, y: 20, touch: true }, '40,20']], 'no pointer capture for a finger');
+  assert.equal(gestures.active && gestures.dragging, true);
+  assert.equal(pad.fire('touchmove').defaultPrevented, true, 'a drag never scrolls');
+  pad.fire('pointerdown', { pointerType: 'touch', pointerId: 2, isPrimary: false, target: 'card' });
+  pad.fire('pointerup', { pointerId: 2, clientX: 0, clientY: 0 });
+  assert.equal(gestures.dragging, true, 'a second finger changes nothing');
+  pad.fire('pointerup', { pointerId: 1, clientX: 40, clientY: 22, timeStamp: 900 });
+  assert.deepEqual(drags.slice(3), [['drop', 'bow', '40,22'], ['end']]);
+  assert.equal(gestures.active, false);
   assert.equal(pad.fire('touchmove').defaultPrevented, false);
-  down();
+  assert.equal(pad.fire('click').stopped, true, 'the lift clicks nothing');
+});
+
+test('a pressed mouse drags once it moves past its slop, captured by the surface', (t) => {
+  const { pad, holds, drags, gestures, down } = setup(t);
+  assert.equal(MOUSE_SLOP, 4);
+  down({ pointerType: 'mouse' });
+  pad.fire('pointermove', { pointerId: 1, clientX: 53, clientY: 50 });
+  pad.fire('pointerup', { pointerId: 1, clientX: 53, clientY: 50, timeStamp: 100 });
+  assert.equal(pad.fire('click').stopped, false, 'a short wobble is a click');
+  down({ pointerType: 'mouse' });
+  pad.fire('pointermove', { pointerId: 1, clientX: 56, clientY: 50 });
+  assert.deepEqual(drags, [['capture', 1], ['start', 'bow', { x: 56, y: 50, touch: false }],
+    ['move', { x: 56, y: 50, touch: false }, '56,50']]);
   t.mock.timers.tick(HOLD_MS);
-  pad.fire('pointermove', { pointerId: 1, clientX: 300, clientY: 300 });
+  assert.deepEqual(holds, [], 'no timer runs for a mouse');
+  pad.fire('pointerup', { pointerId: 1, clientX: 70, clientY: 80, timeStamp: 200 });
+  assert.deepEqual(drags.slice(3), [['drop', 'bow', '70,80'], ['end']]);
+  assert.equal(gestures.dragging, false);
+  assert.equal(pad.fire('click').stopped, true);
+});
+
+test('a cancelled drag ends without a drop', (t) => {
+  const { pad, drags, gestures, down } = setup(t);
+  const drag = () => {
+    down({ pointerType: 'mouse' });
+    pad.fire('pointermove', { pointerId: 1, clientX: 60, clientY: 50 });
+    drags.length = 0;
+  };
+  drag();
   pad.fire('pointercancel');
-  assert.equal(pad.fire('touchmove').defaultPrevented, false);
+  assert.deepEqual(drags, [['end']]);
+  assert.equal(pad.fire('click').stopped, false, 'a cancelled pointer sends no click');
+  drag();
+  gestures.cancel();
+  gestures.cancel();
+  assert.deepEqual(drags, [['end']], 'once');
+  pad.fire('pointerup', { pointerId: 1, timeStamp: 100 });
+  assert.equal(pad.fire('click').stopped, true, 'the lift after Esc clicks nothing');
+  drag();
+  gestures.destroy();
+  assert.deepEqual(drags, [['end']]);
+});
+
+test('a touch drags only after its hold, through the default hit test', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const pad = surface();
+  const seen = [];
+  const original = globalThis.document;
+  globalThis.document = { elementFromPoint: (x, y) => `at ${x},${y}` };
+  t.after(() => { globalThis.document = original; });
+  new BagGestures({ surface: pad, onHold() {}, onDragStart() {}, onDragEnd() {}, onDrop() {},
+    onDragMove: (point, target) => seen.push(target), sourceOf: () => ({ selection: 1, node: { getBoundingClientRect: () => ({}) } }) });
+  pad.fire('pointerdown', { pointerType: 'touch', pointerId: 1, clientX: 0, clientY: 0, timeStamp: 0 });
+  t.mock.timers.tick(HOLD_MS);
+  pad.fire('pointermove', { pointerId: 1, clientX: 20, clientY: 0 });
+  assert.deepEqual(seen, ['at 20,0']);
 });
 
 test('a cancelled hold, or any later press on the wider surface, leaves the next click alone', (t) => {

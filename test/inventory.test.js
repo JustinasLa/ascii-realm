@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Vitals } from '../src/entities/vitals.js';
 import { ITEMS, EQUIPMENT_SLOTS, STACK_SLOTS, fitsSlot, slotsFor } from '../src/inventory/items.js';
-import { Inventory, stackExtras } from '../src/inventory/inventory.js';
+import { Inventory, canSwap, stackExtras } from '../src/inventory/inventory.js';
 
 const emptyInventory = (capacity = 1000) => new Inventory({ starter: false, capacity });
 const carriedCount = (inventory, id) => [...inventory.slots, ...Object.values(inventory.equipment)]
@@ -546,4 +546,35 @@ test('pickups top up a quiver of the same arrows first, but never fill an empty 
   assert.equal(heavy.add('arrow', 20), 5);
   assert.equal(heavy.equipment.quiver.count, 35);
   assert.equal(heavy.slots.filter(Boolean).length, 0);
+});
+
+test('two worn slots swap only when each piece fits the other, as rings do', () => {
+  const rings = { gold: { equipmentSlot: 'ring', stackLimit: 1 }, jade: { equipmentSlot: 'ring', stackLimit: 1 } };
+  const def = (id) => rings[id] ?? ITEMS[id] ?? null;
+  const gold = { id: 'gold', count: 1 };
+  const jade = { id: 'jade', count: 1 };
+  const worn = { ringLeft: gold, ringRight: jade, mainHand: { id: 'shortSword', count: 1 }, offHand: null, helm: null };
+  assert.equal(canSwap(worn, 'ringLeft', 'ringRight', def), true, 'ring for ring');
+  assert.equal(canSwap({ ringLeft: gold, ringRight: null }, 'ringRight', 'ringLeft', def), true, 'onto an empty ring');
+  assert.equal(canSwap({ ringLeft: null, ringRight: null }, 'ringLeft', 'ringRight', def), false, 'nothing to swap');
+  assert.equal(canSwap(worn, 'ringLeft', 'ringLeft', def), false, 'the same slot');
+  assert.equal(canSwap(worn, 'mainHand', 'offHand', def), false, 'a sword is no shield');
+  assert.equal(canSwap(worn, 'ringLeft', 'pocket', def), false, 'no such slot');
+  assert.equal(canSwap(worn, 'ringLeft', 'ringRight'), false, 'no ring items exist yet');
+  assert.equal(canSwap({ ringLeft: { id: 'gold', count: 2 }, ringRight: null }, 'ringLeft', 'ringRight', def), false, 'one ring a slot');
+  assert.equal(canSwap({ ringLeft: { id: 'gold', count: 0 }, ringRight: null }, 'ringLeft', 'ringRight', def), false);
+
+  const inventory = emptyInventory();
+  inventory.equipment.mainHand = { id: 'shortSword', count: 1 };
+  inventory.equipment.helm = { id: 'outlawHood', count: 1 };
+  const before = inventoryState(inventory);
+  assert.equal(inventory.canSwapEquipped('mainHand', 'helm'), false);
+  assert.equal(inventory.swapEquipped('mainHand', 'helm'), false);
+  assert.deepEqual(inventoryState(inventory), before, 'nothing moves');
+  inventory.equipment.ringLeft = gold;
+  const weight = inventory.weight;
+  assert.equal(inventory.swapEquipped('ringLeft', 'ringRight', def), true);
+  assert.equal(inventory.equipment.ringLeft, null);
+  assert.equal(inventory.equipment.ringRight, gold);
+  assert.equal(inventory.weight, weight);
 });

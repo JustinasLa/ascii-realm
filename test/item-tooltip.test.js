@@ -15,7 +15,7 @@ test('the tooltip names the item, its kind, grip, stats, weight, durability and 
   const sword = tooltipFor({ item: ITEMS.shortSword, stack: { id: 'shortSword', count: 1, durability: 87 }, where: 'equipment' });
   assert.deepEqual(sword.lines, ['weapon · one hand', ITEMS.shortSword.description, 'material Iron', 'weight 1.6 kg',
     'durability 87/100']);
-  assert.equal(sword.help, 'click — take off');
+  assert.equal(sword.help, 'click — take off · drag to the bag');
   const bow = tooltipFor({ item: ITEMS.longbow, stack: { id: 'longbow', count: 1 }, drop: false });
   assert.equal(bow.help, 'click — equip');
   const ore = tooltipFor({ item: ITEMS.rawIron, stack: { id: 'rawIron', count: 1 } });

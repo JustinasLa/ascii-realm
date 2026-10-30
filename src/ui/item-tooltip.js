@@ -35,7 +35,7 @@ export function tooltipFor({ item, stack, own = null, where = 'bag', phone = fal
   const notes = noteReference(item.id);
   lines.push(...notes, ...(notes.length && phone ? ['Played with a keyboard for now.'] : []));
   const click = where === 'equipment' ? 'take off' : item.equipmentSlot ? 'equip' : item.use && 'use';
-  const help = [click && `click — ${click}`, drop && where === 'bag' && 'right-click — drop'].filter(Boolean);
+  const help = [click && `click — ${click}`, where === 'equipment' ? 'drag to the bag' : drop && 'right-click — drop'].filter(Boolean);
   return { name: own?.name ?? item.name, colour: own?.colour ?? null, lines: lines.filter(Boolean),
     help: phone ? '' : help.join(' · ') };
 }
