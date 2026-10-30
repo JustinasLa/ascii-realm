@@ -98,9 +98,16 @@ export function skyAt(tick, day, phase, out = emptySky()) {
   const night = 1 - daylight;
   const warm = 4 * daylight * night;
   const dawn = tick >= 18000 || tick < 6000;
-  Object.assign(out, { tick, day, daylight, night, warm, dawn, stars: starlightAt(tick),
-    // The moon is gone before the sun shows, so they never share the sky.
-    moon: smoothstep(0.4, 0.8, night), sun: smoothstep(0.6, 0.95, daylight) });
+  out.tick = tick;
+  out.day = day;
+  out.daylight = daylight;
+  out.night = night;
+  out.warm = warm;
+  out.dawn = dawn;
+  out.stars = starlightAt(tick);
+  // The moon is gone before the sun shows, so they never share the sky.
+  out.moon = smoothstep(0.4, 0.8, night);
+  out.sun = smoothstep(0.6, 0.95, daylight);
   const angle = phase * Math.PI * 2 / MOON_PHASES;
   const p = out.moonPhase;
   p.index = phase;
